@@ -5,10 +5,11 @@ import PinnedPage from '../components/PinnedPage.svelte';
 import ProjectPage from '../components/ProjectPage.svelte';
 import Settings from '../components/settings/Settings.svelte';
 import GanttView from '../components/views/GanttView.svelte';
-import ListView from '../components/views/ListView.svelte';
+import ViewPage from './ViewPage.svelte';
 
 export const routes: { pattern: string; component: Component }[] = [
-  { pattern: '/view/:id', component: ListView },
+  { pattern: '/view/:id', component: ViewPage },
+  { pattern: '/view/:id/:layout', component: ViewPage },
   { pattern: '/issue/:key', component: IssueDetail },
   { pattern: '/project/:slug', component: ProjectPage },
   { pattern: '/projects/timeline', component: GanttView },
