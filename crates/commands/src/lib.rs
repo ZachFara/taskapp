@@ -253,13 +253,12 @@ macro_rules! with_commands {
             backup_list(_s, dir: String) -> Vec<String> {
                 Ok(backup::list(dir.as_ref())?.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
             }
-            backup_restore(s, from: String) -> () { backup::restore_live(&s.db, from.as_ref()).await }
-
             sync_status(s) -> SyncStatus {
                 Ok(settings::get(&s.db, "sync_status").await?.unwrap_or(SyncStatus {
                     reminders: SyncState::Off,
                     gcal: SyncState::Off,
                     export: SyncState::Off,
+                    backup: SyncState::Off,
                 }))
             }
         }

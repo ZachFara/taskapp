@@ -1,8 +1,8 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { api } from '../../lib/api';
-  import type { Issue, Milestone, Project, Relation, Reschedule, SavedView, ViewDef } from '../../lib/bindings';
-  import { TICK_DAYS, ZOOMS, addDays, buildRows, dayDiff, range, unscheduled, type Row, type Zoom } from '../../lib/gantt';
+  import type { Issue, IssuePatch, Milestone, Project, Relation, Reschedule, SavedView, ViewDef } from '../../lib/bindings';
+  import { TICK_DAYS, ZOOMS, addDays, buildRows, dayDiff, range, shiftLocalDays, unscheduled, type Row, type Zoom } from '../../lib/gantt';
 
   // The projects route mounts this without a view, which selects projects mode.
   let { view = null, mode = view ? 'issues' : 'projects' }: { view?: SavedView | null; mode?: 'issues' | 'projects' } = $props();
@@ -18,6 +18,7 @@
   let allIssues = $state<Issue[]>([]);
   let projectList = $state<Project[]>([]);
   let toast = $state<{ text: string; apply: () => Promise<void> } | null>(null);
+  let error = $state('');
   let drag = $state<{ id: string; x0: number; dx: number } | null>(null);
   let dragIssue: number | null = null;
   let timeline: HTMLElement | undefined = $state();
@@ -59,6 +60,27 @@
   const rowOf = (issueId: number) => rows.findIndex((r) => r.issueId === issueId && r.start);
   const shifted = (r: Row, d: number) => ({ start: addDays(r.start!, d), end: addDays(r.end!, d) });
 
+  // Keeps a timed due's time and zone, and never invents a due for an estimate-derived bar.
+  function patch(m: Reschedule): IssuePatch {
+    const old = allIssues.find((i) => i.id === m.issue_id);
+    const due = old?.due;
+    if (!due) return { start_date: m.start_date };
+    if ('Date' in due) return { start_date: m.start_date, due: { Date: m.due_date } };
+    const day = due.DateTime.utc.slice(0, 10);
+    const d = dayDiff(old!.start_date ?? day, old!.start_date ? m.start_date : m.due_date);
+    return { start_date: m.start_date, due: { DateTime: { ...due.DateTime, utc: shiftLocalDays(due.DateTime.utc, due.DateTime.tz, d) } } };
+  }
+  // All or nothing from the user's view: on any failure show it and reload what is really stored.
+  async function guarded(fn: () => Promise<unknown>) {
+    error = '';
+    try {
+      await fn();
+    } catch (e) {
+      error = (e as { message?: string })?.message ?? String(e);
+    }
+    await load();
+  }
+
   function down(e: MouseEvent, r: Row) {
     if (r.kind === 'group' || r.kind === 'milestone' || r.kind === 'rollup') return;
     drag = { id: r.id, x0: e.clientX, dx: 0 };
@@ -66,7 +88,8 @@
   function move(e: MouseEvent) {
     if (drag) drag.dx = e.clientX - drag.x0;
   }
-  async function up() {
+  const up = () => (drag ? guarded(commit) : undefined);
+  async function commit() {
     if (!drag) return;
     const r = rows.find((x) => x.id === drag!.id)!;
     const d = Math.round(drag.dx / dw);
@@ -76,16 +99,17 @@
     if (r.projectId !== undefined) {
       const p = projectList.find((x) => x.id === r.projectId)!;
       await api.projects.update({ ...p, start_date: to.start, target_date: to.end });
-      return load();
+      return;
     }
     const moved: Reschedule = { issue_id: r.issueId!, start_date: to.start, due_date: to.end };
     const also = await api.schedule.shiftDependents(moved);
-    const apply = async () => {
+    const apply = () => {
       toast = null;
-      for (const m of [moved, ...also]) await api.issues.update(m.issue_id, { start_date: m.start_date, due: { Date: m.due_date } });
-      await load();
+      return guarded(async () => {
+        for (const m of [moved, ...also]) await api.issues.update(m.issue_id, patch(m));
+      });
     };
-    if (!also.length) return apply();
+    if (!also.length) return void (await apply());
     toast = { text: `Also moves ${also.map((a) => key(a.issue_id)).join(', ')}`, apply };
   }
 
@@ -95,8 +119,7 @@
     const x = e.clientX - (timeline?.getBoundingClientRect().left ?? 0) + (timeline?.scrollLeft ?? 0);
     const id = dragIssue;
     dragIssue = null;
-    await api.issues.update(id, { start_date: addDays(span.start, Math.floor(x / dw)) });
-    await load();
+    await guarded(() => api.issues.update(id, { start_date: addDays(span.start, Math.floor(x / dw)) }));
   }
 
   const barStyle = (r: Row) => {
@@ -175,6 +198,8 @@
     </aside>
   </div>
 
+  {#if error}<p class="error" role="alert">{error}</p>{/if}
+
   {#if toast}
     <div class="toast" role="alertdialog">
       <span>{toast.text}</span>
@@ -210,6 +235,7 @@
   .lane { width: 220px; flex: none; border-left: 1px solid #ddd; padding: 8px; overflow: auto; }
   .lane h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; color: #666; }
   .item { padding: 4px 6px; border: 1px solid #e2e2e2; border-radius: 4px; margin-bottom: 4px; cursor: grab; }
+  .error { margin: 0; padding: 6px 12px; color: #b00020; }
   .muted { color: #888; }
   .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #222; color: #fff; padding: 8px 12px; border-radius: 6px; display: flex; gap: 8px; align-items: center; }
 </style>

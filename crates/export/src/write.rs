@@ -26,6 +26,7 @@ const MANAGED_DIRS: [&str; 2] = ["issues", "projects"];
 ///
 /// Fails when the database cannot be read or a file cannot be written.
 pub async fn write_snapshot(db: &Db, dir: &Path) -> Result<ExportStats> {
+    refuse_empty(dir)?;
     let files = render(db).await?;
     let mut stats = ExportStats {
         issues: u32::try_from(files.keys().filter(|k| k.starts_with("issues/")).count())
@@ -391,4 +392,14 @@ fn keys_of(rels: &[(String, i64)], kind: &str, prefix: &str) -> Vec<String> {
         .filter(|(k, _)| k == kind)
         .map(|(_, to)| key(prefix, *to))
         .collect()
+}
+
+/// An empty path means "the current directory" to `fs` and to `git -C`, which would export into the cwd.
+pub(crate) fn refuse_empty(dir: &Path) -> Result<()> {
+    if dir.as_os_str().is_empty() {
+        return Err(taskapp_core::Error::Invalid(
+            "export folder is empty".into(),
+        ));
+    }
+    Ok(())
 }
