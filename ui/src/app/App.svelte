@@ -1,5 +1,8 @@
 <script lang="ts">
   import { matchRoute } from './routes';
+  import { refreshAll } from '../lib/stores.svelte';
+
+  refreshAll();
 
   let path = $state(location.pathname);
   const match = $derived(matchRoute(path));
