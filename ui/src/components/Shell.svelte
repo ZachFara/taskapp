@@ -14,7 +14,7 @@
   let overlay = $state<'palette' | 'quickadd' | null>(null);
   let sync = $state<SyncStatus | null>(null);
   const syncError = $derived(
-    sync ? Object.values(sync).map((s) => (s === 'Off' ? undefined : s.Error?.message)).find((m) => m !== undefined) : undefined,
+    sync ? Object.values(sync).map((s) => (s === 'Off' ? undefined : s?.Error?.message)).find((m) => m !== undefined) : undefined,
   );
 
   onMount(() => {

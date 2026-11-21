@@ -5,7 +5,7 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 
 use crate::{Db, Error, Result};
 
@@ -76,24 +76,8 @@ pub fn list(dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(all)
 }
 
-/// Restores `from` over the file `db` was opened from. `db`'s own pool holds that file, so this only
-/// succeeds once the pool has no open connection.
-///
-/// # Errors
-///
-/// Fails with `Invalid` for an in-memory database, otherwise as `restore`.
-pub async fn restore_live(db: &Db, from: &Path) -> Result<()> {
-    let live: String =
-        sqlx::query_scalar("SELECT file FROM pragma_database_list WHERE name = 'main'")
-            .fetch_one(&db.pool)
-            .await?;
-    if live.is_empty() {
-        return Err(Error::Invalid("the database is not a file".into()));
-    }
-    restore(from, Path::new(&live)).await
-}
-
-/// Replaces `to` with the backup `from`, but only after `from` passes `PRAGMA integrity_check`.
+/// Replaces `to` with the backup `from`, but only after `from` passes `PRAGMA integrity_check` and is a taskapp
+/// database. The replaced file is first copied to `<to>.pre-restore-<UTC timestamp>`.
 ///
 /// # Errors
 ///
@@ -112,6 +96,15 @@ pub async fn restore(from: &Path, to: &Path) -> Result<()> {
     }
     check_backup(from).await?;
     ensure_unused(to).await?;
+    if to.exists() {
+        // Kept under another name, not deleted, so a mistaken restore can be undone.
+        let mut kept = to.as_os_str().to_owned();
+        kept.push(format!(
+            ".pre-restore-{}",
+            Utc::now().format("%Y%m%dT%H%M%S%9fZ")
+        ));
+        fs::copy(to, PathBuf::from(kept))?;
+    }
     let mut staging_name = to.as_os_str().to_owned();
     staging_name.push(".restoring");
     let staging = PathBuf::from(staging_name);
@@ -134,6 +127,19 @@ pub async fn restore(from: &Path, to: &Path) -> Result<()> {
 /// A WAL database cannot leave WAL mode while any other connection has it open, so a refused switch
 /// means someone else holds it.
 async fn ensure_unused(to: &Path) -> Result<()> {
+    // Retried: a pool's connections can finish closing just after `close()` returns.
+    let mut result = try_unused(to).await;
+    for _ in 0..9 {
+        if !matches!(result, Err(Error::Conflict(_))) {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        result = try_unused(to).await;
+    }
+    result
+}
+
+async fn try_unused(to: &Path) -> Result<()> {
     if !to.exists() {
         return Ok(());
     }
@@ -228,24 +234,44 @@ fn prune_folder(folder: &Path, keep: usize) -> Result<Vec<PathBuf>> {
     Ok(old)
 }
 
-/// Opens the backup read-only and fails unless SQLite reports it intact.
+/// Opens the backup read-only and fails unless SQLite reports it intact and it is a taskapp database.
 async fn check_backup(from: &Path) -> Result<()> {
     let opts = SqliteConnectOptions::new().filename(from).read_only(true);
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect_with(opts)
         .await?;
-    let verdict: std::result::Result<String, sqlx::Error> =
-        sqlx::query_scalar("PRAGMA integrity_check")
-            .fetch_one(&pool)
-            .await;
+    let verdict = check_pool(&pool, from).await;
     pool.close().await;
-    let report = verdict?;
-    if report == "ok" {
-        Ok(())
-    } else {
-        Err(Error::Invalid(format!(
+    verdict
+}
+
+async fn check_pool(pool: &SqlitePool, from: &Path) -> Result<()> {
+    let report: String = sqlx::query_scalar("PRAGMA integrity_check")
+        .fetch_one(pool)
+        .await?;
+    if report != "ok" {
+        return Err(Error::Invalid(format!(
             "backup failed integrity check: {report}"
-        )))
+        )));
     }
+    let tables: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('issues', 'settings')",
+    )
+    .fetch_one(pool)
+    .await?;
+    let prefix: i64 = if tables == 2 {
+        sqlx::query_scalar("SELECT count(*) FROM settings WHERE key = 'issue_prefix'")
+            .fetch_one(pool)
+            .await?
+    } else {
+        0
+    };
+    if tables != 2 || prefix == 0 {
+        return Err(Error::Invalid(format!(
+            "not a taskapp database: {}",
+            from.display()
+        )));
+    }
+    Ok(())
 }

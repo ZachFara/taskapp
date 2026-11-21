@@ -47,6 +47,15 @@ describe('Shell', () => {
     expect(document.body.textContent).toContain('token expired');
   });
 
+  it('backup_error_shows_indicator', async () => {
+    const api = createMockApi();
+    api.sync.status = async () => ({ reminders: 'Off', gcal: 'Off', export: 'Off', backup: { Error: { at: 'now', message: 'disk full' } } });
+    setApi(api);
+    await open();
+    expect(document.querySelector('.dot.error')).not.toBeNull();
+    expect(document.body.textContent).toContain('disk full');
+  });
+
   it('shows_main_view_and_no_indicator_when_sync_is_off', async () => {
     await open();
     expect(document.body.textContent).toContain('main view');
