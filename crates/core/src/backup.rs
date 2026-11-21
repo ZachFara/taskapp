@@ -90,9 +90,11 @@ pub async fn restore(from: &Path, to: &Path) -> Result<()> {
     for suffix in ["-wal", "-shm"] {
         let mut sidecar = to.as_os_str().to_owned();
         sidecar.push(suffix);
-        let sidecar = PathBuf::from(sidecar);
-        if sidecar.exists() {
-            fs::remove_file(sidecar)?;
+        // SQLite may delete the sidecar between a check and the remove, so NotFound is not an error.
+        match fs::remove_file(PathBuf::from(sidecar)) {
+            Ok(()) => {}
+            Err(e) if e.kind() == ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
         }
     }
     fs::rename(&staging, to)?;

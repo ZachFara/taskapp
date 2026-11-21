@@ -134,6 +134,22 @@ async fn restore_roundtrip() -> R {
 }
 
 #[tokio::test]
+async fn restore_ignores_vanished_sidecar() -> R {
+    let dir = TempDir::new()?;
+    let db = open_with_three_issues(dir.path()).await?;
+    let snap = backup::snapshot(&db, dir.path(), "before").await?;
+    db.pool.close().await;
+
+    // A fresh target has no -wal or -shm, which is the state after SQLite deletes them.
+    let to = dir.path().join("fresh.db");
+    backup::restore(&snap, &to).await?;
+
+    let db = Db::open(&to).await?;
+    assert_eq!(issue_count(&db).await?, 3);
+    Ok(())
+}
+
+#[tokio::test]
 async fn restore_rejects_corrupt_file() -> R {
     let dir = TempDir::new()?;
     let db = open_with_three_issues(dir.path()).await?;
