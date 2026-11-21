@@ -3,6 +3,8 @@
 # Rust steps are skipped when no Rust or manifest file is staged.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Same as CI: build sqlx queries from the committed .sqlx cache, so no dev.db is needed and a stale cache fails here.
+export SQLX_OFFLINE=${SQLX_OFFLINE:-true}
 step() { printf '== %s\n' "$1"; }
 step layout; scripts/check-layout.sh
 if [[ ${GATE_ALL:-0} == 1 ]] || git diff --cached --name-only | grep -qE '\.rs$|Cargo\.(toml|lock)$|clippy\.toml$'; then
