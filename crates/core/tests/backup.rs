@@ -150,10 +150,11 @@ async fn restore_rejects_corrupt_file() -> R {
     }
     fs::write(&corrupt, &bytes)?;
 
-    let target = dir.path().join("live.db");
-    let before = fs::read(&target)?;
+    // A marker, not the live database: a WAL-mode file's bytes shift when its pool closes.
+    let target = dir.path().join("marker.db");
+    fs::write(&target, b"original")?;
     assert!(backup::restore(&corrupt, &target).await.is_err());
-    assert_eq!(fs::read(&target)?, before);
+    assert_eq!(fs::read(&target)?, b"original");
     Ok(())
 }
 
