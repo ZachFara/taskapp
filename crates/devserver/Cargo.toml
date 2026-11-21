@@ -8,7 +8,17 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+taskapp-core.workspace = true
+taskapp-commands.workspace = true
+axum.workspace = true
+tower-http.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+chrono.workspace = true
 
 [dev-dependencies]
 reqwest.workspace = true
 tempfile.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
