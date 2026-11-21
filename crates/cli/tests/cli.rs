@@ -92,7 +92,7 @@ fn property_change_kind_snapshots_first() {
         "stderr: {}",
         String::from_utf8_lossy(&change.stderr)
     );
-    let snapshots = dir.path().join("snapshots");
+    let snapshots = dir.path().join("backups/snapshots");
     let count = std::fs::read_dir(&snapshots).map_or(0, Iterator::count);
     assert!(count >= 1, "no snapshot in {}", snapshots.display());
 }
@@ -128,7 +128,7 @@ fn make_snapshot(db: &Path) -> PathBuf {
     assert!(create.status.success());
     let change = run(db, &["property", "change-kind", "note", "number"]);
     assert!(change.status.success());
-    let snaps = db.parent().expect("parent").join("snapshots");
+    let snaps = db.parent().expect("parent").join("backups/snapshots");
     std::fs::read_dir(&snaps)
         .expect("snapshots dir")
         .map(|e| e.expect("entry").path())
@@ -146,7 +146,7 @@ fn backup_list_prints_snapshots() {
             "backup",
             "list",
             "--dir",
-            dir.path().to_str().expect("utf8"),
+            dir.path().join("backups").to_str().expect("utf8"),
         ],
     );
     let rows = listed.as_array().expect("array");
@@ -236,4 +236,130 @@ fn backup_restore_without_yes_changes_nothing() {
         "stderr was: {stderr}"
     );
     assert_eq!(std::fs::read(&dst_db).expect("db bytes"), before);
+}
+
+fn history_sources(db: &Path, key: &str) -> Vec<Value> {
+    let h = run_json(db, &["history", key]);
+    h.as_array()
+        .expect("history array")
+        .iter()
+        .map(|c| c["source"].clone())
+        .collect()
+}
+
+#[test]
+fn cli_writes_record_cli_source() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Write report"]);
+    let sources = history_sources(&db, "ZF-1");
+    assert_eq!(sources[0], "Cli");
+    assert!(sources.iter().all(|s| s == "Cli"), "{sources:?}");
+}
+
+#[test]
+fn property_delete_snapshots_first() {
+    let (dir, db) = fresh();
+    run(&db, &["property", "create", "note", "Note", "text"]);
+    let del = run(&db, &["property", "delete", "note"]);
+    assert!(del.status.success());
+    let snaps = dir.path().join("backups/snapshots");
+    let names: Vec<_> = std::fs::read_dir(&snaps)
+        .expect("snapshots dir")
+        .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        names.len() == 1 && names[0].contains("delete-property"),
+        "{names:?}"
+    );
+}
+
+#[test]
+fn failed_snapshot_aborts_property_delete() {
+    let (dir, db) = fresh();
+    run(&db, &["property", "create", "note", "Note", "text"]);
+    std::fs::write(dir.path().join("backups"), "not a dir").expect("block backups");
+    let del = run(&db, &["property", "delete", "note"]);
+    assert_ne!(del.status.code(), Some(0));
+    let props = run_json(&db, &["property", "list"]);
+    assert!(
+        props
+            .as_array()
+            .expect("array")
+            .iter()
+            .any(|p| p["key"] == "note"),
+        "property was deleted despite the failed snapshot"
+    );
+}
+
+#[test]
+fn issue_create_accepts_migration_fields() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Parent"]);
+    let label = run_json(&db, &["label", "create", "bug", "red"]);
+    let cycle = run_json(
+        &db,
+        &[
+            "cycle",
+            "create",
+            "--start",
+            "2024-01-01",
+            "--end",
+            "2024-01-14",
+        ],
+    );
+    run(
+        &db,
+        &["property", "create", "linear_id", "Linear ID", "text"],
+    );
+    let (label_id, cycle_id) = (label["id"].to_string(), cycle["id"].to_string());
+    let made = run_json(
+        &db,
+        &[
+            "issue",
+            "create",
+            "Old",
+            "--created-at",
+            "2024-01-02T03:04:05Z",
+            "--completed-at",
+            "2024-01-09T00:00:00Z",
+            "--property",
+            "linear_id=ENG-7",
+            "--parent",
+            "ZF-1",
+            "--cycle",
+            &cycle_id,
+            "--label",
+            &label_id,
+            "--migration",
+        ],
+    );
+    assert_eq!(made["created_at"], "2024-01-02T03:04:05Z");
+    assert_eq!(made["completed_at"], "2024-01-09T00:00:00Z");
+    assert_eq!(made["properties"]["linear_id"], "ENG-7");
+    assert_eq!(made["cycle_id"], cycle["id"]);
+    assert!(made["parent_id"].is_number(), "{made}");
+    assert!(
+        history_sources(&db, "ZF-2")
+            .iter()
+            .all(|s| s == "Migration")
+    );
+}
+
+#[test]
+fn comment_add_accepts_created_at_and_migration() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Parent"]);
+    let c = run_json(
+        &db,
+        &[
+            "comment",
+            "add",
+            "ZF-1",
+            "hi",
+            "--created-at",
+            "2023-05-06T07:08:09Z",
+            "--migration",
+        ],
+    );
+    assert_eq!(c["created_at"], "2023-05-06T07:08:09Z");
 }

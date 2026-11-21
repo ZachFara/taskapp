@@ -3,13 +3,13 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use chrono::{NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use taskapp_core::{
-    ChangeSource, Db, Due, Error, IssueId, IssuePatch, NewIssue, PinId, PinKind, ProjectId,
-    PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, StatusId, ViewDef,
-    ViewId, backup, comments, cycles, history, issues, labels, pins, projects, properties,
+    ChangeSource, CycleId, Db, Due, Error, IssueId, IssuePatch, LabelId, NewIssue, PinId, PinKind,
+    ProjectId, PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, StatusId,
+    ViewDef, ViewId, backup, comments, cycles, history, issues, labels, pins, projects, properties,
     quickadd, relations, search, views,
 };
 
@@ -29,9 +29,15 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Project(cmd) => project(db, cmd).await,
         Cmd::Cycle(cmd) => cycle(db, cmd).await,
         Cmd::Label(cmd) => label(db, cmd).await,
-        Cmd::Comment(CommentCmd::Add { key, body }) => {
+        Cmd::Comment(CommentCmd::Add {
+            key,
+            body,
+            created_at,
+            migration,
+        }) => {
             let id = issue_id(db, &key).await?;
-            val(comments::add_comment(db, id, &body, None, SRC).await?)
+            let at = created_at.as_deref().map(timestamp).transpose()?;
+            val(comments::add_comment(db, id, &body, at, source(migration)).await?)
         }
         Cmd::Relation(cmd) => relation(db, cmd).await,
         Cmd::Pin(cmd) => pin(db, cmd).await,
@@ -69,8 +75,25 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
             project,
             due,
             estimate,
+            created_at,
+            completed_at,
+            properties,
+            parent,
+            cycle,
+            labels,
+            migration,
         } => {
+            let parent_id = match parent {
+                Some(key) => Some(issue_id(db, &key).await?),
+                None => None,
+            };
             let new = NewIssue {
+                created_at: created_at.as_deref().map(timestamp).transpose()?,
+                completed_at: completed_at.as_deref().map(timestamp).transpose()?,
+                properties: property_map(&properties)?,
+                parent_id,
+                cycle_id: cycle.map(CycleId),
+                label_ids: (!labels.is_empty()).then(|| labels.into_iter().map(LabelId).collect()),
                 title,
                 description,
                 priority: check_priority(priority)?,
@@ -80,36 +103,9 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
                 estimate_minutes: estimate,
                 ..NewIssue::default()
             };
-            val(issues::create(db, new, SRC).await?)
+            val(issues::create(db, new, source(migration)).await?)
         }
-        IssueCmd::Update {
-            key,
-            title,
-            description,
-            priority,
-            status,
-            due,
-            clear_due,
-        } => {
-            let id = issue_id(db, &key).await?;
-            let due = if clear_due {
-                Some(None)
-            } else {
-                due.as_deref()
-                    .map(date)
-                    .transpose()?
-                    .map(|d| Some(Due::Date(d)))
-            };
-            let patch = IssuePatch {
-                title,
-                description,
-                priority: check_priority(priority)?,
-                status_id: status.map(StatusId),
-                due,
-                ..IssuePatch::default()
-            };
-            val(issues::update(db, id, patch, SRC).await?)
-        }
+        update @ IssueCmd::Update { .. } => issue_update(db, update).await,
         IssueCmd::Get { key } => val(issues::get_by_key(db, &key).await?),
         IssueCmd::Archive { key } => {
             let id = issue_id(db, &key).await?;
@@ -118,6 +114,39 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
         }
         IssueCmd::Search { text, limit } => val(search::search(db, &text, limit).await?),
     }
+}
+
+async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
+    let IssueCmd::Update {
+        key,
+        title,
+        description,
+        priority,
+        status,
+        due,
+        clear_due,
+    } = cmd
+    else {
+        unreachable!("issue_update is only called with Update");
+    };
+    let id = issue_id(db, &key).await?;
+    let due = if clear_due {
+        Some(None)
+    } else {
+        due.as_deref()
+            .map(date)
+            .transpose()?
+            .map(|d| Some(Due::Date(d)))
+    };
+    let patch = IssuePatch {
+        title,
+        description,
+        priority: check_priority(priority)?,
+        status_id: status.map(StatusId),
+        due,
+        ..IssuePatch::default()
+    };
+    val(issues::update(db, id, patch, SRC).await?)
 }
 
 async fn view(db: &Db, cmd: ViewCmd) -> Result<Value> {
@@ -259,6 +288,33 @@ fn val<T: Serialize>(value: T) -> Result<Value> {
 fn date(text: &str) -> Result<NaiveDate> {
     NaiveDate::parse_from_str(text, "%Y-%m-%d")
         .map_err(|_| Error::Invalid(format!("not a date (YYYY-MM-DD): {text}")))
+}
+
+fn source(migration: bool) -> ChangeSource {
+    if migration {
+        ChangeSource::Migration
+    } else {
+        SRC
+    }
+}
+
+fn timestamp(text: &str) -> Result<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(text)
+        .map(|t| t.with_timezone(&Utc))
+        .map_err(|_| Error::Invalid(format!("not an RFC 3339 timestamp: {text}")))
+}
+
+/// `key=value` pairs; a value that is not JSON is taken as text.
+fn property_map(pairs: &[String]) -> Result<Option<Map<String, Value>>> {
+    let mut map = Map::new();
+    for pair in pairs {
+        let (key, raw) = pair
+            .split_once('=')
+            .ok_or_else(|| Error::Invalid(format!("property must be key=value: {pair}")))?;
+        let value = serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.to_owned()));
+        map.insert(key.to_owned(), value);
+    }
+    Ok((!map.is_empty()).then_some(map))
 }
 
 fn check_priority(priority: Option<u8>) -> Result<Option<u8>> {

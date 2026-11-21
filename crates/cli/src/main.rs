@@ -91,6 +91,27 @@ enum IssueCmd {
         /// Estimate in minutes.
         #[arg(long)]
         estimate: Option<u32>,
+        /// Original creation time, RFC 3339.
+        #[arg(long)]
+        created_at: Option<String>,
+        /// Original completion time, RFC 3339.
+        #[arg(long)]
+        completed_at: Option<String>,
+        /// Custom property as key=value (value is JSON, else text); repeat for several.
+        #[arg(long = "property")]
+        properties: Vec<String>,
+        /// Parent issue key.
+        #[arg(long)]
+        parent: Option<String>,
+        /// Cycle id.
+        #[arg(long)]
+        cycle: Option<i64>,
+        /// Label id; repeat for several.
+        #[arg(long = "label")]
+        labels: Vec<i64>,
+        /// Record the Migration source instead of Cli.
+        #[arg(long)]
+        migration: bool,
     },
     Update {
         key: String,
@@ -198,7 +219,16 @@ enum LabelCmd {
 
 #[derive(Subcommand)]
 enum CommentCmd {
-    Add { key: String, body: String },
+    Add {
+        key: String,
+        body: String,
+        /// Original creation time, RFC 3339.
+        #[arg(long)]
+        created_at: Option<String>,
+        /// Record the Migration source instead of Cli.
+        #[arg(long)]
+        migration: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -260,7 +290,8 @@ async fn run(cli: Cli) -> Result<()> {
         .map_or_else(|| PathBuf::from("."), PathBuf::from);
     std::fs::create_dir_all(&dir)?;
     let db = Db::open(&path).await?;
-    let value = commands::run(&db, &dir, cli.cmd).await?;
+    // Same folder the MCP server and the app list and prune.
+    let value = commands::run(&db, &dir.join("backups"), cli.cmd).await?;
     print_value(&value, cli.json);
     Ok(())
 }
