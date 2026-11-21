@@ -284,3 +284,30 @@ async fn failed_log_write_leaves_no_issue() -> R {
     assert_eq!(count(&db, "SELECT COUNT(*) FROM import_log").await?, 0);
     Ok(())
 }
+
+#[tokio::test]
+async fn notes_and_due_land_with_the_issue() -> R {
+    let db = db_with_list().await?;
+    // Any later update to an issue fails: notes and due must not depend on one.
+    sqlx::query("CREATE TRIGGER no_update BEFORE UPDATE ON issues BEGIN SELECT RAISE(ABORT, 'update down'); END")
+        .execute(&db.pool)
+        .await?;
+    let fake = Fake::new();
+    fake.say(
+        "fetch",
+        r#"[{"external_id":"a","title":"Pay rent","notes":"IMPORTANT NOTES","due":{"date":"2026-12-01"}}]"#,
+        0,
+    );
+    fake.say("delete", r#"{"deleted":["a"],"missing":[]}"#, 0);
+    let r = import(&db, &fake.path(), today(), TZ).await?;
+    assert_eq!((r.imported, r.failed.len()), (1, 0));
+    let a = only_issue(&db).await?;
+    assert_eq!(a.description, "IMPORTANT NOTES");
+    assert_eq!(
+        a.due,
+        Some(Due::Date(
+            NaiveDate::from_ymd_opt(2026, 12, 1).expect("date")
+        ))
+    );
+    Ok(())
+}

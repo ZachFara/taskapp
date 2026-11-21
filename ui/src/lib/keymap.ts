@@ -29,6 +29,7 @@ function onKeydown(e: KeyboardEvent) {
     e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])');
   // Palette and close must still work from inside a text field.
   if (typing && !key.includes('+') && key !== 'esc') return;
+  if (key === 'enter' && e.target instanceof Element && e.target.closest('button, a, [role=button], [role=menuitem]')) return;
   const sequence = pending && e.timeStamp - pending.at < SEQUENCE_MS ? `${pending.key} ${key}` : null;
   const hits = entries.filter((x) => x.combo === sequence);
   pending = hits.length ? null : { key, at: e.timeStamp };
