@@ -1,7 +1,7 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use taskapp_core::{
     ChangeSource, Db, Error, IssueId, ProjectId, blocks, comments, cycles, history, labels,
-    projects,
+    projects, properties, search,
 };
 
 type R = Result<(), Box<dyn std::error::Error>>;
@@ -303,5 +303,49 @@ async fn blocks_between_returns_overlapping_only() -> R {
     }
     assert!(!ids.contains(&before.id));
     assert!(!ids.contains(&touches_end.id));
+    Ok(())
+}
+
+#[tokio::test]
+async fn project_delete_refuses_while_scoped_defs_exist() -> R {
+    let db = Db::open_in_memory().await?;
+    let p = projects::create(&db, "alpha", "Alpha", ChangeSource::Ui).await?;
+    let def = taskapp_core::PropertyDef {
+        key: "area".into(),
+        name: "Area".into(),
+        kind: taskapp_core::PropertyKind::Text,
+        options: vec![],
+        project_id: Some(p.id),
+        position: 0,
+    };
+    properties::create_def(&db, def, ChangeSource::Ui).await?;
+    let i = issue(&db, Some(p.id), 1, false).await?;
+    let e = projects::delete(&db, p.id, ChangeSource::Ui).await;
+    let Err(Error::Conflict(m)) = e else {
+        panic!("expected Conflict, got {e:?}")
+    };
+    assert!(m.contains("area"), "{m}");
+    assert_eq!(projects::list(&db).await?.len(), 1);
+    let project: Option<i64> = sqlx::query_scalar("SELECT project_id FROM issues WHERE id = ?")
+        .bind(i.0)
+        .fetch_one(&db.pool)
+        .await?;
+    assert_eq!(project, Some(p.id.0));
+    let logged = history::list_for(&db, "issue", &i.0.to_string()).await?;
+    assert_eq!(logged.len(), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn comment_edits_reach_the_search_index() -> R {
+    let db = Db::open_in_memory().await?;
+    let i = issue(&db, None, 1, false).await?;
+    let c = comments::add_comment(&db, i, "zebra crossing", None, ChangeSource::Ui).await?;
+    assert_eq!(search::search(&db, "zebra", 10).await?.len(), 1);
+    comments::update(&db, c.id, "giraffe crossing", ChangeSource::Ui).await?;
+    assert_eq!(search::search(&db, "zebra", 10).await?.len(), 0);
+    assert_eq!(search::search(&db, "giraffe", 10).await?.len(), 1);
+    comments::delete(&db, c.id, ChangeSource::Ui).await?;
+    assert_eq!(search::search(&db, "giraffe", 10).await?.len(), 0);
     Ok(())
 }
