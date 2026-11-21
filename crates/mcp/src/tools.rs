@@ -315,8 +315,6 @@ impl Server {
         })
     }
 
-    // shortcut: patches apply one by one, so a core failure after validation leaves earlier items applied;
-    // upgrade when core exposes a transaction-taking update.
     async fn bulk_update(&self, a: &Value) -> Res<Value> {
         let items: Vec<Map<String, Value>> = arg(a, "items")?;
         if items.len() > 10 {
@@ -329,11 +327,19 @@ impl Server {
             plan.push((issue.id, arg::<IssuePatch>(&item, "patch")?));
         }
         let n = plan.len();
+        // One transaction: a failing item drops the rest, so nothing is half applied.
+        let mut tx = self
+            .db
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(|e| ce(&e.into()))?;
         for (id, patch) in plan {
-            issues::update(&self.db, id, patch, src(a))
+            issues::update_in(&mut tx, id, patch, src(a))
                 .await
                 .map_err(|e| ce(&e))?;
         }
+        tx.commit().await.map_err(|e| ce(&e.into()))?;
         Ok(json!({ "updated": n }))
     }
 

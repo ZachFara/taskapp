@@ -93,15 +93,22 @@ async fn import_one(
         return Ok(());
     }
     let src = ChangeSource::RemindersImport;
-    let issue = match quickadd::create_from(db, &r.title, today, tz, src).await {
+    let new = match quickadd::new_issue(db, &r.title, today, tz).await {
+        Ok(n) => n,
+        Err(e) => {
+            report.failed.push(format!("{}: {e}", r.external_id));
+            return Ok(());
+        }
+    };
+    // One transaction, so a crash cannot leave an issue without its log row (a duplicate on re-import).
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let issue = match issues::create_in(&mut tx, new, src).await {
         Ok(i) => i,
         Err(e) => {
             report.failed.push(format!("{}: {e}", r.external_id));
             return Ok(());
         }
     };
-    // shortcut: issue and log row are two writes (core takes a pool, not a transaction); a crash
-    // between them can leave a duplicate on re-import, upgrade when core exposes a tx-taking create.
     let now = Utc::now();
     sqlx::query!(
         "INSERT INTO import_log (external_id, source, issue_id, imported_at) VALUES (?, 'reminders', ?, ?)",
@@ -109,8 +116,9 @@ async fn import_one(
         issue.id.0,
         now
     )
-    .execute(&db.pool)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
     report.imported += 1;
     let notes = r.notes.filter(|n| !n.trim().is_empty());
     if notes.is_some() || r.due.is_some() {
