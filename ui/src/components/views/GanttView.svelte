@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import { api } from '../../lib/api';
   import type { Issue, IssuePatch, Milestone, Project, Relation, Reschedule, SavedView, ViewDef } from '../../lib/bindings';
-  import { TICK_DAYS, ZOOMS, addDays, buildRows, dayDiff, range, unscheduled, type Row, type Zoom } from '../../lib/gantt';
+  import { TICK_DAYS, ZOOMS, addDays, buildRows, dayDiff, range, shiftLocalDays, unscheduled, type Row, type Zoom } from '../../lib/gantt';
 
   // The projects route mounts this without a view, which selects projects mode.
   let { view = null, mode = view ? 'issues' : 'projects' }: { view?: SavedView | null; mode?: 'issues' | 'projects' } = $props();
@@ -68,7 +68,7 @@
     if ('Date' in due) return { start_date: m.start_date, due: { Date: m.due_date } };
     const day = due.DateTime.utc.slice(0, 10);
     const d = dayDiff(old!.start_date ?? day, old!.start_date ? m.start_date : m.due_date);
-    return { start_date: m.start_date, due: { DateTime: { ...due.DateTime, utc: addDays(day, d) + due.DateTime.utc.slice(10) } } };
+    return { start_date: m.start_date, due: { DateTime: { ...due.DateTime, utc: shiftLocalDays(due.DateTime.utc, due.DateTime.tz, d) } } };
   }
   // All or nothing from the user's view: on any failure show it and reload what is really stored.
   async function guarded(fn: () => Promise<unknown>) {
