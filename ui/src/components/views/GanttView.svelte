@@ -1,14 +1,11 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { api } from '../../lib/api';
-  import type { Issue, Milestone, Project, Relation, Reschedule, ViewDef } from '../../lib/bindings';
+  import type { Issue, Milestone, Project, Relation, Reschedule, SavedView, ViewDef } from '../../lib/bindings';
   import { TICK_DAYS, ZOOMS, addDays, buildRows, dayDiff, range, unscheduled, type Row, type Zoom } from '../../lib/gantt';
 
-  // The projects route mounts this without props; a view id selects issues mode.
-  let { mode = location.pathname === '/projects/timeline' ? 'projects' : 'issues', viewId = null }: {
-    mode?: 'issues' | 'projects';
-    viewId?: number | null;
-  } = $props();
+  // The projects route mounts this without a view, which selects projects mode.
+  let { view = null, mode = view ? 'issues' : 'projects' }: { view?: SavedView | null; mode?: 'issues' | 'projects' } = $props();
 
   const ALL: ViewDef = { filter: null, sorts: [], group_by: null, layout: 'Gantt', columns: [], include_archived: false };
   const ROW = 28;
@@ -33,9 +30,7 @@
   const ticks = $derived(Array.from({ length: Math.ceil(days / TICK_DAYS[zoom]) }, (_, k) => addDays(span.start, k * TICK_DAYS[zoom])));
 
   async function load() {
-    const views = await api.views.list();
-    const id = viewId ?? views[0]?.id ?? null;
-    const view = views.find((v) => v.id === id);
+    const id = view?.id ?? null;
     const [issues, projects] = await Promise.all([api.views.query(mode === 'issues' && view ? view.def : ALL), api.projects.list()]);
     const live = mode === 'issues' && id !== null;
     const [bars, critical, rels] = live
@@ -56,7 +51,7 @@
     rows = buildRows({ mode, issues, bars, projects, milestones, critical });
   }
   $effect(() => {
-    void [mode, viewId];
+    void [mode, view];
     untrack(load);
   });
 

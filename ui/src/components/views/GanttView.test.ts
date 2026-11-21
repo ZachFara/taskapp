@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setApi } from '../../lib/api';
 import { api } from '../../lib/api';
 import { createMockApi, fixtures, type MockSeed } from '../../lib/api.mock';
-import type { Issue, ViewDef } from '../../lib/bindings';
+import type { Issue, SavedView, ViewDef } from '../../lib/bindings';
 import GanttView from './GanttView.svelte';
 
 const def: ViewDef = { filter: null, sorts: [], group_by: null, layout: 'Gantt', columns: [], include_archived: false };
@@ -17,10 +17,10 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-async function show(issues: Issue[], props: { mode?: 'issues' | 'projects'; viewId?: number | null } = {}, seed: Partial<MockSeed> = {}) {
+async function show(issues: Issue[], props: { mode?: 'issues' | 'projects'; view?: SavedView } = {}, seed: Partial<MockSeed> = {}) {
   setApi(createMockApi({ ...fixtures, issues, views: [{ id: 1, name: 'All', def, position: 0 }], ...seed }));
   if (seed.issues) throw new Error('pass issues as the first argument');
-  view = mount(GanttView, { target: document.body, props: { viewId: 1, ...props } });
+  view = mount(GanttView, { target: document.body, props: { view: { id: 1, name: 'All', def, position: 0 }, ...props } });
   await vi.waitFor(() => expect(document.querySelector('.timeline')).not.toBeNull());
   await vi.waitFor(() => expect(api.views.list).toBeDefined());
   await new Promise((r) => setTimeout(r, 20));
@@ -67,7 +67,7 @@ describe('GanttView', () => {
     await block();
     // the view loaded before the relation existed; remount to reload
     unmount(view!);
-    view = mount(GanttView, { target: document.body, props: { viewId: 1 } });
+    view = mount(GanttView, { target: document.body, props: { view: { id: 1, name: 'All', def, position: 0 } } });
     await vi.waitFor(() => expect(bar('issue-1')?.classList.contains('critical')).toBe(true));
     expect(bar('issue-2').classList.contains('critical')).toBe(true);
     expect(bar('issue-3').classList.contains('critical')).toBe(false);
