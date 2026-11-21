@@ -52,4 +52,22 @@ describe('Shell', () => {
     expect(document.body.textContent).toContain('main view');
     expect(document.querySelector('.dot.error')).toBeNull();
   });
+
+  it('slash_opens_palette_and_g_i_g_v_navigate', async () => {
+    history.replaceState(null, '', '/');
+    await open();
+    press(window, '/');
+    await settle();
+    expect(document.querySelector('[role=dialog] input')).not.toBeNull();
+    press(document.querySelector('[role=dialog] input')!, 'Escape');
+    await settle();
+    press(window, 'g');
+    press(window, 'i');
+    expect(location.pathname).toBe('/view/1');
+    history.replaceState(null, '', '/');
+    press(window, 'g');
+    press(window, 'v');
+    await settle();
+    expect(document.querySelector('[role=dialog]')).not.toBeNull();
+  });
 });

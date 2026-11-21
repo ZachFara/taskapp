@@ -104,3 +104,21 @@ export function range(rows: Row[], today: string): Span {
   const r = rollup(rows.filter((x) => x.start && x.end) as Span[]) ?? { start: today, end: today };
   return { start: addDays(r.start, -3), end: addDays(r.end, 14) };
 }
+
+// Zone offset in ms at an instant: the zone's wall clock read as UTC, minus the instant.
+const offsetAt = (tz: string, t: number) => {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' })
+      .formatToParts(new Date(t)).map((x) => [x.type, +x.value]),
+  );
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(t / 1000) * 1000;
+};
+
+/** Moves a UTC instant by whole days of `tz` local time, so the wall-clock time survives a DST change. */
+export function shiftLocalDays(utc: string, tz: string, days: number): string {
+  const t = Date.parse(utc);
+  const wall = t + offsetAt(tz, t) + days * 86_400_000;
+  // The offset at the new date may differ; one re-check settles it except inside the DST gap itself.
+  const guess = wall - offsetAt(tz, wall - offsetAt(tz, t));
+  return new Date(wall - offsetAt(tz, guess)).toISOString().replace('.000Z', 'Z');
+}
