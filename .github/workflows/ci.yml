@@ -1,0 +1,119 @@
+name: ci
+on:
+  pull_request:
+    branches: [main, 'plan-*']
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  SQLX_OFFLINE: 'true'
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.d.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: d
+        run: |
+          base=${{ github.event.pull_request.base.sha }}
+          echo "docs_only=$(git diff --name-only "$base"...HEAD | scripts/docs-only.sh)" >> "$GITHUB_OUTPUT"
+
+  commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: |
+          for c in $(git rev-list --no-merges "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"); do
+            git log -1 --format=%B "$c" > "$RUNNER_TEMP/msg"
+            scripts/check-commit-msg.sh "$RUNNER_TEMP/msg"
+          done
+
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck scripts/*.sh scripts/hooks/* scripts/test/*.sh
+      - run: scripts/test/test-checks.sh
+
+  lint:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: 'clippy, rustfmt' }
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/check-layout.sh
+      - run: scripts/check-boundaries.sh
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo install cargo-machete --locked && cargo machete
+      - run: cargo build --workspace
+
+  # Sharding rule: a job that passes 3 minutes is split, balanced by measured time. The slowest
+  # package gets its own job. Today: core alone, everything else together.
+  test-core:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p taskapp-core
+
+  test-rest:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --exclude taskapp-core
+
+  test-ui:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true' && hashFiles('ui/package.json') != ''
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: ui/pnpm-lock.yaml }
+      - run: pnpm -C ui install --frozen-lockfile
+      - run: pnpm -C ui build
+      - run: pnpm -C ui test
+
+  test-swift:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true' && hashFiles('helpers/reminders-helper/Package.swift') != ''
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test --package-path helpers/reminders-helper
+
+  size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/size-report.sh
+      - name: duplicate-code groups (report only)
+        run: npx -y jscpd@4 --min-lines 10 --reporters console crates app ui/src || true
+
+  # The one required status. Skipped jobs count as passing; it reports on every PR.
+  check:
+    if: always()
+    needs: [changes, commits, scripts, lint, test-core, test-rest, test-ui, test-swift, size]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo '${{ toJSON(needs) }}'
+          if echo '${{ toJSON(needs) }}' | grep -qE '"result": "(failure|cancelled)"'; then exit 1; fi
