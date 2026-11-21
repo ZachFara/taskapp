@@ -88,17 +88,17 @@ async fn status(db: &Db) -> Result<SyncStatus> {
             reminders: SyncState::Off,
             gcal: SyncState::Off,
             export: SyncState::Off,
+            backup: SyncState::Off,
         }))
 }
 
-/// Backups have no status field; their failures only reach the log.
 async fn set_state(db: &Db, step: Step, state: SyncState) -> Result<()> {
     let mut all = status(db).await?;
     match step {
         Step::Reminders => all.reminders = state,
         Step::Gcal => all.gcal = state,
         Step::Export => all.export = state,
-        Step::Backup => return Ok(()),
+        Step::Backup => all.backup = state,
     }
     settings::set(db, "sync_status", &all).await
 }
@@ -116,6 +116,7 @@ impl Steps for Real {
             Step::Backup => {
                 backup::nightly(&self.db, &self.backup_dir, Utc::now()).await?;
                 backup::prune(&self.backup_dir)?;
+                set_state(&self.db, Step::Backup, SyncState::Ok { at: Utc::now() }).await?;
             }
             Step::Reminders => {
                 let tz: chrono_tz::Tz = self

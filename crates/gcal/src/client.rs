@@ -129,6 +129,7 @@ pub(crate) async fn set_state(db: &Db, state: SyncState) -> Result<()> {
             reminders: SyncState::Off,
             gcal: SyncState::Off,
             export: SyncState::Off,
+            backup: SyncState::Off,
         });
     status.gcal = state;
     settings::set(db, "sync_status", &status).await
