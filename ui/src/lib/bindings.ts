@@ -524,10 +524,10 @@ export const commands = {
 	 */
 	remindersListLists: (options?: InvokeOptions) => __TAURI_INVOKE<([string, string])[]>("reminders_list_lists", undefined, options),
 	/**
-	 *  Runs every enabled sync now and returns the new status.
+	 *  Runs every enabled sync now, after any sync already running, and returns the new status.
 	 * 
 	 *  # Errors
-	 *  Fails when a sync cannot start.
+	 *  Fails when the status cannot be read.
 	 */
 	syncNow: (options?: InvokeOptions) => __TAURI_INVOKE<SyncStatus>("sync_now", undefined, options),
 	/**

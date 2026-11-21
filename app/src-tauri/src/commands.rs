@@ -2,6 +2,9 @@
 //! need a sync crate (the app is the only place allowed to use those together).
 
 use std::path::Path;
+use std::sync::Arc;
+
+use crate::sync_loop::{Real, Syncer};
 use taskapp_commands::AppState;
 
 use taskapp_core::{Db, Error, Result, SyncStatus, settings};
@@ -70,14 +73,14 @@ pub async fn reminders_list_lists(state: State<'_, AppState>) -> Result<Vec<(Str
     taskapp_reminders::helper::list_reminder_lists(&state.helper_path).await
 }
 
-/// Runs every enabled sync now and returns the new status.
+/// Runs every enabled sync now, after any sync already running, and returns the new status.
 ///
 /// # Errors
-/// Fails when a sync cannot start.
+/// Fails when the status cannot be read.
 #[tauri::command]
 #[specta::specta]
-pub async fn sync_now() -> Result<SyncStatus> {
-    todo!("T26")
+pub async fn sync_now(syncer: State<'_, Arc<Syncer<Real>>>) -> Result<SyncStatus> {
+    syncer.sync_all().await
 }
 
 /// Writes the markdown export to the configured directory and commits it, pushing when a remote is set.
