@@ -11,11 +11,10 @@ final class FakeStore: ReminderStore {
         guard let r = items[id] else { throw HelperError("unknown list: \(id)") }
         return r
     }
-    func delete(externalId: String) throws -> Bool {
-        for k in items.keys {
-            if let i = items[k]!.firstIndex(where: { $0.externalId == externalId }) { items[k]!.remove(at: i); return true }
-        }
-        return false
+    func delete(externalId: String, inList id: String) throws -> Bool {
+        guard let i = items[id]?.firstIndex(where: { $0.externalId == externalId }) else { return false }
+        items[id]!.remove(at: i)
+        return true
     }
     func onChange(_ h: @escaping () -> Void) { handler = h }
 }
@@ -70,9 +69,18 @@ struct CommandsTests {
     @Test func delete_reports_missing() async {
         let s = FakeStore()
         s.items["L1"] = [RawReminder(externalId: "a", title: "x")]
-        let (code, out) = await exec(["delete", "a", "zzz"], s)
+        let (code, out) = await exec(["delete", "--list", "L1", "a", "zzz"], s)
         #expect(code == 0)
         #expect(out == [#"{"deleted":["a"],"missing":["zzz"]}"#])
+    }
+
+    @Test func delete_ignores_same_id_in_other_list() async {
+        let s = FakeStore()
+        s.items["L2"] = [RawReminder(externalId: "a", title: "other list")]
+        let (code, out) = await exec(["delete", "--list", "L1", "a"], s)
+        #expect(code == 0)
+        #expect(out == [#"{"deleted":[],"missing":["a"]}"#])
+        #expect(s.items["L2"]!.count == 1)
     }
 
     @Test func errors_are_json() async {

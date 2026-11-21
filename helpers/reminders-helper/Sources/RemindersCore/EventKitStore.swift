@@ -28,10 +28,12 @@ public final class EventKitStore: ReminderStore {
         }
     }
 
-    public func delete(externalId: String) throws -> Bool {
-        let found = store.calendarItems(withExternalIdentifier: externalId).compactMap { $0 as? EKReminder }
-        for r in found { try store.remove(r, commit: false) }
+    public func delete(externalId: String, inList id: String) throws -> Bool {
+        let found = store.calendarItems(withExternalIdentifier: externalId)
+            .compactMap { $0 as? EKReminder }
+            .filter { $0.calendar.calendarIdentifier == id }
         if found.isEmpty { return false }
+        for r in found { try store.remove(r, commit: false) }
         try store.commit()
         return true
     }

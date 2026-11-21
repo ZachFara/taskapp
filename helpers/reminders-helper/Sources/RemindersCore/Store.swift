@@ -31,7 +31,7 @@ public protocol ReminderStore {
     func lists() throws -> [ReminderList]
     /// Throws `HelperError` for an unknown list id.
     func reminders(inList id: String) async throws -> [RawReminder]
-    /// Returns false when no reminder has that external id.
-    func delete(externalId: String) throws -> Bool
+    /// Returns false when the list has no reminder with that external id; other lists are never touched.
+    func delete(externalId: String, inList id: String) throws -> Bool
     func onChange(_ handler: @escaping () -> Void)
 }

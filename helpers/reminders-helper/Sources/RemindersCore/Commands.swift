@@ -50,9 +50,11 @@ public func run(_ args: [String], store: ReminderStore, out: @escaping (String) 
             let items = try await store.reminders(inList: id).filter { !$0.isCompleted }
             out(json(items.map(reminderJSON)))
         case "delete":
+            guard let list = listArg() else { return fail("delete requires --list <id>") }
+            guard try store.lists().contains(where: { $0.id == list }) else { return fail("unknown list: \(list)") }
             var deleted: [String] = [], missing: [String] = []
-            for id in args.dropFirst() {
-                if try store.delete(externalId: id) { deleted.append(id) } else { missing.append(id) }
+            for id in args.dropFirst().filter({ $0 != "--list" && $0 != list }) {
+                if try store.delete(externalId: id, inList: list) { deleted.append(id) } else { missing.append(id) }
             }
             out(json(["deleted": deleted, "missing": missing]))
         case "watch":
