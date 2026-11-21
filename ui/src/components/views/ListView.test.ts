@@ -18,16 +18,14 @@ afterEach(() => {
   if (live) unmount(live);
   live = null;
   vi.useRealTimers();
-  history.replaceState(null, '', '/');
 });
 
-async function open(seed: MockSeed, path = '/view/1') {
+async function open(seed: MockSeed) {
   const mock = createMockApi(seed);
   setApi(mock);
-  history.replaceState(null, '', path);
   const target = document.createElement('div');
   document.body.append(target);
-  live = mount(ListView, { target });
+  live = mount(ListView, { target, props: { view: seed.views![0] } });
   flushSync();
   return { mock, target };
 }
@@ -44,7 +42,7 @@ describe('ListView', () => {
   });
 
   it('jk_moves_selection', async () => {
-    const { target } = await open({ ...fixtures, views: viewSeed() }, '/view/1');
+    const { target } = await open({ ...fixtures, views: viewSeed() });
     await vi.waitFor(() => expect(rows(target).length).toBeGreaterThan(0));
     const first = selected(target);
     press('j');

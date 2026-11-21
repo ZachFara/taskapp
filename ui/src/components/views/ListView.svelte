@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../../lib/api';
-  import type { FieldRef, Issue, PropertyDef, Status, ViewDef } from '../../lib/bindings';
+  import type { FieldRef, Issue, PropertyDef, SavedView, Status, ViewDef } from '../../lib/bindings';
   import { registerShortcut } from '../../lib/keymap';
   import { navigate } from '../../app/routes';
 
@@ -12,16 +12,14 @@
   // Linear's order: no priority first, then urgent to low
   const PRIORITY = ['No priority', 'Urgent', 'High', 'Medium', 'Low'];
   const BARS = [0, 4, 3, 2, 1];
-  // The route /view/:id with no saved view, or an unknown id, shows all issues grouped by status.
-  const DEFAULT_DEF: ViewDef = { filter: null, sorts: [], group_by: { Fixed: 'Status' }, layout: 'List', columns: [], include_archived: false };
+
+  let { view }: { view: SavedView } = $props();
 
   type Item = { head: string } | { row: Issue; group: string };
 
-  let path = $state(location.pathname);
   let issues = $state<Issue[]>([]);
   let statuses = $state<Status[]>([]);
   let defs = $state<PropertyDef[]>([]);
-  let def = $state<ViewDef>(DEFAULT_DEF);
   let loaded = $state(false);
   let selectedId = $state<number | null>(null);
   let picker = $state<'status' | 'priority' | null>(null);
@@ -29,22 +27,18 @@
   let height = $state(0);
   let scroller = $state<HTMLElement>();
 
-  const viewId = $derived(Number(path.split('/')[2]));
+  const def = $derived<ViewDef>(view.def);
 
-  async function load(id: number) {
-    const [views, st, dd] = await Promise.all([api.views.list(), api.statuses.list(), api.properties.listDefs()]);
-    const saved = views.find((v) => v.id === id);
-    const next = saved?.def ?? DEFAULT_DEF;
-    const rows = await api.views.query(next);
+  async function load(v: SavedView) {
+    const [st, dd, rows] = await Promise.all([api.statuses.list(), api.properties.listDefs(), api.views.query(v.def)]);
     statuses = st;
     defs = dd;
-    def = next;
     issues = rows;
     loaded = true;
   }
 
   $effect(() => {
-    load(viewId);
+    load(view);
   });
 
   // Groups keep the order the view's query returned; status groups follow the status positions.
@@ -95,18 +89,6 @@
       return [{ name, value: String(i.properties[c.Property]) }];
     });
 
-  function move(delta: number) {
-    if (!rowItems.length) return;
-    const at = rowItems.findIndex((x) => x.row.id === current?.id);
-    const next = Math.max(0, Math.min(rowItems.length - 1, at + delta));
-    selectedId = rowItems[next].row.id;
-    const index = items.indexOf(rowItems[next]);
-    const top = index * ROW;
-    if (!scroller) return;
-    if (top < scroller.scrollTop) scroller.scrollTop = top;
-    else if (top + ROW > scroller.scrollTop + viewport) scroller.scrollTop = top + ROW - viewport;
-  }
-
   function measure() {
     height = scroller?.clientHeight ?? 0;
   }
@@ -114,6 +96,17 @@
   $effect(() => {
     if (scroller) measure();
   });
+
+  function move(delta: number) {
+    if (!rowItems.length) return;
+    const at = rowItems.findIndex((x) => x.row.id === current?.id);
+    const next = Math.max(0, Math.min(rowItems.length - 1, at + delta));
+    selectedId = rowItems[next].row.id;
+    const top = items.indexOf(rowItems[next]) * ROW;
+    if (!scroller) return;
+    if (top < scroller.scrollTop) scroller.scrollTop = top;
+    else if (top + ROW > scroller.scrollTop + viewport) scroller.scrollTop = top + ROW - viewport;
+  }
 
   function open() {
     if (current && !picker) navigate(`/issue/${current.key}`);
@@ -123,7 +116,7 @@
     if (!current) return;
     await api.issues.update(current.id, patch);
     picker = null;
-    await load(viewId);
+    await load(view);
   }
 
   $effect(() => {
@@ -139,7 +132,7 @@
   });
 </script>
 
-<svelte:window onpopstate={() => (path = location.pathname)} onresize={measure} />
+<svelte:window onresize={measure} />
 
 {#if loaded && issues.length === 0}
   <p class="empty">No issues in this view.</p>
