@@ -54,4 +54,13 @@ describe('keymap', () => {
     press(document.body, 'c');
     expect(handler).not.toHaveBeenCalled();
   });
+
+  it('enter is ignored on a focused button, link or role=button but fires on the page body', () => {
+    const handler = register('enter');
+    document.body.innerHTML = '<button></button><a href="#x">x</a><div role="button" tabindex="0"></div>';
+    for (const el of document.body.children) press(el, 'Enter');
+    expect(handler).not.toHaveBeenCalled();
+    press(document.body, 'Enter');
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
 });
