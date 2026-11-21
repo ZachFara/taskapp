@@ -5000,7 +5000,14 @@ name = "taskapp-cli"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
+ "chrono",
+ "chrono-tz",
+ "clap",
+ "serde",
+ "serde_json",
+ "taskapp-core",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
