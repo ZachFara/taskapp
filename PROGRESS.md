@@ -1,8 +1,10 @@
 # PROGRESS
 
 ## Status
-Dated 2026-11-21. Wave 0, 1 and 2 merged into `plan-1` (T0-T25, T28, T29) plus follow-ups T30, T33, T34. Running:
-T26 (sync loop), T32 (settings commands). Next: T31 (opener plugin), T27 (QA, Linear runbook), final review, PR to main.
+Dated 2026-11-21. Plan 1 complete on `plan-1`: every task T0-T35, the final review (4 Sonnet reviewers: 0 Critical,
+23 Important, 28 Minor) and one fix wave (FW1-FW8, every Critical and Important closed with a failing test first).
+Live check: real-mode harness on a seeded database, 11 screens, 0 console errors or failed requests. Waiting on the
+owner: the PR from plan-1 to main, and the owner steps in docs/qa-checklist.md.
 
 ## Models
 Subagents: about half Sonnet, half Haiku, by difficulty (Haiku: steps can be given; Sonnet: judgment). Pass the model
@@ -156,6 +158,100 @@ Ledger:
 - 2026-11-21 Queue agent (Haiku) final: landed 9 11 5 10 18 19 12 14 31 29 22 8 38 39. #39 merged; #20 #21 #23-#28 #30 closed as superseded (task/T15 carries a bad queue merge commit 7cf5d80; PR closed, harmless). #40 conflicted on App.svelte after #39: orchestrator resolved with T33 side (plan-1 had the pre-T33 file), 134 UI tests pass; landing #40 then #41 with land.sh.
 
 22. 2026-11-21 land.sh merges with merge commits, not squash: squashed task PRs made every branch that carried another task's commits conflict (add/add) when it landed. Cost: noisier history on plan-1; the final PR to main can still squash.
+
+## Ledger since PR #44
+
+- 2026-11-21 T35 NEEDS_CONTEXT answered: backup subcommands dispatch before Db::open; restore requires --yes (prints target and exits non-zero otherwise); default target stays the app db.
+- 2026-11-21 #44 and #42 landed. #43 conflicted (app Cargo.toml, commands.rs with T26): orchestrator kept both sides, regenerated bindings (unchanged), gate green; landing #45 (WAL race fix, Haiku, green) then #43 with merge commits.
+- 2026-11-21 T31 (Haiku) DONE_WITH_CONCERNS PR #46 green, tests first; non-allow-listed schemes (mailto:) now refused; no harness capture. T35 (Haiku) BLOCKED on conflicts in app files after #42; PR #47 work done, tests first. Orchestrator resolves after #43 lands.
+- 2026-11-21 #45 and #43 landed (merge commits). #47 (T35) merged plan-1 cleanly after #43 (shared history); #46 (T31) took plan-1 commands.rs, 150 UI tests pass. Landing #47 then #46. Orchestrator slip repeated: merge ran on fix43's local task/T32 (branch used by another worktree); reset, nothing pushed. Lesson: always operate in the task's own worktree.
+- 2026-11-21 T27 (Sonnet) dispatched on plan-1 + T35 + T31.
+- 2026-11-21 #47 and #46 landed. All implementation tasks except T27 in plan-1.
+- 2026-11-21 Final review started (the one review): 4 Sonnet reviewers, read-only, one detached worktree each at plan-1: core, sync, agents/security, ui. Reports go to .scratch/review/<area>.md. Briefs .briefs/review-*.md.
+- 2026-11-21 review-ui (Sonnet): 0 Critical, 4 Important, 6 Minor; 10 break tests, 8 caught.
+- 2026-11-21 review-sync (Sonnet): 0 Critical, 7 Important, 6 Minor. F1 work blocks never sync (julianday NULL for MIN/MAX_UTC); F4 git add -A in enclosing repo; F5 "## Comments" truncation; F2 digest alert at 08:00 UTC; F3 reminder deleted when notes/due patch fails; F6 helper not bundled; F7 backup errors stderr only.
+- 2026-11-21 T27 (Sonnet) DONE_WITH_CONCERNS PR #48 green. Sidecar bundled (debug build verified, helper beside binary); QA checklist (automated + owner steps 1-6); Linear runbook. DEFECT FIXED: views_query failed on a real db (stored property kind is JSON-quoted; test helper hid it) so every view was empty in real mode; failing test first. build.rs writes an empty placeholder sidecar for non-release builds (accepted; release needs scripts/build-helper.sh). Real-mode harness PNGs 0 problems.
+- Process lesson: mock-only UI testing hid a real-db defect for the whole plan; next plan runs harness real mode from the first UI task.
+- 2026-11-21 review-core (Sonnet): 0 Critical, 7 Important (F1 BEGIN IMMEDIATE x21, F2 restore_live dead, F3 restore accepts any sqlite + no pre-restore copy, F4 pins deleted on rename, F5 DueDate filters skip timed dues, F6 properties patch unvalidated, F7 parent cycles), 9 Minor; 66 break tests, 18 unnoticed.
+- 2026-11-21 review-agents (Sonnet): 0 Critical, 5 Important (A1 CLI snapshots to snapshots/ not backups/; A2 CI docs-only misses renames; A3 CLI cannot do Linear migration; snapshot-failure and CLI SRC/snapshot untested), 7 Minor. Reviewer slip: a break test resolved the CLI restore default to the real app dir; aborted (dir absent), nothing written.
+- Review totals: 0 Critical, 23 Important, 28 Minor. Fix wave FW1-FW8 + orchestrator CI fix.
+- 2026-11-21 #48 (T27) landed. Fix wave dispatched, each on plan-1, own worktree: FW1 core integrity S, FW2 backup H, FW3 calendar S, FW4 export S, FW5 reminders H, FW6 Gantt S, FW7 keyboard S, FW8 CLI S. Orchestrator PR #49: CI --no-renames (A2).
+- Deferred to After this plan (Minor, from review): devserver hard-link bypass; unused shell:default capability and csp null; create_status/pin history source; per-call snapshot rule; Gantt/Calendar keyboard and panel open; markdown forms and remote images; quick-add weekday words eat title words; views not validated at save.
+- 2026-11-21 FW7 (Sonnet) DONE PR #50 green; UI Important 3, 4 closed, tests first. g i opens first view (no inbox screen); Board l not done (Minor).
+- 2026-11-21 FW6 (Sonnet) PR #51 green but shifted DateTime dues in UTC (breaks Review Focus 1 across DST); sent back with a failing-test spec before landing.
+- 2026-11-21 FW6 DST fix pushed, test failed first (14:00Z vs 13:00Z), PR #51 green. Limit: a due inside the spring-forward gap resolves to a nearby instant (untested).
+- 2026-11-21 FW2 (Haiku) NEEDS_CONTEXT: SyncStatus.backup needs a line in gcal client.rs and reminders import.rs (approved); also fixes ensure_unused race (retry before Conflict, 30-run loop as evidence).
+- 2026-11-21 FW5 (Haiku) DONE PR #53 green; sync F3 closed, test failed first.
+- 2026-11-21 FW4 (Sonnet) DONE PR #52 green; sync F4, F5, empty export_dir closed with failing tests; safe_name and rebuild guard tests passed first run (guards only). Known limit kept: comment body line "### <time> <time>" misread.
+- 2026-11-21 FW3 (Sonnet) DONE PR #54 green; sync F1 (block window), F2 (timezone default from system) closed with failing tests; PKCE coverage test added.
+24. 2026-11-21 Calendar sync covers work blocks from 30 days back to 365 days ahead; older or later blocks get no event. Why: SQLite julianday cannot parse chrono MIN/MAX, and past blocks need no phone notification. Cost: a block a year out has no event until it enters the window.
+- 2026-11-21 FW1 (Sonnet) DONE PR #56 green; core F1 (BEGIN IMMEDIATE everywhere), F4 (pins follow slug rename, issue pins by number), F5 (timed dues get local due_date), F6 (properties merge + validate changed keys), F7 (parent cycles Invalid) closed with failing tests. Not done: project scope check on update (set_value has it); old-prefix pins stay.
+- Records fix: docs/IMPLEMENTER-CONTRACT.md says "never touch any remote" but briefs require push + PR; reword to "only your own task branch on origin".
+- 2026-11-21 FW8 (Sonnet) DONE PR #55 green; A1 (CLI snapshots in backups/), A3 (CLI migration flags), snapshot-failure and Cli-source tests closed. Two coverage tests passed first run (code already correct). After plan: one core backup::dir_for helper; CLI/MCP ignore backup_dir setting; CLI change-kind snapshots before validating.
+- 2026-11-21 FW2 (Haiku) DONE PR #57 green; core F2, F3, sync F7 closed with failing tests; ensure_unused retry, backup tests 30/30.
+- 2026-11-21 #52 test-core failed: concurrent_writers_do_not_error "database is locked" after 12 s (plan-1 test, export-only PR). Rerun once. If it repeats: investigate (busy_timeout 5000 vs FTS reindex inside the write tx added in T30).
+
+
+## Models table
+Minutes and tokens are the subagent's own run (from its completion notice), rounded. CI wait time per agent was not
+recorded in the ledger, so it is not listed; next plan records start, finish and CI wait per dispatch.
+
+| Task | Model | Fix rounds | Minutes | Tokens (k) | Handed up |
+|---|---|---|---|---|---|
+| setup | Sonnet | 0 | 8 | 140 | no |
+| T0 | Sonnet | 1 (PR after plan-1 existed) | 15 | 166 | no |
+| T1 | Sonnet | 0 | 9 | 120 | no |
+| T2 | Sonnet | 0 | 26 | 119 | no |
+| T3 | Sonnet | 0 | 12 | 95 | no |
+| T4 | Haiku | 0 | 24 | 159 | no |
+| T5 | Sonnet | 0 | 22 | 102 | no |
+| T6 | Sonnet | 0 | 20 | 108 | no |
+| T7 | Haiku | 1 (parked on T2/T4) | 10 | 134 | no |
+| T8 | Haiku | 1 (NEEDS_CONTEXT) | 29 | 130 | no |
+| T9 | Haiku | 0 | 25 | 139 | no |
+| T10 | Sonnet | 1 (security finding) | 10 | 85 | no |
+| T11 | Haiku | 0 | 17 | 124 | no |
+| T28 | Sonnet | 1 (security finding) | 24 | 125 | no |
+| T12 | Sonnet | 0 | 13 | 97 | no |
+| T13 | Haiku | 1 (harness assertion) | 13 | 124 | no |
+| T14 | Haiku | 1 (merge conflict ruling) | 9 | 135 | no |
+| T15 | Haiku | 0 | 8 | 124 | no |
+| T16 | Sonnet | 0 | 14 | 105 | no |
+| T17 | Sonnet | 0 | 16 | 117 | no |
+| T18 | Haiku | 0 | 12 | 127 | no |
+| T19 | Sonnet | 0 | 11 | 103 | no |
+| T20 | Haiku | 2 (missing libs, conflicts) | 12 | 152 | no |
+| T29 | Haiku | 0 | 9 | 115 | no |
+| T21 | Sonnet | 0 | 15 | 127 | no |
+| T22 | Haiku | 1 (NEEDS_CONTEXT) | 15 | 130 | no |
+| T23 | Sonnet | 0 | 16 | 101 | no |
+| T24 | Sonnet | 0 | 20 | 140 | no |
+| T25 | Haiku | 0 | 16 | 220 | no |
+| T30 | Sonnet | 0 | 14 | 113 | no |
+| T33 | Sonnet | 0 | 9 | 81 | no |
+| T34 | Sonnet | 0 | 9 | 86 | no |
+| T26 | Sonnet | 0 | 18 | 127 | no |
+| T32 | Sonnet | 0 | 17 | 147 | no |
+| T31 | Haiku | 0 | 7 | 81 | no |
+| T35 | Haiku | 1 (NEEDS_CONTEXT) | 6 | 109 | no |
+| T27 | Sonnet | 0 | 17 | 108 | no |
+| landing queue | Haiku | 0 | 78 | 85 | no |
+| WAL race fix | Haiku | 0 | 9 | 73 | no |
+| review core / sync / agents / ui | Sonnet | 0 | 11 / 10 / 23 / 5 | 225 / 171 / 179 / 110 | no |
+| FW1 / FW3 / FW4 / FW7 / FW8 | Sonnet | 0 | 17 / 16 / 15 / 8 / 19 | 95 / 85 / 84 / 85 / 94 | no |
+| FW6 | Sonnet | 1 (DST shift) | 12 | 74 | no |
+| FW2 / FW5 | Haiku | 1 / 0 | 19 / 16 | 144 / 76 | no |
+
+Split: 31 Sonnet runs, 21 Haiku runs. No Haiku brief had to be handed up to Sonnet; Haiku stops were all for missing
+context the brief should have given (missing libraries, unmerged dependencies, unclear CLI startup), not for difficulty.
+
+## Profile of this plan (largest costs)
+1. Landing: serial merges under the up-to-date rule, about 5-8 minutes each; fixed mid-plan by batching green PRs
+   (#31, #38, #39) and by Linux runners (#18).
+2. Squash merges: every branch carrying other task commits conflicted on landing; fixed by merge commits (#44).
+3. Mock-only UI testing hid a real-database defect (all views empty) until T27; next plan runs real-mode harness from
+   the first UI task.
+4. Briefs that missed shared prerequisites (UI libraries, routes, empty crates) caused four NEEDS_CONTEXT stops.
 
 ## After this plan
 - CI lint job takes ~6 min on macos-latest; shard or move clippy to ubuntu once Rust tasks land (target < 5 min).
