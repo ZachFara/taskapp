@@ -121,3 +121,119 @@ fn unknown_subcommand_prints_usage_and_exits_2() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("Usage"));
 }
+
+/// A snapshot of `db` made by a destructive command, as the app does before a property change.
+fn make_snapshot(db: &Path) -> PathBuf {
+    let create = run(db, &["property", "create", "note", "Note", "text"]);
+    assert!(create.status.success());
+    let change = run(db, &["property", "change-kind", "note", "number"]);
+    assert!(change.status.success());
+    let snaps = db.parent().expect("parent").join("snapshots");
+    std::fs::read_dir(&snaps)
+        .expect("snapshots dir")
+        .map(|e| e.expect("entry").path())
+        .next()
+        .expect("a snapshot file")
+}
+
+#[test]
+fn backup_list_prints_snapshots() {
+    let (dir, db) = fresh();
+    make_snapshot(&db);
+    let listed = run_json(
+        &db,
+        &[
+            "backup",
+            "list",
+            "--dir",
+            dir.path().to_str().expect("utf8"),
+        ],
+    );
+    let rows = listed.as_array().expect("array");
+    assert_eq!(rows.len(), 1, "listed: {listed}");
+    assert!(
+        rows[0]["path"]
+            .as_str()
+            .expect("path")
+            .contains("snapshots")
+    );
+}
+
+#[test]
+fn backup_restore_replaces_db() {
+    let (_src, src_db) = fresh();
+    run(&src_db, &["add", "One"]);
+    run(&src_db, &["add", "Two"]);
+    run(&src_db, &["add", "Three"]);
+    let snapshot = make_snapshot(&src_db);
+
+    let (_dst, dst_db) = fresh();
+    run(&dst_db, &["add", "Only one"]);
+    assert_ne!(
+        run(&dst_db, &["issue", "get", "ZF-3"]).status.code(),
+        Some(0)
+    );
+
+    let out = run(
+        &dst_db,
+        &[
+            "backup",
+            "restore",
+            snapshot.to_str().expect("utf8"),
+            "--yes",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let issue = run_json(&dst_db, &["issue", "get", "ZF-3"]);
+    assert_eq!(issue["key"], "ZF-3");
+}
+
+#[test]
+fn backup_restore_refuses_corrupt_file() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Keep me"]);
+    let before = std::fs::read(&db).expect("db bytes");
+    let corrupt = db.parent().expect("parent").join("corrupt.db");
+    std::fs::write(&corrupt, b"not a database").expect("write");
+
+    let out = run(
+        &db,
+        &[
+            "backup",
+            "restore",
+            corrupt.to_str().expect("utf8"),
+            "--yes",
+        ],
+    );
+    assert_ne!(out.status.code(), Some(0));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!stderr.contains("unrecognized"), "stderr was: {stderr}");
+    assert_eq!(std::fs::read(&db).expect("db bytes"), before);
+}
+
+#[test]
+fn backup_restore_without_yes_changes_nothing() {
+    let (_src, src_db) = fresh();
+    run(&src_db, &["add", "One"]);
+    let snapshot = make_snapshot(&src_db);
+
+    let (_dst, dst_db) = fresh();
+    run(&dst_db, &["add", "Keep me"]);
+    let before = std::fs::read(&dst_db).expect("db bytes");
+
+    let out = run(
+        &dst_db,
+        &["backup", "restore", snapshot.to_str().expect("utf8")],
+    );
+    assert_ne!(out.status.code(), Some(0));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(&dst_db.display().to_string()),
+        "stderr was: {stderr}"
+    );
+    assert_eq!(std::fs::read(&dst_db).expect("db bytes"), before);
+}
