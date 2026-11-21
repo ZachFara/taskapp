@@ -405,11 +405,17 @@ pub struct ParsedQuickAdd {
     pub estimate_minutes: Option<u32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, specta::Type)]
 pub enum SyncState {
+    #[default]
     Off,
-    Ok { at: DateTime<Utc> },
-    Error { at: DateTime<Utc>, message: String },
+    Ok {
+        at: DateTime<Utc>,
+    },
+    Error {
+        at: DateTime<Utc>,
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -417,6 +423,9 @@ pub struct SyncStatus {
     pub reminders: SyncState,
     pub gcal: SyncState,
     pub export: SyncState,
+    /// Absent in statuses saved before backups reported here.
+    #[serde(default)]
+    pub backup: SyncState,
 }
 
 /// One row of change history.

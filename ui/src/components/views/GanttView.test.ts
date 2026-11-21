@@ -123,4 +123,59 @@ describe('GanttView', () => {
     expect(bar('issue-7')).toBeNull();
     expect(bar('issue-1')).not.toBeNull();
   });
+
+  it('drag_keeps_datetime_due_time_and_zone', async () => {
+    const due = { DateTime: { utc: '2026-12-03T15:00:00Z', tz: 'America/New_York' } };
+    await show([issue(1, { start_date: '2026-12-01', due })]);
+    const update = vi.spyOn(api.issues, 'update');
+    dragBy(bar('issue-1'), 28);
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(update).toHaveBeenCalledWith(1, { start_date: '2026-12-03', due: { DateTime: { utc: '2026-12-05T15:00:00Z', tz: 'America/New_York' } } });
+  });
+
+  it('drag_across_dst_keeps_local_wall_clock', async () => {
+    const due = { DateTime: { utc: '2026-03-06T14:00:00Z', tz: 'America/New_York' } };
+    await show([issue(1, { start_date: '2026-03-06', due })]);
+    const update = vi.spyOn(api.issues, 'update');
+    dragBy(bar('issue-1'), 42);
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(update.mock.calls[0][1]).toEqual({ start_date: '2026-03-09', due: { DateTime: { utc: '2026-03-09T13:00:00Z', tz: 'America/New_York' } } });
+  });
+
+  it('drag_estimate_only_bar_does_not_invent_due', async () => {
+    await show([issue(1, { start_date: '2026-12-01', estimate_minutes: 480 })]);
+    const update = vi.spyOn(api.issues, 'update');
+    dragBy(bar('issue-1'), 28);
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(update.mock.calls[0][1]).toEqual({ start_date: '2026-12-03' });
+  });
+
+  it('failed_apply_reloads_and_shows_error', async () => {
+    await show(chain());
+    await block();
+    const real = api.issues.update.bind(api.issues);
+    let n = 0;
+    vi.spyOn(api.issues, 'update').mockImplementation((...a) => (++n === 2 ? Promise.reject({ message: 'boom' }) : real(...a)));
+    const rejections: unknown[] = [];
+    const on = (e: PromiseRejectionEvent) => { rejections.push(e.reason); e.preventDefault(); };
+    window.addEventListener('unhandledrejection', on);
+    dragBy(bar('issue-1'), 28);
+    await vi.waitFor(() => expect(document.querySelector('.toast')).not.toBeNull());
+    (document.querySelectorAll('.toast button')[0] as HTMLElement).click();
+    await vi.waitFor(() => expect(document.body.textContent).toContain('boom'));
+    await new Promise((r) => setTimeout(r, 20));
+    window.removeEventListener('unhandledrejection', on);
+    expect(rejections).toEqual([]);
+  });
+
+  it('rollup_rows_are_not_draggable', async () => {
+    await show([issue(7), dated(8, '2026-12-01', '2026-12-03', { parent_id: 7 })]);
+    const update = vi.spyOn(api.issues, 'update');
+    const before = bar('issue-7').style.left;
+    dragBy(bar('issue-7'), 28);
+    await new Promise((r) => setTimeout(r, 20));
+    flushSync();
+    expect(update).not.toHaveBeenCalled();
+    expect(bar('issue-7').style.left).toBe(before);
+  });
 });

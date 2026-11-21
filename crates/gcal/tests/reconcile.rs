@@ -1,7 +1,8 @@
 use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use taskapp_core::{
-    ChangeSource, Db, Due, IssuePatch, NewIssue, SyncState, SyncStatus, issues, settings, statuses,
+    ChangeSource, Db, Due, IssuePatch, NewIssue, SyncState, SyncStatus, blocks, issues, settings,
+    statuses,
 };
 use taskapp_gcal::{
     auth::connect_with,
@@ -451,4 +452,110 @@ async fn lists_writable_calendars() {
         .await
         .expect("list");
     assert_eq!(got, [("cal1".to_string(), "Tasks".to_string())]);
+}
+
+#[tokio::test]
+async fn work_block_becomes_an_event() {
+    let db = db().await;
+    let id = timed_issue(&db).await;
+    let start = Utc::now() + Duration::days(1);
+    let block = blocks::create_block(
+        &db,
+        taskapp_core::IssueId(id),
+        start,
+        start + Duration::hours(1),
+    )
+    .await
+    .expect("block");
+    let s = server().await;
+    mount_list(&s, &[]).await;
+    Mock::given(method("POST"))
+        .and(path(EVENTS))
+        .and(body_string_contains(format!(
+            "\"managed_key\":\"block:{}\"",
+            block.id.0
+        )))
+        .respond_with(stored("gb", "eb"))
+        .expect(1)
+        .mount(&s)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(EVENTS))
+        .respond_with(stored("g1", "e1"))
+        .mount(&s)
+        .await;
+    reconcile_with(&db, &google(&s), REFRESH)
+        .await
+        .expect("reconcile");
+    assert!(row_ids(&db).await.contains(&"gb".to_owned()));
+}
+
+#[tokio::test]
+async fn digest_alert_uses_the_timezone_setting() {
+    let db = db().await;
+    settings::set(&db, "timezone", &"America/New_York")
+        .await
+        .expect("tz");
+    let new = NewIssue {
+        title: "Pay rent".into(),
+        due: Some(Due::Date(
+            chrono::NaiveDate::from_ymd_opt(2099, 1, 15).expect("date"),
+        )),
+        ..NewIssue::default()
+    };
+    issues::create(&db, new, ChangeSource::Ui)
+        .await
+        .expect("issue");
+    let s = server().await;
+    mount_list(&s, &[]).await;
+    Mock::given(method("POST"))
+        .and(path(EVENTS))
+        .and(body_string_contains("2099-01-15T13:00:00"))
+        .respond_with(stored("ga", "ea"))
+        .expect(1)
+        .mount(&s)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(EVENTS))
+        .respond_with(stored("gd", "ed"))
+        .mount(&s)
+        .await;
+    reconcile_with(&db, &google(&s), REFRESH)
+        .await
+        .expect("reconcile");
+}
+
+#[tokio::test]
+async fn token_exchange_sends_the_pkce_verifier_for_the_challenge() {
+    let s = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"access_token": "at", "refresh_token": "rt"})),
+        )
+        .mount(&s)
+        .await;
+    let challenge = std::sync::Mutex::new(String::new());
+    connect_with(&google(&s), |url| {
+        let u = reqwest::Url::parse(url).expect("url");
+        let c = u
+            .query_pairs()
+            .find(|(k, _)| k == "code_challenge")
+            .expect("challenge");
+        *challenge.lock().expect("lock") = c.1.into_owned();
+        visit(url, "c", None);
+    })
+    .await
+    .expect("connect");
+    let req = &s.received_requests().await.expect("recorded")[0];
+    let body = String::from_utf8_lossy(&req.body).into_owned();
+    let verifier = body
+        .split('&')
+        .find_map(|p| p.strip_prefix("code_verifier="))
+        .expect("verifier");
+    let expected = oauth2::PkceCodeChallenge::from_code_verifier_sha256(
+        &oauth2::PkceCodeVerifier::new(verifier.to_owned()),
+    );
+    assert_eq!(expected.as_str(), *challenge.lock().expect("lock"));
 }
