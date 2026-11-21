@@ -5,7 +5,7 @@ suggested fix). Worktree `../taskapp-wt/FW8`, branch `fix/fw8` from `plan-1`; PR
 SQLX_OFFLINE=true. Never `--no-verify`, never `merge -s ours`.
 
 ## Findings to fix
-/Users/user1/Ark/Development/active/taskapp/.scratch/review/agents.md: A1 (CLI snapshots go to the same backups dir as MCP, via one shared helper), A3 (CLI create flags for created_at, completed_at, properties incl. linear_id, parent, cycle, labels, comment created_at, and a `--migration` flag for source Migration, matching MCP), and tests for: snapshot failure aborts the change (MCP and CLI), CLI writes record source Cli, CLI property delete snapshots first.
+<workspace>/taskapp/.scratch/review/agents.md: A1 (CLI snapshots go to the same backups dir as MCP, via one shared helper), A3 (CLI create flags for created_at, completed_at, properties incl. linear_id, parent, cycle, labels, comment created_at, and a `--migration` flag for source Migration, matching MCP), and tests for: snapshot failure aborts the change (MCP and CLI), CLI writes record source Cli, CLI property delete snapshots first.
 
 ## Rules
 Every finding gets a failing test first, in the owning test file; watch it fail and record the message, then fix.
