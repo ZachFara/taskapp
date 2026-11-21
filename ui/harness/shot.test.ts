@@ -1,9 +1,9 @@
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const uiDir = resolve(import.meta.dirname, '..');
 // Async, so this process can still answer the throwaway page server while the shot runs.
@@ -29,6 +29,9 @@ async function page(script: string): Promise<string> {
 }
 
 describe('shot', () => {
+  // Idempotent: a no-op when the browser is cached, so CI needs no separate install step.
+  beforeAll(() => void execFileSync('pnpm', ['exec', 'playwright', 'install', 'chromium'], { cwd: uiDir }), 300_000);
+
   it('mock_mode_writes_png_aria_and_console', async () => {
     const out = outDir();
     const r = await shot(['/view/1', '--mode', 'mock', '--out', out]);
