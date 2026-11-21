@@ -1,0 +1,15 @@
+.scratch/
+target/
+node_modules/
+harness-out/
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+# agent working directories (.briefs/ is tracked on purpose)
+.worktrees/
+.claude/
+.codex/
+.cursor/
+.gemini/
+.aider*

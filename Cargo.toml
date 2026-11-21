@@ -1,0 +1,60 @@
+[workspace]
+resolver = "3"
+members = [
+  "crates/core", "crates/gcal", "crates/reminders", "crates/export",
+  "crates/mcp", "crates/cli", "crates/commands", "crates/devserver", "app/src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+taskapp-core = { path = "crates/core" }
+taskapp-gcal = { path = "crates/gcal" }
+taskapp-reminders = { path = "crates/reminders" }
+taskapp-export = { path = "crates/export" }
+taskapp-commands = { path = "crates/commands" }
+
+sqlx = { version = "=0.8.6", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "migrate", "chrono", "json"] }
+tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "fs", "net", "signal"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+serde_yaml_ng = "=0.10.0"
+chrono = { version = "=0.4.45", features = ["serde"] }
+chrono-tz = "=0.10.4"
+thiserror = "=2.0.21"
+sha2 = "=0.10.9"
+specta = { version = "=2.0.0-rc.28", features = ["derive", "chrono", "serde_json"] }
+specta-typescript = "=0.0.15"
+tauri = { version = "=2.12.7", features = [] }
+tauri-build = "=2.7.6"
+tauri-specta = { version = "=2.0.0-rc.29", features = ["derive", "typescript"] }
+tauri-plugin-single-instance = "=2.5.5"
+tauri-plugin-deep-link = "=2.6.3"
+tauri-plugin-shell = "=2.6.0"
+rmcp = { version = "=3.11.0", features = ["server", "transport-io"] }
+schemars = "=1.2.3"
+clap = { version = "=4.6.9", features = ["derive"] }
+oauth2 = "=5.0.0"
+keyring = { version = "=3.6.3", features = ["apple-native"] }
+reqwest = { version = "=0.12.28", default-features = false, features = ["json", "rustls-tls"] }
+axum = "=0.8.9"
+tower-http = { version = "=0.6.11", features = ["cors"] }
+wiremock = "=0.6.5"
+assert_cmd = "=2.2.2"
+tempfile = "=3.27.0"
+
+[workspace.lints.rust]
+unused = { level = "deny", priority = -1 }
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+cognitive_complexity = "deny"
+too_many_lines = "deny"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+unwrap_used = "deny"
