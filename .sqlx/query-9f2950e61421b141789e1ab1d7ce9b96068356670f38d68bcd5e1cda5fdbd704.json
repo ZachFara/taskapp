@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO issue_labels (issue_id, label_id) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "9f2950e61421b141789e1ab1d7ce9b96068356670f38d68bcd5e1cda5fdbd704"
+}

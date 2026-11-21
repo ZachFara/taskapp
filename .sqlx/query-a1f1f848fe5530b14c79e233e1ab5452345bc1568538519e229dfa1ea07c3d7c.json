@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT category FROM statuses WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "category",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a1f1f848fe5530b14c79e233e1ab5452345bc1568538519e229dfa1ea07c3d7c"
+}

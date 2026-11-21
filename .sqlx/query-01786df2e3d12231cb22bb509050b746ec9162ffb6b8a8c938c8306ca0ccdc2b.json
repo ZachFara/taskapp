@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: i64\" FROM issues WHERE parent_id = ? AND archived_at IS NULL ORDER BY number",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "01786df2e3d12231cb22bb509050b746ec9162ffb6b8a8c938c8306ca0ccdc2b"
+}

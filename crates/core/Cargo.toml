@@ -19,3 +19,4 @@ specta.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+chrono-tz.workspace = true
