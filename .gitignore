@@ -17,3 +17,5 @@ harness-out/
 app/src-tauri/gen/
 ui/dist/
 helpers/reminders-helper/.build/
+# the sidecar copy made by scripts/build-helper.sh
+app/src-tauri/binaries/
