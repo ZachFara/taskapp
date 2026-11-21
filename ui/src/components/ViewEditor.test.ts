@@ -24,7 +24,7 @@ const optionsOf = (sel: HTMLSelectElement) => [...sel.options].map((o) => o.valu
 let mock: Api;
 let app: ReturnType<typeof mount>;
 async function open(view: SavedView | null = null) {
-  mock = createMockApi(fixtures);
+  mock = createMockApi({ ...fixtures, views: [] });
   setApi(mock);
   let saved: SavedView | undefined;
   app = mount(ViewEditor, { target: document.body, props: { view, onsaved: (v: SavedView) => (saved = v) } });
@@ -84,7 +84,7 @@ describe('ViewEditor', () => {
   });
 
   it('update_and_save_as_new', async () => {
-    const v = await createMockApi(fixtures).views.save(null, 'Old', { filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false });
+    const v = await createMockApi({ ...fixtures, views: [] }).views.save(null, 'Old', { filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false });
     await open(v);
     await mock.views.save(null, 'Old', v.def); // the editor's mock has its own store
     await set(q<HTMLInputElement>('[aria-label=Name]'), 'New', 'input');
