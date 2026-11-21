@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Duration, NaiveDate, NaiveTime, Utc};
+use chrono::{DateTime, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
 use chrono_tz::Tz;
 use sha2::{Digest, Sha256};
 use taskapp_core::{Due, Issue, Project, Status, StatusCategory, WorkBlock};
@@ -69,7 +69,7 @@ pub fn desired(
         .iter()
         .filter_map(|i| timed_event(i, projects, zone))
         .collect();
-    events.extend(digest_events(&open, projects));
+    events.extend(digest_events(&open, projects, zone));
     events.extend(block_events(blocks, issues, statuses, projects));
     events
 }
@@ -106,7 +106,9 @@ fn timed_event(issue: &Issue, projects: &[Project], zone: Tz) -> Option<DesiredE
     })
 }
 
-fn digest_events(open: &[&Issue], projects: &[Project]) -> Vec<DesiredEvent> {
+/// An all-day event cannot carry an 08:00 reminder (Google counts minutes back from midnight and
+/// rejects negatives), so each digest is paired with a short timed event at 08:00 local that carries the popup.
+fn digest_events(open: &[&Issue], projects: &[Project], zone: Tz) -> Vec<DesiredEvent> {
     let mut by_date: BTreeMap<NaiveDate, Vec<&Issue>> = BTreeMap::new();
     for issue in open {
         if let Some(Due::Date(date)) = &issue.due {
@@ -115,22 +117,38 @@ fn digest_events(open: &[&Issue], projects: &[Project]) -> Vec<DesiredEvent> {
     }
     by_date
         .into_iter()
-        .map(|(date, group)| {
+        .flat_map(|(date, group)| {
             let summary = match group.len() {
                 1 => "Due today: 1 task".to_string(),
                 n => format!("Due today: {n} tasks"),
             };
-            DesiredEvent {
+            let description = group
+                .iter()
+                .map(|i| header(i, projects))
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            let alert = zone
+                .from_local_datetime(&date.and_time(DIGEST_NOTIFY_LOCAL))
+                .earliest()
+                .map(|t| t.with_timezone(&Utc))
+                .map(|start| DesiredEvent {
+                    managed_key: format!("digest-alert:{date}"),
+                    summary: summary.clone(),
+                    description: description.clone(),
+                    timing: EventTiming::Timed {
+                        start,
+                        end: start + Duration::minutes(15),
+                    },
+                    reminder_minutes: Some(0),
+                });
+            let digest = DesiredEvent {
                 managed_key: format!("digest:{date}"),
                 summary,
-                description: group
-                    .iter()
-                    .map(|i| header(i, projects))
-                    .collect::<Vec<_>>()
-                    .join("\n\n"),
+                description,
                 timing: EventTiming::AllDay(date),
                 reminder_minutes: digest_reminder_minutes(),
-            }
+            };
+            std::iter::once(digest).chain(alert)
         })
         .collect()
 }
@@ -307,6 +325,13 @@ mod tests {
         desired(issues, &statuses(), &[project()], blocks, NY, "ZF")
     }
 
+    /// Only the all-day digests, without their 08:00 alert events.
+    fn run_digests(issues: &[Issue]) -> Vec<DesiredEvent> {
+        let mut events = run(issues, &[]);
+        events.retain(|e| e.managed_key.starts_with("digest:"));
+        events
+    }
+
     fn event(key: &str, minutes: Option<u32>) -> DesiredEvent {
         DesiredEvent {
             managed_key: key.into(),
@@ -341,7 +366,7 @@ mod tests {
 
     #[test]
     fn date_only_grouped_into_digest() {
-        let events = run(&[issue(1, Some(date(21))), issue(2, Some(date(21)))], &[]);
+        let events = run_digests(&[issue(1, Some(date(21))), issue(2, Some(date(21)))]);
         assert_eq!(events.len(), 1);
         let e = &events[0];
         assert_eq!(e.managed_key, "digest:2026-11-21");
@@ -362,7 +387,7 @@ mod tests {
 
     #[test]
     fn single_task_digest_singular() {
-        let events = run(&[issue(1, Some(date(21)))], &[]);
+        let events = run_digests(&[issue(1, Some(date(21)))]);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].summary, "Due today: 1 task");
         assert_eq!(events[0].reminder_minutes, digest_reminder_minutes());
@@ -440,7 +465,7 @@ mod tests {
 
     #[test]
     fn two_digests_on_different_dates_are_separate_events() {
-        let events = run(&[issue(1, Some(date(21))), issue(2, Some(date(22)))], &[]);
+        let events = run_digests(&[issue(1, Some(date(21))), issue(2, Some(date(22)))]);
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].managed_key, "digest:2026-11-21");
         assert_eq!(events[0].summary, "Due today: 1 task");
@@ -462,6 +487,39 @@ mod tests {
         assert_eq!(e.managed_key, "block:5");
         assert_eq!(e.summary, "Task 1");
         assert_eq!(e.reminder_minutes, None);
+    }
+
+    #[test]
+    fn digest_has_a_timed_0800_alert_beside_it() {
+        // Winter: 08:00 in New York is 13:00 UTC.
+        let events = run(&[issue(1, Some(date(21))), issue(2, Some(date(21)))], &[]);
+        let alert = events
+            .iter()
+            .find(|e| e.managed_key == "digest-alert:2026-11-21")
+            .expect("alert event");
+        assert_eq!(alert.summary, "Due today: 2 tasks");
+        assert_eq!(
+            alert.timing,
+            EventTiming::Timed {
+                start: at(2026, 11, 21, 13),
+                end: at(2026, 11, 21, 13) + Duration::minutes(15),
+            }
+        );
+        assert_eq!(alert.reminder_minutes, Some(0));
+        // Summer: the same wall-clock time is 12:00 UTC.
+        let summer = Due::Date(NaiveDate::from_ymd_opt(2026, 7, 4).expect("valid date"));
+        let events = run(&[issue(1, Some(summer))], &[]);
+        let alert = events
+            .iter()
+            .find(|e| e.managed_key == "digest-alert:2026-07-04")
+            .expect("summer alert");
+        assert_eq!(
+            alert.timing,
+            EventTiming::Timed {
+                start: at(2026, 7, 4, 12),
+                end: at(2026, 7, 4, 12) + Duration::minutes(15),
+            }
+        );
     }
 
     #[test]
