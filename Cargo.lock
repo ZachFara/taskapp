@@ -5142,11 +5142,14 @@ name = "taskapp-app"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "chrono-tz",
  "serde_json",
  "specta",
  "specta-typescript",
+ "sqlx",
  "taskapp-commands",
  "taskapp-core",
+ "taskapp-export",
  "taskapp-gcal",
  "taskapp-reminders",
  "tauri",
@@ -5156,6 +5159,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-specta",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
