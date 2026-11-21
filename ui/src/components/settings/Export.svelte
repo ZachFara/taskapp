@@ -32,9 +32,9 @@
   async function exportNow() {
     error = '';
     try {
-      const status = await api.sync.now();
-      const state = status.export;
-      result = typeof state === 'string' ? state : 'Error' in state ? state.Error.message : `Exported at ${state.Ok.at}`;
+      result = '';
+      await api.export.now();
+      result = 'Exported.';
     } catch (e) {
       error = (e as { message?: string }).message ?? String(e);
     }

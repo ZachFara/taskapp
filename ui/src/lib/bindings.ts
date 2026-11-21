@@ -130,6 +130,20 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	propertiesReorder: (keys: string[], options?: InvokeOptions) => __TAURI_INVOKE<null>("properties_reorder", { keys }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	propertiesSetScope: (key: string, project: ProjectId | null, options?: InvokeOptions) => __TAURI_INVOKE<PropertyDef>("properties_set_scope", { key, project }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	propertiesDeleteDef: (key: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("properties_delete_def", { key }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -375,6 +389,13 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	viewsReorder: (ids: ViewId[], options?: InvokeOptions) => __TAURI_INVOKE<null>("views_reorder", { ids }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	searchSearch: (text: string, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<Issue[]>("search_search", { text, limit }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -466,6 +487,20 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	backupList: (dir: string, options?: InvokeOptions) => __TAURI_INVOKE<string[]>("backup_list", { dir }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	backupRestore: (from: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("backup_restore", { from }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	syncStatus: (options?: InvokeOptions) => __TAURI_INVOKE<SyncStatus>("sync_status", undefined, options),
 	/**
 	 *  `(id, name)` of each calendar the connected account can write to.
@@ -495,6 +530,13 @@ export const commands = {
 	 *  Fails when the status cannot be read.
 	 */
 	syncNow: (options?: InvokeOptions) => __TAURI_INVOKE<SyncStatus>("sync_now", undefined, options),
+	/**
+	 *  Writes the markdown export to the configured directory and commits it, pushing when a remote is set.
+	 * 
+	 *  # Errors
+	 *  Fails when no export directory is set, or when writing or git fails.
+	 */
+	exportNow: (options?: InvokeOptions) => __TAURI_INVOKE<null>("export_now", undefined, options),
 };
 
 /* Types */

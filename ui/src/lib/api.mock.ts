@@ -153,7 +153,14 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
   const upsert = <T extends { id: number }>(rows: T[], row: T, what: string) =>
     Object.assign(find(rows, row.id, what), row);
   const def = (key: string) => s.propertyDefs.find((d) => d.key === key) ?? fail('NotFound', `property ${key}`);
+  const backups: string[] = [];
   const ok = async () => null;
+  // Sets position to each row's index in `order`; like the real commands, the order must list every row once.
+  const reposition = <T extends { position: number }, K>(rows: T[], order: K[], keyOf: (r: T) => K, what: string) => {
+    if (order.length !== rows.length || rows.some((r) => order.filter((k) => k === keyOf(r)).length !== 1))
+      fail('Invalid', `reorder must list every ${what} exactly once`);
+    for (const r of rows) r.position = order.indexOf(keyOf(r));
+  };
   const off = { reminders: 'Off', gcal: 'Off', export: 'Off' } as const;
 
   return {
@@ -213,9 +220,19 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
           if (v == null) return false;
           return kind === 'Number' ? Number.isNaN(Number(v)) : kind === 'Select' && !options.some((o) => o.value === v);
         });
-        if (bad.length) fail('Invalid', `values do not fit ${kind}: ${bad.map((i) => i.key).join(', ')}`);
+        if (bad.length) fail('Conflict', `values do not fit ${kind}: ${bad.map((i) => i.key).join(', ')}`);
         for (const i of s.issues) if (kind === 'Number' && i.properties[key] != null) i.properties[key] = Number(i.properties[key]);
         return Object.assign(d, { kind, options });
+      },
+      reorder: async (keys) => {
+        reposition(s.propertyDefs, keys, (d) => d.key, 'property');
+        return null;
+      },
+      setScope: async (key, project) => {
+        const d = def(key);
+        const bad = s.issues.filter((i) => i.properties[key] != null && project !== null && i.project_id !== project);
+        if (bad.length) fail('Conflict', `${key} has values on issues outside the project: ${bad.map((i) => i.key).join(', ')}`);
+        return Object.assign(d, { project_id: project });
       },
       deleteDef: async (key) => {
         s.propertyDefs.splice(s.propertyDefs.indexOf(def(key)), 1);
@@ -356,6 +373,11 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
         return Object.assign(find(views, id, 'view'), { name, def: d });
       },
       delete: async (id) => nothing(remove(views, id, 'view')),
+      reorder: async (ids) => {
+        reposition(views, ids, (v) => v.id, 'view');
+        views.sort((a, b) => a.position - b.position);
+        return null;
+      },
     },
     search: {
       search: async (text, limit) => {
@@ -397,7 +419,17 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
       get: async (key) => settings.get(key) ?? null,
       set: async (key, value) => nothing(settings.set(key, value)),
     },
-    backup: { snapshot: async (dir, reason) => `${dir}/mock-${reason}.db` },
+    backup: {
+      snapshot: async (dir, reason) => {
+        const path = `${dir}/snapshots/mock-${reason}.db`;
+        backups.unshift(path);
+        return path;
+      },
+      list: async (dir) => backups.filter((p) => p.startsWith(`${dir}/`)),
+      // The app always holds its own database, so the real command refuses the same way.
+      restore: async () => fail('Conflict', 'the database is open elsewhere; close the app before restoring'),
+    },
+    export: { now: ok },
     sync: { status: async () => off, now: async () => off },
     gcal: { connect: ok, listCalendars: async () => [['primary', 'Primary']] },
     reminders: { listLists: async () => [['1', 'Reminders']] },
