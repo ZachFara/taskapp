@@ -340,3 +340,23 @@ fn bulk_update_failing_item_leaves_earlier_items_unchanged() {
     assert!(r[7].is_err());
     assert_eq!(r[8].as_ref().expect("get")["issue"]["priority"], 0);
 }
+
+#[test]
+fn failed_snapshot_aborts_delete_property() {
+    let (_d, db) = tmp();
+    // A file named `backups` makes the snapshot directory impossible to create.
+    std::fs::write(db.parent().expect("parent").join("backups"), "not a dir").expect("block");
+    let r = session(
+        &db,
+        &[
+            (
+                "create_property",
+                json!({"key":"p","name":"P","kind":"Text"}),
+            ),
+            ("delete_property", json!({"key":"p"})),
+            ("list_properties", json!({})),
+        ],
+    );
+    assert!(r[1].is_err(), "{:?}", r[1]);
+    assert!(r[2].as_ref().expect("list").to_string().contains("\"p\""));
+}
