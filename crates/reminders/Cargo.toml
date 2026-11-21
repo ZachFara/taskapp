@@ -9,14 +9,7 @@ workspace = true
 
 [dependencies]
 taskapp-core.workspace = true
-tokio.workspace = true
-serde.workspace = true
-serde_json.workspace = true
 chrono.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-
-# Removed by T0 once the code uses these dependencies.
-[package.metadata.cargo-machete]
-ignored = ["taskapp-core", "tokio", "serde", "serde_json", "chrono", "tempfile"]
