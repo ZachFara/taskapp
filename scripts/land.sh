@@ -39,5 +39,5 @@ for pr in "$@"; do
     sleep "$poll"
   done
   echo "PR $pr is green ($total checks)"
-  do_or_say gh pr merge "$pr" --squash --match-head-commit "$head"
+  do_or_say gh pr merge "$pr" --merge --match-head-commit "$head"
 done

@@ -1,15 +1,22 @@
 //! The Tauri shell: wires the commands, plugins and bindings export together.
 
 mod commands;
-mod deeplink;
-mod sync_loop;
+pub mod deeplink;
+pub mod sync_loop;
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 use specta_typescript::Typescript;
 use taskapp_commands::AppState;
-use taskapp_core::Db;
-use tauri::Manager;
+use taskapp_core::{Db, settings};
+use tauri::{Emitter, Manager};
+use tauri_plugin_deep_link::DeepLinkExt;
+
+use crate::sync_loop::{Real, Syncer, Timing};
 
 const BINDINGS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../ui/src/lib/bindings.ts");
 
@@ -44,6 +51,38 @@ fn system_tz() -> String {
         .unwrap_or_else(|| "UTC".to_owned())
 }
 
+/// The sync loop, the reminders watcher and the live-refresh poll, all in the app's runtime.
+fn start_background(
+    app: &tauri::AppHandle,
+    db: &Db,
+    helper: PathBuf,
+    backup_dir: PathBuf,
+    syncer: Arc<Syncer<Real>>,
+) {
+    let (cal_tx, cal_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (rem_tx, rem_rx) = tokio::sync::mpsc::unbounded_channel();
+    let handle = app.clone();
+    let poll_db = db.clone();
+    tauri::async_runtime::spawn(async move {
+        let result = sync_loop::poll_db(poll_db, Duration::from_secs(1), move |calendar| {
+            handle.emit("db-changed", ()).ok();
+            if calendar {
+                cal_tx.send(()).ok();
+            }
+        })
+        .await;
+        eprintln!("live refresh stopped: {result:?}");
+    });
+    tauri::async_runtime::spawn(sync_loop::watch_reminders(db.clone(), helper, rem_tx));
+    tauri::async_runtime::spawn(sync_loop::run(
+        syncer,
+        Timing::PRODUCTION,
+        backup_dir,
+        cal_rx,
+        rem_rx,
+    ));
+}
+
 /// Runs the app.
 ///
 /// # Panics
@@ -61,11 +100,32 @@ pub fn run() {
             let dir: PathBuf = app.path().data_dir()?.join("taskapp");
             std::fs::create_dir_all(&dir)?;
             let db = tauri::async_runtime::block_on(Db::open(&dir.join("taskapp.db")))?;
-            let helper_path = app.path().resource_dir()?.join("reminders-helper");
+            let bundled = std::env::current_exe()?
+                .parent()
+                .map_or_else(PathBuf::new, |p| p.join("reminders-helper"));
+            let helper_path = sync_loop::resolve_helper(bundled);
+            let backup_dir =
+                tauri::async_runtime::block_on(settings::get::<String>(&db, "backup_dir"))?
+                    .map_or_else(|| dir.join("backups"), PathBuf::from);
+            let tz = system_tz();
             app.manage(AppState {
-                db,
-                helper_path,
-                tz: system_tz(),
+                db: db.clone(),
+                helper_path: helper_path.clone(),
+                tz: tz.clone(),
+            });
+            let real = Real {
+                db: db.clone(),
+                helper: helper_path.clone(),
+                tz,
+                backup_dir: backup_dir.clone(),
+            };
+            let syncer = Arc::new(Syncer::new(real, db.clone()));
+            app.manage(syncer.clone());
+            start_background(app.handle(), &db, helper_path, backup_dir, syncer);
+            let handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                let urls: Vec<String> = event.urls().iter().map(ToString::to_string).collect();
+                deeplink::open(&handle, &urls);
             });
             Ok(())
         })
