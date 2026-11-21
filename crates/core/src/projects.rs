@@ -118,7 +118,7 @@ pub async fn list(db: &Db) -> Result<Vec<Project>> {
 /// Fails on a database error or invalid arguments.
 pub async fn create(db: &Db, slug: &str, name: &str, src: ChangeSource) -> Result<Project> {
     validate(slug, None)?;
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let now = Utc::now();
     let id = sqlx::query!(
         "INSERT INTO projects (slug, name, created_at) VALUES (?, ?, ?)",
@@ -175,7 +175,7 @@ async fn record_edits(
 /// Fails on a database error or invalid arguments.
 pub async fn update(db: &Db, project: Project, src: ChangeSource) -> Result<Project> {
     validate(&project.slug, project.doc_link.as_deref())?;
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let old = find(&mut tx, project.id).await?;
     record_edits(&mut tx, src, &old, &project).await?;
     sqlx::query!(
@@ -192,6 +192,12 @@ pub async fn update(db: &Db, project: Project, src: ChangeSource) -> Result<Proj
     )
     .execute(&mut *tx)
     .await?;
+    // Project pins are keyed by slug, so a rename must carry them along.
+    sqlx::query("UPDATE pins SET target = ? WHERE kind = 'project' AND target = ?")
+        .bind(&project.slug)
+        .bind(&old.slug)
+        .execute(&mut *tx)
+        .await?;
     tx.commit().await?;
     Ok(project)
 }
@@ -230,7 +236,7 @@ async fn unlink_issues(tx: &mut SqliteConnection, src: ChangeSource, pid: i64) -
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn delete(db: &Db, id: ProjectId, src: ChangeSource) -> Result<()> {
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let old = find(&mut tx, id).await?;
     let defs: Vec<String> =
         sqlx::query_scalar("SELECT key FROM property_defs WHERE project_id = ? ORDER BY key")
@@ -291,7 +297,7 @@ pub async fn create_milestone(
     target_date: Option<NaiveDate>,
     src: ChangeSource,
 ) -> Result<Milestone> {
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let id = sqlx::query!(
         "INSERT INTO milestones (project_id, name, target_date) VALUES (?, ?, ?)",
         project.0,
@@ -328,7 +334,7 @@ pub async fn update_milestone(
     src: ChangeSource,
 ) -> Result<Milestone> {
     let id = milestone.id.0;
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let old = sqlx::query!(
         r#"SELECT name, target_date AS "target_date: NaiveDate" FROM milestones WHERE id = ?"#,
         id
@@ -367,7 +373,7 @@ pub async fn update_milestone(
 /// Fails on a database error or invalid arguments.
 pub async fn delete_milestone(db: &Db, id: MilestoneId, src: ChangeSource) -> Result<()> {
     let mid = id.0;
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let name: String = sqlx::query_scalar("SELECT name FROM milestones WHERE id = ?")
         .bind(mid)
         .fetch_optional(&mut *tx)

@@ -417,7 +417,7 @@ pub async fn delete(db: &Db, id: ViewId) -> Result<()> {
 ///
 /// Fails with `Invalid` unless `ids` lists every view exactly once.
 pub async fn reorder(db: &Db, ids: &[ViewId]) -> Result<()> {
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let mut have: Vec<i64> = sqlx::query_scalar("SELECT id FROM views")
         .fetch_all(&mut *tx)
         .await?;

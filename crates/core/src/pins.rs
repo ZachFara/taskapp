@@ -111,7 +111,7 @@ pub async fn unpin(db: &Db, id: PinId) -> Result<()> {
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn reorder(db: &Db, ids_in_order: &[PinId]) -> Result<()> {
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let mut have: Vec<i64> = sqlx::query_scalar("SELECT id FROM pins")
         .fetch_all(&mut *tx)
         .await?;
@@ -141,10 +141,8 @@ async fn resolve(db: &Db, prefix: &str, pin: &Pin) -> Result<Option<(String, boo
     let t = pin.target.as_str();
     Ok(match pin.kind {
         PinKind::Issue => {
-            let number = t
-                .strip_prefix(prefix)
-                .and_then(|rest| rest.strip_prefix('-'))
-                .and_then(|n| n.parse::<i64>().ok());
+            // The number alone identifies the issue, so a changed issue prefix does not orphan the pin.
+            let number = t.rsplit_once('-').and_then(|(_, n)| n.parse::<i64>().ok());
             match number {
                 None => None,
                 Some(number) => sqlx::query_as::<_, (String, Option<String>)>(
@@ -153,7 +151,13 @@ async fn resolve(db: &Db, prefix: &str, pin: &Pin) -> Result<Option<(String, boo
                 .bind(number)
                 .fetch_optional(&db.pool)
                 .await?
-                .map(|(title, archived)| (title, archived.is_some(), format!("/issue/{t}"))),
+                .map(|(title, archived)| {
+                    (
+                        title,
+                        archived.is_some(),
+                        format!("/issue/{prefix}-{number}"),
+                    )
+                }),
             }
         }
         PinKind::Project => sqlx::query_as::<_, (String, Option<String>)>(

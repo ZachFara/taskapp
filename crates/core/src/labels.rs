@@ -26,7 +26,7 @@ pub async fn list(db: &Db) -> Result<Vec<Label>> {
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn create(db: &Db, name: &str, color: &str, src: ChangeSource) -> Result<Label> {
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let id = sqlx::query!(
         "INSERT INTO labels (name, color) VALUES (?, ?)",
         name,
@@ -55,7 +55,7 @@ pub async fn create(db: &Db, name: &str, color: &str, src: ChangeSource) -> Resu
 /// Fails on a database error or invalid arguments.
 pub async fn update(db: &Db, label: Label, src: ChangeSource) -> Result<Label> {
     let id = label.id.0;
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let old = sqlx::query!("SELECT name, color FROM labels WHERE id = ?", id)
         .fetch_optional(&mut *tx)
         .await?
@@ -92,7 +92,7 @@ pub async fn update(db: &Db, label: Label, src: ChangeSource) -> Result<Label> {
 /// Fails on a database error or invalid arguments.
 pub async fn delete(db: &Db, id: LabelId, src: ChangeSource) -> Result<()> {
     let lid = id.0;
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let name: String = sqlx::query_scalar("SELECT name FROM labels WHERE id = ?")
         .bind(lid)
         .fetch_optional(&mut *tx)
@@ -132,7 +132,7 @@ pub async fn delete(db: &Db, id: LabelId, src: ChangeSource) -> Result<()> {
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn add_label(db: &Db, issue: IssueId, label: LabelId, src: ChangeSource) -> Result<()> {
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let added = sqlx::query!(
         "INSERT OR IGNORE INTO issue_labels (issue_id, label_id) VALUES (?, ?)",
         issue.0,
@@ -163,7 +163,7 @@ pub async fn remove_label(
     label: LabelId,
     src: ChangeSource,
 ) -> Result<()> {
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let removed = sqlx::query!(
         "DELETE FROM issue_labels WHERE issue_id = ? AND label_id = ?",
         issue.0,

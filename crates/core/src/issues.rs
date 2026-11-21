@@ -165,7 +165,14 @@ fn due_cols(due: Option<&Due>) -> DueCols<'_> {
     let (mut date, mut utc, mut tz) = (None, None, None);
     match due {
         Some(Due::Date(d)) => date = Some(*d),
-        Some(Due::DateTime { utc: u, tz: z }) => (utc, tz) = (Some(*u), Some(z.as_str())),
+        Some(Due::DateTime { utc: u, tz: z }) => {
+            (utc, tz) = (Some(*u), Some(z.as_str()));
+            // Views filter and sort on due_date, so timed dues carry their local date there too.
+            date = Some(z.parse::<chrono_tz::Tz>().map_or_else(
+                |_| u.date_naive(),
+                |zone| u.with_timezone(&zone).date_naive(),
+            ));
+        }
         None => {}
     }
     DueCols { date, utc, tz }
@@ -227,6 +234,7 @@ pub async fn create_in(
 ) -> Result<Issue> {
     let priority = new.priority.unwrap_or(0);
     check_fields(&new.title, priority)?;
+    check_props(tx, None, new.properties.as_ref()).await?;
     let status = match new.status_id {
         Some(s) => s,
         None => StatusId(
@@ -317,8 +325,57 @@ fn apply_patch(old: &Issue, p: IssuePatch) -> Issue {
         l.dedup();
         n.label_ids = l;
     }
-    n.properties = p.properties.unwrap_or(n.properties);
+    for (k, v) in p.properties.unwrap_or_default() {
+        if v.is_null() {
+            n.properties.remove(&k);
+        } else {
+            n.properties.insert(k, v);
+        }
+    }
     n
+}
+
+/// Keys with a definition must hold a valid value; keys without one pass (migrated data).
+async fn check_props(
+    conn: &mut SqliteConnection,
+    old: Option<&Map<String, Value>>,
+    new: Option<&Map<String, Value>>,
+) -> Result<()> {
+    let changed = new
+        .into_iter()
+        .flatten()
+        .filter(|(k, v)| old.and_then(|o| o.get(*k)) != Some(*v));
+    for (k, v) in changed {
+        match crate::properties::get_def(conn, k).await {
+            Ok(def) => crate::properties::validate(&def, v)?,
+            Err(Error::NotFound(_)) => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
+}
+
+/// Walking up from the new parent must not reach the issue (a self-parent is the shortest cycle).
+async fn check_parent(
+    conn: &mut SqliteConnection,
+    id: IssueId,
+    parent: Option<IssueId>,
+) -> Result<()> {
+    let Some(parent) = parent else { return Ok(()) };
+    let cyclic = sqlx::query_scalar::<_, i64>(
+        "WITH RECURSIVE up(id) AS (SELECT ?1 UNION SELECT i.parent_id FROM issues i JOIN up ON i.id = up.id
+             WHERE i.parent_id IS NOT NULL)
+         SELECT EXISTS (SELECT 1 FROM up WHERE id = ?2)",
+    )
+    .bind(parent.0)
+    .bind(id.0)
+    .fetch_one(conn)
+    .await?;
+    if cyclic == 0 {
+        Ok(())
+    } else {
+        Err(Error::Invalid("parent would create a cycle".into()))
+    }
 }
 
 fn changes(old: &Issue, n: &Issue) -> Vec<(&'static str, Value, Value)> {
@@ -369,7 +426,7 @@ async fn record_all(
 /// # Errors
 ///
 /// `NotFound` for an unknown id, `Invalid` for an empty title, a priority above 4, an unknown
-/// status or an issue made its own parent.
+/// status or a parent that would close a cycle.
 pub async fn update(db: &Db, id: IssueId, patch: IssuePatch, src: ChangeSource) -> Result<Issue> {
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let issue = update_in(&mut tx, id, patch, src).await?;
@@ -391,9 +448,8 @@ pub async fn update_in(
     let old = fetch(tx, id).await?;
     let mut new = apply_patch(&old, patch);
     check_fields(&new.title, new.priority)?;
-    if new.parent_id == Some(id) {
-        return Err(Error::Invalid("an issue cannot be its own parent".into()));
-    }
+    check_parent(tx, id, new.parent_id).await?;
+    check_props(tx, Some(&old.properties), Some(&new.properties)).await?;
     let cs = changes(&old, &new);
     if cs.is_empty() {
         return Ok(old);
