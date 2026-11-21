@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # land.sh against a fake gh: draft and non-green PRs must not be merged.
 set -uo pipefail
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/../.." || exit 1
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 cat >"$tmp/gh" <<'FAKE'
 #!/usr/bin/env bash

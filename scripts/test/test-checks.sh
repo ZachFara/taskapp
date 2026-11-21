@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Self-tests for the checks: each one must fail on a bad input, not only pass on a good one.
 set -uo pipefail
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/../.." || exit 1
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 fails=0
 expect() { # expect <0|nonzero> <name> <cmd...>
@@ -29,14 +29,19 @@ expect nonzero "boundaries: commands importing a sync crate fails" scripts/check
 expect 0 "boundaries: sync crate on core passes" scripts/check-boundaries.sh "$tmp/gcal-core.json"
 expect 0 "boundaries pass on the real workspace" scripts/check-boundaries.sh
 # commit messages
-msg() { printf '%s\n' "$1" >"$tmp/msg"; scripts/check-commit-msg.sh "$tmp/msg"; }
-expect 0 "commit: conventional subject passes" msg "feat(core): add issues"
-expect nonzero "commit: missing type fails" msg "add issues"
-expect nonzero "commit: 73 chars fails" msg "feat: $(printf 'x%.0s' {1..70})"
+printf '%s\n' "feat(core): add issues" >"$tmp/m-ok"
+printf '%s\n' "add issues" >"$tmp/m-notype"
+printf '%s\n' "feat: $(printf 'x%.0s' {1..70})" >"$tmp/m-long"
+expect 0 "commit: conventional subject passes" scripts/check-commit-msg.sh "$tmp/m-ok"
+expect nonzero "commit: missing type fails" scripts/check-commit-msg.sh "$tmp/m-notype"
+expect nonzero "commit: 73 chars fails" scripts/check-commit-msg.sh "$tmp/m-long"
 # docs-only
 d() { printf '%s\n' "$@" | scripts/docs-only.sh; }
-[[ $(d docs/a.md README.md) == true ]] && echo "ok   docs-only true" || { echo "FAIL docs-only true"; fails=1; }
-[[ $(d docs/a.md crates/core/src/lib.rs) == false ]] && echo "ok   docs-only false on code" || { echo "FAIL docs-only code"; fails=1; }
-[[ $(d docs/fixtures/x.md) == false ]] && echo "ok   docs-only false on fixture" || { echo "FAIL docs-only fixture"; fails=1; }
+check_d() { # check_d <want> <name> <paths...>
+  if [[ $(d "${@:3}") == "$1" ]]; then echo "ok   $2"; else echo "FAIL $2"; fails=1; fi
+}
+check_d true "docs-only true" docs/a.md README.md
+check_d false "docs-only false on code" docs/a.md crates/core/src/lib.rs
+check_d false "docs-only false on fixture" docs/fixtures/x.md
 scripts/test/test-land.sh || fails=1
 exit $fails
