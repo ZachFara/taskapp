@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use chrono::{DateTime, Utc};
+use chrono::{Duration, Utc};
 use sqlx::Row;
 use taskapp_core::{
     Db, Error, Layout, Result, SyncState, ViewDef, blocks, projects, settings, statuses, views,
@@ -201,7 +201,9 @@ async fn desired(db: &Db) -> Result<Vec<DesiredEvent>> {
         include_archived: false,
     };
     let issues = views::query(db, &def).await?;
-    let (from, to) = (DateTime::<Utc>::MIN_UTC, DateTime::<Utc>::MAX_UTC);
+    // SQLite julianday() cannot parse chrono's MIN/MAX years, so an unbounded range matches nothing.
+    let now = Utc::now();
+    let (from, to) = (now - Duration::days(30), now + Duration::days(365));
     let blocks = blocks::blocks_between(db, from, to).await?;
     // shortcut: an unset `timezone` setting means UTC, so 08:00 alerts fire at UTC 08:00; upgrade when settings own a zone.
     let tz: String = settings::get(db, "timezone")
