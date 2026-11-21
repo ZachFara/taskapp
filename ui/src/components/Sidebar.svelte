@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { navigate } from '../app/routes';
   import { api } from '../lib/api';
+  import { openExternal } from '../lib/openExternal';
   import type { Cycle, PinKind, ResolvedPin } from '../lib/bindings';
   import { projects, refreshAll, views } from '../lib/stores.svelte';
 
@@ -34,11 +35,11 @@
     }
   }
 
-  // Never run a script URL from a pin; any other scheme (https, obsidian) goes to the system.
+  // Any scheme other than the openExternal allow-list (script, file) is refused there, so a pin never runs code.
   const external = (route: string) => /^[a-z][a-z0-9+.-]*:/i.test(route);
   function open(route: string) {
     if (!external(route)) return navigate(route);
-    if (!/^(javascript|data|vbscript):/i.test(route)) window.open(route, '_blank', 'noopener');
+    void openExternal(route);
   }
 
   const moved = <T,>(ids: T[], from: T, to: T) => {

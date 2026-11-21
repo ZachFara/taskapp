@@ -95,6 +95,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(handler)
         .setup(|app| {
             let dir: PathBuf = app.path().data_dir()?.join("taskapp");

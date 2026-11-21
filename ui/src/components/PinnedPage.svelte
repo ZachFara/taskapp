@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../lib/api';
+  import { openExternal } from '../lib/openExternal';
   import type { PinKind, ResolvedPin } from '../lib/bindings';
   import { navigate } from '../app/routes';
 
@@ -43,10 +44,11 @@
   // Only http(s) URLs become links; a pinned Url with any other scheme is shown as plain text.
   const linkFor = (p: ResolvedPin) => (p.pin.kind !== 'Url' || /^https?:\/\//i.test(p.route) ? p.route : null);
 
+  // A Url pin leaves the app through openExternal; a webview would ignore target=_blank.
   function open(e: MouseEvent, p: ResolvedPin) {
-    if (p.pin.kind === 'Url') return;
     e.preventDefault();
-    navigate(p.route);
+    if (p.pin.kind === 'Url') void openExternal(p.route);
+    else navigate(p.route);
   }
 
   onMount(load);
