@@ -9,7 +9,7 @@
 <svelte:window onpopstate={() => (path = location.pathname)} />
 
 {#if Page}
-  <Page />
+  <Page params={match?.params ?? {}} />
 {:else}
   <p>Not found: {path}</p>
 {/if}
