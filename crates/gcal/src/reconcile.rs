@@ -124,7 +124,7 @@ impl Ctx<'_> {
             existing.push(ManagedEvent {
                 google_event_id: r.id.clone(),
                 managed_key: r.managed_key.clone(),
-                last_synced_hash: known.map(|k| k.hash).unwrap_or_default(),
+                last_synced_hash: known.map_or_default(|k| k.hash),
             });
         }
         Ok(existing)
