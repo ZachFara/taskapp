@@ -37,7 +37,7 @@ describe('shot', () => {
     const r = await shot(['/view/1', '--mode', 'mock', '--out', out]);
     expect(r.status, r.stderr).toBe(0);
     expect(statSync(join(out, 'view-1.png')).size).toBeGreaterThan(0);
-    expect(readFileSync(join(out, 'view-1.aria.txt'), 'utf8')).toContain('ListView'); // placeholder page: change to 'ZF-1' once the list renders issues
+    expect(readFileSync(join(out, 'view-1.aria.txt'), 'utf8')).toContain('ZF-1');
     expect(JSON.parse(readFileSync(join(out, 'view-1.console.json'), 'utf8'))).toEqual([]);
   }, 120_000);
 
