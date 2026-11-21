@@ -3,6 +3,8 @@
   import { api } from '../../lib/api';
   import type { Issue, IssuePatch, Label, SavedView } from '../../lib/bindings';
   import { issues, propertyDefs, statuses } from '../../lib/stores.svelte';
+  import { registerShortcut } from '../../lib/keymap';
+  import { navigate } from '../../app/routes';
 
   let { view }: { view: SavedView } = $props();
 
@@ -50,7 +52,45 @@
 
   async function drop(col: Column, e: DragEvent) {
     e.preventDefault();
-    const id = Number(e.dataTransfer?.getData('text/plain'));
+    await moveTo(col, Number(e.dataTransfer?.getData('text/plain')));
+  }
+
+  // Cards in reading order (column by column); j/k walk it.
+  const ordered = $derived(columns.flatMap((c) => issues.filter(c.holds)));
+  let selectedId = $state<number | null>(null);
+  const current = $derived(ordered.find((i) => i.id === selectedId) ?? ordered[0] ?? null);
+  const step = (d: number) => {
+    const at = ordered.findIndex((i) => i.id === current?.id);
+    selectedId = ordered[Math.min(Math.max(at + d, 0), ordered.length - 1)]?.id ?? null;
+  };
+  // s moves the card one column right (wrapping); p cycles its priority.
+  const advance = () => {
+    const at = columns.findIndex((c) => current && c.holds(current));
+    if (current && at >= 0) void moveTo(columns[(at + 1) % columns.length], current.id);
+  };
+  const bump = async () => {
+    if (!current) return;
+    const id = current.id;
+    try {
+      const next = await api.issues.update(id, { priority: (current.priority + 1) % 5 });
+      const at = issues.findIndex((i) => i.id === id);
+      if (at >= 0) issues[at] = next;
+    } catch (err) {
+      error = (err as { message?: string }).message ?? String(err);
+    }
+  };
+  onMount(() => {
+    const offs = [
+      registerShortcut('j', 'board.next', () => step(1)),
+      registerShortcut('k', 'board.previous', () => step(-1)),
+      registerShortcut('enter', 'board.open', () => current && navigate(`/issue/${current.key}`)),
+      registerShortcut('s', 'board.status', advance),
+      registerShortcut('p', 'board.priority', () => void bump()),
+    ];
+    return () => offs.forEach((off) => off());
+  });
+
+  async function moveTo(col: Column, id: number) {
     const at = issues.findIndex((i) => i.id === id);
     const before = issues[at];
     if (!before || col.holds(before)) return;
@@ -90,6 +130,7 @@
           class="card"
           draggable="true"
           data-issue={i.key}
+          aria-selected={i.id === current?.id}
           ondragstart={(e) => {
             e.dataTransfer?.setData('text/plain', String(i.id));
             if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';

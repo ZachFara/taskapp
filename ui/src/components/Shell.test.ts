@@ -47,9 +47,36 @@ describe('Shell', () => {
     expect(document.body.textContent).toContain('token expired');
   });
 
+  it('backup_error_shows_indicator', async () => {
+    const api = createMockApi();
+    api.sync.status = async () => ({ reminders: 'Off', gcal: 'Off', export: 'Off', backup: { Error: { at: 'now', message: 'disk full' } } });
+    setApi(api);
+    await open();
+    expect(document.querySelector('.dot.error')).not.toBeNull();
+    expect(document.body.textContent).toContain('disk full');
+  });
+
   it('shows_main_view_and_no_indicator_when_sync_is_off', async () => {
     await open();
     expect(document.body.textContent).toContain('main view');
     expect(document.querySelector('.dot.error')).toBeNull();
+  });
+
+  it('slash_opens_palette_and_g_i_g_v_navigate', async () => {
+    history.replaceState(null, '', '/');
+    await open();
+    press(window, '/');
+    await settle();
+    expect(document.querySelector('[role=dialog] input')).not.toBeNull();
+    press(document.querySelector('[role=dialog] input')!, 'Escape');
+    await settle();
+    press(window, 'g');
+    press(window, 'i');
+    expect(location.pathname).toBe('/view/1');
+    history.replaceState(null, '', '/');
+    press(window, 'g');
+    press(window, 'v');
+    await settle();
+    expect(document.querySelector('[role=dialog]')).not.toBeNull();
   });
 });

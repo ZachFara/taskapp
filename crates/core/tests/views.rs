@@ -290,3 +290,31 @@ async fn reorder_missing_or_duplicate_id_is_invalid() -> R {
     assert_eq!(views::list(&db).await?, before);
     Ok(())
 }
+
+#[tokio::test]
+async fn due_date_filter_sees_timed_due_issues() -> R {
+    use chrono::{TimeZone, Utc};
+    use taskapp_core::{ChangeSource, Due, NewIssue, issues};
+    let db = Db::open_in_memory().await?;
+    let timed = Due::DateTime {
+        utc: Utc.with_ymd_and_hms(2026, 12, 1, 14, 0, 0).unwrap(),
+        tz: "UTC".into(),
+    };
+    let new = |title: &str, due| NewIssue {
+        title: title.into(),
+        due: Some(due),
+        ..NewIssue::default()
+    };
+    issues::create(&db, new("timed", timed), ChangeSource::Ui).await?;
+    let date = Due::Date("2026-12-01".parse()?);
+    issues::create(&db, new("dated", date), ChangeSource::Ui).await?;
+    let f = cond(
+        FieldRef::Fixed(FixedField::DueDate),
+        Op::Lte,
+        json!("2026-12-31"),
+    );
+    let mut got = run(&db, &def(Some(f))).await?;
+    got.sort();
+    assert_eq!(got, ["dated", "timed"]);
+    Ok(())
+}

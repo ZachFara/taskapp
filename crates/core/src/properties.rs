@@ -48,7 +48,7 @@ async fn record_def(
     history::record(tx, src, "property_def", key, &Edit { field, old, new }).await
 }
 
-async fn get_def(conn: &mut SqliteConnection, key: &str) -> Result<PropertyDef> {
+pub(crate) async fn get_def(conn: &mut SqliteConnection, key: &str) -> Result<PropertyDef> {
     let row = sqlx::query("SELECT * FROM property_defs WHERE key = ?")
         .bind(key)
         .fetch_optional(conn)
@@ -85,7 +85,7 @@ pub async fn create_def(db: &Db, def: PropertyDef, src: ChangeSource) -> Result<
         return Err(Error::Invalid("property name is empty".into()));
     }
     check_options(def.kind, &def.options)?;
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     if get_def(&mut tx, &def.key).await.is_ok() {
         return Err(Error::Conflict(format!("property {} exists", def.key)));
     }
@@ -151,7 +151,7 @@ pub async fn rename_def(
     if new_name.trim().is_empty() {
         return Err(Error::Invalid("property name is empty".into()));
     }
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let def = get_def(&mut tx, key).await?;
     sqlx::query("UPDATE property_defs SET name = ? WHERE key = ?")
         .bind(new_name)
@@ -267,7 +267,7 @@ async fn convert_all(
 ///
 /// Fails with `Invalid` unless `keys` lists every property exactly once.
 pub async fn reorder(db: &Db, keys: &[String]) -> Result<()> {
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let mut have: Vec<String> = sqlx::query_scalar("SELECT key FROM property_defs")
         .fetch_all(&mut *tx)
         .await?;
@@ -302,7 +302,7 @@ pub async fn set_scope(
     project: Option<ProjectId>,
     src: ChangeSource,
 ) -> Result<PropertyDef> {
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let old = get_def(&mut tx, key).await?;
     if let Some(p) = project {
         let sql = format!(
@@ -362,7 +362,7 @@ pub async fn change_kind(
     src: ChangeSource,
 ) -> Result<PropertyDef> {
     check_options(kind, &options)?;
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let old = get_def(&mut tx, key).await?;
     let new = PropertyDef {
         kind,
@@ -437,7 +437,7 @@ fn is_key(f: &FieldRef, key: &str) -> bool {
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn delete_def(db: &Db, key: &str, src: ChangeSource) -> Result<()> {
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let def = get_def(&mut tx, key).await?;
     let path = format!("$.\"{key}\"");
     let lost: Vec<(i64, String)> = sqlx::query_as(
@@ -501,7 +501,7 @@ pub async fn set_value(
     value: Option<Value>,
     src: ChangeSource,
 ) -> Result<Issue> {
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let def = get_def(&mut tx, key).await?;
     let sql = format!("SELECT {} FROM issues WHERE id = ?", issues::ISSUE_COLS);
     let row = sqlx::query(&sql)

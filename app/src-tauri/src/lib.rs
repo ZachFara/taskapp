@@ -51,6 +51,15 @@ fn system_tz() -> String {
         .unwrap_or_else(|| "UTC".to_owned())
 }
 
+/// Records the system zone as the `timezone` setting when the owner has not set one, so the
+/// calendar's 08:00 alerts land at local time.
+async fn default_timezone(db: &Db, tz: &str) -> taskapp_core::Result<()> {
+    if settings::get::<String>(db, "timezone").await?.is_none() {
+        settings::set(db, "timezone", &tz).await?;
+    }
+    Ok(())
+}
+
 /// The sync loop, the reminders watcher and the live-refresh poll, all in the app's runtime.
 fn start_background(
     app: &tauri::AppHandle,
@@ -109,6 +118,7 @@ pub fn run() {
                 tauri::async_runtime::block_on(settings::get::<String>(&db, "backup_dir"))?
                     .map_or_else(|| dir.join("backups"), PathBuf::from);
             let tz = system_tz();
+            tauri::async_runtime::block_on(default_timezone(&db, &tz))?;
             app.manage(AppState {
                 db: db.clone(),
                 helper_path: helper_path.clone(),
@@ -132,4 +142,32 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("run tauri app");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn timezone_defaults_to_system_but_keeps_an_owner_value() {
+        let db = Db::open_in_memory().await.expect("db");
+        default_timezone(&db, "America/New_York")
+            .await
+            .expect("set");
+        assert_eq!(
+            settings::get::<String>(&db, "timezone")
+                .await
+                .expect("get")
+                .as_deref(),
+            Some("America/New_York")
+        );
+        default_timezone(&db, "UTC").await.expect("keep");
+        assert_eq!(
+            settings::get::<String>(&db, "timezone")
+                .await
+                .expect("get")
+                .as_deref(),
+            Some("America/New_York")
+        );
+    }
 }

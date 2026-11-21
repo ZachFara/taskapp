@@ -305,3 +305,62 @@ async fn create_in_and_update_in_roll_back_with_the_caller() -> R {
     assert!(issues::get_by_key(&db, "ZF-2").await.is_err());
     Ok(())
 }
+
+#[tokio::test]
+async fn update_merges_properties_and_validates_defined_keys() -> R {
+    use serde_json::json;
+    use taskapp_core::{PropertyDef, PropertyKind, properties};
+    let db = Db::open_in_memory().await?;
+    let num = PropertyDef {
+        key: "size".into(),
+        name: "Size".into(),
+        kind: PropertyKind::Number,
+        options: vec![],
+        project_id: None,
+        position: 0,
+    };
+    properties::create_def(&db, num, ChangeSource::Ui).await?;
+    let i = issues::create(&db, new("a"), ChangeSource::Ui).await?;
+    let props = |v: serde_json::Value| IssuePatch {
+        properties: serde_json::from_value(v).ok(),
+        ..IssuePatch::default()
+    };
+    issues::update(
+        &db,
+        i.id,
+        props(json!({"size": 1, "linear_id": "L1"})),
+        ChangeSource::Ui,
+    )
+    .await?;
+    let got = issues::update(&db, i.id, props(json!({"size": 2})), ChangeSource::Ui).await?;
+    assert_eq!(got.properties["linear_id"], json!("L1"));
+    assert_eq!(got.properties["size"], json!(2));
+    let got = issues::update(
+        &db,
+        i.id,
+        props(json!({"linear_id": null})),
+        ChangeSource::Ui,
+    )
+    .await?;
+    assert!(!got.properties.contains_key("linear_id"));
+    let bad = issues::update(&db, i.id, props(json!({"size": "big"})), ChangeSource::Ui).await;
+    assert!(matches!(bad, Err(Error::Invalid(_))), "{bad:?}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn parent_cycles_are_rejected() -> R {
+    let db = Db::open_in_memory().await?;
+    let a = issues::create(&db, new("a"), ChangeSource::Ui).await?;
+    let b = issues::create(&db, new("b"), ChangeSource::Ui).await?;
+    let c = issues::create(&db, new("c"), ChangeSource::Ui).await?;
+    let parent = |p: IssueId| IssuePatch {
+        parent_id: Some(Some(p)),
+        ..IssuePatch::default()
+    };
+    issues::update(&db, a.id, parent(b.id), ChangeSource::Ui).await?;
+    issues::update(&db, b.id, parent(c.id), ChangeSource::Ui).await?;
+    let bad = issues::update(&db, c.id, parent(a.id), ChangeSource::Ui).await;
+    assert!(matches!(bad, Err(Error::Invalid(_))), "{bad:?}");
+    Ok(())
+}

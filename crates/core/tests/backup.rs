@@ -240,3 +240,54 @@ async fn restore_refuses_while_another_connection_holds_the_db() -> R {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn restore_refuses_a_foreign_sqlite_file() -> R {
+    let dir = TempDir::new()?;
+    let db = open_with_three_issues(dir.path()).await?;
+    db.pool.close().await;
+
+    // A valid SQLite file that is not a taskapp database.
+    let foreign = dir.path().join("foreign.db");
+    let pool = sqlx::SqlitePool::connect_with(
+        sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&foreign)
+            .create_if_missing(true),
+    )
+    .await?;
+    sqlx::query("CREATE TABLE notes (body TEXT)")
+        .execute(&pool)
+        .await?;
+    pool.close().await;
+
+    let live = dir.path().join("live.db");
+    let e = backup::restore(&foreign, &live).await;
+    assert!(matches!(e, Err(taskapp_core::Error::Invalid(_))), "{e:?}");
+    assert_eq!(issue_count(&Db::open(&live).await?).await?, 3);
+    Ok(())
+}
+
+#[tokio::test]
+async fn restore_keeps_a_copy_of_the_database_it_replaces() -> R {
+    let dir = TempDir::new()?;
+    let db = open_with_three_issues(dir.path()).await?;
+    let snap = backup::snapshot(&db, dir.path(), "before").await?;
+    add_issue(&db, "d").await?;
+    db.pool.close().await;
+
+    backup::restore(&snap, &dir.path().join("live.db")).await?;
+
+    let mut copies = Vec::new();
+    for entry in fs::read_dir(dir.path())? {
+        let path = entry?.path();
+        if path
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().starts_with("live.db.pre-restore-"))
+        {
+            copies.push(path);
+        }
+    }
+    assert_eq!(copies.len(), 1, "{copies:?}");
+    assert_eq!(issue_count(&Db::open(&copies[0]).await?).await?, 4);
+    Ok(())
+}

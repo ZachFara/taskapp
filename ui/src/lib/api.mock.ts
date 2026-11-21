@@ -161,7 +161,7 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
       fail('Invalid', `reorder must list every ${what} exactly once`);
     for (const r of rows) r.position = order.indexOf(keyOf(r));
   };
-  const off = { reminders: 'Off', gcal: 'Off', export: 'Off' } as const;
+  const off = { reminders: 'Off', gcal: 'Off', export: 'Off', backup: 'Off' } as const;
 
   return {
     issues: {
@@ -426,8 +426,6 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
         return path;
       },
       list: async (dir) => backups.filter((p) => p.startsWith(`${dir}/`)),
-      // The app always holds its own database, so the real command refuses the same way.
-      restore: async () => fail('Conflict', 'the database is open elsewhere; close the app before restoring'),
     },
     export: { now: ok },
     sync: { status: async () => off, now: async () => off },

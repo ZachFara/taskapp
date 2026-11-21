@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../../lib/api';
-  import type { FieldRef, Issue, PropertyDef, SavedView, Status, ViewDef } from '../../lib/bindings';
+  import type { FieldRef, Issue, Label, PropertyDef, SavedView, Status, ViewDef } from '../../lib/bindings';
   import { registerShortcut } from '../../lib/keymap';
   import { navigate } from '../../app/routes';
 
@@ -22,7 +22,8 @@
   let defs = $state<PropertyDef[]>([]);
   let loaded = $state(false);
   let selectedId = $state<number | null>(null);
-  let picker = $state<'status' | 'priority' | null>(null);
+  let picker = $state<'status' | 'priority' | 'labels' | null>(null);
+  let labels = $state<Label[]>([]);
   let scrollTop = $state(0);
   let height = $state(0);
   let scroller = $state<HTMLElement>();
@@ -33,6 +34,7 @@
     const [st, dd, rows] = await Promise.all([api.statuses.list(), api.properties.listDefs(), api.views.query(v.def)]);
     statuses = st;
     defs = dd;
+    labels = await api.labels.list();
     issues = rows;
     loaded = true;
   }
@@ -112,11 +114,17 @@
     if (current && !picker) navigate(`/issue/${current.key}`);
   }
 
-  async function set(patch: Record<string, number>) {
+  async function set(patch: Record<string, number | number[]>) {
     if (!current) return;
     await api.issues.update(current.id, patch);
     picker = null;
     await load(view);
+  }
+
+  async function toggleLabel(id: number) {
+    if (!current) return;
+    const ids = current.label_ids;
+    await set({ label_ids: ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id] });
   }
 
   $effect(() => {
@@ -126,6 +134,7 @@
       registerShortcut('enter', 'list.open', open),
       registerShortcut('s', 'list.status', () => (picker = current ? 'status' : null)),
       registerShortcut('p', 'list.priority', () => (picker = current ? 'priority' : null)),
+      registerShortcut('l', 'list.labels', () => (picker = current ? 'labels' : null)),
       registerShortcut('esc', 'list.close', () => (picker = null)),
     ];
     return () => offs.forEach((off) => off());
@@ -147,6 +156,12 @@
     <div class="picker" role="menu" aria-label="Priority">
       {#each PRIORITY as label, p (p)}
         <button role="menuitem" onclick={() => set({ priority: p })}>{label}</button>
+      {/each}
+    </div>
+  {:else if picker === 'labels'}
+    <div class="picker" role="menu" aria-label="Labels">
+      {#each labels as l (l.id)}
+        <button role="menuitem" aria-checked={current?.label_ids.includes(l.id)} onclick={() => toggleLabel(l.id)}>{l.name}</button>
       {/each}
     </div>
   {/if}
