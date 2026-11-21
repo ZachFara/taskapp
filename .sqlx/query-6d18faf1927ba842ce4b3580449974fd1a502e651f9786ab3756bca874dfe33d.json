@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: i64\", project_id, milestone_id FROM issues WHERE project_id = ?\n           OR milestone_id IN (SELECT id FROM milestones WHERE project_id = ?)",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "project_id",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "milestone_id",
+        "ordinal": 2,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "6d18faf1927ba842ce4b3580449974fd1a502e651f9786ab3756bca874dfe33d"
+}

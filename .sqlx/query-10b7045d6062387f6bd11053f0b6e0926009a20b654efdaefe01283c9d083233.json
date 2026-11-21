@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT from_id AS \"from_id!: i64\", to_id AS \"to_id!: i64\", kind AS \"kind!: String\"\n           FROM relations WHERE from_id = ?1 OR to_id = ?1 ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "name": "from_id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "to_id!: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "kind!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "10b7045d6062387f6bd11053f0b6e0926009a20b654efdaefe01283c9d083233"
+}

@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: i64\", issue_id, start_utc AS \"start_utc: DateTime<Utc>\",\n                  end_utc AS \"end_utc: DateTime<Utc>\"\n           FROM work_blocks\n           WHERE julianday(start_utc) < julianday(?) AND julianday(end_utc) > julianday(?)\n           ORDER BY julianday(start_utc), id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "issue_id",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "start_utc: DateTime<Utc>",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "end_utc: DateTime<Utc>",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "149568f3330a67196d9b8003713ce2bc87d867ac7552ae42c0c703b997b7088f"
+}

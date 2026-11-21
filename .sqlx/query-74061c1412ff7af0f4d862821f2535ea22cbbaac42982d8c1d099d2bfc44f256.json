@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO milestones (project_id, name, target_date) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "74061c1412ff7af0f4d862821f2535ea22cbbaac42982d8c1d099d2bfc44f256"
+}
