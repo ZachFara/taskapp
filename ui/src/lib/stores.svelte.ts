@@ -30,3 +30,15 @@ export async function refreshAll(): Promise<void> {
   replace(propertyDefs, d);
   replace(views, savedViews);
 }
+
+/** In the desktop app the backend says when another process wrote (`db-changed`) or a link was opened. */
+export async function listenToBackend(): Promise<void> {
+  const { listen } = await import('@tauri-apps/api/event');
+  await listen('db-changed', () => void refreshAll());
+  await listen<string>('open-issue', ({ payload }) => {
+    history.pushState(null, '', `/issue/${encodeURIComponent(payload)}`);
+    dispatchEvent(new PopStateEvent('popstate'));
+  });
+}
+
+if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) void listenToBackend();
