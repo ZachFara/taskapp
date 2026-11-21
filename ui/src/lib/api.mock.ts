@@ -1,6 +1,6 @@
 import type { Api } from './api';
 import type {
-  Bar, Change, Comment, Cycle, FieldRef, Filter, Issue, Label, Milestone, Pin, Project, PropertyDef,
+  Bar, Change, Comment, Cycle, FieldRef, Filter, Issue, Label, Layout, Milestone, Pin, Project, PropertyDef,
   Relation, Reschedule, SavedView, Status, FixedField, Value, ViewDef, WorkBlock,
 } from './bindings';
 
@@ -433,4 +433,15 @@ const issues: Issue[] = Array.from({ length: 20 }, (_, k) => {
   };
 });
 
-export const fixtures: MockSeed = { statuses, projects, propertyDefs, issues };
+// Same three views the migration seeds. shortcut: no status filter, the mock query has no StatusCategory support.
+const view = (id: number, name: string, layout: Layout, group_by: FieldRef | null = null): SavedView => ({
+  id, name, position: id - 1,
+  def: { filter: null, sorts: [], group_by, layout, columns: [], include_archived: false },
+});
+const views: SavedView[] = [
+  view(1, 'Active', 'List'),
+  view(2, 'Board', 'Board', { Fixed: 'Status' }),
+  view(3, 'Timeline: all projects', 'Gantt', { Fixed: 'Project' }),
+];
+
+export const fixtures: MockSeed = { statuses, projects, propertyDefs, issues, views };
