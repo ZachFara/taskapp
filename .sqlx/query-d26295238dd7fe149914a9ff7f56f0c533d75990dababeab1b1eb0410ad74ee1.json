@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT label_id AS \"label_id!: i64\" FROM issue_labels WHERE issue_id = ? ORDER BY label_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "label_id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "d26295238dd7fe149914a9ff7f56f0c533d75990dababeab1b1eb0410ad74ee1"
+}
