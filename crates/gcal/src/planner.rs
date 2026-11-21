@@ -167,8 +167,7 @@ fn header(issue: &Issue, projects: &[Project]) -> String {
     let project = issue
         .project_id
         .and_then(|id| projects.iter().find(|p| p.id == id))
-        .map(|p| format!(" | Project: {}", p.name))
-        .unwrap_or_default();
+        .map_or_else(String::new, |p| format!(" | Project: {}", p.name));
     format!(
         "{} {}\nPriority: {}{}\ntaskapp://issue/{}",
         issue.key,
