@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE import_log SET source_deleted = 1 WHERE external_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "a9edf3237febc1e9340c5946727103ec4c11818dbd7793c6239577ada16655f5"
+}
