@@ -10,7 +10,10 @@ workspace = true
 [dependencies]
 taskapp-core.workspace = true
 chrono.workspace = true
+chrono-tz = { workspace = true }
+sha2 = { workspace = true }
 
 [dev-dependencies]
 wiremock.workspace = true
 tempfile.workspace = true
+serde_json = { workspace = true }

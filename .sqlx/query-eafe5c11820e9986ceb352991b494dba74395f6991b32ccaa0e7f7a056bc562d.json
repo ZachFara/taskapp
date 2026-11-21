@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE work_blocks SET start_utc = ?, end_utc = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "eafe5c11820e9986ceb352991b494dba74395f6991b32ccaa0e7f7a056bc562d"
+}
