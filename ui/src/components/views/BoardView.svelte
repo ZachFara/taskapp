@@ -1,13 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
-  import type { Issue, IssuePatch, Label } from '../../lib/bindings';
-  import { currentViewId, issues, propertyDefs, statuses, views } from '../../lib/stores.svelte';
+  import type { Issue, IssuePatch, Label, SavedView } from '../../lib/bindings';
+  import { issues, propertyDefs, statuses } from '../../lib/stores.svelte';
+
+  let { view }: { view: SavedView } = $props();
 
   // One column per status, or per option of the view's group_by select property (plus "None" for unset values).
   type Column = { name: string; holds: (i: Issue) => boolean; patch: (i: Issue) => IssuePatch };
 
-  const groupBy = $derived(views.find((v) => v.id === currentViewId.value)?.def.group_by ?? null);
+  const groupBy = $derived(view.def.group_by);
   const selectProp = $derived.by(() => {
     const key = groupBy?.Property;
     return propertyDefs.find((d) => d.key === key && d.kind === 'Select') ?? null;

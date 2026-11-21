@@ -2,19 +2,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import { api, setApi } from '../../lib/api';
 import { createMockApi, fixtures, type MockSeed } from '../../lib/api.mock';
-import type { Status, ViewDef } from '../../lib/bindings';
-import { currentViewId, refreshAll } from '../../lib/stores.svelte';
+import type { SavedView, Status, ViewDef } from '../../lib/bindings';
+import { refreshAll } from '../../lib/stores.svelte';
 import BoardView from './BoardView.svelte';
 
 const board = (group_by: ViewDef['group_by'] = null): ViewDef => ({
   filter: null, sorts: [], group_by, layout: 'Board', columns: [], include_archived: false,
 });
 
-const seedWith = (extra: Partial<MockSeed>, group_by: ViewDef['group_by'] = null): MockSeed => ({
-  ...fixtures,
-  ...extra,
-  views: [{ id: 1, name: 'Board', def: board(group_by), position: 0 }],
-});
+const seedWith = (extra: Partial<MockSeed>): MockSeed => ({ ...fixtures, ...extra });
+const boardView = (group_by: ViewDef['group_by'] = null): SavedView => ({ id: 1, name: 'Board', def: board(group_by), position: 0 });
 
 let cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -23,13 +20,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function render(seed: MockSeed) {
+async function render(seed: MockSeed, view: SavedView = boardView()) {
   setApi(createMockApi(seed));
-  currentViewId.value = 1;
   await refreshAll();
   const target = document.createElement('div');
   document.body.append(target);
-  const app = mount(BoardView, { target });
+  const app = mount(BoardView, { target, props: { view } });
   flushSync();
   cleanups.push(() => {
     unmount(app);
@@ -85,7 +81,7 @@ describe('BoardView', () => {
   });
 
   it('group_by_select_property_columns', async () => {
-    const root = await render(seedWith({}, { Property: 'area' }));
+    const root = await render(seedWith({}), boardView({ Property: 'area' }));
     expect(columnNames(root)).toEqual(['home', 'work', 'None']);
     const update = vi.spyOn(api.issues, 'update');
     drag(root, 'ZF-1', 'work');
