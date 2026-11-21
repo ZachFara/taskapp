@@ -1,12 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { api } from '../lib/api';
   import type { Milestone, Project, ResolvedPin } from '../lib/bindings';
   import ProjectHeader from './project/ProjectHeader.svelte';
   import ProjectIssues from './project/ProjectIssues.svelte';
 
-  // The router passes no params to pages, so the slug is read from the path (/project/:slug).
-  const slug = decodeURIComponent(location.pathname.split('/')[2] ?? '');
+  let { params }: { params: { slug?: string } } = $props();
+  const slug = $derived(params.slug ?? '');
 
   // undefined while loading, null when no project has this slug.
   let project = $state<Project | null | undefined>(undefined);
@@ -16,7 +15,7 @@
 
   const pinned = $derived(pins.find((p) => p.pin.kind === 'Project' && p.pin.target === slug));
 
-  async function reload() {
+  async function reload(slug: string) {
     const found = (await api.projects.list()).find((p) => p.slug === slug) ?? null;
     project = found;
     if (!found) return;
@@ -33,7 +32,10 @@
     pins = await api.pins.listResolved();
   }
 
-  onMount(reload);
+  // Reloads when the slug changes, since the router reuses this page for another project.
+  $effect(() => {
+    void reload(slug);
+  });
 </script>
 
 {#if project === undefined}

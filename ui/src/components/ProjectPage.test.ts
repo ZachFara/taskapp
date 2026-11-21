@@ -17,7 +17,8 @@ const open = async (path: string, source: MockSeed | Api = seed()) => {
   setApi(source instanceof Object && 'pins' in source ? source : createMockApi(source));
   const target = document.createElement('div');
   document.body.append(target);
-  mounted.push(mount(ProjectPage, { target }));
+  const slug = decodeURIComponent(path.split('/')[2] ?? '');
+  mounted.push(mount(ProjectPage, { target, props: { params: { slug } } }));
   await vi.waitFor(() => expect(target.textContent).not.toMatch(/Loading/));
   return target;
 };
