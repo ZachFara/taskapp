@@ -26,4 +26,32 @@ describe('Properties', () => {
     await press(target, 'Confirm delete');
     expect(calls).toContain('properties.deleteDef');
   });
+
+  it('move_up_saves_the_new_order', async () => {
+    const { target, calls, api } = await mountSettings(Properties);
+    const before = (await api.properties.listDefs()).map((d) => d.key);
+    await setField(target, 'Property', before[1]);
+    await press(target, 'Move up');
+    expect(calls).toContain('properties.reorder');
+    expect((await api.properties.listDefs()).map((d) => d.key)).toEqual([before[1], before[0], ...before.slice(2)]);
+  });
+
+  it('set_scope_conflict_shows_message_and_keeps_scope', async () => {
+    const { target, api } = await mountSettings(Properties);
+    const project = (await api.projects.list())[0].id;
+    await setField(target, 'Property', 'area');
+    await setField(target, 'Scope', String(project));
+    await press(target, 'Set scope');
+    expect(target.querySelector('[role="alert"]')?.textContent).toMatch(/outside the project/);
+    expect((await api.properties.listDefs()).find((d) => d.key === 'area')?.project_id).toBeNull();
+  });
+
+  it('set_scope_to_all_projects_clears_it', async () => {
+    const { target, calls } = await mountSettings(Properties);
+    await setField(target, 'Property', 'area');
+    await setField(target, 'Scope', '');
+    await press(target, 'Set scope');
+    expect(calls).toContain('properties.setScope');
+    expect(target.querySelector('[role="alert"]')).toBeNull();
+  });
 });

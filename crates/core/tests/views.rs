@@ -262,3 +262,31 @@ async fn search_tolerates_punctuation() -> R {
     assert_eq!(search::search(&db, "", 10).await?.len(), 0);
     Ok(())
 }
+
+#[tokio::test]
+async fn reorder_writes_positions_and_list_follows() -> R {
+    let db = Db::open_in_memory().await?;
+    let mut ids: Vec<_> = views::list(&db).await?.into_iter().map(|v| v.id).collect();
+    ids.reverse();
+    views::reorder(&db, &ids).await?;
+    let now: Vec<_> = views::list(&db).await?;
+    assert_eq!(now.iter().map(|v| v.id).collect::<Vec<_>>(), ids);
+    assert_eq!(
+        now.iter().map(|v| v.position).collect::<Vec<_>>(),
+        [0, 1, 2]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn reorder_missing_or_duplicate_id_is_invalid() -> R {
+    let db = Db::open_in_memory().await?;
+    let before = views::list(&db).await?;
+    let ids: Vec<_> = before.iter().map(|v| v.id).collect();
+    for bad in [ids[..2].to_vec(), vec![ids[0], ids[0], ids[1]]] {
+        let e = views::reorder(&db, &bad).await;
+        assert!(matches!(e, Err(Error::Invalid(_))), "{e:?}");
+    }
+    assert_eq!(views::list(&db).await?, before);
+    Ok(())
+}

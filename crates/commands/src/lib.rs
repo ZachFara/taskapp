@@ -139,6 +139,10 @@ macro_rules! with_commands {
             properties_change_kind(s, key: String, kind: PropertyKind, options: Vec<SelectOption>) -> PropertyDef {
                 properties::change_kind(&s.db, &key, kind, options, ChangeSource::Ui).await
             }
+            properties_reorder(s, keys: Vec<String>) -> () { properties::reorder(&s.db, &keys).await }
+            properties_set_scope(s, key: String, project: Option<ProjectId>) -> PropertyDef {
+                properties::set_scope(&s.db, &key, project, ChangeSource::Ui).await
+            }
             properties_delete_def(s, key: String) -> () { properties::delete_def(&s.db, &key, ChangeSource::Ui).await }
             properties_set_value(s, issue: IssueId, key: String, value: Option<Value>) -> Issue {
                 properties::set_value(&s.db, issue, &key, value, ChangeSource::Ui).await
@@ -215,6 +219,7 @@ macro_rules! with_commands {
                 views::save(&s.db, id, &name, def).await
             }
             views_delete(s, id: ViewId) -> () { views::delete(&s.db, id).await }
+            views_reorder(s, ids: Vec<ViewId>) -> () { views::reorder(&s.db, &ids).await }
 
             search_search(s, text: String, limit: u32) -> Vec<Issue> { search::search(&s.db, &text, limit).await }
 
@@ -244,6 +249,11 @@ macro_rules! with_commands {
             backup_snapshot(s, dir: String, reason: String) -> String {
                 Ok(backup::snapshot(&s.db, dir.as_ref(), &reason).await?.to_string_lossy().into_owned())
             }
+
+            backup_list(_s, dir: String) -> Vec<String> {
+                Ok(backup::list(dir.as_ref())?.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
+            }
+            backup_restore(s, from: String) -> () { backup::restore_live(&s.db, from.as_ref()).await }
 
             sync_status(s) -> SyncStatus {
                 Ok(settings::get(&s.db, "sync_status").await?.unwrap_or(SyncStatus {

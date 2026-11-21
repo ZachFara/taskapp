@@ -6,19 +6,14 @@
   import type { Cycle, PinKind, ResolvedPin } from '../lib/bindings';
   import { projects, refreshAll, views } from '../lib/stores.svelte';
 
-  const ORDER_KEY = 'view_order';
   let pins = $state<ResolvedPin[]>([]);
   let cycles = $state<Cycle[]>([]);
-  let order = $state<number[]>([]);
   let error = $state('');
 
-  const sortedViews = $derived([...views].sort((a, b) => (order.indexOf(a.id) + 1 || 1e9) - (order.indexOf(b.id) + 1 || 1e9) || a.position - b.position));
-
   onMount(async () => {
-    const [, p, c, o] = await Promise.all([refreshAll(), api.pins.listResolved(), api.cycles.list(), api.settings.get(ORDER_KEY)]);
+    const [, p, c] = await Promise.all([refreshAll(), api.pins.listResolved(), api.cycles.list()]);
     pins = p;
     cycles = c;
-    order = Array.isArray(o) ? (o as number[]) : [];
   });
 
   const fail = (e: unknown) => (error = (e as { message?: string }).message ?? String(e));
@@ -64,12 +59,10 @@
   }
   async function dropView(target: number) {
     if (dragging === null || dragging === target) return;
-    const before = order;
-    order = moved(sortedViews.map((v) => v.id), dragging, target);
     try {
-      await api.settings.set(ORDER_KEY, order);
+      await api.views.reorder(moved(views.map((v) => v.id), dragging, target));
+      await refreshAll();
     } catch (e) {
-      order = before;
       fail(e);
     }
   }
@@ -90,7 +83,7 @@
 
   <section aria-label="Views">
     <h3>Views</h3>
-    {#each sortedViews as v (v.id)}
+    {#each views as v (v.id)}
       <div class="row" {...drag(v.id)} ondrop={() => dropView(v.id)} role="listitem">
         <a href={`/view/${v.id}`} onclick={(e) => (e.preventDefault(), navigate(`/view/${v.id}`))}>{v.name}</a>
         <button aria-label={`${isPinned('View', String(v.id)) ? 'Unpin' : 'Pin'} ${v.name}`} aria-pressed={isPinned('View', String(v.id))} onclick={() => toggle('View', String(v.id), v.name)}>*</button>

@@ -261,6 +261,93 @@ async fn convert_all(
     Ok(writes)
 }
 
+/// Sets every property's position to its index in `keys`.
+///
+/// # Errors
+///
+/// Fails with `Invalid` unless `keys` lists every property exactly once.
+pub async fn reorder(db: &Db, keys: &[String]) -> Result<()> {
+    let mut tx = db.pool.begin().await?;
+    let mut have: Vec<String> = sqlx::query_scalar("SELECT key FROM property_defs")
+        .fetch_all(&mut *tx)
+        .await?;
+    let mut want = keys.to_vec();
+    have.sort_unstable();
+    want.sort_unstable();
+    if want != have {
+        return Err(Error::Invalid(
+            "reorder must list every property exactly once".into(),
+        ));
+    }
+    for (position, key) in (0_i64..).zip(keys) {
+        sqlx::query("UPDATE property_defs SET position = ? WHERE key = ?")
+            .bind(position)
+            .bind(key)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Limits the property to one project, or to all projects when `project` is `None`. Refused with
+/// `Conflict`, changing nothing, while an issue outside the new project holds a value.
+///
+/// # Errors
+///
+/// Fails with `NotFound` for an unknown key, `Conflict` as above, or on a database error.
+pub async fn set_scope(
+    db: &Db,
+    key: &str,
+    project: Option<ProjectId>,
+    src: ChangeSource,
+) -> Result<PropertyDef> {
+    let mut tx = db.pool.begin().await?;
+    let old = get_def(&mut tx, key).await?;
+    if let Some(p) = project {
+        let sql = format!(
+            "SELECT {} FROM issues WHERE json_type(properties, ?1) IS NOT NULL
+             AND project_id IS NOT ?2 ORDER BY id",
+            issues::ISSUE_COLS
+        );
+        let rows = sqlx::query(&sql)
+            .bind(format!("$.{key}"))
+            .bind(p.0)
+            .fetch_all(&mut *tx)
+            .await?;
+        if !rows.is_empty() {
+            let prefix = issues::prefix(&mut tx).await?;
+            let mut keys = rows
+                .iter()
+                .map(|r| issues::issue_from_row(r, &prefix).map(|i| i.key))
+                .collect::<Result<Vec<_>>>()?;
+            let more = keys.len().saturating_sub(20);
+            keys.truncate(20);
+            return Err(Error::Conflict(format!(
+                "{key} has values on issues outside the project: {}{}",
+                keys.join(", "),
+                if more > 0 {
+                    format!(" and {more} more")
+                } else {
+                    String::new()
+                }
+            )));
+        }
+    }
+    sqlx::query("UPDATE property_defs SET project_id = ? WHERE key = ?")
+        .bind(project.map(|p| p.0))
+        .bind(key)
+        .execute(&mut *tx)
+        .await?;
+    let (before, after) = (json!(old.project_id), json!(project));
+    record_def(&mut tx, src, key, "project_id", Some(&before), Some(&after)).await?;
+    tx.commit().await?;
+    Ok(PropertyDef {
+        project_id: project,
+        ..old
+    })
+}
+
 /// Converts every stored value to the new kind. If any value cannot convert, nothing changes and the
 /// error lists up to 20 issue keys.
 ///

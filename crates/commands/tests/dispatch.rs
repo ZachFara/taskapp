@@ -67,3 +67,29 @@ fn command_names_are_unique_and_exclude_sync_crate_commands() {
         );
     }
 }
+
+#[tokio::test]
+async fn backup_restore_refuses_while_the_state_holds_the_db() -> R {
+    let dir = std::env::temp_dir().join(format!("taskapp-restore-{}", std::process::id()));
+    std::fs::create_dir_all(&dir)?;
+    let live = dir.join("live.db");
+    let st = AppState {
+        db: Db::open(&live).await?,
+        helper_path: "/nonexistent".into(),
+        tz: "UTC".into(),
+    };
+    let snap = dispatch(&st, "backup_snapshot", json!({"dir": dir, "reason": "t"})).await?;
+    let err = dispatch(&st, "backup_restore", json!({"from": snap}))
+        .await
+        .expect_err("pool is open");
+    assert!(matches!(err, Error::Conflict(_)), "got {err:?}");
+    let listed = dispatch(&st, "backup_list", json!({"dir": dir})).await?;
+    assert_eq!(listed, json!([snap]));
+
+    let err = dispatch(&state().await, "backup_restore", json!({"from": snap}))
+        .await
+        .expect_err("memory db");
+    assert!(matches!(err, Error::Invalid(_)), "got {err:?}");
+    std::fs::remove_dir_all(&dir)?;
+    Ok(())
+}

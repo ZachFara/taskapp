@@ -1,11 +1,13 @@
 //! Tauri wrappers: one per command in `taskapp_commands`, generated from its list, plus the commands that
 //! need a sync crate (the app is the only place allowed to use those together).
 
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::sync_loop::{Real, Syncer};
 use taskapp_commands::AppState;
-use taskapp_core::{Result, SyncStatus};
+
+use taskapp_core::{Db, Error, Result, SyncStatus, settings};
 use tauri::State;
 use tauri_specta::{Builder, collect_commands};
 
@@ -33,7 +35,7 @@ macro_rules! wrap {
         pub fn builder() -> Builder<tauri::Wry> {
             Builder::new().commands(collect_commands![
                 $($name,)*
-                gcal_list_calendars, gcal_connect, reminders_list_lists, sync_now
+                gcal_list_calendars, gcal_connect, reminders_list_lists, sync_now, export_now
             ])
         }
     };
@@ -79,4 +81,67 @@ pub async fn reminders_list_lists(state: State<'_, AppState>) -> Result<Vec<(Str
 #[specta::specta]
 pub async fn sync_now(syncer: State<'_, Arc<Syncer<Real>>>) -> Result<SyncStatus> {
     syncer.sync_all().await
+}
+
+/// Writes the markdown export to the configured directory and commits it, pushing when a remote is set.
+///
+/// # Errors
+/// Fails when no export directory is set, or when writing or git fails.
+#[tauri::command]
+#[specta::specta]
+pub async fn export_now(state: State<'_, AppState>) -> Result<()> {
+    export_snapshot(&state.db).await
+}
+
+async fn export_snapshot(db: &Db) -> Result<()> {
+    let setting = |key: &'static str| async move {
+        Ok::<_, Error>(
+            settings::get::<String>(db, key)
+                .await?
+                .filter(|s| !s.is_empty()),
+        )
+    };
+    let dir = setting("export_dir")
+        .await?
+        .ok_or_else(|| Error::Invalid("choose an export directory first".into()))?;
+    let remote = setting("export_remote").await?;
+    let dir = Path::new(&dir);
+    taskapp_export::write::write_snapshot(db, dir).await?;
+    taskapp_export::git::commit_and_push(dir, "export", remote.as_deref()).await?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn export_needs_a_directory_then_writes_and_commits() {
+        tauri::async_runtime::block_on(async {
+            let db = Db::open_in_memory().await.expect("db");
+            let e = export_snapshot(&db).await;
+            assert!(matches!(e, Err(Error::Invalid(_))), "{e:?}");
+
+            let dir = tempfile::tempdir().expect("tempdir");
+            let git = |args: &[&str]| {
+                let ok = std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(dir.path())
+                    .args(args)
+                    .status()
+                    .expect("git")
+                    .success();
+                assert!(ok, "git {args:?}");
+            };
+            git(&["init", "-q"]);
+            // Commits need an identity; the throwaway repo gets one through its own config.
+            git(&["config", "user.name", "t"]);
+            git(&["config", "user.email", "t@example.com"]);
+            settings::set(&db, "export_dir", &dir.path().to_str().expect("utf-8"))
+                .await
+                .expect("set");
+            export_snapshot(&db).await.expect("export");
+            git(&["rev-parse", "--verify", "HEAD"]);
+        });
+    }
 }

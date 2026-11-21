@@ -3,27 +3,47 @@
   import { api } from '../../lib/api';
 
   let dir = $state('');
-  let snapshots = $state<string[]>([]);
+  let files = $state<string[]>([]);
   let error = $state('');
+  let restored = $state('');
+
+  const fail = (e: unknown) => (error = (e as { message?: string }).message ?? String(e));
+
+  async function load() {
+    files = dir.trim() === '' ? [] : await api.backup.list(dir.trim());
+  }
 
   onMount(async () => {
     dir = ((await api.settings.get('backup_dir')) as string | null) ?? '';
+    await load();
   });
 
   async function saveDir() {
     await api.settings.set('backup_dir', dir.trim());
+    await load();
   }
 
   async function snapshot() {
-    error = '';
+    error = restored = '';
     if (dir.trim() === '') {
       error = 'Choose a backup directory first.';
       return;
     }
     try {
-      snapshots = [await api.backup.snapshot(dir.trim(), 'manual'), ...snapshots];
+      await api.backup.snapshot(dir.trim(), 'manual');
+      await load();
     } catch (e) {
-      error = (e as { message?: string }).message ?? String(e);
+      fail(e);
+    }
+  }
+
+  async function restore(path: string) {
+    error = restored = '';
+    try {
+      await api.backup.restore(path);
+      restored = `Restored ${path}. Restart the app.`;
+    } catch (e) {
+      fail(e);
     }
   }
 </script>
@@ -35,12 +55,13 @@
 </label>
 <button onclick={snapshot}>Snapshot now</button>
 {#if error}<p role="alert">{error}</p>{/if}
-{#if snapshots.length}
+{#if restored}<p>{restored}</p>{/if}
+{#if files.length}
   <ul>
-    {#each snapshots as path (path)}
+    {#each files as path (path)}
       <li>
         <code>{path}</code>
-        <button disabled title="No restore command yet">Restore</button>
+        <button onclick={() => restore(path)}>Restore</button>
       </li>
     {/each}
   </ul>

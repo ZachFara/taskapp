@@ -16,8 +16,14 @@
   let newScope = $state('');
   let renameTo = $state('');
   let changeTo = $state<PropertyKind>('Text');
+  let scopeTo = $state('');
 
   const current = $derived(propertyDefs.find((d) => d.key === selected));
+
+  // The scope control shows the selected property's real scope, also after a refused change.
+  $effect(() => {
+    scopeTo = current?.project_id == null ? '' : String(current.project_id);
+  });
 
   onMount(async () => {
     await refreshAll();
@@ -57,6 +63,18 @@
   function changeKind() {
     const options: SelectOption[] = changeTo === 'Select' || changeTo === 'MultiSelect' ? current?.options ?? [] : [];
     void write(() => api.properties.changeKind(selected, changeTo, options));
+  }
+
+  function setScope() {
+    void write(() => api.properties.setScope(selected, scopeTo === '' ? null : Number(scopeTo)));
+  }
+
+  function move(by: -1 | 1) {
+    const keys = propertyDefs.map((d) => d.key);
+    const at = keys.indexOf(selected);
+    if (at + by < 0 || at + by >= keys.length) return;
+    [keys[at], keys[at + by]] = [keys[at + by], keys[at]];
+    void write(() => api.properties.reorder(keys));
   }
 
   function remove() {
@@ -100,6 +118,13 @@
     {#each kinds as k (k)}<option value={k}>{k}</option>{/each}
   </select>
   <button onclick={changeKind}>Change kind</button>
+  <select aria-label="Scope" bind:value={scopeTo}>
+    <option value="">All projects</option>
+    {#each projects as p (p.id)}<option value={String(p.id)}>{p.name}</option>{/each}
+  </select>
+  <button onclick={setScope}>Set scope</button>
+  <button onclick={() => move(-1)}>Move up</button>
+  <button onclick={() => move(1)}>Move down</button>
   {#if confirming}
     <button onclick={remove}>Confirm delete</button>
     <button onclick={() => (confirming = false)}>Cancel</button>
