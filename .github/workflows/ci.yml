@@ -2,9 +2,12 @@ name: ci
 on:
   pull_request:
     branches: [main, 'plan-*']
+  # main commits need their own `check` so plan-N branches can be cut from them under the ruleset
+  push:
+    branches: [main]
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -23,7 +26,7 @@ jobs:
         with: { fetch-depth: 0 }
       - id: d
         run: |
-          base=${{ github.event.pull_request.base.sha }}
+          base=${{ github.event.pull_request.base.sha || github.event.before }}
           # hashFiles is not allowed in job-level if, so detect the packages here
           {
             echo "docs_only=$(git diff --name-only "$base"...HEAD | scripts/docs-only.sh)"
@@ -32,6 +35,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   commits:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
