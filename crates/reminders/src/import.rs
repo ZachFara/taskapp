@@ -1,9 +1,7 @@
 use std::path::Path;
 
 use chrono::{NaiveDate, Utc};
-use taskapp_core::{
-    ChangeSource, Db, IssuePatch, Result, SyncState, SyncStatus, issues, quickadd, settings,
-};
+use taskapp_core::{ChangeSource, Db, Result, SyncState, SyncStatus, issues, quickadd, settings};
 
 use crate::helper::{self, Reminder};
 
@@ -93,13 +91,16 @@ async fn import_one(
         return Ok(());
     }
     let src = ChangeSource::RemindersImport;
-    let new = match quickadd::new_issue(db, &r.title, today, tz).await {
+    let mut new = match quickadd::new_issue(db, &r.title, today, tz).await {
         Ok(n) => n,
         Err(e) => {
             report.failed.push(format!("{}: {e}", r.external_id));
             return Ok(());
         }
     };
+    // Notes and due go in the same insert as the issue: nothing is patched after the commit.
+    new.description = r.notes.filter(|n| !n.trim().is_empty());
+    new.due = r.due.or(new.due);
     // One transaction, so a crash cannot leave an issue without its log row (a duplicate on re-import).
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let issue = match issues::create_in(&mut tx, new, src).await {
@@ -120,19 +121,6 @@ async fn import_one(
     .await?;
     tx.commit().await?;
     report.imported += 1;
-    let notes = r.notes.filter(|n| !n.trim().is_empty());
-    if notes.is_some() || r.due.is_some() {
-        let patch = IssuePatch {
-            description: notes,
-            due: r.due.map(Some),
-            ..IssuePatch::default()
-        };
-        if let Err(e) = issues::update(db, issue.id, patch, src).await {
-            report
-                .failed
-                .push(format!("{}: notes or due not applied: {e}", r.external_id));
-        }
-    }
     Ok(())
 }
 
