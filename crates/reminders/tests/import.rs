@@ -266,3 +266,21 @@ async fn missing_ids_still_marked_deleted() -> R {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn failed_log_write_leaves_no_issue() -> R {
+    let db = db_with_list().await?;
+    sqlx::query("CREATE TRIGGER no_log BEFORE INSERT ON import_log BEGIN SELECT RAISE(ABORT, 'log down'); END")
+        .execute(&db.pool)
+        .await?;
+    let fake = Fake::new();
+    fake.say(
+        "fetch",
+        r#"[{"external_id":"a","title":"Buy milk","notes":null,"due":null}]"#,
+        0,
+    );
+    assert!(import(&db, &fake.path(), today(), TZ).await.is_err());
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM issues").await?, 0);
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM import_log").await?, 0);
+    Ok(())
+}
