@@ -288,3 +288,20 @@ async fn archived_issue_is_not_found_after_reindex() -> R {
     assert_eq!(search::search(&db, "giraffe", 10).await?.len(), 1);
     Ok(())
 }
+
+#[tokio::test]
+async fn create_in_and_update_in_roll_back_with_the_caller() -> R {
+    let db = Db::open_in_memory().await?;
+    let keep = issues::create(&db, new("keep"), ChangeSource::Ui).await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    issues::create_in(&mut tx, new("gone"), ChangeSource::Ui).await?;
+    let patch = IssuePatch {
+        title: Some("changed".into()),
+        ..IssuePatch::default()
+    };
+    issues::update_in(&mut tx, keep.id, patch, ChangeSource::Ui).await?;
+    tx.rollback().await?;
+    assert_eq!(issues::get(&db, keep.id).await?.title, "keep");
+    assert!(issues::get_by_key(&db, "ZF-2").await.is_err());
+    Ok(())
+}
