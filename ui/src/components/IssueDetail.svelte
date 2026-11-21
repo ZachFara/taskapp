@@ -9,8 +9,8 @@
   import Relations from './detail/Relations.svelte';
   import SubIssues from './detail/SubIssues.svelte';
 
-  // The route table renders this without props, so the key comes from the URL.
-  let { key = decodeURIComponent(location.pathname.split('/').pop() ?? '') }: { key?: string } = $props();
+  let { params = {} }: { params?: { key?: string } } = $props();
+  const key = $derived(params.key ?? '');
 
   let issue = $state<Issue | null>(null);
   let error = $state('');

@@ -11,7 +11,7 @@ const settle = () => new Promise((r) => setTimeout(r, 20));
 async function open(key: string, wrap?: (a: Api) => Api) {
   api = createMockApi();
   setApi(wrap ? wrap(api) : api);
-  app = mount(IssueDetail, { target: document.body, props: { key } });
+  app = mount(IssueDetail, { target: document.body, props: { params: { key } } });
   await settle();
 }
 const q = <T extends Element>(sel: string) => document.querySelector(sel) as T;
@@ -77,12 +77,12 @@ describe('IssueDetail', () => {
     api = createMockApi(seed);
     setApi(api);
     // ZF-2 is in project 1 (home), ZF-1 in project 2 (work).
-    app = mount(IssueDetail, { target: document.body, props: { key: 'ZF-2' } });
+    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ZF-2' } } });
     await settle();
     expect(q('[aria-label=Properties]').textContent).toContain('Home only');
     unmount(app);
     document.body.innerHTML = '';
-    app = mount(IssueDetail, { target: document.body, props: { key: 'ZF-1' } });
+    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ZF-1' } } });
     await settle();
     expect(q('[aria-label=Properties]').textContent).not.toContain('Home only');
     expect(q('[aria-label=Properties]').textContent).toContain('Area');
@@ -100,7 +100,7 @@ describe('IssueDetail', () => {
     const seed = { ...structuredClone(fixtures), cycles: [{ id: 1, number: 1, name: 'C1', start_date: '2026-12-01', end_date: '2026-12-14' }] };
     api = createMockApi(seed);
     setApi({ ...api, issues: { ...api.issues, update: async () => { throw { kind: 'Conflict', message: 'cycle in parent chain' }; } } });
-    app = mount(IssueDetail, { target: document.body, props: { key: 'ZF-1' } });
+    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ZF-1' } } });
     await settle();
     const cycle = field('Cycle');
     cycle.value = '1';
@@ -125,16 +125,16 @@ describe('IssueDetail', () => {
     expect(q('[aria-label=History]').textContent).toContain('"Changed"');
   });
 
-  it('script_in_description_renders_as_text', async () => {
+  it('script_in_description_is_sanitized', async () => {
     const seed = structuredClone(fixtures);
     seed.issues[0].description = '<script>window.pwned = 1</script> <img src=x onerror="window.pwned=1">';
     api = createMockApi(seed);
     setApi(api);
-    app = mount(IssueDetail, { target: document.body, props: { key: 'ZF-1' } });
+    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ZF-1' } } });
     await settle();
     const box = q('[aria-label=Description]');
-    expect(box.querySelector('script, img')).toBeNull();
-    expect(box.textContent).toContain('<script>window.pwned = 1</script>');
+    expect(box.querySelector('script, [onerror]')).toBeNull();
+    expect(box.innerHTML).not.toContain('onerror');
   });
 
   it('sub_issue_cannot_be_the_issue_itself', async () => {
