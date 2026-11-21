@@ -129,4 +129,15 @@ describe('ListView', () => {
     expect(rows(target)[0].textContent).toContain('2026-12-03');
     expect(rows(target)[0].textContent).toContain('home');
   });
+
+  it('l_opens_label_picker_and_toggles_label', async () => {
+    const labels = [{ id: 1, name: 'bug', color: '#f00' }];
+    const { mock, target } = await open({ ...fixtures, labels, views: viewSeed() });
+    await vi.waitFor(() => expect(rows(target).length).toBeGreaterThan(0));
+    press('l');
+    flushSync();
+    await vi.waitFor(() => expect(target.querySelector('[aria-label="Labels"] button')).not.toBeNull());
+    target.querySelector<HTMLElement>('[aria-label="Labels"] button')!.click();
+    await vi.waitFor(async () => expect((await mock.issues.get(1))?.label_ids).toContain(1));
+  });
 });

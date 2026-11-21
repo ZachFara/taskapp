@@ -173,4 +173,18 @@ describe('TableView', () => {
     expect(heads).toEqual(['fixed:Title', 'prop:effort', 'prop:area']);
     expect(target.querySelector('[role="alert"]')).toBeNull();
   });
+
+  it('jk_and_enter_work_from_anywhere', async () => {
+    await open();
+    cell('ZF-1', 'fixed:Title').click();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' }));
+    flushSync();
+    expect(activeCell()).toBe('ZF-2|fixed:Title');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k' }));
+    flushSync();
+    expect(activeCell()).toBe('ZF-1|fixed:Title');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await flush();
+    expect(cell('ZF-1', 'fixed:Title').querySelector('input')).not.toBeNull();
+  });
 });
