@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO issues (number, title, description, status_id, priority, project_id, milestone_id,\n           parent_id, cycle_id, start_date, due_date, due_time_utc, due_tz, estimate_minutes, properties,\n           created_at, updated_at, completed_at)\n         VALUES ((SELECT COALESCE(MAX(number), 0) + 1 FROM issues), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,\n           ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 17
+    },
+    "nullable": []
+  },
+  "hash": "3db3edcf8bf829bb122ff816ac98bb38588a527b720ffa5b06c1ba20a9f4819b"
+}
