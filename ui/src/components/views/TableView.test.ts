@@ -1,6 +1,7 @@
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setApi } from '../../lib/api';
+import type { SavedView } from '../../lib/bindings';
 import { createMockApi, fixtures } from '../../lib/api.mock';
 import { currentViewId } from '../../lib/stores.svelte';
 import TableView from './TableView.svelte';
@@ -51,7 +52,7 @@ const alertText = () => target.querySelector('[role="alert"]')?.textContent?.tri
 
 async function open() {
   target = document.body.appendChild(document.createElement('div'));
-  app = mount(TableView, { target });
+  app = mount(TableView, { target, props: { view: seed.views[0] as SavedView } });
   await flush();
   await vi.waitFor(() => expect(cell('ZF-1', 'prop:effort')?.textContent?.trim()).toBe('1'));
 }

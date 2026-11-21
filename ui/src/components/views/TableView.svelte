@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
-  import type { FieldRef, FixedField, Issue, IssuePatch, PropertyKind, Value, ViewDef } from '../../lib/bindings';
+  import type { FieldRef, FixedField, Issue, IssuePatch, PropertyKind, SavedView, Value } from '../../lib/bindings';
   import { currentViewId, issues, propertyDefs, refreshAll, statuses, views } from '../../lib/stores.svelte';
+
+  let { view }: { view: SavedView } = $props();
 
   type EditKind = PropertyKind | 'Status' | 'Priority';
   // Fixed fields a table can show and edit. Others are left out of the column picker and skipped in views.
@@ -22,14 +24,6 @@
     DueDate: (v) => ({ due: v === null ? null : { Date: v as string } }),
     Estimate: (v) => ({ estimate_minutes: v as number | null }),
   };
-  const DEFAULT_DEF: ViewDef = {
-    filter: null,
-    sorts: [],
-    group_by: null,
-    layout: 'Table',
-    columns: [{ Fixed: 'Title' }, { Fixed: 'Status' }, { Fixed: 'Priority' }, { Fixed: 'DueDate' }],
-    include_archived: false,
-  };
 
   const colId = (ref: FieldRef) => (ref.Property !== undefined ? `prop:${ref.Property}` : `fixed:${ref.Fixed}`);
   const kindOf = (ref: FieldRef): EditKind | null =>
@@ -37,8 +31,9 @@
       ? (propertyDefs.find((d) => d.key === ref.Property)?.kind ?? null)
       : (FIXED[ref.Fixed!]?.kind ?? null);
 
-  const def = $derived(views.find((v) => v.id === currentViewId.value)?.def ?? DEFAULT_DEF);
-  const viewName = $derived(views.find((v) => v.id === currentViewId.value)?.name ?? 'Table');
+  // The store copy is newer after a column save; the prop is the fallback before the first refresh.
+  const live = $derived(views.find((v) => v.id === view.id) ?? view);
+  const def = $derived(live.def);
   // Columns whose property def is gone (or fixed field not supported) are skipped, keeping their index in the def.
   const cols = $derived(
     def.columns
@@ -61,7 +56,10 @@
   let draft = $state('');
   let error = $state<string | null>(null);
 
-  onMount(() => void refreshAll());
+  onMount(() => {
+    currentViewId.value = view.id;
+    void refreshAll();
+  });
 
   const raw = (i: Issue, ref: FieldRef): Value => {
     if (ref.Property !== undefined) return i.properties[ref.Property] ?? null;
@@ -195,8 +193,7 @@
 
   async function saveColumns(columns: FieldRef[]) {
     try {
-      const saved = await api.views.save(currentViewId.value, viewName, { ...def, columns });
-      currentViewId.value = saved.id;
+      await api.views.save(view.id, live.name, { ...def, columns });
       await refreshAll();
       error = null;
     } catch (e) {
@@ -225,7 +222,7 @@
 
 <section class="table-view">
   <header class="toolbar">
-    <h1>{viewName}</h1>
+    <h1>{live.name}</h1>
     <label>
       Add column
       <select data-testid="add-column" onchange={addColumn}>
