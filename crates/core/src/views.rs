@@ -410,3 +410,32 @@ pub async fn delete(db: &Db, id: ViewId) -> Result<()> {
     }
     Ok(())
 }
+
+/// Sets every view's position to its index in `ids`.
+///
+/// # Errors
+///
+/// Fails with `Invalid` unless `ids` lists every view exactly once.
+pub async fn reorder(db: &Db, ids: &[ViewId]) -> Result<()> {
+    let mut tx = db.pool.begin().await?;
+    let mut have: Vec<i64> = sqlx::query_scalar("SELECT id FROM views")
+        .fetch_all(&mut *tx)
+        .await?;
+    let mut want: Vec<i64> = ids.iter().map(|id| id.0).collect();
+    have.sort_unstable();
+    want.sort_unstable();
+    if want != have {
+        return Err(Error::Invalid(
+            "reorder must list every view exactly once".into(),
+        ));
+    }
+    for (position, id) in (0_i64..).zip(ids) {
+        sqlx::query("UPDATE views SET position = ? WHERE id = ?")
+            .bind(position)
+            .bind(id.0)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}

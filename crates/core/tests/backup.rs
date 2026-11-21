@@ -183,3 +183,44 @@ async fn restore_missing_parent_touches_nothing() -> R {
     assert!(snap.is_file());
     Ok(())
 }
+
+#[tokio::test]
+async fn list_returns_snapshots_and_nightly_newest_first() -> R {
+    let dir = TempDir::new()?;
+    let db = open_with_three_issues(dir.path()).await?;
+    let a = backup::snapshot(&db, dir.path(), "a").await?;
+    let b = backup::snapshot(&db, dir.path(), "b").await?;
+    let n = backup::nightly(
+        &db,
+        dir.path(),
+        Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap(),
+    )
+    .await?
+    .expect("written");
+    assert_eq!(backup::list(dir.path())?, [b, a, n]);
+    assert_eq!(
+        backup::list(&dir.path().join("missing"))?,
+        Vec::<PathBuf>::new()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn restore_refuses_while_another_connection_holds_the_db() -> R {
+    let dir = TempDir::new()?;
+    let db = open_with_three_issues(dir.path()).await?;
+    let snap = backup::snapshot(&db, dir.path(), "before").await?;
+    add_issue(&db, "d").await?;
+
+    let e = backup::restore(&snap, &dir.path().join("live.db")).await;
+    assert!(matches!(e, Err(taskapp_core::Error::Conflict(_))), "{e:?}");
+    assert_eq!(issue_count(&db).await?, 4);
+
+    db.pool.close().await;
+    backup::restore(&snap, &dir.path().join("live.db")).await?;
+    assert_eq!(
+        issue_count(&Db::open(&dir.path().join("live.db")).await?).await?,
+        3
+    );
+    Ok(())
+}

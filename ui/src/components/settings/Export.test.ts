@@ -17,9 +17,19 @@ describe('Export', () => {
     expect(calls).not.toContain('settings.set');
   });
 
-  it('export now calls sync', async () => {
+  it('export now calls the export command and reports it', async () => {
     const { target, calls } = await mountSettings(Export);
     await press(target, 'Export now');
-    expect(calls).toContain('sync.now');
+    expect(calls).toContain('export.now');
+    expect(target.textContent).toMatch(/exported/i);
+  });
+
+  it('export now shows the error when it fails', async () => {
+    const fail = async () => {
+      throw { kind: 'Invalid', message: 'choose an export directory first' };
+    };
+    const { target } = await mountSettings(Export, { export: { now: fail } });
+    await press(target, 'Export now');
+    expect(target.querySelector('[role="alert"]')?.textContent).toContain('export directory');
   });
 });

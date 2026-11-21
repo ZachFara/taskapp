@@ -72,7 +72,7 @@ describe('Sidebar', () => {
     dragOnto('Gamma', 'Alpha');
     await settle();
     expect(names('[aria-label=Views]')).toEqual(['Gamma', 'Alpha', 'Beta']);
-    expect(await mock.settings.get('view_order')).toEqual([3, 1, 2]);
+    expect((await mock.views.list()).map((v) => v.id)).toEqual([3, 1, 2]);
   });
 
   it('reorder_with_failed_api_restores_old_order', async () => {

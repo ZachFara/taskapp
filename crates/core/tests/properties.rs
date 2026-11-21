@@ -407,3 +407,81 @@ async fn delete_def_writes_a_row_per_issue_that_lost_a_value() -> R {
     assert_eq!(log(&db, "issue", &b.0.to_string()).await.len(), 0);
     Ok(())
 }
+
+async fn keys_in_order(db: &Db) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    Ok(properties::list_defs(db)
+        .await?
+        .into_iter()
+        .map(|d| d.key)
+        .collect())
+}
+
+#[tokio::test]
+async fn reorder_sets_positions() -> R {
+    let db = Db::open_in_memory().await?;
+    for k in ["a", "b", "c"] {
+        properties::create_def(&db, def(k, PropertyKind::Text), Ui).await?;
+    }
+    properties::reorder(&db, &["c".into(), "a".into(), "b".into()]).await?;
+    assert_eq!(keys_in_order(&db).await?, ["c", "a", "b"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn reorder_missing_or_duplicate_key_is_invalid_and_changes_nothing() -> R {
+    let db = Db::open_in_memory().await?;
+    for k in ["a", "b"] {
+        properties::create_def(&db, def(k, PropertyKind::Text), Ui).await?;
+    }
+    for keys in [
+        vec!["b".to_string()],
+        vec!["b".into(), "b".into()],
+        vec!["b".into(), "a".into(), "zz".into()],
+    ] {
+        let e = properties::reorder(&db, &keys).await;
+        assert!(matches!(e, Err(Error::Invalid(_))), "{keys:?}: {e:?}");
+    }
+    assert_eq!(keys_in_order(&db).await?, ["a", "b"]);
+    Ok(())
+}
+
+async fn two_projects(db: &Db) -> Result<(), sqlx::Error> {
+    for (id, slug) in [(1, "a"), (2, "b")] {
+        sqlx::query("INSERT INTO projects (id, slug, name, created_at) VALUES (?, ?, ?, '2026-01-01T00:00:00Z')")
+            .bind(id).bind(slug).bind(slug).execute(&db.pool).await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn set_scope_moves_and_clears_scope() -> R {
+    let db = Db::open_in_memory().await?;
+    two_projects(&db).await?;
+    properties::create_def(&db, def("area", PropertyKind::Text), Ui).await?;
+    issue(&db, Some(1), json!({"area": "x"})).await;
+    let d = properties::set_scope(&db, "area", Some(taskapp_core::ProjectId(1)), Ui).await?;
+    assert_eq!(d.project_id, Some(taskapp_core::ProjectId(1)));
+    let d = properties::set_scope(&db, "area", None, Ui).await?;
+    assert_eq!(d.project_id, None);
+    assert_eq!(properties::list_defs(&db).await?[0].project_id, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn set_scope_refuses_while_values_sit_on_other_projects() -> R {
+    let db = Db::open_in_memory().await?;
+    two_projects(&db).await?;
+    properties::create_def(&db, def("area", PropertyKind::Text), Ui).await?;
+    issue(&db, Some(1), json!({"area": "x"})).await;
+    issue(&db, Some(2), json!({"area": "y"})).await;
+    issue(&db, None, json!({})).await;
+    let e = properties::set_scope(&db, "area", Some(taskapp_core::ProjectId(1)), Ui).await;
+    let Err(Error::Conflict(m)) = e else {
+        panic!("expected Conflict, got {e:?}")
+    };
+    assert!(m.contains("ZF-2") && !m.contains("ZF-1"), "{m}");
+    assert_eq!(properties::list_defs(&db).await?[0].project_id, None);
+    let e = properties::set_scope(&db, "nope", None, Ui).await;
+    assert!(matches!(e, Err(Error::NotFound(_))));
+    Ok(())
+}

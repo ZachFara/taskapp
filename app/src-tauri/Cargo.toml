@@ -12,6 +12,7 @@ taskapp-core.workspace = true
 taskapp-commands.workspace = true
 taskapp-gcal.workspace = true
 taskapp-reminders.workspace = true
+taskapp-export.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
 specta.workspace = true
