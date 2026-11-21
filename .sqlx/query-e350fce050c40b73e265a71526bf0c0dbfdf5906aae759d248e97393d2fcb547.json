@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT count(*) AS \"total!: i64\",\n                  coalesce(sum(s.category = 'completed'), 0) AS \"completed!: i64\"\n           FROM issues i JOIN statuses s ON s.id = i.status_id\n           WHERE i.project_id = ? AND i.archived_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "total!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "completed!: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "e350fce050c40b73e265a71526bf0c0dbfdf5906aae759d248e97393d2fcb547"
+}

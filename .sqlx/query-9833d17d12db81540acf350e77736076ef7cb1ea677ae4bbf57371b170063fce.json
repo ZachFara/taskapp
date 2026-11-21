@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO work_blocks (issue_id, start_utc, end_utc) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "9833d17d12db81540acf350e77736076ef7cb1ea677ae4bbf57371b170063fce"
+}

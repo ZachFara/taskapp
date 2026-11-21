@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issues SET project_id = NULL, milestone_id = NULL WHERE project_id = ?\n         OR milestone_id IN (SELECT id FROM milestones WHERE project_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "4e79023a0a5d20b5813beb716c8a4b1576b36d8f26584de3cea9d2eed37ab529"
+}

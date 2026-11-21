@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE milestones SET name = ?, target_date = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "4b643c4a07783c8d72c380cbe1ae00835811d290f431f56bb209136944a1380e"
+}

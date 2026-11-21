@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT name, start_date AS \"start_date!: NaiveDate\", end_date AS \"end_date!: NaiveDate\"\n           FROM cycles WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "name",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "start_date!: NaiveDate",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "end_date!: NaiveDate",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "21974671fb8723f56ee2038d540aae0a6061172531d99c7a6ac0d95436c43a0b"
+}
