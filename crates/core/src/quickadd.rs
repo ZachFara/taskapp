@@ -59,6 +59,15 @@ pub async fn create_from(
     tz: &str,
     src: ChangeSource,
 ) -> Result<Issue> {
+    issues::create(db, new_issue(db, input, today, tz).await?, src).await
+}
+
+/// The issue [`create_from`] would create, with project and label names resolved.
+///
+/// # Errors
+///
+/// Fails on a database error.
+pub async fn new_issue(db: &Db, input: &str, today: NaiveDate, tz: &str) -> Result<NewIssue> {
     let parsed = parse(input, today, tz);
     let mut title = parsed.title;
     // Unknown project or label: its token goes back into the title, nothing is created.
@@ -89,7 +98,7 @@ pub async fn create_from(
             title.push_str(&name);
         }
     }
-    let new = NewIssue {
+    Ok(NewIssue {
         title,
         description: None,
         status_id: None,
@@ -105,8 +114,7 @@ pub async fn create_from(
         properties: None,
         created_at: None,
         completed_at: None,
-    };
-    issues::create(db, new, src).await
+    })
 }
 
 #[derive(Default)]

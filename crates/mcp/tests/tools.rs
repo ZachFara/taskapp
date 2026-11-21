@@ -325,3 +325,18 @@ fn db_flag_is_used_and_home_is_untouched() {
     assert!(db.exists());
     assert_eq!(std::fs::read_dir(home.path()).expect("dir").count(), 0);
 }
+
+#[test]
+fn bulk_update_failing_item_leaves_earlier_items_unchanged() {
+    let (_d, db) = tmp();
+    let mut calls = make_issues(7);
+    // Priority 9 passes argument parsing and is rejected by core on the 7th item.
+    let items: Vec<Value> = (1..=7)
+        .map(|i| json!({"key":format!("ZF-{i}"),"patch":{"priority": if i == 7 { 9 } else { 2 }}}))
+        .collect();
+    calls.push(("bulk_update", json!({"items": items})));
+    calls.push(("get_issue", json!({"key":"ZF-1"})));
+    let r = session(&db, &calls);
+    assert!(r[7].is_err());
+    assert_eq!(r[8].as_ref().expect("get")["issue"]["priority"], 0);
+}

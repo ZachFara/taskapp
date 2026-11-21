@@ -208,10 +208,25 @@ async fn record_created(tx: &mut SqliteConnection, src: ChangeSource, issue: &Is
 ///
 /// `Invalid` for an empty title, a priority above 4 or an unknown status; `Db` for other failures.
 pub async fn create(db: &Db, new: NewIssue, src: ChangeSource) -> Result<Issue> {
-    let priority = new.priority.unwrap_or(0);
-    check_fields(&new.title, priority)?;
     // IMMEDIATE takes the write lock up front, so two writers cannot read the same max(number).
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let issue = create_in(&mut tx, new, src).await?;
+    tx.commit().await?;
+    Ok(issue)
+}
+
+/// [`create`] inside the caller's transaction, which should be `BEGIN IMMEDIATE`.
+///
+/// # Errors
+///
+/// As [`create`].
+pub async fn create_in(
+    tx: &mut SqliteConnection,
+    new: NewIssue,
+    src: ChangeSource,
+) -> Result<Issue> {
+    let priority = new.priority.unwrap_or(0);
+    check_fields(&new.title, priority)?;
     let status = match new.status_id {
         Some(s) => s,
         None => StatusId(
@@ -227,7 +242,7 @@ pub async fn create(db: &Db, new: NewIssue, src: ChangeSource) -> Result<Issue> 
     let created = new.created_at.unwrap_or(now);
     let completed = match new.completed_at {
         Some(c) => Some(c),
-        None => is_done(category(&mut tx, status).await?).then_some(now),
+        None => is_done(category(tx, status).await?).then_some(now),
     };
     let due = due_cols(new.due.as_ref());
     let props = serde_json::to_string(&new.properties.unwrap_or_default()).map_err(bad)?;
@@ -262,10 +277,9 @@ pub async fn create(db: &Db, new: NewIssue, src: ChangeSource) -> Result<Issue> 
     .await?
     .last_insert_rowid();
     let id = IssueId(id);
-    set_labels(&mut tx, id, &new.label_ids.unwrap_or_default()).await?;
-    let issue = fetch(&mut tx, id).await?;
-    record_created(&mut tx, src, &issue).await?;
-    tx.commit().await?;
+    set_labels(tx, id, &new.label_ids.unwrap_or_default()).await?;
+    let issue = fetch(tx, id).await?;
+    record_created(tx, src, &issue).await?;
     Ok(issue)
 }
 
@@ -358,7 +372,23 @@ async fn record_all(
 /// status or an issue made its own parent.
 pub async fn update(db: &Db, id: IssueId, patch: IssuePatch, src: ChangeSource) -> Result<Issue> {
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
-    let old = fetch(&mut tx, id).await?;
+    let issue = update_in(&mut tx, id, patch, src).await?;
+    tx.commit().await?;
+    Ok(issue)
+}
+
+/// [`update`] inside the caller's transaction, which should be `BEGIN IMMEDIATE`.
+///
+/// # Errors
+///
+/// As [`update`].
+pub async fn update_in(
+    tx: &mut SqliteConnection,
+    id: IssueId,
+    patch: IssuePatch,
+    src: ChangeSource,
+) -> Result<Issue> {
+    let old = fetch(tx, id).await?;
     let mut new = apply_patch(&old, patch);
     check_fields(&new.title, new.priority)?;
     if new.parent_id == Some(id) {
@@ -369,8 +399,8 @@ pub async fn update(db: &Db, id: IssueId, patch: IssuePatch, src: ChangeSource) 
         return Ok(old);
     }
     if new.status_id != old.status_id {
-        let was = is_done(category(&mut tx, old.status_id).await?);
-        new.completed_at = if is_done(category(&mut tx, new.status_id).await?) {
+        let was = is_done(category(tx, old.status_id).await?);
+        new.completed_at = if is_done(category(tx, new.status_id).await?) {
             if was {
                 old.completed_at
             } else {
@@ -410,10 +440,9 @@ pub async fn update(db: &Db, id: IssueId, patch: IssuePatch, src: ChangeSource) 
     .execute(&mut *tx)
     .await?;
     if new.label_ids != old.label_ids {
-        set_labels(&mut tx, id, &new.label_ids).await?;
+        set_labels(tx, id, &new.label_ids).await?;
     }
-    record_all(&mut tx, src, id, &cs).await?;
-    tx.commit().await?;
+    record_all(tx, src, id, &cs).await?;
     Ok(new)
 }
 
