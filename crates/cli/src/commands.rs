@@ -35,6 +35,9 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         }
         Cmd::Relation(cmd) => relation(db, cmd).await,
         Cmd::Pin(cmd) => pin(db, cmd).await,
+        Cmd::Backup(_) => Err(Error::Invalid(
+            "backup runs before the database opens".into(),
+        )),
         Cmd::History { key } => {
             let id = issue_id(db, &key).await?;
             val(history::list_for(db, "issue", &id.0.to_string()).await?)

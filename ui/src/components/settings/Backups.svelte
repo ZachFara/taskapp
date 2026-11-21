@@ -5,7 +5,6 @@
   let dir = $state('');
   let files = $state<string[]>([]);
   let error = $state('');
-  let restored = $state('');
 
   const fail = (e: unknown) => (error = (e as { message?: string }).message ?? String(e));
 
@@ -24,7 +23,7 @@
   }
 
   async function snapshot() {
-    error = restored = '';
+    error = '';
     if (dir.trim() === '') {
       error = 'Choose a backup directory first.';
       return;
@@ -37,15 +36,6 @@
     }
   }
 
-  async function restore(path: string) {
-    error = restored = '';
-    try {
-      await api.backup.restore(path);
-      restored = `Restored ${path}. Restart the app.`;
-    } catch (e) {
-      fail(e);
-    }
-  }
 </script>
 
 <h2>Backups</h2>
@@ -55,14 +45,11 @@
 </label>
 <button onclick={snapshot}>Snapshot now</button>
 {#if error}<p role="alert">{error}</p>{/if}
-{#if restored}<p>{restored}</p>{/if}
 {#if files.length}
+  <p>To restore, quit the app and run: taskapp backup restore &lt;file&gt;</p>
   <ul>
     {#each files as path (path)}
-      <li>
-        <code>{path}</code>
-        <button onclick={() => restore(path)}>Restore</button>
-      </li>
+      <li><code>{path}</code></li>
     {/each}
   </ul>
 {/if}
