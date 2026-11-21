@@ -39,7 +39,7 @@ CREATE TABLE import_log (external_id TEXT PRIMARY KEY, source TEXT NOT NULL, iss
   imported_at TEXT NOT NULL, source_deleted INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE gcal_events (google_event_id TEXT PRIMARY KEY, calendar_id TEXT NOT NULL,
   managed_key TEXT NOT NULL UNIQUE, etag TEXT, last_synced_hash TEXT NOT NULL);
-CREATE VIRTUAL TABLE issue_fts USING fts5(title, description, comments, content='', tokenize='porter');
+CREATE VIRTUAL TABLE issue_fts USING fts5(title, description, comments, content='', contentless_delete=1, tokenize='porter');
 
 CREATE INDEX idx_milestones_project ON milestones(project_id);
 CREATE INDEX idx_issues_status ON issues(status_id);

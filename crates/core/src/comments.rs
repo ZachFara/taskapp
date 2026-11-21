@@ -4,6 +4,7 @@ use serde_json::json;
 use crate::{
     ChangeSource, Comment, CommentId, Db, Error, IssueId, Result,
     history::{self, Edit},
+    search,
 };
 
 /// # Errors
@@ -32,9 +33,6 @@ pub async fn list(db: &Db, issue: IssueId) -> Result<Vec<Comment>> {
 }
 
 /// `created_at` defaults to now; a migration passes the original time.
-///
-/// shortcut: comment bodies are not added to the search index (`search::reindex` is still a T6 stub
-/// that panics), so comments are not searchable yet; add the reindex call once T6 is merged.
 ///
 /// # Errors
 ///
@@ -65,6 +63,7 @@ pub async fn add_comment(
         new: Some(&new),
     };
     history::record(&mut tx, src, "comment", &id.to_string(), &edit).await?;
+    search::reindex_in(&mut tx, issue).await?;
     tx.commit().await?;
     Ok(Comment {
         id: CommentId(id),
@@ -105,6 +104,7 @@ pub async fn update(db: &Db, id: CommentId, body: &str, src: ChangeSource) -> Re
     )
     .execute(&mut *tx)
     .await?;
+    search::reindex_in(&mut tx, IssueId(old.issue_id)).await?;
     tx.commit().await?;
     Ok(Comment {
         id,
@@ -120,11 +120,12 @@ pub async fn update(db: &Db, id: CommentId, body: &str, src: ChangeSource) -> Re
 /// Fails on a database error or invalid arguments.
 pub async fn delete(db: &Db, id: CommentId, src: ChangeSource) -> Result<()> {
     let mut tx = db.pool.begin().await?;
-    let body: String = sqlx::query_scalar("SELECT body FROM comments WHERE id = ?")
-        .bind(id.0)
-        .fetch_optional(&mut *tx)
-        .await?
-        .ok_or_else(|| Error::NotFound(format!("comment {}", id.0)))?;
+    let (body, issue): (String, i64) =
+        sqlx::query_as("SELECT body, issue_id FROM comments WHERE id = ?")
+            .bind(id.0)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("comment {}", id.0)))?;
     sqlx::query!("DELETE FROM comments WHERE id = ?", id.0)
         .execute(&mut *tx)
         .await?;
@@ -135,6 +136,7 @@ pub async fn delete(db: &Db, id: CommentId, src: ChangeSource) -> Result<()> {
         new: None,
     };
     history::record(&mut tx, src, "comment", &id.0.to_string(), &edit).await?;
+    search::reindex_in(&mut tx, IssueId(issue)).await?;
     tx.commit().await?;
     Ok(())
 }

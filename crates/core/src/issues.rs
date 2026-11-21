@@ -1,18 +1,18 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
-use serde_json::Value;
-use sqlx::SqliteConnection;
+use serde_json::{Map, Value};
+use sqlx::{Row, SqliteConnection, sqlite::SqliteRow};
 
 use crate::{
     ChangeSource, Db, Due, Error, Issue, IssueId, IssuePatch, LabelId, NewIssue, Result,
-    StatusCategory, StatusId, history, statuses::parse_category,
+    StatusCategory, StatusId, history, search, statuses::parse_category,
 };
 
 fn bad<E: std::fmt::Display>(e: E) -> Error {
     Error::Invalid(e.to_string())
 }
 
-async fn prefix(conn: &mut SqliteConnection) -> Result<String> {
+pub(crate) async fn prefix(conn: &mut SqliteConnection) -> Result<String> {
     let v = sqlx::query_scalar!("SELECT value FROM settings WHERE key = 'issue_prefix'")
         .fetch_optional(conn)
         .await?
@@ -87,6 +87,64 @@ async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Issue> {
     })
 }
 
+/// Columns every issue query selects: the row plus its label ids as a comma list.
+pub(crate) const ISSUE_COLS: &str = "issues.*, \
+    (SELECT group_concat(label_id) FROM issue_labels WHERE issue_id = issues.id) AS label_ids";
+
+pub(crate) fn issue_from_row(r: &SqliteRow, prefix: &str) -> Result<Issue> {
+    let id: i64 = r.try_get("id")?;
+    let due = match (
+        r.try_get::<Option<DateTime<Utc>>, _>("due_time_utc")?,
+        r.try_get::<Option<String>, _>("due_tz")?,
+        r.try_get::<Option<NaiveDate>, _>("due_date")?,
+    ) {
+        (Some(utc), Some(tz), _) => Some(Due::DateTime { utc, tz }),
+        (_, _, Some(d)) => Some(Due::Date(d)),
+        _ => None,
+    };
+    let props: String = r.try_get("properties")?;
+    let labels: Option<String> = r.try_get("label_ids")?;
+    let opt = |c: &str| -> Result<Option<i64>> { Ok(r.try_get(c)?) };
+    Ok(Issue {
+        id: IssueId(id),
+        key: format!("{prefix}-{}", r.try_get::<i64, _>("number")?),
+        title: r.try_get("title")?,
+        description: r.try_get("description")?,
+        status_id: StatusId(r.try_get("status_id")?),
+        priority: u8::try_from(r.try_get::<i64, _>("priority")?)
+            .map_err(|e| Error::Invalid(e.to_string()))?,
+        project_id: opt("project_id")?.map(crate::ProjectId),
+        milestone_id: opt("milestone_id")?.map(crate::MilestoneId),
+        parent_id: opt("parent_id")?.map(IssueId),
+        cycle_id: opt("cycle_id")?.map(crate::CycleId),
+        label_ids: labels
+            .iter()
+            .flat_map(|s| s.split(','))
+            .filter_map(|s| s.parse().ok().map(LabelId))
+            .collect(),
+        start_date: r.try_get("start_date")?,
+        due,
+        estimate_minutes: opt("estimate_minutes")?
+            .map(|m| u32::try_from(m).map_err(|e| Error::Invalid(e.to_string())))
+            .transpose()?,
+        properties: serde_json::from_str::<Map<String, Value>>(&props)
+            .map_err(|e| Error::Invalid(format!("issue properties: {e}")))?,
+        created_at: r.try_get("created_at")?,
+        updated_at: r.try_get("updated_at")?,
+        completed_at: r.try_get("completed_at")?,
+        archived_at: r.try_get("archived_at")?,
+    })
+}
+
+/// Rows from a query that selected [`ISSUE_COLS`].
+pub(crate) async fn issues_from_rows(
+    conn: &mut SqliteConnection,
+    rows: &[SqliteRow],
+) -> Result<Vec<Issue>> {
+    let prefix = prefix(conn).await?;
+    rows.iter().map(|r| issue_from_row(r, &prefix)).collect()
+}
+
 fn check_fields(title: &str, priority: u8) -> Result<()> {
     if title.trim().is_empty() {
         return Err(Error::Invalid("title is empty".into()));
@@ -143,7 +201,7 @@ async fn record_created(tx: &mut SqliteConnection, src: ChangeSource, issue: &Is
         };
         history::record(tx, src, "issue", &id, &edit).await?;
     }
-    Ok(())
+    search::reindex_in(tx, issue.id).await
 }
 
 /// # Errors
@@ -285,6 +343,9 @@ async fn record_all(
             new: (!new.is_null()).then_some(new),
         };
         history::record(tx, src, "issue", &id.0.to_string(), &edit).await?;
+    }
+    if cs.iter().any(|c| matches!(c.0, "title" | "description")) {
+        search::reindex_in(tx, id).await?;
     }
     Ok(())
 }

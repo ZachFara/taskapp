@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT external_id AS \"external_id!: String\" FROM import_log\n           WHERE source = 'reminders' AND source_deleted = 0",
+  "describe": {
+    "columns": [
+      {
+        "name": "external_id!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "ea916c685b3241374dd88bf59d79ee6435a29077cf1a9378981e8bcd4de6d518"
+}
