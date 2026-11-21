@@ -16,13 +16,20 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       docs_only: ${{ steps.d.outputs.docs_only }}
+      has_ui: ${{ steps.d.outputs.has_ui }}
+      has_swift: ${{ steps.d.outputs.has_swift }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - id: d
         run: |
           base=${{ github.event.pull_request.base.sha }}
-          echo "docs_only=$(git diff --name-only "$base"...HEAD | scripts/docs-only.sh)" >> "$GITHUB_OUTPUT"
+          # hashFiles is not allowed in job-level if, so detect the packages here
+          {
+            echo "docs_only=$(git diff --name-only "$base"...HEAD | scripts/docs-only.sh)"
+            echo "has_ui=$([ -f ui/package.json ] && echo true || echo false)"
+            echo "has_swift=$([ -f helpers/reminders-helper/Package.swift ] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
 
   commits:
     runs-on: ubuntu-latest
@@ -80,7 +87,7 @@ jobs:
 
   test-ui:
     needs: changes
-    if: needs.changes.outputs.docs_only != 'true' && hashFiles('ui/package.json') != ''
+    if: needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.has_ui == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -94,7 +101,7 @@ jobs:
 
   test-swift:
     needs: changes
-    if: needs.changes.outputs.docs_only != 'true' && hashFiles('helpers/reminders-helper/Package.swift') != ''
+    if: needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.has_swift == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
