@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "WITH RECURSIVE reach(id) AS (\n             SELECT ?2 UNION SELECT r.to_id FROM relations r JOIN reach ON r.from_id = reach.id WHERE r.kind = 'blocks')\n         INSERT OR IGNORE INTO relations (from_id, to_id, kind)\n         SELECT ?1, ?2, ?3 WHERE ?3 <> 'blocks' OR NOT EXISTS (SELECT 1 FROM reach WHERE id = ?1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "bb91884fb78671032070e3bf359e0ec4869e0728170b1e79b3365b65eaf70fbb"
+}
