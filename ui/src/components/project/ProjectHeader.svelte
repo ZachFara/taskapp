@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from '../../lib/api';
+  import { openExternal } from '../../lib/openExternal';
   import type { Project } from '../../lib/bindings';
 
   let {
@@ -23,7 +24,7 @@
   let draft = $state('');
 
   function openDoc() {
-    if (docHref) window.open(docHref, '_blank', 'noopener');
+    if (docHref) void openExternal(docHref);
   }
 
   async function saveDescription() {
