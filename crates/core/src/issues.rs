@@ -1,55 +1,444 @@
-use crate::{ChangeSource, Db, Issue, IssueId, IssuePatch, NewIssue, Result};
+use chrono::{DateTime, NaiveDate, Utc};
+use serde::Serialize;
+use serde_json::Value;
+use sqlx::SqliteConnection;
 
-/// # Errors
-///
-/// Fails on a database error or invalid arguments.
-pub async fn create(_db: &Db, _new: NewIssue, _src: ChangeSource) -> Result<Issue> {
-    todo!("T2")
+use crate::{
+    ChangeSource, Db, Due, Error, Issue, IssueId, IssuePatch, LabelId, NewIssue, Result,
+    StatusCategory, StatusId, history, statuses::parse_category,
+};
+
+fn bad<E: std::fmt::Display>(e: E) -> Error {
+    Error::Invalid(e.to_string())
+}
+
+async fn prefix(conn: &mut SqliteConnection) -> Result<String> {
+    let v = sqlx::query_scalar!("SELECT value FROM settings WHERE key = 'issue_prefix'")
+        .fetch_optional(conn)
+        .await?
+        .ok_or_else(|| Error::Invalid("issue_prefix setting is missing".into()))?;
+    serde_json::from_str(&v).map_err(bad)
+}
+
+async fn category(conn: &mut SqliteConnection, id: StatusId) -> Result<StatusCategory> {
+    let c = sqlx::query_scalar!("SELECT category FROM statuses WHERE id = ?", id.0)
+        .fetch_optional(conn)
+        .await?
+        .ok_or_else(|| Error::Invalid(format!("status {} does not exist", id.0)))?;
+    parse_category(&c)
+}
+
+fn is_done(c: StatusCategory) -> bool {
+    matches!(c, StatusCategory::Completed | StatusCategory::Canceled)
+}
+
+async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Issue> {
+    let r = sqlx::query!(
+        r#"SELECT id AS "id!: i64", number, title, description, status_id, priority,
+                  project_id, milestone_id, parent_id, cycle_id,
+                  start_date AS "start_date: NaiveDate", due_date AS "due_date: NaiveDate",
+                  due_time_utc AS "due_time_utc: DateTime<Utc>", due_tz, estimate_minutes, properties,
+                  created_at AS "created_at: DateTime<Utc>", updated_at AS "updated_at: DateTime<Utc>",
+                  completed_at AS "completed_at: DateTime<Utc>", archived_at AS "archived_at: DateTime<Utc>"
+           FROM issues WHERE id = ?"#,
+        id.0
+    )
+    .fetch_optional(&mut *conn)
+    .await?
+    .ok_or_else(|| Error::NotFound(format!("issue {}", id.0)))?;
+    let label_ids = sqlx::query_scalar!(
+        r#"SELECT label_id AS "label_id!: i64" FROM issue_labels WHERE issue_id = ? ORDER BY label_id"#,
+        id.0
+    )
+    .fetch_all(&mut *conn)
+    .await?
+    .into_iter()
+    .map(LabelId)
+    .collect();
+    let due = match (r.due_time_utc, r.due_tz, r.due_date) {
+        (Some(utc), Some(tz), _) => Some(Due::DateTime { utc, tz }),
+        (_, _, Some(d)) => Some(Due::Date(d)),
+        _ => None,
+    };
+    Ok(Issue {
+        id,
+        key: format!("{}-{}", prefix(conn).await?, r.number),
+        title: r.title,
+        description: r.description,
+        status_id: StatusId(r.status_id),
+        priority: u8::try_from(r.priority).map_err(bad)?,
+        project_id: r.project_id.map(crate::ProjectId),
+        milestone_id: r.milestone_id.map(crate::MilestoneId),
+        parent_id: r.parent_id.map(IssueId),
+        cycle_id: r.cycle_id.map(crate::CycleId),
+        label_ids,
+        start_date: r.start_date,
+        due,
+        estimate_minutes: r
+            .estimate_minutes
+            .map(u32::try_from)
+            .transpose()
+            .map_err(bad)?,
+        properties: serde_json::from_str(&r.properties).map_err(bad)?,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+        completed_at: r.completed_at,
+        archived_at: r.archived_at,
+    })
+}
+
+fn check_fields(title: &str, priority: u8) -> Result<()> {
+    if title.trim().is_empty() {
+        return Err(Error::Invalid("title is empty".into()));
+    }
+    if priority > 4 {
+        return Err(Error::Invalid(format!("priority {priority} is not 0 to 4")));
+    }
+    Ok(())
+}
+
+struct DueCols<'a> {
+    date: Option<NaiveDate>,
+    utc: Option<DateTime<Utc>>,
+    tz: Option<&'a str>,
+}
+
+fn due_cols(due: Option<&Due>) -> DueCols<'_> {
+    let (mut date, mut utc, mut tz) = (None, None, None);
+    match due {
+        Some(Due::Date(d)) => date = Some(*d),
+        Some(Due::DateTime { utc: u, tz: z }) => (utc, tz) = (Some(*u), Some(z.as_str())),
+        None => {}
+    }
+    DueCols { date, utc, tz }
+}
+
+async fn set_labels(conn: &mut SqliteConnection, id: IssueId, labels: &[LabelId]) -> Result<()> {
+    sqlx::query!("DELETE FROM issue_labels WHERE issue_id = ?", id.0)
+        .execute(&mut *conn)
+        .await?;
+    for l in labels {
+        sqlx::query!(
+            "INSERT OR IGNORE INTO issue_labels (issue_id, label_id) VALUES (?, ?)",
+            id.0,
+            l.0
+        )
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn record_created(tx: &mut SqliteConnection, src: ChangeSource, issue: &Issue) -> Result<()> {
+    let id = issue.id.0.to_string();
+    let (title, key) = (
+        Value::from(issue.title.as_str()),
+        Value::from(issue.key.as_str()),
+    );
+    for (field, v) in [("title", &title), ("key", &key)] {
+        let edit = history::Edit {
+            field,
+            old: None,
+            new: Some(v),
+        };
+        history::record(tx, src, "issue", &id, &edit).await?;
+    }
+    Ok(())
 }
 
 /// # Errors
 ///
-/// Fails on a database error or invalid arguments.
-pub async fn update(
-    _db: &Db,
-    _id: IssueId,
-    _patch: IssuePatch,
-    _src: ChangeSource,
-) -> Result<Issue> {
-    todo!("T2")
+/// `Invalid` for an empty title, a priority above 4 or an unknown status; `Db` for other failures.
+pub async fn create(db: &Db, new: NewIssue, src: ChangeSource) -> Result<Issue> {
+    let priority = new.priority.unwrap_or(0);
+    check_fields(&new.title, priority)?;
+    // IMMEDIATE takes the write lock up front, so two writers cannot read the same max(number).
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let status = match new.status_id {
+        Some(s) => s,
+        None => StatusId(
+            sqlx::query_scalar!(
+                r#"SELECT id AS "id!: i64" FROM statuses ORDER BY position, id LIMIT 1"#
+            )
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or_else(|| Error::Invalid("no statuses exist".into()))?,
+        ),
+    };
+    let now = Utc::now();
+    let created = new.created_at.unwrap_or(now);
+    let completed = match new.completed_at {
+        Some(c) => Some(c),
+        None => is_done(category(&mut tx, status).await?).then_some(now),
+    };
+    let due = due_cols(new.due.as_ref());
+    let props = serde_json::to_string(&new.properties.unwrap_or_default()).map_err(bad)?;
+    let description = new.description.unwrap_or_default();
+    let (project, milestone) = (new.project_id.map(|p| p.0), new.milestone_id.map(|m| m.0));
+    let (parent, cycle) = (new.parent_id.map(|p| p.0), new.cycle_id.map(|c| c.0));
+    let id = sqlx::query!(
+        "INSERT INTO issues (number, title, description, status_id, priority, project_id, milestone_id,
+           parent_id, cycle_id, start_date, due_date, due_time_utc, due_tz, estimate_minutes, properties,
+           created_at, updated_at, completed_at)
+         VALUES ((SELECT COALESCE(MAX(number), 0) + 1 FROM issues), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+           ?, ?, ?)",
+        new.title,
+        description,
+        status.0,
+        priority,
+        project,
+        milestone,
+        parent,
+        cycle,
+        new.start_date,
+        due.date,
+        due.utc,
+        due.tz,
+        new.estimate_minutes,
+        props,
+        created,
+        created,
+        completed
+    )
+    .execute(&mut *tx)
+    .await?
+    .last_insert_rowid();
+    let id = IssueId(id);
+    set_labels(&mut tx, id, &new.label_ids.unwrap_or_default()).await?;
+    let issue = fetch(&mut tx, id).await?;
+    record_created(&mut tx, src, &issue).await?;
+    tx.commit().await?;
+    Ok(issue)
+}
+
+/// Collects `(field, old, new)` when the two values differ.
+fn diff<T: Serialize + PartialEq>(
+    out: &mut Vec<(&'static str, Value, Value)>,
+    field: &'static str,
+    old: &T,
+    new: &T,
+) {
+    if old != new {
+        out.push((
+            field,
+            serde_json::to_value(old).unwrap_or(Value::Null),
+            serde_json::to_value(new).unwrap_or(Value::Null),
+        ));
+    }
+}
+
+fn apply_patch(old: &Issue, p: IssuePatch) -> Issue {
+    let mut n = old.clone();
+    n.title = p.title.unwrap_or(n.title);
+    n.description = p.description.unwrap_or(n.description);
+    n.status_id = p.status_id.unwrap_or(n.status_id);
+    n.priority = p.priority.unwrap_or(n.priority);
+    n.project_id = p.project_id.unwrap_or(n.project_id);
+    n.milestone_id = p.milestone_id.unwrap_or(n.milestone_id);
+    n.parent_id = p.parent_id.unwrap_or(n.parent_id);
+    n.cycle_id = p.cycle_id.unwrap_or(n.cycle_id);
+    n.start_date = p.start_date.unwrap_or(n.start_date);
+    n.due = p.due.unwrap_or(n.due);
+    n.estimate_minutes = p.estimate_minutes.unwrap_or(n.estimate_minutes);
+    if let Some(mut l) = p.label_ids {
+        l.sort_by_key(|l| l.0);
+        l.dedup();
+        n.label_ids = l;
+    }
+    n.properties = p.properties.unwrap_or(n.properties);
+    n
+}
+
+fn changes(old: &Issue, n: &Issue) -> Vec<(&'static str, Value, Value)> {
+    let mut c = Vec::new();
+    diff(&mut c, "title", &old.title, &n.title);
+    diff(&mut c, "description", &old.description, &n.description);
+    diff(&mut c, "status_id", &old.status_id, &n.status_id);
+    diff(&mut c, "priority", &old.priority, &n.priority);
+    diff(&mut c, "project_id", &old.project_id, &n.project_id);
+    diff(&mut c, "milestone_id", &old.milestone_id, &n.milestone_id);
+    diff(&mut c, "parent_id", &old.parent_id, &n.parent_id);
+    diff(&mut c, "cycle_id", &old.cycle_id, &n.cycle_id);
+    diff(&mut c, "label_ids", &old.label_ids, &n.label_ids);
+    diff(&mut c, "start_date", &old.start_date, &n.start_date);
+    diff(&mut c, "due", &old.due, &n.due);
+    diff(
+        &mut c,
+        "estimate_minutes",
+        &old.estimate_minutes,
+        &n.estimate_minutes,
+    );
+    diff(&mut c, "properties", &old.properties, &n.properties);
+    c
+}
+
+async fn record_all(
+    tx: &mut SqliteConnection,
+    src: ChangeSource,
+    id: IssueId,
+    cs: &[(&str, Value, Value)],
+) -> Result<()> {
+    for (field, old, new) in cs {
+        let edit = history::Edit {
+            field,
+            old: (!old.is_null()).then_some(old),
+            new: (!new.is_null()).then_some(new),
+        };
+        history::record(tx, src, "issue", &id.0.to_string(), &edit).await?;
+    }
+    Ok(())
+}
+
+/// A patch that changes nothing writes nothing, not even `updated_at`.
+///
+/// # Errors
+///
+/// `NotFound` for an unknown id, `Invalid` for an empty title, a priority above 4, an unknown
+/// status or an issue made its own parent.
+pub async fn update(db: &Db, id: IssueId, patch: IssuePatch, src: ChangeSource) -> Result<Issue> {
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let old = fetch(&mut tx, id).await?;
+    let mut new = apply_patch(&old, patch);
+    check_fields(&new.title, new.priority)?;
+    if new.parent_id == Some(id) {
+        return Err(Error::Invalid("an issue cannot be its own parent".into()));
+    }
+    let cs = changes(&old, &new);
+    if cs.is_empty() {
+        return Ok(old);
+    }
+    if new.status_id != old.status_id {
+        let was = is_done(category(&mut tx, old.status_id).await?);
+        new.completed_at = if is_done(category(&mut tx, new.status_id).await?) {
+            if was {
+                old.completed_at
+            } else {
+                Some(Utc::now())
+            }
+        } else {
+            None
+        };
+    }
+    new.updated_at = Utc::now();
+    let due = due_cols(new.due.as_ref());
+    let props = serde_json::to_string(&new.properties).map_err(bad)?;
+    let (project, milestone) = (new.project_id.map(|p| p.0), new.milestone_id.map(|m| m.0));
+    let (parent, cycle) = (new.parent_id.map(|p| p.0), new.cycle_id.map(|c| c.0));
+    sqlx::query!(
+        "UPDATE issues SET title = ?, description = ?, status_id = ?, priority = ?, project_id = ?,
+           milestone_id = ?, parent_id = ?, cycle_id = ?, start_date = ?, due_date = ?, due_time_utc = ?,
+           due_tz = ?, estimate_minutes = ?, properties = ?, updated_at = ?, completed_at = ? WHERE id = ?",
+        new.title,
+        new.description,
+        new.status_id.0,
+        new.priority,
+        project,
+        milestone,
+        parent,
+        cycle,
+        new.start_date,
+        due.date,
+        due.utc,
+        due.tz,
+        new.estimate_minutes,
+        props,
+        new.updated_at,
+        new.completed_at,
+        id.0
+    )
+    .execute(&mut *tx)
+    .await?;
+    if new.label_ids != old.label_ids {
+        set_labels(&mut tx, id, &new.label_ids).await?;
+    }
+    record_all(&mut tx, src, id, &cs).await?;
+    tx.commit().await?;
+    Ok(new)
 }
 
 /// # Errors
 ///
-/// Fails on a database error or invalid arguments.
-pub async fn get(_db: &Db, _id: IssueId) -> Result<Issue> {
-    todo!("T2")
+/// `NotFound` for an unknown id.
+pub async fn get(db: &Db, id: IssueId) -> Result<Issue> {
+    fetch(&mut *db.pool.acquire().await?, id).await
 }
 
 /// # Errors
 ///
-/// Fails on a database error or invalid arguments.
-pub async fn get_by_key(_db: &Db, _key: &str) -> Result<Issue> {
-    todo!("T2")
+/// `NotFound` when the key is malformed, has another prefix, or names no issue.
+pub async fn get_by_key(db: &Db, key: &str) -> Result<Issue> {
+    let mut conn = db.pool.acquire().await?;
+    let not_found = || Error::NotFound(format!("issue {key}"));
+    let (p, n) = key.rsplit_once('-').ok_or_else(not_found)?;
+    let number: i64 = n.parse().map_err(|_| not_found())?;
+    if p != prefix(&mut conn).await? {
+        return Err(not_found());
+    }
+    let id = sqlx::query_scalar!(
+        r#"SELECT id AS "id!: i64" FROM issues WHERE number = ?"#,
+        number
+    )
+    .fetch_optional(&mut *conn)
+    .await?
+    .ok_or_else(not_found)?;
+    fetch(&mut conn, IssueId(id)).await
 }
 
-/// # Errors
-///
-/// Fails on a database error or invalid arguments.
-pub async fn archive(_db: &Db, _id: IssueId, _src: ChangeSource) -> Result<()> {
-    todo!("T2")
+async fn set_archived(db: &Db, id: IssueId, src: ChangeSource, archive: bool) -> Result<()> {
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let issue = fetch(&mut tx, id).await?;
+    if issue.archived_at.is_some() == archive {
+        return Ok(());
+    }
+    let at = archive.then(Utc::now);
+    sqlx::query!("UPDATE issues SET archived_at = ? WHERE id = ?", at, id.0)
+        .execute(&mut *tx)
+        .await?;
+    let (old, new) = (
+        issue
+            .archived_at
+            .map_or(Value::Null, |t| Value::from(t.to_rfc3339())),
+        at.map_or(Value::Null, |t| Value::from(t.to_rfc3339())),
+    );
+    record_all(&mut tx, src, id, &[("archived_at", old, new)]).await?;
+    tx.commit().await?;
+    Ok(())
 }
 
+/// Archiving an archived issue is a no-op.
+///
 /// # Errors
 ///
-/// Fails on a database error or invalid arguments.
-pub async fn restore(_db: &Db, _id: IssueId, _src: ChangeSource) -> Result<()> {
-    todo!("T2")
+/// `NotFound` for an unknown id.
+pub async fn archive(db: &Db, id: IssueId, src: ChangeSource) -> Result<()> {
+    set_archived(db, id, src, true).await
 }
 
+/// Restoring an issue that is not archived is a no-op.
+///
 /// # Errors
 ///
-/// Fails on a database error or invalid arguments.
-pub async fn children(_db: &Db, _id: IssueId) -> Result<Vec<Issue>> {
-    todo!("T2")
+/// `NotFound` for an unknown id.
+pub async fn restore(db: &Db, id: IssueId, src: ChangeSource) -> Result<()> {
+    set_archived(db, id, src, false).await
+}
+
+/// Non-archived sub-issues, oldest number first.
+///
+/// # Errors
+///
+/// Fails on a database error.
+pub async fn children(db: &Db, id: IssueId) -> Result<Vec<Issue>> {
+    let mut conn = db.pool.acquire().await?;
+    let ids = sqlx::query_scalar!(
+        r#"SELECT id AS "id!: i64" FROM issues WHERE parent_id = ? AND archived_at IS NULL ORDER BY number"#,
+        id.0
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut out = Vec::with_capacity(ids.len());
+    for c in ids {
+        out.push(fetch(&mut conn, IssueId(c)).await?);
+    }
+    Ok(out)
 }
