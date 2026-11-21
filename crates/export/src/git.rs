@@ -12,6 +12,20 @@ use tokio::process::Command;
 ///
 /// Fails when git fails. A failed push leaves the commit in place.
 pub async fn commit_and_push(dir: &Path, message: &str, remote: Option<&str>) -> Result<bool> {
+    crate::write::refuse_empty(dir)?;
+    let top = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["rev-parse", "--show-toplevel"])
+        .output()
+        .await?;
+    let top = String::from_utf8_lossy(&top.stdout);
+    // Git resolves the repo upward, so a plain subfolder would stage and push the outer repo.
+    if std::fs::canonicalize(top.trim()).ok() != std::fs::canonicalize(dir).ok() {
+        return Err(taskapp_core::Error::Invalid(
+            "export folder must be the root of its own git repo".into(),
+        ));
+    }
     git(dir, &["add", "-A"]).await?;
     let unchanged = Command::new("git")
         .arg("-C")

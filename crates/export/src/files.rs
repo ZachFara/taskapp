@@ -149,8 +149,10 @@ pub struct CommentText {
 /// Renders an issue file: frontmatter, the description as the body, then `## Comments` with one
 /// `### <created> <updated>` block per comment.
 ///
-/// shortcut: a description containing a `## Comments` line, or a comment body containing a line
-/// `### <time> <time>`, is read back wrongly. Escape them if this ever happens in real notes.
+/// Description lines `## Comments` get one extra leading backslash so they cannot start the section.
+///
+/// shortcut: a comment body containing a line `### <time> <time>` is read back wrongly. Escape it
+/// if this ever happens in real notes.
 ///
 /// # Errors
 ///
@@ -161,7 +163,7 @@ pub fn render_issue(
     comments: &[CommentText],
 ) -> Result<String> {
     let yaml = serde_yaml_ng::to_string(front).map_err(invalid)?;
-    let mut out = format!("---\n{yaml}---\n{description}");
+    let mut out = format!("---\n{yaml}---\n{}", escape(description));
     if !comments.is_empty() {
         out.push_str(SECTION_COMMENTS);
     }
@@ -191,7 +193,39 @@ pub fn parse_issue(text: &str) -> Result<ParsedIssue> {
         Some(at) => (&body[..at], &body[at + SECTION_COMMENTS.len()..]),
         None => (body, ""),
     };
-    Ok((front, description.to_string(), parse_comments(section)?))
+    Ok((front, unescape(description), parse_comments(section)?))
+}
+
+fn is_comments_line(line: &str) -> bool {
+    line.trim_start_matches('\\') == "## Comments"
+}
+
+fn escape(text: &str) -> String {
+    let lines: Vec<String> = text
+        .split('\n')
+        .map(|l| {
+            if is_comments_line(l) {
+                format!("\\{l}")
+            } else {
+                l.to_string()
+            }
+        })
+        .collect();
+    lines.join("\n")
+}
+
+fn unescape(text: &str) -> String {
+    let lines: Vec<&str> = text
+        .split('\n')
+        .map(|l| {
+            if is_comments_line(l) {
+                l.strip_prefix('\\').unwrap_or(l)
+            } else {
+                l
+            }
+        })
+        .collect();
+    lines.join("\n")
 }
 
 fn parse_comments(section: &str) -> Result<Vec<CommentText>> {

@@ -386,3 +386,93 @@ async fn rebuild_refuses_existing_db() -> R {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn rebuild_existing_db_error_names_the_guard() -> R {
+    let db = seeded().await?;
+    let dir = tempfile::tempdir()?;
+    write::write_snapshot(&db, dir.path()).await?;
+    let existing = dir.path().join("keep.db");
+    fs::write(&existing, b"not a database")?;
+    let err = rebuild::rebuild(dir.path(), &existing)
+        .await
+        .err()
+        .ok_or("rebuild must fail")?;
+    assert!(err.to_string().contains("already exists"), "{err}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn unsafe_project_slug_refused() -> R {
+    for slug in ["a/b", "a.b", "..", ""] {
+        let db = Db::open_in_memory().await?;
+        if projects::create(&db, slug, "P", SRC).await.is_err() {
+            continue;
+        }
+        let dir = tempfile::tempdir()?;
+        let result = write::write_snapshot(&db, dir.path()).await;
+        assert!(result.is_err(), "slug {slug:?} must not become a file name");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn empty_export_dir_refused() -> R {
+    let db = seeded().await?;
+    assert!(write::write_snapshot(&db, Path::new("")).await.is_err());
+    assert!(
+        git::commit_and_push(Path::new(""), "x", None)
+            .await
+            .is_err()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn export_dir_inside_other_repo_refused() -> R {
+    let db = seeded().await?;
+    let root = tempfile::tempdir()?;
+    let repo = temp_repo(root.path());
+    fs::write(repo.join("unrelated-wip.txt"), "wip")?;
+    let sub = repo.join("exports");
+    write::write_snapshot(&db, &sub).await?;
+    let err = git::commit_and_push(&sub, "export", None)
+        .await
+        .err()
+        .ok_or("must refuse a subfolder of another repo")?;
+    assert!(
+        err.to_string().contains("root of its own git repo"),
+        "{err}"
+    );
+    let staged = git_in(&repo, &["status", "--porcelain"]);
+    assert!(!staged.contains("A "), "nothing may be staged: {staged}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn comments_heading_in_description_roundtrips() -> R {
+    let db = Db::open_in_memory().await?;
+    let desc = "Plan\n\n## Comments\nkeep this text and more\n\n\\## Comments\nsecond para";
+    let issue = issues::create(
+        &db,
+        NewIssue {
+            title: "T".into(),
+            description: Some(desc.into()),
+            ..NewIssue::default()
+        },
+        SRC,
+    )
+    .await?;
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    for with_comment in [false, true] {
+        if with_comment {
+            comments::add_comment(&db, issue.id, "c", None, SRC).await?;
+        }
+        write::write_snapshot(&db, src.path()).await?;
+        let path = dst.path().join(format!("{with_comment}.db"));
+        let rebuilt = rebuild::rebuild(src.path(), &path).await?;
+        let got = issues::get(&rebuilt, issue.id).await?;
+        assert_eq!(got.description, desc, "comment={with_comment}");
+    }
+    Ok(())
+}
