@@ -255,3 +255,53 @@ fn deeplink_parses_key() {
         assert_eq!(parse_key(bad), None, "{bad}");
     }
 }
+
+#[tokio::test]
+async fn backup_failure_is_recorded_and_clears_on_success() -> R {
+    let dir = tempfile::tempdir()?;
+    let db = Db::open(&dir.path().join("t.db")).await?;
+    // A file where the backup folder should be makes the nightly write fail.
+    std::fs::write(dir.path().join("blocked"), b"")?;
+    let real = Real {
+        db: db.clone(),
+        helper: PathBuf::from("/nonexistent/helper"),
+        tz: "UTC".into(),
+        backup_dir: dir.path().join("blocked/backups"),
+    };
+    let status = Syncer::new(real, db.clone()).sync_all().await?;
+    assert!(
+        matches!(&status.backup, SyncState::Error { message, .. } if !message.is_empty()),
+        "{:?}",
+        status.backup
+    );
+
+    let real = Real {
+        db: db.clone(),
+        helper: PathBuf::from("/nonexistent/helper"),
+        tz: "UTC".into(),
+        backup_dir: dir.path().join("backups"),
+    };
+    let status = Syncer::new(real, db).sync_all().await?;
+    assert!(
+        matches!(status.backup, SyncState::Ok { .. }),
+        "{:?}",
+        status.backup
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn sync_status_saved_before_backup_existed_still_reads() -> R {
+    let db = Db::open_in_memory().await?;
+    settings::set(
+        &db,
+        "sync_status",
+        &serde_json::json!({"reminders": "Off", "gcal": "Off", "export": "Off"}),
+    )
+    .await?;
+    let status = Syncer::new(Handle(Arc::new(Fake::default())), db)
+        .sync_all()
+        .await?;
+    assert_eq!(status.backup, SyncState::Off);
+    Ok(())
+}

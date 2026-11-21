@@ -42,6 +42,7 @@ pub async fn import(db: &Db, helper: &Path, today: NaiveDate, tz: &str) -> Resul
             reminders: SyncState::Off,
             gcal: SyncState::Off,
             export: SyncState::Off,
+            backup: SyncState::Off,
         });
     status.reminders = state;
     settings::set(db, "sync_status", &status).await?;

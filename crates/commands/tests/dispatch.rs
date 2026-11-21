@@ -44,7 +44,7 @@ async fn sync_status_defaults_to_off() -> R {
     let out = dispatch(&state().await, "sync_status", json!({})).await?;
     assert_eq!(
         out,
-        json!({"reminders": "Off", "gcal": "Off", "export": "Off"})
+        json!({"reminders": "Off", "gcal": "Off", "export": "Off", "backup": "Off"})
     );
     Ok(())
 }
@@ -68,28 +68,24 @@ fn command_names_are_unique_and_exclude_sync_crate_commands() {
     }
 }
 
+#[test]
+fn backup_restore_is_not_a_command() {
+    // Restoring over the open database cannot work from the app. Settings points to the CLI instead.
+    assert!(!names().any(|n| n == "backup_restore"));
+}
+
 #[tokio::test]
-async fn backup_restore_refuses_while_the_state_holds_the_db() -> R {
-    let dir = std::env::temp_dir().join(format!("taskapp-restore-{}", std::process::id()));
+async fn backup_snapshot_then_list_finds_it() -> R {
+    let dir = std::env::temp_dir().join(format!("taskapp-snapshot-{}", std::process::id()));
     std::fs::create_dir_all(&dir)?;
-    let live = dir.join("live.db");
     let st = AppState {
-        db: Db::open(&live).await?,
+        db: Db::open(&dir.join("live.db")).await?,
         helper_path: "/nonexistent".into(),
         tz: "UTC".into(),
     };
     let snap = dispatch(&st, "backup_snapshot", json!({"dir": dir, "reason": "t"})).await?;
-    let err = dispatch(&st, "backup_restore", json!({"from": snap}))
-        .await
-        .expect_err("pool is open");
-    assert!(matches!(err, Error::Conflict(_)), "got {err:?}");
     let listed = dispatch(&st, "backup_list", json!({"dir": dir})).await?;
     assert_eq!(listed, json!([snap]));
-
-    let err = dispatch(&state().await, "backup_restore", json!({"from": snap}))
-        .await
-        .expect_err("memory db");
-    assert!(matches!(err, Error::Invalid(_)), "got {err:?}");
     std::fs::remove_dir_all(&dir)?;
     Ok(())
 }
