@@ -8,6 +8,7 @@ plan=(
   "cargo-tauri|cargo install tauri-cli --version ^2 --locked"
   "cargo-machete|cargo install cargo-machete --locked"
   "shellcheck|brew install shellcheck"
+  "actionlint|brew install actionlint"
 )
 present() { command -v "$1" >/dev/null 2>&1; }
 echo "This will run (only for tools not already on PATH):"
