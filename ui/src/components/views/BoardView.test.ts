@@ -122,4 +122,24 @@ describe('BoardView', () => {
     expect(text).toContain('Fixture task 1');
     expect(text).toContain('P3');
   });
+
+  it('jk_enter_s_work_on_cards', async () => {
+    history.replaceState(null, '', '/');
+    const root = await render(seedWith({}));
+    const key = (k: string) => window.dispatchEvent(new KeyboardEvent('keydown', { key: k }));
+    const sel = () => root.querySelector<HTMLElement>('[aria-selected="true"]')?.dataset.issue;
+    const first = sel();
+    expect(first).toBeDefined();
+    key('j');
+    flushSync();
+    expect(sel()).not.toBe(first);
+    key('k');
+    flushSync();
+    expect(sel()).toBe(first);
+    const from = card(root, first!).closest('[data-column]')!.getAttribute('data-column');
+    key('s');
+    await vi.waitFor(() => expect(card(root, first!).closest('[data-column]')!.getAttribute('data-column')).not.toBe(from));
+    key('Enter');
+    expect(location.pathname).toBe(`/issue/${first}`);
+  });
 });
