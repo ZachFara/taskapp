@@ -315,7 +315,7 @@ async fn property_defs(db: &Db) -> Result<Vec<PropertyDef>> {
             Ok(PropertyDef {
                 key: r.try_get("key")?,
                 name: r.try_get("name")?,
-                kind: serde_json::from_value(Value::String(kind)).map_err(parse)?,
+                kind: serde_json::from_str(&kind).map_err(parse)?,
                 options: serde_json::from_str(&options).map_err(parse)?,
                 project_id: r
                     .try_get::<Option<i64>, _>("project_id")?

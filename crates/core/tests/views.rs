@@ -65,7 +65,7 @@ async fn run(db: &Db, d: &ViewDef) -> Result<Vec<String>, Error> {
         sqlx::query("INSERT INTO property_defs (key, name, kind, position) VALUES (?, ?, ?, 0)")
             .bind(&p.key)
             .bind(&p.name)
-            .bind(kind.trim_matches('"'))
+            .bind(kind)
             .execute(&db.pool)
             .await?;
     }
