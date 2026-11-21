@@ -45,7 +45,7 @@ pub async fn add_comment(
     src: ChangeSource,
 ) -> Result<Comment> {
     let at = created_at.unwrap_or_else(Utc::now);
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let id = sqlx::query!(
         "INSERT INTO comments (issue_id, body, created_at, updated_at) VALUES (?, ?, ?, ?)",
         issue.0,
@@ -78,7 +78,7 @@ pub async fn add_comment(
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn update(db: &Db, id: CommentId, body: &str, src: ChangeSource) -> Result<Comment> {
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let old = sqlx::query!(
         r#"SELECT issue_id, body, created_at AS "created_at: DateTime<Utc>" FROM comments WHERE id = ?"#,
         id.0
@@ -119,7 +119,7 @@ pub async fn update(db: &Db, id: CommentId, body: &str, src: ChangeSource) -> Re
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn delete(db: &Db, id: CommentId, src: ChangeSource) -> Result<()> {
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let (body, issue): (String, i64) =
         sqlx::query_as("SELECT body, issue_id FROM comments WHERE id = ?")
             .bind(id.0)

@@ -97,7 +97,7 @@ pub async fn create(
     src: ChangeSource,
 ) -> Result<Cycle> {
     check_dates(start_date, end_date)?;
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     // The number is taken in the same statement as the insert, so it cannot repeat.
     let id = sqlx::query!(
         "INSERT INTO cycles (number, name, start_date, end_date)
@@ -139,7 +139,7 @@ pub async fn create(
 pub async fn update(db: &Db, cycle: Cycle, src: ChangeSource) -> Result<Cycle> {
     check_dates(cycle.start_date, cycle.end_date)?;
     let id = cycle.id.0;
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let old = sqlx::query!(
         r#"SELECT name, start_date AS "start_date!: NaiveDate", end_date AS "end_date!: NaiveDate"
            FROM cycles WHERE id = ?"#,
@@ -188,7 +188,7 @@ pub async fn update(db: &Db, cycle: Cycle, src: ChangeSource) -> Result<Cycle> {
 /// Fails on a database error or invalid arguments.
 pub async fn delete(db: &Db, id: CycleId, src: ChangeSource) -> Result<()> {
     let cid = id.0;
-    let mut tx = db.pool.begin().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let exists: i64 = sqlx::query_scalar("SELECT count(*) FROM cycles WHERE id = ?")
         .bind(cid)
         .fetch_one(&mut *tx)

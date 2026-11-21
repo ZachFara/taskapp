@@ -219,3 +219,23 @@ async fn unpin_missing_is_not_found() -> R {
     assert_eq!(pins::list_resolved(&db).await?.len(), 0);
     Ok(())
 }
+
+#[tokio::test]
+async fn pins_survive_project_slug_rename_and_prefix_change() -> R {
+    use taskapp_core::{ChangeSource, projects, settings};
+    let db = Db::open_in_memory().await?;
+    let mut p = projects::create(&db, "home", "Home", ChangeSource::Ui).await?;
+    add_issue(&db, 1, "Fix roof", false).await?;
+    pins::pin(&db, PinKind::Project, "home", None).await?;
+    pins::pin(&db, PinKind::Issue, "ZF-1", None).await?;
+    p.slug = "house".into();
+    projects::update(&db, p, ChangeSource::Ui).await?;
+    settings::set(&db, "issue_prefix", &"AB").await?;
+    let routes: Vec<_> = pins::list_resolved(&db)
+        .await?
+        .into_iter()
+        .map(|p| p.route)
+        .collect();
+    assert_eq!(routes, ["/project/house", "/issue/AB-1"]);
+    Ok(())
+}

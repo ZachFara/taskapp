@@ -485,3 +485,29 @@ async fn set_scope_refuses_while_values_sit_on_other_projects() -> R {
     assert!(matches!(e, Err(Error::NotFound(_))));
     Ok(())
 }
+
+#[tokio::test]
+async fn set_value_waits_for_a_second_writer_instead_of_failing() -> R {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("t.db");
+    let (a, b) = (Db::open(&path).await?, Db::open(&path).await?);
+    properties::create_def(&a, def("note", PropertyKind::Text), Ui).await?;
+    let mut ids = vec![];
+    for _ in 0..60 {
+        ids.push(issue(&a, None, json!({})).await);
+    }
+    let run = |db: Db, ids: Vec<IssueId>| async move {
+        let mut failed = 0;
+        for id in ids {
+            let v = Some(json!("x"));
+            failed += i32::from(properties::set_value(&db, id, "note", v, Ui).await.is_err());
+        }
+        failed
+    };
+    let (x, y) = tokio::join!(
+        tokio::spawn(run(a.clone(), ids.clone())),
+        tokio::spawn(run(b.clone(), ids))
+    );
+    assert_eq!((x?, y?), (0, 0));
+    Ok(())
+}
