@@ -25,6 +25,7 @@ tauri-specta.workspace = true
 tauri-plugin-single-instance.workspace = true
 tauri-plugin-deep-link.workspace = true
 tauri-plugin-shell.workspace = true
+tauri-plugin-opener.workspace = true
 
 [build-dependencies]
 tauri-build.workspace = true
