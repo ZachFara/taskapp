@@ -10,7 +10,10 @@ use std::{
 
 use axum::{
     Json, Router,
-    extract::{Path as UrlPath, State},
+    extract::{Path as UrlPath, Request, State},
+    http::{StatusCode, header},
+    middleware::{self, Next},
+    response::IntoResponse,
     routing::post,
 };
 use clap::{Parser, Subcommand};
@@ -82,6 +85,35 @@ async fn rpc(
     })
 }
 
+fn router(state: Arc<AppState>, port: u16) -> Router {
+    // A predicate, not `exact`: the exact form sends the allow header to every origin.
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::predicate(|o, _| o == UI_ORIGIN))
+        .allow_methods([axum::http::Method::POST])
+        .allow_headers([header::CONTENT_TYPE]);
+    // Only our own host names: a rebound DNS name still sends the attacker's Host.
+    let hosts = Arc::new([format!("127.0.0.1:{port}"), format!("localhost:{port}")]);
+    // Non-JSON bodies get 415 from the `Json` extractor, so a cross-site form post always needs a preflight.
+    Router::new()
+        .route("/rpc/{name}", post(rpc))
+        .layer(middleware::from_fn(move |req: Request, next: Next| {
+            let hosts = hosts.clone();
+            async move {
+                let host = req
+                    .headers()
+                    .get(header::HOST)
+                    .and_then(|h| h.to_str().ok());
+                if host.is_some_and(|h| hosts.iter().any(|a| a == h)) {
+                    next.run(req).await
+                } else {
+                    StatusCode::FORBIDDEN.into_response()
+                }
+            }
+        }))
+        .layer(cors)
+        .with_state(state)
+}
+
 async fn run(cmd: Cmd) -> Result<(), String> {
     let (Cmd::Serve { db, .. } | Cmd::Seed { db }) = &cmd;
     refuse_real_db(db)?;
@@ -94,22 +126,12 @@ async fn run(cmd: Cmd) -> Result<(), String> {
                 helper_path: PathBuf::new(),
                 tz: std::env::var("TZ").unwrap_or_else(|_| "UTC".into()),
             });
-            // A predicate, not `exact`: the exact form sends the allow header to every origin.
-            let cors = CorsLayer::new()
-                .allow_origin(AllowOrigin::predicate(|o, _| o == UI_ORIGIN))
-                .allow_methods([axum::http::Method::POST])
-                .allow_headers([axum::http::header::CONTENT_TYPE]);
-            let app = Router::new()
-                .route("/rpc/{name}", post(rpc))
-                .layer(cors)
-                .with_state(state);
             let listener = tokio::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], port)))
                 .await
                 .map_err(|e| e.to_string())?;
-            println!(
-                "listening on {}",
-                listener.local_addr().map_err(|e| e.to_string())?
-            );
+            let addr = listener.local_addr().map_err(|e| e.to_string())?;
+            println!("listening on {addr}");
+            let app = router(state, addr.port());
             axum::serve(listener, app).await.map_err(|e| e.to_string())
         }
     }

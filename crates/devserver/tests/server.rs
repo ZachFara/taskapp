@@ -162,3 +162,42 @@ async fn cors_allows_only_the_dev_origin() -> R {
     assert!(other.headers().get("access-control-allow-origin").is_none());
     Ok(())
 }
+
+#[tokio::test]
+async fn rejects_foreign_host() -> R {
+    let dir = tempfile::tempdir()?;
+    let s = start(dir.path(), &dir.path().join("t.db"))?;
+    let url = format!("{}/rpc/settings_get", s.base);
+    let post = |host: String| {
+        reqwest::Client::new()
+            .post(&url)
+            .header("host", host)
+            .json(&json!({"key": "k"}))
+            .send()
+    };
+    let number = s.base.rsplit(':').next().ok_or("no port")?;
+    assert_eq!(post(format!("evil.example:{number}")).await?.status(), 403);
+    assert_eq!(post("127.0.0.1".into()).await?.status(), 403);
+    assert_eq!(post(format!("localhost:{number}")).await?.status(), 200);
+    Ok(())
+}
+
+#[tokio::test]
+async fn rejects_non_json_content_type() -> R {
+    let dir = tempfile::tempdir()?;
+    let s = start(dir.path(), &dir.path().join("t.db"))?;
+    let res = reqwest::Client::new()
+        .post(format!("{}/rpc/settings_set", s.base))
+        .header("content-type", "text/plain")
+        .body(r#"{"key":"k","value":"v"}"#)
+        .send()
+        .await?;
+    assert_eq!(res.status(), 415);
+    let got = rpc(&s, "settings_get", json!({"key": "k"})).await?;
+    assert_eq!(
+        got["ok"],
+        Value::Null,
+        "the command must not have run: {got}"
+    );
+    Ok(())
+}
