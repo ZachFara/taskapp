@@ -1,7 +1,7 @@
 # Implementer contract
 
 Read AGENTS.md, this file, then your brief in `.briefs/` (never the whole plan). One task, finished completely
-before you report DONE. Never dispatch subagents. Never touch ~ outside this repo, any remote, or GitHub.
+before you report DONE. Never dispatch subagents. Never touch ~ outside this repo. On GitHub, only push your own task branch and open its PR into the integration branch.
 
 ## Rules that bind you (full text in AGENTS.md: ENGINEERING, CODE, MY MACHINE, DECISIONS)
 - Edit only the files your brief names. Shared files (manifests, module declarations, routes, CI, PROGRESS.md, AGENTS.md,

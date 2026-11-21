@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM issue_labels WHERE issue_id = ? AND label_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "3779ddabcad02366d081599cfa22b7ffc48c43cc6b9ba9818ca9d2cd8c621a87"
+}

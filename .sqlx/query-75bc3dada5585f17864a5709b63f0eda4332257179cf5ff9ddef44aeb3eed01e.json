@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: i64\", project_id, name, target_date AS \"target_date: NaiveDate\"\n           FROM milestones WHERE project_id = ? ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "project_id",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "target_date: NaiveDate",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "75bc3dada5585f17864a5709b63f0eda4332257179cf5ff9ddef44aeb3eed01e"
+}

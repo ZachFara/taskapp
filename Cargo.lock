@@ -5142,10 +5142,11 @@ name = "taskapp-app"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "serde",
+ "chrono-tz",
  "serde_json",
  "specta",
  "specta-typescript",
+ "sqlx",
  "taskapp-commands",
  "taskapp-core",
  "taskapp-export",
@@ -5154,9 +5155,11 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-deep-link",
+ "tauri-plugin-opener",
  "tauri-plugin-shell",
  "tauri-plugin-single-instance",
  "tauri-specta",
+ "tempfile",
  "tokio",
 ]
 
@@ -5166,7 +5169,9 @@ version = "0.1.0"
 dependencies = [
  "assert_cmd",
  "chrono",
+ "chrono-tz",
  "clap",
+ "serde",
  "serde_json",
  "taskapp-core",
  "tempfile",
@@ -5178,9 +5183,9 @@ name = "taskapp-commands"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "chrono-tz",
  "serde",
  "serde_json",
- "specta",
  "taskapp-core",
  "tokio",
 ]
@@ -5205,6 +5210,7 @@ name = "taskapp-devserver"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
  "clap",
  "reqwest 0.12.28",
  "serde_json",
@@ -5223,6 +5229,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml_ng",
+ "sqlx",
  "taskapp-core",
  "tempfile",
  "tokio",
@@ -5237,9 +5244,9 @@ dependencies = [
  "keyring",
  "oauth2",
  "reqwest 0.12.28",
- "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sqlx",
  "taskapp-core",
  "tempfile",
  "tokio",
@@ -5251,9 +5258,7 @@ name = "taskapp-mcp"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "clap",
  "rmcp",
- "schemars 1.2.3",
  "serde",
  "serde_json",
  "taskapp-core",
@@ -5268,6 +5273,7 @@ dependencies = [
  "chrono",
  "serde",
  "serde_json",
+ "sqlx",
  "taskapp-core",
  "tempfile",
  "tokio",
@@ -5424,6 +5430,28 @@ dependencies = [
  "url",
  "windows-registry",
  "windows-result",
+]
+
+[[package]]
+name = "tauri-plugin-opener"
+version = "2.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53810be1b4fed22bb6ac3f4cab5a2b80d9391d1af436bda145607532bc0bb219"
+dependencies = [
+ "dunce",
+ "glob",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "open",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.21",
+ "url",
+ "windows",
+ "zbus",
 ]
 
 [[package]]

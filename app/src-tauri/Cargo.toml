@@ -13,8 +13,9 @@ taskapp-commands.workspace = true
 taskapp-gcal.workspace = true
 taskapp-reminders.workspace = true
 taskapp-export.workspace = true
+sqlx.workspace = true
 tokio.workspace = true
-serde.workspace = true
+chrono-tz.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
 specta.workspace = true
@@ -24,10 +25,10 @@ tauri-specta.workspace = true
 tauri-plugin-single-instance.workspace = true
 tauri-plugin-deep-link.workspace = true
 tauri-plugin-shell.workspace = true
+tauri-plugin-opener.workspace = true
 
 [build-dependencies]
 tauri-build.workspace = true
 
-# Removed by T0 once the code uses these dependencies.
-[package.metadata.cargo-machete]
-ignored = ["taskapp-core", "taskapp-commands", "taskapp-gcal", "taskapp-reminders", "taskapp-export", "tokio", "serde", "serde_json", "chrono", "specta", "specta-typescript", "tauri", "tauri-specta", "tauri-plugin-single-instance", "tauri-plugin-deep-link", "tauri-plugin-shell", "tauri-build"]
+[dev-dependencies]
+tempfile.workspace = true

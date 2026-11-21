@@ -1,0 +1,364 @@
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
+
+use serde::de::DeserializeOwned;
+use serde_json::Value;
+use sqlx::{Sqlite, Transaction};
+use taskapp_core::{Db, Error, IssueId, Result, ViewDef, search};
+
+use crate::files::{
+    CommentText, CycleRow, IssueFront, LabelRow, PinRow, ProjectFile, PropertyFile, StatusRow,
+    ViewFile, invalid, parse_issue,
+};
+
+type Tx<'a> = Transaction<'a, Sqlite>;
+
+/// Rebuilds a database at `db_path` from an export directory. The file must not exist yet: a
+/// rebuild never overwrites data.
+///
+/// # Errors
+///
+/// Fails when `db_path` exists, a file cannot be parsed, a reference names nothing in the export,
+/// or the database cannot be written. A failed rebuild leaves a partial database at `db_path`.
+pub async fn rebuild(dir: &Path, db_path: &Path) -> Result<Db> {
+    if db_path.exists() {
+        return Err(Error::Invalid(format!(
+            "{} already exists",
+            db_path.display()
+        )));
+    }
+    let db = Db::open(db_path).await?;
+    let mut tx = db.pool.begin().await?;
+    restore_tables(&mut tx, dir).await?;
+    restore_issues(&mut tx, dir).await?;
+    tx.commit().await?;
+    // reindex rebuilds every search row at once; the id argument is not used.
+    search::reindex(&db, IssueId(0)).await?;
+    Ok(db)
+}
+
+/// `(number, frontmatter, description, comments)` for one issue file.
+type IssueEntry = (i64, IssueFront, String, Vec<CommentText>);
+
+async fn restore_tables(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    restore_settings(tx, dir).await?;
+    restore_statuses(tx, dir).await?;
+    restore_labels(tx, dir).await?;
+    restore_cycles(tx, dir).await?;
+    restore_projects(tx, dir).await?;
+    restore_properties(tx, dir).await?;
+    restore_views(tx, dir).await?;
+    restore_pins(tx, dir).await?;
+    Ok(())
+}
+
+/// Inserts every issue first, so parents, relations and labels can refer to any of them.
+async fn restore_issues(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let prefix = prefix(tx).await?;
+    let issues = read_issues(dir, &prefix)?;
+    for (number, front, description, _) in &issues {
+        insert_issue(tx, *number, front, description).await?;
+    }
+    for (number, front, _, comments) in &issues {
+        link_issue(tx, &prefix, *number, front, comments).await?;
+    }
+    Ok(())
+}
+
+fn read_yaml<T: DeserializeOwned>(path: &Path) -> Result<T> {
+    serde_yaml_ng::from_str(&fs::read_to_string(path)?).map_err(invalid)
+}
+
+/// The sorted files in `dir/sub` with the given extension.
+fn files_in(dir: &Path, sub: &str, ext: &str) -> Result<Vec<PathBuf>> {
+    let folder = dir.join(sub);
+    if !folder.is_dir() {
+        return Ok(vec![]);
+    }
+    let mut paths = Vec::new();
+    for entry in fs::read_dir(&folder)? {
+        let path = entry?.path();
+        if path.extension().is_some_and(|e| e == ext) {
+            paths.push(path);
+        }
+    }
+    paths.sort();
+    Ok(paths)
+}
+
+async fn prefix(tx: &mut Tx<'_>) -> Result<String> {
+    let json: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'issue_prefix'")
+        .fetch_one(&mut **tx)
+        .await?;
+    serde_json::from_str(&json).map_err(invalid)
+}
+
+async fn restore_settings(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let settings: BTreeMap<String, Value> = read_yaml(&dir.join("settings.yaml"))?;
+    for (key, value) in settings {
+        sqlx::query(
+            "INSERT INTO settings (key, value) VALUES (?, ?)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        )
+        .bind(key)
+        .bind(value.to_string())
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn restore_statuses(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let statuses: Vec<StatusRow> = read_yaml(&dir.join("statuses.yaml"))?;
+    for s in statuses {
+        sqlx::query(
+            "INSERT INTO statuses (name, category, position, color) VALUES (?, ?, ?, ?)
+             ON CONFLICT(name) DO UPDATE SET category = excluded.category,
+               position = excluded.position, color = excluded.color",
+        )
+        .bind(s.name)
+        .bind(s.category)
+        .bind(s.position)
+        .bind(s.color)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn restore_labels(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let labels: Vec<LabelRow> = read_yaml(&dir.join("labels.yaml"))?;
+    for l in labels {
+        sqlx::query("INSERT INTO labels (name, color) VALUES (?, ?)")
+            .bind(l.name)
+            .bind(l.color)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
+}
+
+async fn restore_cycles(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let cycles: Vec<CycleRow> = read_yaml(&dir.join("cycles.yaml"))?;
+    for c in cycles {
+        sqlx::query("INSERT INTO cycles (number, name, start_date, end_date) VALUES (?, ?, ?, ?)")
+            .bind(c.number)
+            .bind(c.name)
+            .bind(c.start_date)
+            .bind(c.end_date)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
+}
+
+async fn restore_projects(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    for path in files_in(dir, "projects", "yaml")? {
+        let p: ProjectFile = read_yaml(&path)?;
+        let id = sqlx::query(
+            "INSERT INTO projects (slug, name, description, doc_link, start_date, target_date,
+               archived_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&p.slug)
+        .bind(p.name)
+        .bind(p.description)
+        .bind(p.doc_link)
+        .bind(p.start_date)
+        .bind(p.target_date)
+        .bind(p.archived_at)
+        .bind(p.created_at)
+        .execute(&mut **tx)
+        .await?
+        .last_insert_rowid();
+        for m in p.milestones {
+            sqlx::query("INSERT INTO milestones (project_id, name, target_date) VALUES (?, ?, ?)")
+                .bind(id)
+                .bind(m.name)
+                .bind(m.target_date)
+                .execute(&mut **tx)
+                .await?;
+        }
+    }
+    Ok(())
+}
+
+async fn restore_properties(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let props: Vec<PropertyFile> = read_yaml(&dir.join("properties.yaml"))?;
+    for p in props {
+        sqlx::query(
+            "INSERT INTO property_defs (key, name, kind, options, project_id, position)
+             VALUES (?, ?, ?, ?, (SELECT id FROM projects WHERE slug = ?), ?)",
+        )
+        .bind(p.key)
+        .bind(p.name)
+        .bind(p.kind.to_string())
+        .bind(p.options.to_string())
+        .bind(p.project)
+        .bind(p.position)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn restore_views(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let views: Vec<ViewFile> = read_yaml(&dir.join("views.yaml"))?;
+    // The migration seeds default views; the export is the whole list, so it replaces them.
+    sqlx::query("DELETE FROM views").execute(&mut **tx).await?;
+    for v in views {
+        // Parsing here rejects a definition the app could not run.
+        serde_json::from_value::<ViewDef>(v.definition.clone()).map_err(invalid)?;
+        sqlx::query("INSERT INTO views (name, definition, position) VALUES (?, ?, ?)")
+            .bind(v.name)
+            .bind(v.definition.to_string())
+            .bind(v.position)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
+}
+
+async fn restore_pins(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let pins: Vec<PinRow> = read_yaml(&dir.join("pins.yaml"))?;
+    for p in pins {
+        sqlx::query("INSERT INTO pins (kind, target, title, position) VALUES (?, ?, ?, ?)")
+            .bind(p.kind)
+            .bind(p.target)
+            .bind(p.title)
+            .bind(p.position)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
+}
+
+fn read_issues(dir: &Path, prefix: &str) -> Result<Vec<IssueEntry>> {
+    files_in(dir, "issues", "md")?
+        .iter()
+        .map(|path| {
+            let (front, description, comments) = parse_issue(&fs::read_to_string(path)?)?;
+            Ok((number_of(prefix, &front.key)?, front, description, comments))
+        })
+        .collect()
+}
+
+/// The number in a key such as `ZF-12`; the prefix must be the database's.
+fn number_of(prefix: &str, key: &str) -> Result<i64> {
+    key.strip_prefix(prefix)
+        .and_then(|rest| rest.strip_prefix('-'))
+        .and_then(|n| n.parse().ok())
+        .ok_or_else(|| Error::Invalid(format!("{key:?} is not an issue key for prefix {prefix}")))
+}
+
+/// Inserts the issue row; the parent and relations are linked in a second pass.
+async fn insert_issue(
+    tx: &mut Tx<'_>,
+    number: i64,
+    f: &IssueFront,
+    description: &str,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO issues (number, title, description, status_id, priority, project_id,
+           milestone_id, cycle_id, start_date, due_date, due_time_utc, due_tz, estimate_minutes,
+           properties, created_at, updated_at, completed_at, archived_at)
+         VALUES (?, ?, ?,
+           (SELECT id FROM statuses WHERE name = ?), ?,
+           (SELECT id FROM projects WHERE slug = ?),
+           (SELECT m.id FROM milestones m JOIN projects p ON p.id = m.project_id
+              WHERE p.slug = ? AND m.name = ? ORDER BY m.id LIMIT 1),
+           (SELECT id FROM cycles WHERE number = ?),
+           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(number)
+    .bind(&f.title)
+    .bind(description)
+    .bind(&f.status)
+    .bind(f.priority)
+    .bind(&f.project)
+    .bind(&f.project)
+    .bind(&f.milestone)
+    .bind(f.cycle)
+    .bind(f.start_date)
+    .bind(f.due_date)
+    .bind(f.due_time)
+    .bind(&f.due_tz)
+    .bind(f.estimate_minutes)
+    .bind(serde_json::to_string(&f.properties).map_err(invalid)?)
+    .bind(f.created_at)
+    .bind(f.updated_at)
+    .bind(f.completed_at)
+    .bind(f.archived_at)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn link_issue(
+    tx: &mut Tx<'_>,
+    prefix: &str,
+    number: i64,
+    f: &IssueFront,
+    comments: &[CommentText],
+) -> Result<()> {
+    if let Some(parent) = &f.parent {
+        sqlx::query(
+            "UPDATE issues SET parent_id = (SELECT id FROM issues WHERE number = ?) WHERE number = ?",
+        )
+        .bind(number_of(prefix, parent)?)
+        .bind(number)
+        .execute(&mut **tx)
+        .await?;
+    }
+    for name in &f.labels {
+        let label: i64 = sqlx::query_scalar("SELECT id FROM labels WHERE name = ?")
+            .bind(name)
+            .fetch_one(&mut **tx)
+            .await?;
+        sqlx::query(
+            "INSERT INTO issue_labels (issue_id, label_id)
+             VALUES ((SELECT id FROM issues WHERE number = ?), ?)",
+        )
+        .bind(number)
+        .bind(label)
+        .execute(&mut **tx)
+        .await?;
+    }
+    for (kind, targets) in [
+        ("blocks", &f.blocks),
+        ("related", &f.related),
+        ("duplicate", &f.duplicate),
+    ] {
+        for target in targets {
+            sqlx::query(
+                "INSERT INTO relations (from_id, to_id, kind) VALUES (
+                   (SELECT id FROM issues WHERE number = ?), (SELECT id FROM issues WHERE number = ?), ?)",
+            )
+            .bind(number)
+            .bind(number_of(prefix, target)?)
+            .bind(kind)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+    for c in comments {
+        insert_comment(tx, number, c).await?;
+    }
+    Ok(())
+}
+
+async fn insert_comment(tx: &mut Tx<'_>, number: i64, c: &CommentText) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO comments (issue_id, body, created_at, updated_at)
+         VALUES ((SELECT id FROM issues WHERE number = ?), ?, ?, ?)",
+    )
+    .bind(number)
+    .bind(&c.body)
+    .bind(c.created_at)
+    .bind(c.updated_at)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT number AS \"number!: i64\" FROM cycles WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "number!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e09d49468a3ff220791f8ca8801dd30047c7eff805cd0cfc9a9e853099e50f16"
+}

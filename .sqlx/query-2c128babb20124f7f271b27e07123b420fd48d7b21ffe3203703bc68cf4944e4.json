@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT from_id AS \"from_id!: i64\", to_id AS \"to_id!: i64\" FROM relations WHERE kind = 'blocks' ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "name": "from_id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "to_id!: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "2c128babb20124f7f271b27e07123b420fd48d7b21ffe3203703bc68cf4944e4"
+}

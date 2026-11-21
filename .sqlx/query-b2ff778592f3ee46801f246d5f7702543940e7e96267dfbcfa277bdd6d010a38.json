@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: i64\", at AS \"at: DateTime<Utc>\", source, field, old_value, new_value\n           FROM changes WHERE entity = ? AND entity_id = ? ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "at: DateTime<Utc>",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "source",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "field",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "old_value",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "new_value",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "b2ff778592f3ee46801f246d5f7702543940e7e96267dfbcfa277bdd6d010a38"
+}

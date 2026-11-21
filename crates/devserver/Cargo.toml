@@ -10,16 +10,15 @@ workspace = true
 [dependencies]
 taskapp-core.workspace = true
 taskapp-commands.workspace = true
-tokio.workspace = true
-serde_json.workspace = true
 axum.workspace = true
 tower-http.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
 clap.workspace = true
+chrono.workspace = true
 
 [dev-dependencies]
 reqwest.workspace = true
 tempfile.workspace = true
-
-# Removed by T0 once the code uses these dependencies.
-[package.metadata.cargo-machete]
-ignored = ["taskapp-core", "taskapp-commands", "tokio", "serde_json", "axum", "tower-http", "clap", "reqwest", "tempfile"]
+tokio.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issues SET cycle_id = NULL WHERE cycle_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "38be813b0d929807396ad474043e7c51bdc37bff0e8f698bb09c200fec657a61"
+}
