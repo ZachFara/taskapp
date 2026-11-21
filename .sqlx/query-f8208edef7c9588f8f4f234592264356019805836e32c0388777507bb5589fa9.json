@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO import_log (external_id, source, issue_id, imported_at) VALUES (?, 'reminders', ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "f8208edef7c9588f8f4f234592264356019805836e32c0388777507bb5589fa9"
+}

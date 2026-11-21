@@ -1,15 +1,10 @@
-use chrono::{DateTime, NaiveDate, Utc};
-use serde_json::{Map, Value};
+use serde_json::Value;
 use sqlx::{Row, query::Query, sqlite::SqliteArguments, sqlite::SqliteRow};
 
 use crate::{
-    Db, Due, Error, FieldRef, Filter, FixedField, Issue, Op, PropertyDef, PropertyKind, Result,
-    SavedView, Sort, ViewDef, ViewId, settings,
+    Db, Error, FieldRef, Filter, FixedField, Issue, Op, PropertyDef, PropertyKind, Result,
+    SavedView, Sort, ViewDef, ViewId, issues,
 };
-
-/// Columns every issue query selects: the row plus its label ids as a comma list.
-pub(crate) const ISSUE_COLS: &str = "issues.*, \
-    (SELECT group_concat(label_id) FROM issue_labels WHERE issue_id = issues.id) AS label_ids";
 
 /// Filters come from saved JSON; a limit keeps a hostile one from overflowing the stack.
 const MAX_DEPTH: usize = 32;
@@ -284,7 +279,10 @@ pub fn compile(def: &ViewDef, defs: &[PropertyDef]) -> Result<(String, Vec<Value
         wheres.join(" AND ")
     };
     Ok((
-        format!("SELECT {ISSUE_COLS} FROM issues WHERE {wheres} ORDER BY {order}"),
+        format!(
+            "SELECT {} FROM issues WHERE {wheres} ORDER BY {order}",
+            issues::ISSUE_COLS
+        ),
         ctx.binds,
     ))
 }
@@ -328,59 +326,6 @@ async fn property_defs(db: &Db) -> Result<Vec<PropertyDef>> {
         .collect()
 }
 
-fn issue_from_row(r: &SqliteRow, prefix: &str) -> Result<Issue> {
-    let id: i64 = r.try_get("id")?;
-    let due = match (
-        r.try_get::<Option<DateTime<Utc>>, _>("due_time_utc")?,
-        r.try_get::<Option<String>, _>("due_tz")?,
-        r.try_get::<Option<NaiveDate>, _>("due_date")?,
-    ) {
-        (Some(utc), Some(tz), _) => Some(Due::DateTime { utc, tz }),
-        (_, _, Some(d)) => Some(Due::Date(d)),
-        _ => None,
-    };
-    let props: String = r.try_get("properties")?;
-    let labels: Option<String> = r.try_get("label_ids")?;
-    let opt = |c: &str| -> Result<Option<i64>> { Ok(r.try_get(c)?) };
-    Ok(Issue {
-        id: crate::IssueId(id),
-        key: format!("{prefix}-{}", r.try_get::<i64, _>("number")?),
-        title: r.try_get("title")?,
-        description: r.try_get("description")?,
-        status_id: crate::StatusId(r.try_get("status_id")?),
-        priority: u8::try_from(r.try_get::<i64, _>("priority")?)
-            .map_err(|e| Error::Invalid(e.to_string()))?,
-        project_id: opt("project_id")?.map(crate::ProjectId),
-        milestone_id: opt("milestone_id")?.map(crate::MilestoneId),
-        parent_id: opt("parent_id")?.map(crate::IssueId),
-        cycle_id: opt("cycle_id")?.map(crate::CycleId),
-        label_ids: labels
-            .iter()
-            .flat_map(|s| s.split(','))
-            .filter_map(|s| s.parse().ok().map(crate::LabelId))
-            .collect(),
-        start_date: r.try_get("start_date")?,
-        due,
-        estimate_minutes: opt("estimate_minutes")?
-            .map(|m| u32::try_from(m).map_err(|e| Error::Invalid(e.to_string())))
-            .transpose()?,
-        properties: serde_json::from_str::<Map<String, Value>>(&props)
-            .map_err(|e| Error::Invalid(format!("issue properties: {e}")))?,
-        created_at: r.try_get("created_at")?,
-        updated_at: r.try_get("updated_at")?,
-        completed_at: r.try_get("completed_at")?,
-        archived_at: r.try_get("archived_at")?,
-    })
-}
-
-/// Rows from a query that selected [`ISSUE_COLS`].
-pub(crate) async fn issues_from_rows(db: &Db, rows: &[SqliteRow]) -> Result<Vec<Issue>> {
-    let prefix = settings::get::<String>(db, "issue_prefix")
-        .await?
-        .unwrap_or_else(|| "ZF".into());
-    rows.iter().map(|r| issue_from_row(r, &prefix)).collect()
-}
-
 /// # Errors
 ///
 /// Fails on a database error or an invalid view definition.
@@ -391,7 +336,7 @@ pub async fn query(db: &Db, def: &ViewDef) -> Result<Vec<Issue>> {
         q = bind_value(q, b);
     }
     let rows = q.fetch_all(&db.pool).await?;
-    issues_from_rows(db, &rows).await
+    issues::issues_from_rows(&mut *db.pool.acquire().await?, &rows).await
 }
 
 fn view_from_row(r: &SqliteRow) -> Result<SavedView> {

@@ -330,3 +330,80 @@ async fn project_scoped_def_rejects_other_project() -> R {
     }
     Ok(())
 }
+
+async fn log(db: &Db, entity: &str, id: &str) -> Vec<(String, Option<Value>, Option<Value>)> {
+    history::list_for(db, entity, id)
+        .await
+        .expect("history")
+        .into_iter()
+        .map(|c| (c.field, c.old_value, c.new_value))
+        .collect()
+}
+
+#[tokio::test]
+async fn def_changes_write_history() -> R {
+    let db = Db::open_in_memory().await?;
+    properties::create_def(&db, def("n", PropertyKind::Text), Ui).await?;
+    properties::rename_def(&db, "n", "Number", Ui).await?;
+    properties::change_kind(&db, "n", PropertyKind::Number, vec![], Ui).await?;
+    properties::delete_def(&db, "n", Ui).await?;
+    let fields: Vec<String> = log(&db, "property_def", "n")
+        .await
+        .into_iter()
+        .map(|c| c.0)
+        .collect();
+    assert_eq!(fields, ["created", "name", "kind", "deleted"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn change_kind_writes_one_issue_row_per_converted_issue() -> R {
+    let db = Db::open_in_memory().await?;
+    properties::create_def(&db, def("n", PropertyKind::Text), Ui).await?;
+    let a = issue(&db, None, json!({"n": "3"})).await;
+    let none = issue(&db, None, json!({})).await;
+    properties::change_kind(&db, "n", PropertyKind::Number, vec![], Ui).await?;
+    assert_eq!(
+        log(&db, "issue", &a.0.to_string()).await,
+        [("properties.n".into(), Some(json!("3")), Some(json!(3)))]
+    );
+    assert_eq!(log(&db, "issue", &none.0.to_string()).await.len(), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn refused_change_kind_writes_no_history() -> R {
+    let db = Db::open_in_memory().await?;
+    properties::create_def(&db, def("n", PropertyKind::Text), Ui).await?;
+    let a = issue(&db, None, json!({"n": "3"})).await;
+    issue(&db, None, json!({"n": "abc"})).await;
+    let before: i64 = sqlx::query_scalar("SELECT count(*) FROM changes")
+        .fetch_one(&db.pool)
+        .await?;
+    assert!(
+        properties::change_kind(&db, "n", PropertyKind::Number, vec![], Ui)
+            .await
+            .is_err()
+    );
+    let after: i64 = sqlx::query_scalar("SELECT count(*) FROM changes")
+        .fetch_one(&db.pool)
+        .await?;
+    assert_eq!(before, after);
+    assert_eq!(log(&db, "issue", &a.0.to_string()).await.len(), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn delete_def_writes_a_row_per_issue_that_lost_a_value() -> R {
+    let db = Db::open_in_memory().await?;
+    properties::create_def(&db, def("n", PropertyKind::Text), Ui).await?;
+    let a = issue(&db, None, json!({"n": "x"})).await;
+    let b = issue(&db, None, json!({})).await;
+    properties::delete_def(&db, "n", Ui).await?;
+    assert_eq!(
+        log(&db, "issue", &a.0.to_string()).await,
+        [("properties.n".into(), Some(json!("x")), None)]
+    );
+    assert_eq!(log(&db, "issue", &b.0.to_string()).await.len(), 0);
+    Ok(())
+}

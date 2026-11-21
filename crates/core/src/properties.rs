@@ -1,10 +1,12 @@
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{NaiveDate, Utc};
 use serde_json::{Map, Value, json};
 use sqlx::{Row, SqliteConnection, sqlite::SqliteRow};
 
 use crate::{
-    ChangeSource, Db, Due, Error, FieldRef, Filter, Issue, IssueId, LabelId, MilestoneId,
-    ProjectId, PropertyDef, PropertyKind, Result, SelectOption, StatusId, ViewDef, history,
+    ChangeSource, Db, Error, FieldRef, Filter, Issue, IssueId, ProjectId, PropertyDef,
+    PropertyKind, Result, SelectOption, ViewDef,
+    history::{self, Edit},
+    issues,
 };
 
 fn enc<T: serde::Serialize>(v: &T) -> Result<String> {
@@ -35,6 +37,17 @@ fn def_from_row(r: &SqliteRow) -> Result<PropertyDef> {
     })
 }
 
+async fn record_def(
+    tx: &mut SqliteConnection,
+    src: ChangeSource,
+    key: &str,
+    field: &str,
+    old: Option<&Value>,
+    new: Option<&Value>,
+) -> Result<()> {
+    history::record(tx, src, "property_def", key, &Edit { field, old, new }).await
+}
+
 async fn get_def(conn: &mut SqliteConnection, key: &str) -> Result<PropertyDef> {
     let row = sqlx::query("SELECT * FROM property_defs WHERE key = ?")
         .bind(key)
@@ -42,53 +55,6 @@ async fn get_def(conn: &mut SqliteConnection, key: &str) -> Result<PropertyDef> 
         .await?
         .ok_or_else(|| Error::NotFound(format!("property {key}")))?;
     def_from_row(&row)
-}
-
-/// Builds an issue from its row. Issues are read here, not through the issue module, so a value
-/// change stays inside one transaction.
-async fn issue_from_row(conn: &mut SqliteConnection, r: &SqliteRow) -> Result<Issue> {
-    let id: i64 = r.get("id");
-    let prefix: String =
-        sqlx::query_scalar("SELECT value FROM settings WHERE key = 'issue_prefix'")
-            .fetch_one(&mut *conn)
-            .await
-            .map(|v: String| dec(&v))??;
-    let labels: Vec<i64> = sqlx::query_scalar(
-        "SELECT label_id FROM issue_labels WHERE issue_id = ? ORDER BY label_id",
-    )
-    .bind(id)
-    .fetch_all(conn)
-    .await?;
-    let due = match (
-        r.get::<Option<DateTime<Utc>>, _>("due_time_utc"),
-        r.get::<Option<String>, _>("due_tz"),
-    ) {
-        (Some(utc), Some(tz)) => Some(Due::DateTime { utc, tz }),
-        _ => r.get::<Option<NaiveDate>, _>("due_date").map(Due::Date),
-    };
-    Ok(Issue {
-        id: IssueId(id),
-        key: format!("{prefix}-{}", r.get::<i64, _>("number")),
-        title: r.get("title"),
-        description: r.get("description"),
-        status_id: StatusId(r.get("status_id")),
-        priority: u8::try_from(r.get::<i64, _>("priority")).unwrap_or(0),
-        project_id: r.get::<Option<i64>, _>("project_id").map(ProjectId),
-        milestone_id: r.get::<Option<i64>, _>("milestone_id").map(MilestoneId),
-        parent_id: r.get::<Option<i64>, _>("parent_id").map(IssueId),
-        cycle_id: r.get::<Option<i64>, _>("cycle_id").map(crate::CycleId),
-        label_ids: labels.into_iter().map(LabelId).collect(),
-        start_date: r.get("start_date"),
-        due,
-        estimate_minutes: r
-            .get::<Option<i64>, _>("estimate_minutes")
-            .and_then(|m| u32::try_from(m).ok()),
-        properties: dec(r.get("properties"))?,
-        created_at: r.get("created_at"),
-        updated_at: r.get("updated_at"),
-        completed_at: r.get("completed_at"),
-        archived_at: r.get("archived_at"),
-    })
 }
 
 /// # Errors
@@ -108,7 +74,7 @@ pub async fn list_defs(db: &Db) -> Result<Vec<PropertyDef>> {
 /// # Errors
 ///
 /// Fails on a database error or invalid arguments.
-pub async fn create_def(db: &Db, def: PropertyDef, _src: ChangeSource) -> Result<PropertyDef> {
+pub async fn create_def(db: &Db, def: PropertyDef, src: ChangeSource) -> Result<PropertyDef> {
     if !valid_key(&def.key) {
         return Err(Error::Invalid(format!(
             "property key {:?} must match ^[a-z][a-z0-9_]{{0,39}}$",
@@ -147,6 +113,15 @@ pub async fn create_def(db: &Db, def: PropertyDef, _src: ChangeSource) -> Result
     .bind(position)
     .execute(&mut *tx)
     .await?;
+    record_def(
+        &mut tx,
+        src,
+        &def.key,
+        "created",
+        None,
+        Some(&json!(def.name)),
+    )
+    .await?;
     tx.commit().await?;
     Ok(PropertyDef { position, ..def })
 }
@@ -171,7 +146,7 @@ pub async fn rename_def(
     db: &Db,
     key: &str,
     new_name: &str,
-    _src: ChangeSource,
+    src: ChangeSource,
 ) -> Result<PropertyDef> {
     if new_name.trim().is_empty() {
         return Err(Error::Invalid("property name is empty".into()));
@@ -183,6 +158,8 @@ pub async fn rename_def(
         .bind(key)
         .execute(&mut *tx)
         .await?;
+    let (before, after) = (json!(def.name), json!(new_name));
+    record_def(&mut tx, src, key, "name", Some(&before), Some(&after)).await?;
     tx.commit().await?;
     Ok(PropertyDef {
         name: new_name.to_owned(),
@@ -221,33 +198,51 @@ fn convert(from: PropertyKind, to: PropertyKind, v: &Value) -> Result<Option<Val
     }))
 }
 
+/// One issue's converted `properties` JSON and the value before and after.
+struct Conversion {
+    id: i64,
+    props: String,
+    old: Value,
+    new: Option<Value>,
+}
+
 /// New `properties` JSON per issue that holds `key`; refuses, writing nothing, if any value cannot convert.
 async fn convert_all(
     tx: &mut SqliteConnection,
     key: &str,
     old: &PropertyDef,
     new: &PropertyDef,
-) -> Result<Vec<(i64, String)>> {
-    let rows = sqlx::query("SELECT * FROM issues WHERE properties != '{}' ORDER BY id")
-        .fetch_all(&mut *tx)
-        .await?;
+) -> Result<Vec<Conversion>> {
+    let sql = format!(
+        "SELECT {} FROM issues WHERE properties != '{{}}' ORDER BY id",
+        issues::ISSUE_COLS
+    );
+    let rows = sqlx::query(&sql).fetch_all(&mut *tx).await?;
+    let prefix = issues::prefix(tx).await?;
     let mut writes = Vec::new();
     let mut bad = Vec::new();
     for r in &rows {
         let mut props: Map<String, Value> = dec(r.get("properties"))?;
-        let Some(v) = props.get(key) else { continue };
-        match convert(old.kind, new.kind, v).and_then(|c| match c {
+        let Some(v) = props.get(key).cloned() else {
+            continue;
+        };
+        let Ok(converted) = convert(old.kind, new.kind, &v).and_then(|c| match c {
             Some(c) => validate(new, &c).map(|()| Some(c)),
             None => Ok(None),
-        }) {
-            Ok(Some(c)) => props.insert(key.to_owned(), c),
-            Ok(None) => props.remove(key),
-            Err(_) => {
-                bad.push(issue_from_row(tx, r).await?.key);
-                continue;
-            }
+        }) else {
+            bad.push(issues::issue_from_row(r, &prefix)?.key);
+            continue;
         };
-        writes.push((r.get::<i64, _>("id"), enc(&props)?));
+        match &converted {
+            Some(c) => props.insert(key.to_owned(), c.clone()),
+            None => props.remove(key),
+        };
+        writes.push(Conversion {
+            id: r.get("id"),
+            props: enc(&props)?,
+            old: v,
+            new: converted,
+        });
     }
     if !bad.is_empty() {
         let more = bad.len().saturating_sub(20);
@@ -277,7 +272,7 @@ pub async fn change_kind(
     key: &str,
     kind: PropertyKind,
     options: Vec<SelectOption>,
-    _src: ChangeSource,
+    src: ChangeSource,
 ) -> Result<PropertyDef> {
     check_options(kind, &options)?;
     let mut tx = db.pool.begin().await?;
@@ -289,13 +284,20 @@ pub async fn change_kind(
     };
     let writes = convert_all(&mut tx, key, &old, &new).await?;
     let now = Utc::now();
-    for (id, props) in writes {
+    let field = format!("properties.{key}");
+    for w in writes {
         sqlx::query("UPDATE issues SET properties = ?, updated_at = ? WHERE id = ?")
-            .bind(props)
+            .bind(w.props)
             .bind(now)
-            .bind(id)
+            .bind(w.id)
             .execute(&mut *tx)
             .await?;
+        let edit = Edit {
+            field: &field,
+            old: Some(&w.old),
+            new: w.new.as_ref(),
+        };
+        history::record(&mut tx, src, "issue", &w.id.to_string(), &edit).await?;
     }
     sqlx::query("UPDATE property_defs SET kind = ?, options = ? WHERE key = ?")
         .bind(enc(&new.kind)?)
@@ -303,6 +305,12 @@ pub async fn change_kind(
         .bind(key)
         .execute(&mut *tx)
         .await?;
+    let (before, after) = (json!(old.kind), json!(new.kind));
+    record_def(&mut tx, src, key, "kind", Some(&before), Some(&after)).await?;
+    if old.options != new.options {
+        let (before, after) = (json!(old.options), json!(new.options));
+        record_def(&mut tx, src, key, "options", Some(&before), Some(&after)).await?;
+    }
     tx.commit().await?;
     Ok(new)
 }
@@ -341,14 +349,30 @@ fn is_key(f: &FieldRef, key: &str) -> bool {
 /// # Errors
 ///
 /// Fails on a database error or invalid arguments.
-pub async fn delete_def(db: &Db, key: &str, _src: ChangeSource) -> Result<()> {
+pub async fn delete_def(db: &Db, key: &str, src: ChangeSource) -> Result<()> {
     let mut tx = db.pool.begin().await?;
-    get_def(&mut tx, key).await?;
-    sqlx::query("UPDATE issues SET properties = json_remove(properties, '$.' || ?) WHERE json_type(properties, '$.' || ?) IS NOT NULL")
-        .bind(format!("\"{key}\""))
-        .bind(format!("\"{key}\""))
+    let def = get_def(&mut tx, key).await?;
+    let path = format!("$.\"{key}\"");
+    let lost: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT id, properties -> ?1 FROM issues WHERE json_type(properties, ?1) IS NOT NULL ORDER BY id",
+    )
+    .bind(&path)
+    .fetch_all(&mut *tx)
+    .await?;
+    sqlx::query("UPDATE issues SET properties = json_remove(properties, ?1) WHERE json_type(properties, ?1) IS NOT NULL")
+        .bind(&path)
         .execute(&mut *tx)
         .await?;
+    let field = format!("properties.{key}");
+    for (id, v) in lost {
+        let old: Value = dec(&v)?;
+        let edit = Edit {
+            field: &field,
+            old: Some(&old),
+            new: None,
+        };
+        history::record(&mut tx, src, "issue", &id.to_string(), &edit).await?;
+    }
     let views = sqlx::query("SELECT id, definition FROM views")
         .fetch_all(&mut *tx)
         .await?;
@@ -373,6 +397,7 @@ pub async fn delete_def(db: &Db, key: &str, _src: ChangeSource) -> Result<()> {
         .bind(key)
         .execute(&mut *tx)
         .await?;
+    record_def(&mut tx, src, key, "deleted", Some(&json!(def.name)), None).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -391,12 +416,13 @@ pub async fn set_value(
 ) -> Result<Issue> {
     let mut tx = db.pool.begin().await?;
     let def = get_def(&mut tx, key).await?;
-    let row = sqlx::query("SELECT * FROM issues WHERE id = ?")
+    let sql = format!("SELECT {} FROM issues WHERE id = ?", issues::ISSUE_COLS);
+    let row = sqlx::query(&sql)
         .bind(issue.0)
         .fetch_optional(&mut *tx)
         .await?
         .ok_or_else(|| Error::NotFound(format!("issue {}", issue.0)))?;
-    let mut found = issue_from_row(&mut tx, &row).await?;
+    let mut found = issues::issues_from_rows(&mut tx, &[row]).await?.remove(0);
     if def.project_id.is_some() && def.project_id != found.project_id {
         return Err(Error::Invalid(format!(
             "{key} is scoped to another project than {}",

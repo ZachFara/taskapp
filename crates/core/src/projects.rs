@@ -232,6 +232,18 @@ async fn unlink_issues(tx: &mut SqliteConnection, src: ChangeSource, pid: i64) -
 pub async fn delete(db: &Db, id: ProjectId, src: ChangeSource) -> Result<()> {
     let mut tx = db.pool.begin().await?;
     let old = find(&mut tx, id).await?;
+    let defs: Vec<String> =
+        sqlx::query_scalar("SELECT key FROM property_defs WHERE project_id = ? ORDER BY key")
+            .bind(id.0)
+            .fetch_all(&mut *tx)
+            .await?;
+    if !defs.is_empty() {
+        return Err(Error::Conflict(format!(
+            "project {} has property definitions: {}",
+            old.slug,
+            defs.join(", ")
+        )));
+    }
     unlink_issues(&mut tx, src, id.0).await?;
     sqlx::query!("DELETE FROM projects WHERE id = ?", id.0)
         .execute(&mut *tx)

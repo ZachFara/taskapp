@@ -2,7 +2,7 @@ use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use chrono_tz::America::New_York;
 use taskapp_core::{
     ChangeSource, Db, Due, Error, IssueId, IssuePatch, NewIssue, StatusCategory, StatusId, history,
-    issues, statuses,
+    issues, search, statuses,
 };
 
 type R = Result<(), Box<dyn std::error::Error>>;
@@ -257,5 +257,34 @@ async fn concurrent_writers_do_not_error() -> R {
             .fetch_one(&a.pool)
             .await?;
     assert_eq!((count, distinct), (100, 100));
+    Ok(())
+}
+
+#[tokio::test]
+async fn create_and_update_keep_search_current() -> R {
+    let db = Db::open_in_memory().await?;
+    let i = issues::create(&db, new("giraffe"), ChangeSource::Ui).await?;
+    assert_eq!(search::search(&db, "giraffe", 10).await?.len(), 1);
+    let patch = IssuePatch {
+        title: Some("okapi".into()),
+        description: Some("savanna".into()),
+        ..IssuePatch::default()
+    };
+    issues::update(&db, i.id, patch, ChangeSource::Ui).await?;
+    assert_eq!(search::search(&db, "giraffe", 10).await?.len(), 0);
+    assert_eq!(search::search(&db, "okapi", 10).await?.len(), 1);
+    assert_eq!(search::search(&db, "savanna", 10).await?.len(), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn archived_issue_is_not_found_after_reindex() -> R {
+    let db = Db::open_in_memory().await?;
+    let i = issues::create(&db, new("giraffe"), ChangeSource::Ui).await?;
+    issues::archive(&db, i.id, ChangeSource::Ui).await?;
+    search::reindex(&db, i.id).await?;
+    assert_eq!(search::search(&db, "giraffe", 10).await?.len(), 0);
+    issues::restore(&db, i.id, ChangeSource::Ui).await?;
+    assert_eq!(search::search(&db, "giraffe", 10).await?.len(), 1);
     Ok(())
 }
