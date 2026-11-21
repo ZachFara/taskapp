@@ -5059,6 +5059,9 @@ name = "taskapp-gcal"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "chrono-tz",
+ "serde_json",
+ "sha2 0.10.9",
  "taskapp-core",
  "tempfile",
  "wiremock",
