@@ -4,7 +4,8 @@
   import { api } from '../lib/api';
   import type { SyncStatus } from '../lib/bindings';
   import { defaultKeymap, registerShortcut } from '../lib/keymap';
-  import { refreshAll } from '../lib/stores.svelte';
+  import { navigate } from '../app/routes';
+  import { refreshAll, views } from '../lib/stores.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import QuickAdd from './QuickAdd.svelte';
 
@@ -23,6 +24,10 @@
     const off = [
       registerShortcut(defaultKeymap.palette, 'palette', () => (overlay = 'palette')),
       registerShortcut(defaultKeymap.create, 'create', () => (overlay = 'quickadd')),
+      registerShortcut(defaultKeymap.search, 'search', () => (overlay = 'palette')),
+      // No inbox screen exists: g i opens the first (default) view; g v opens the palette, which lists every view.
+      registerShortcut(defaultKeymap.inbox, 'inbox', () => views[0] && navigate(`/view/${views[0].id}`)),
+      registerShortcut(defaultKeymap.views, 'views', () => (overlay = 'palette')),
     ];
     return () => off.forEach((f) => f());
   });

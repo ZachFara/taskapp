@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { registerShortcut } from '../../lib/keymap';
   import { api } from '../../lib/api';
   import type { FieldRef, FixedField, Issue, IssuePatch, PropertyKind, SavedView, Value } from '../../lib/bindings';
   import { currentViewId, issues, propertyDefs, refreshAll, statuses, views } from '../../lib/stores.svelte';
@@ -152,6 +153,29 @@
     error = null;
   }
 
+  function jump(delta: number) {
+    if (!editing) active = { ...active, row: Math.min(Math.max(active.row + delta, 0), Math.max(issues.length - 1, 0)) };
+  }
+
+  // s and p edit the active row's Status or Priority cell when the view shows that column.
+  function editField(field: FixedField) {
+    const col = cols.findIndex((c) => c.ref.Fixed === field);
+    if (editing || col < 0) return;
+    active = { ...active, col };
+    startEdit();
+  }
+
+  onMount(() => {
+    const offs = [
+      registerShortcut('j', 'table.next', () => jump(1)),
+      registerShortcut('k', 'table.previous', () => jump(-1)),
+      registerShortcut('enter', 'table.open', () => !editing && startEdit()),
+      registerShortcut('s', 'table.status', () => editField('Status')),
+      registerShortcut('p', 'table.priority', () => editField('Priority')),
+    ];
+    return () => offs.forEach((off) => off());
+  });
+
   async function commit() {
     const e = editing!;
     const issue = issues[e.row];
@@ -183,7 +207,6 @@
       ArrowDown: () => (active = { ...active, row: clamp(active.row + 1, issues.length) }),
       ArrowLeft: () => (active = { ...active, col: clamp(active.col - 1, cols.length) }),
       ArrowRight: () => (active = { ...active, col: clamp(active.col + 1, cols.length) }),
-      Enter: startEdit,
     };
     if (moves[e.key]) {
       e.preventDefault();
