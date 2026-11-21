@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT issue_id, body, created_at AS \"created_at: DateTime<Utc>\" FROM comments WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "issue_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "body",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at: DateTime<Utc>",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5767b955279846633b63d8d74aa6abd500f33520bad8e97c327cfdd7029d7387"
+}
