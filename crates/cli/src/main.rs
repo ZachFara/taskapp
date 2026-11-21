@@ -2,12 +2,12 @@
 
 mod commands;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use serde_json::Value;
-use taskapp_core::{Db, Error, Result};
+use serde_json::{Value, json};
+use taskapp_core::{Db, Error, Result, backup};
 
 #[derive(Parser)]
 #[command(name = "taskapp", about = "Manage taskapp issues from the terminal")]
@@ -51,6 +51,24 @@ enum Cmd {
     Pin(PinCmd),
     /// Change history of an issue.
     History { key: String },
+    #[command(subcommand)]
+    Backup(BackupCmd),
+}
+
+#[derive(Subcommand)]
+enum BackupCmd {
+    /// Snapshots and nightly backups under a backup directory.
+    List {
+        #[arg(long, value_name = "DIR")]
+        dir: PathBuf,
+    },
+    /// Replaces the database with a backup. Quit the app first. Needs --yes.
+    Restore {
+        file: PathBuf,
+        /// Confirms the replacement of the target database.
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -227,6 +245,12 @@ async fn main() -> ExitCode {
 }
 
 async fn run(cli: Cli) -> Result<()> {
+    // Backup commands run before the database opens: restore must not hold a pool on its target.
+    if let Cmd::Backup(cmd) = &cli.cmd {
+        let value = backup_cmd(cmd, cli.db.as_deref()).await?;
+        print_value(&value, cli.json);
+        return Ok(());
+    }
     let path = match cli.db {
         Some(path) => path,
         None => default_db_path()?,
@@ -239,6 +263,35 @@ async fn run(cli: Cli) -> Result<()> {
     let value = commands::run(&db, &dir, cli.cmd).await?;
     print_value(&value, cli.json);
     Ok(())
+}
+
+async fn backup_cmd(cmd: &BackupCmd, db: Option<&Path>) -> Result<Value> {
+    match cmd {
+        BackupCmd::List { dir } => {
+            let rows = backup::list(dir)?
+                .into_iter()
+                .map(|p| json!({"path": p.display().to_string()}))
+                .collect();
+            Ok(Value::Array(rows))
+        }
+        BackupCmd::Restore { file, yes } => {
+            let target = match db {
+                Some(path) => path.to_path_buf(),
+                None => default_db_path()?,
+            };
+            if !yes {
+                return Err(Error::Invalid(format!(
+                    "restore replaces {}; quit the app, then rerun with --yes",
+                    target.display()
+                )));
+            }
+            eprintln!("Quit the app before restoring; it must not be running.");
+            backup::restore(file, &target).await?;
+            Ok(
+                json!({"restored": target.display().to_string(), "from": file.display().to_string()}),
+            )
+        }
+    }
 }
 
 fn default_db_path() -> Result<PathBuf> {

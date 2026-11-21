@@ -18,21 +18,16 @@ describe('Backups', () => {
     expect(target.textContent).toContain('backups-test/snapshots/mock-older.db');
   });
 
-  it('restore passes the chosen file and shows the refusal', async () => {
+  it('shows the restore instruction instead of a restore button', async () => {
     const { target, calls } = await mountSettings(Backups);
     await setField(target, 'Backup directory', 'backups-test');
     await press(target, 'Snapshot now');
-    await press(target, 'Restore');
-    expect(calls).toContain('backup.restore');
-    expect(target.querySelector('[role="alert"]')?.textContent).toMatch(/open elsewhere/);
-  });
-
-  it('restore success is reported', async () => {
-    const { target } = await mountSettings(Backups, { backup: { restore: async () => null } });
-    await setField(target, 'Backup directory', 'backups-test');
-    await press(target, 'Snapshot now');
-    await press(target, 'Restore');
-    expect(target.querySelector('[role="alert"]')).toBeNull();
-    expect(target.textContent).toMatch(/restored/i);
+    expect(target.textContent).toContain(
+      'To restore, quit the app and run: taskapp backup restore <file>',
+    );
+    expect(target.textContent).toContain('backups-test/snapshots/mock-manual.db');
+    const buttons = [...target.querySelectorAll('button')].map((b) => b.textContent ?? '');
+    expect(buttons.some((text) => /restore/i.test(text))).toBe(false);
+    expect(calls).not.toContain('backup.restore');
   });
 });
