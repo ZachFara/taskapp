@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issues SET milestone_id = NULL WHERE milestone_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "b5a02f0fb68583f2fcea9cba0cb47b27721f88caa16d491c1033e5942ecd2f3b"
+}
