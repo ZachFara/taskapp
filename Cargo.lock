@@ -4849,7 +4849,6 @@ name = "taskapp-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "chrono-tz",
  "serde",
  "serde_json",
  "specta",
