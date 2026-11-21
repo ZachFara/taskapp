@@ -102,8 +102,7 @@ pub fn run() {
             let db = tauri::async_runtime::block_on(Db::open(&dir.join("taskapp.db")))?;
             let bundled = std::env::current_exe()?
                 .parent()
-                .map(|p| p.join("reminders-helper"))
-                .unwrap_or_default();
+                .map_or_else(PathBuf::new, |p| p.join("reminders-helper"));
             let helper_path = sync_loop::resolve_helper(bundled);
             let backup_dir =
                 tauri::async_runtime::block_on(settings::get::<String>(&db, "backup_dir"))?
