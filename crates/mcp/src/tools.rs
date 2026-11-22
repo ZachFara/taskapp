@@ -9,8 +9,8 @@ use serde_json::{Map, Value, json};
 use taskapp_core::{
     ChangeSource, Db, Issue, IssuePatch, NewIssue, Project, PropertyDef, PropertyKind, Relation,
     RelationKind, SelectOption, StatusCategory, TemplateInput, ViewDef, backup, comments, cycles,
-    history, import, issues, labels, pins, projects, properties, relations, search, statuses,
-    templates, undo, view_templates, views, workspace,
+    history, import, insights, issues, labels, pins, projects, properties, relations, search,
+    statuses, templates, undo, view_templates, views, workspace,
 };
 
 type Res<T> = Result<T, String>;
@@ -147,6 +147,21 @@ const TOOLS: &[Row] = &[
         "import_apply",
         "Write exactly the plan an import tool returned, in one transaction. Args: plan.",
         &["plan"],
+    ),
+    (
+        "set_points",
+        "Set or clear an issue's points (0 or more, one decimal). Args: key, points (null clears).",
+        &["key", "points"],
+    ),
+    (
+        "insights_progress",
+        "Per local day totals of scope, started and completed, rebuilt from history. Args: scope ({\"Project\": id}, {\"Cycle\": id} or {\"View\": id}), measure (points, count or time in minutes), from and to (optional dates).",
+        &["scope", "measure"],
+    ),
+    (
+        "insights_velocity",
+        "Completed per cycle (or per week when there are no cycles). Args: scope, measure, periods.",
+        &["scope", "measure", "periods"],
     ),
     (
         "get_history",
@@ -291,7 +306,8 @@ impl Server {
             "undo_status" => ok(&undo::undo_status(&self.db).await.map_err(|e| ce(&e))?),
             "search_issues" | "query_view" | "get_issue" | "create_issue" | "update_issue"
             | "archive_issue" | "add_comment" | "add_relation" | "remove_relation"
-            | "bulk_update" | "get_history" => self.issue_tool(name, args).await,
+            | "bulk_update" | "get_history" | "set_points" => self.issue_tool(name, args).await,
+            "insights_progress" | "insights_velocity" => self.insights_tool(name, args).await,
             "list_view_templates"
             | "save_view_as_template"
             | "create_view_from_template"
@@ -370,10 +386,33 @@ impl Server {
                 issues::archive(db, issue.id, s).await.map_err(|e| ce(&e))?;
                 Ok(json!({ "archived": issue.key }))
             }
+            "set_points" => self.set_points(a).await,
             "add_comment" => self.add_comment(a).await,
             "add_relation" | "remove_relation" => self.link(name == "add_relation", a).await,
             "bulk_update" => self.bulk_update(a).await,
             _ => self.history(a).await,
+        }
+    }
+
+    async fn set_points(&self, a: &Value) -> Res<Value> {
+        let issue = self.issue_by_key(a, "key").await?;
+        let patch = IssuePatch {
+            points: Some(opt::<f64>(a, "points")?),
+            ..IssuePatch::default()
+        };
+        let done = issues::update(&self.db, issue.id, patch, src(a)).await;
+        ok(&done.map_err(|e| ce(&e))?)
+    }
+
+    async fn insights_tool(&self, name: &str, a: &Value) -> Res<Value> {
+        let (scope, measure) = (arg(a, "scope")?, arg(a, "measure")?);
+        if name == "insights_progress" {
+            let done =
+                insights::progress(&self.db, scope, measure, opt(a, "from")?, opt(a, "to")?).await;
+            ok(&done.map_err(|e| ce(&e))?)
+        } else {
+            let done = insights::velocity(&self.db, scope, measure, arg(a, "periods")?).await;
+            ok(&done.map_err(|e| ce(&e))?)
         }
     }
 
