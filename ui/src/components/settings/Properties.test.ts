@@ -1,57 +1,93 @@
 import { describe, expect, it } from 'vitest';
 import Properties from './Properties.svelte';
-import { mountSettings, press, setField } from './testing';
+import { clickLabel, field, mountSettings, press, setField } from './testing';
+
+async function add(target: Element, key: string, kind = 'Text') {
+  await setField(target, 'New property name', key.toUpperCase());
+  await setField(target, 'New property key', key);
+  if (kind !== 'Text') {
+    await clickLabel('New property kind');
+    await clickLabel(`Kind ${kind}`);
+  }
+  await press(target, 'Add property');
+}
 
 describe('Properties', () => {
-  it('change_kind_conflict_lists_keys', async () => {
-    const conflict = async () => {
-      throw { kind: 'Conflict', message: 'values do not fit Number: ZF-1, ZF-4' };
-    };
-    const { target } = await mountSettings(Properties, { properties: { changeKind: conflict } });
-    await setField(target, 'Property', 'area');
-    await setField(target, 'New kind', 'Number');
-    await press(target, 'Change kind');
-    expect(target.querySelector('[role="alert"]')?.textContent).toContain('ZF-1, ZF-4');
+  it('adds a property once', async () => {
+    const { target, calls } = await mountSettings(Properties);
+    await add(target, 'wobble');
+    expect(calls.filter((c) => c === 'properties.createDef')).toHaveLength(1);
+    expect(field(target, 'Name of WOBBLE')).toBeTruthy();
   });
 
-  it('delete_property_requires_confirm', async () => {
+  it('refuses a malformed key without calling the api', async () => {
     const { target, calls } = await mountSettings(Properties);
-    await setField(target, 'Property', 'effort');
-    await press(target, 'Delete');
-    const before = calls.length;
-    await press(target, 'Cancel');
-    expect(calls.slice(before)).toEqual([]);
-    expect(calls).not.toContain('properties.deleteDef');
-    await press(target, 'Delete');
-    await press(target, 'Confirm delete');
-    expect(calls).toContain('properties.deleteDef');
+    await setField(target, 'New property key', 'Bad Key');
+    await press(target, 'Add property');
+    expect(calls).not.toContain('properties.createDef');
+    expect(target.querySelector('[role="alert"]')?.textContent).toMatch(/lowercase/);
+  });
+
+  it('renames inline with one call', async () => {
+    const { target, calls } = await mountSettings(Properties);
+    await add(target, 'wobble');
+    await setField(target, 'Name of WOBBLE', 'Size');
+    expect(calls.filter((c) => c === 'properties.renameDef')).toHaveLength(1);
+  });
+
+  it('change_kind_conflict_lists_keys', async () => {
+    const conflict = async () => {
+      throw { kind: 'Conflict', message: 'values do not fit Number: ABC-1, ABC-4' };
+    };
+    const { target } = await mountSettings(Properties, { properties: { changeKind: conflict } });
+    await add(target, 'wobble');
+    await clickLabel('Kind of WOBBLE');
+    await clickLabel('Kind Number');
+    expect(target.querySelector('[role="alert"]')?.textContent).toContain('ABC-1, ABC-4');
   });
 
   it('move_up_saves_the_new_order', async () => {
     const { target, calls, api } = await mountSettings(Properties);
-    const before = (await api.properties.listDefs()).map((d) => d.key);
-    await setField(target, 'Property', before[1]);
-    await press(target, 'Move up');
-    expect(calls).toContain('properties.reorder');
-    expect((await api.properties.listDefs()).map((d) => d.key)).toEqual([before[1], before[0], ...before.slice(2)]);
+    await add(target, 'aaa');
+    await add(target, 'bbb');
+    await clickLabel('Move BBB up');
+    expect(calls.filter((c) => c === 'properties.reorder')).toHaveLength(1);
+    const keys = (await api.properties.listDefs()).map((d) => d.key);
+    expect(keys.indexOf('bbb')).toBeLessThan(keys.indexOf('aaa'));
   });
 
-  it('set_scope_conflict_shows_message_and_keeps_scope', async () => {
-    const { target, api } = await mountSettings(Properties);
-    const project = (await api.projects.list())[0].id;
-    await setField(target, 'Property', 'area');
-    await setField(target, 'Scope', String(project));
-    await press(target, 'Set scope');
-    expect(target.querySelector('[role="alert"]')?.textContent).toMatch(/outside the project/);
-    expect((await api.properties.listDefs()).find((d) => d.key === 'area')?.project_id).toBeNull();
-  });
-
-  it('set_scope_to_all_projects_clears_it', async () => {
+  it('delete_property_requires_confirm', async () => {
     const { target, calls } = await mountSettings(Properties);
-    await setField(target, 'Property', 'area');
-    await setField(target, 'Scope', '');
-    await press(target, 'Set scope');
-    expect(calls).toContain('properties.setScope');
-    expect(target.querySelector('[role="alert"]')).toBeNull();
+    await add(target, 'wobble');
+    await clickLabel('Delete WOBBLE');
+    expect(calls).not.toContain('properties.deleteDef');
+    await press(document.body, 'Delete property');
+    expect(calls.filter((c) => c === 'properties.deleteDef')).toHaveLength(1);
+  });
+
+  it('scope can be set to a project', async () => {
+    const { target, calls, api } = await mountSettings(Properties);
+    await add(target, 'wobble');
+    const project = (await api.projects.list())[0];
+    await clickLabel('Scope of WOBBLE');
+    await clickLabel(`Scope ${project.name}`);
+    expect(calls.filter((c) => c === 'properties.setScope')).toHaveLength(1);
+    expect((await api.properties.listDefs()).find((d) => d.key === 'wobble')?.project_id).toBe(project.id);
+  });
+
+  it('select options can be added, recoloured, renamed and removed', async () => {
+    const { target, api } = await mountSettings(Properties);
+    await add(target, 'stage', 'Select');
+    const opts = async () => (await api.properties.listDefs()).find((d) => d.key === 'stage')!.options;
+    await setField(target, 'New option of STAGE', 'Draft');
+    await press(field(target, 'New option of STAGE').closest('form')!, 'Add option');
+    expect(await opts()).toEqual([{ value: 'Draft', color: 'gray' }]);
+    await clickLabel('Colour of option Draft');
+    await clickLabel('green');
+    expect((await opts())[0].color).toBe('green');
+    await setField(target, 'Option Draft', 'Final');
+    expect((await opts())[0].value).toBe('Final');
+    await clickLabel('Remove option Final');
+    expect(await opts()).toEqual([]);
   });
 });
