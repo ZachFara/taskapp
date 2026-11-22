@@ -44,4 +44,5 @@ check_d true "docs-only true" docs/a.md README.md
 check_d false "docs-only false on code" docs/a.md crates/core/src/lib.rs
 check_d false "docs-only false on fixture" docs/fixtures/x.md
 scripts/test/test-land.sh || fails=1
+scripts/test/test-check-tokens.sh || fails=1
 exit $fails
