@@ -62,13 +62,25 @@ async function startDevserver(origin: string) {
 }
 
 async function ensureServers(mode: 'mock' | 'real') {
-  const vite = await freePort();
-  const base = `http://localhost:${vite}`;
-  const env: Record<string, string> = { VITE_API_MODE: mode === 'mock' ? 'mock' : 'http' };
-  if (mode === 'real') env.VITE_API_URL = await startDevserver(base);
-  launch('pnpm', ['exec', 'vite', '--host', 'localhost', '--port', String(vite), '--strictPort'], uiDir, env);
-  await waitFor(base);
-  return base;
+  // The probe frees the port before vite binds it, so a parallel run can take it in between. --strictPort then
+  // makes vite exit instead of moving on; that exit, or no "Local:" line, means retry with a new port. The line
+  // also proves the server answering on the port is ours, not another run's.
+  for (let attempt = 1; ; attempt++) {
+    const vite = await freePort();
+    const base = `http://localhost:${vite}`;
+    const env: Record<string, string> = { VITE_API_MODE: mode === 'mock' ? 'mock' : 'http' };
+    if (mode === 'real') env.VITE_API_URL = await startDevserver(base);
+    const p = launch('pnpm', ['exec', 'vite', '--host', 'localhost', '--port', String(vite), '--strictPort'], uiDir, env);
+    const bound = await new Promise<boolean>((ok) => {
+      p.once('exit', () => ok(false));
+      p.stdout!.on('data', (d: Buffer) => /Local:.*localhost/.test(String(d)) && ok(true));
+    });
+    if (bound) {
+      await waitFor(base);
+      return base;
+    }
+    if (attempt === 5) throw new Error(`vite did not start on a free port in ${attempt} tries`);
+  }
 }
 
 const slug = (route: string) => route.replace(/^https?:\/\//, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '') || 'root';
