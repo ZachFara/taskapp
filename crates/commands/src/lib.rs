@@ -9,14 +9,14 @@ use std::{future::Future, path::PathBuf};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::Value;
 use taskapp_core::{
-    Applied, AppliedTemplate, Bar, Change, ChangeSource, Comment, CommentId, Cycle, CycleId, Db,
-    Error, ImportPlan, Issue, IssueId, IssuePatch, IssueTemplate, Label, LabelId, Milestone,
-    MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId, PinKind, Project, ProjectId, PropertyDef,
-    PropertyKind, Relation, Reschedule, ResolvedPin, Result, SavedView, SelectOption, Status,
-    StatusCategory, StatusId, SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus,
-    ViewDef, ViewId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks, comments, cycles,
-    history, import, issues, labels, pins, projects, properties, quickadd, relations, schedule,
-    search, settings, statuses, templates, undo, views, workspace,
+    Applied, AppliedTemplate, Bar, BulkPatch, Change, ChangeSource, Comment, CommentId, Cycle,
+    CycleId, Db, Error, ImportPlan, Issue, IssueId, IssuePatch, IssueTemplate, Label, LabelId,
+    Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId, PinKind, Project, ProjectId,
+    PropertyDef, PropertyKind, Relation, Reschedule, ResolvedPin, Result, SavedView, SelectOption,
+    Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus,
+    ViewDef, ViewId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks, bulk, comments,
+    cycles, history, import, issues, labels, pins, projects, properties, quickadd, relations,
+    schedule, search, settings, statuses, templates, undo, views, workspace,
 };
 
 pub struct AppState {
@@ -110,6 +110,9 @@ macro_rules! with_commands {
             issues_create(s, input: NewIssue) -> Issue { issues::create(&s.db, input, ChangeSource::Ui).await }
             issues_update(s, id: IssueId, patch: IssuePatch) -> Issue {
                 issues::update(&s.db, id, patch, ChangeSource::Ui).await
+            }
+            issues_bulk_update(s, ids: Vec<IssueId>, patch: BulkPatch) -> () {
+                bulk::update(&s.db, &ids, patch, ChangeSource::Ui).await
             }
             issues_get(s, id: IssueId) -> Issue { issues::get(&s.db, id).await }
             issues_get_by_key(s, key: String) -> Issue { issues::get_by_key(&s.db, &key).await }

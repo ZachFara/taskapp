@@ -1,12 +1,16 @@
 <script lang="ts">
   import { api } from '../../lib/api';
   import type { Issue, Relation, RelationKind } from '../../lib/bindings';
+  import GroupHeader from '../../ui/GroupHeader.svelte';
+  import IconButton from '../../ui/IconButton.svelte';
+  import Select from '../../ui/Select.svelte';
   import IssuePicker from './IssuePicker.svelte';
 
-  let { issue, act, rev }: { issue: Issue; act: (p: Promise<unknown>) => void; rev: number } = $props();
+  let { issue, act, rev, open }: { issue: Issue; act: (p: Promise<unknown>) => void; rev: number; open: (key: string) => void } = $props();
   type Row = { rel: Relation; label: string; other: Issue };
   let rows = $state<Row[]>([]);
-  let choice = $state<'blocks' | 'blocked_by' | 'related' | 'duplicate'>('blocks');
+  let choice = $state('blocks');
+  let collapsed = $state(false);
 
   const labelOf = (r: Relation) =>
     r.kind === 'Blocks' ? (r.from === issue.id ? 'blocks' : 'blocked by') : r.kind === 'Related' ? 'related' : 'duplicate';
@@ -28,19 +32,30 @@
 </script>
 
 <section aria-label="Relations">
-  <h3>Relations</h3>
-  <ul>
-    {#each rows as r (`${r.rel.from}-${r.rel.to}-${r.rel.kind}`)}
-      <li>{r.label} {r.other.key} {r.other.title}
-        <button aria-label="Remove relation to {r.other.key}" onclick={() => act(api.relations.remove(r.rel))}>x</button>
-      </li>
-    {/each}
-  </ul>
-  <select aria-label="Relation kind" bind:value={choice}>
-    <option value="blocks">blocks</option>
-    <option value="blocked_by">blocked by</option>
-    <option value="related">related</option>
-    <option value="duplicate">duplicate</option>
-  </select>
-  <IssuePicker selfId={issue.id} label="Find issue" pick={add} />
+  <GroupHeader name="Relations" count={rows.length} category="Backlog" {collapsed} ontoggle={() => (collapsed = !collapsed)} />
+  {#if !collapsed}
+    <ul>
+      {#each rows as r (`${r.rel.from}-${r.rel.to}-${r.rel.kind}`)}
+        <li>
+          <button type="button" class="go" onclick={() => open(r.other.key)}><em>{r.label}</em> <b>{r.other.key}</b> {r.other.title}</button>
+          <IconButton icon="close" label="Remove relation to {r.other.key}" onclick={() => act(api.relations.remove(r.rel))} />
+        </li>
+      {/each}
+    </ul>
+    <div class="add">
+      <Select label="Relation kind" bind:value={choice} items={[
+        { value: 'blocks', label: 'blocks' }, { value: 'blocked_by', label: 'blocked by' },
+        { value: 'related', label: 'related' }, { value: 'duplicate', label: 'duplicate' }]} />
+      <IssuePicker selfId={issue.id} label="Find issue" pick={add} />
+    </div>
+  {/if}
 </section>
+
+<style>
+  ul { list-style: none; }
+  li { display: flex; align-items: center; height: var(--row-h); padding-right: var(--s-4); }
+  .go { flex: 1; display: flex; gap: var(--s-4); align-items: center; height: 100%; padding: 0 var(--s-5); border: 0; background: transparent; text-align: left; min-width: 0; }
+  .go:hover { background: var(--active); }
+  em { color: var(--muted); font-style: normal; font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; min-width: 5.5rem; }
+  .add { display: grid; grid-template-columns: 9rem 1fr; gap: var(--s-4); padding: var(--s-4); align-items: start; }
+</style>

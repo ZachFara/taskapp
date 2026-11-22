@@ -249,6 +249,18 @@ pub struct Comment {
     pub updated_at: DateTime<Utc>,
 }
 
+/// One edit for a whole selection: the patch, labels to add or remove, and a relation from each issue to `add_relation.1`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct BulkPatch {
+    pub patch: IssuePatch,
+    pub add_labels: Vec<LabelId>,
+    pub remove_labels: Vec<LabelId>,
+    pub add_relation: Option<(RelationKind, IssueId)>,
+    /// `Some(true)` archives, `Some(false)` restores.
+    pub archive: Option<bool>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct Relation {
     pub from: IssueId,
