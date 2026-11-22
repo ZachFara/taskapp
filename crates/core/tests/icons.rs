@@ -209,20 +209,15 @@ async fn legacy_hex_colors_map_to_nearest_key() -> Result<(), Box<dyn std::error
 }
 
 #[tokio::test]
-async fn undo_refuses_an_icon_or_color_change_with_a_clear_error()
--> Result<(), Box<dyn std::error::Error>> {
+async fn undo_reverts_an_icon_or_color_change() -> Result<(), Box<dyn std::error::Error>> {
     let db = Db::open_in_memory().await?;
     let p = projects::create(&db, "abc-undo", "ABC undo", None, None, Ui).await?;
     let mut edited = p.clone();
     edited.color = Some("pink".into());
     history::step("Recolor", async { projects::update(&db, edited, Ui).await }).await?;
-    let Err(err) = undo::undo(&db).await else {
-        panic!("undo must refuse a project color change");
-    };
-    assert!(
-        err.to_string().contains("not covered"),
-        "unclear refusal: {err}"
-    );
+    undo::undo(&db).await?;
+    assert_eq!(projects::list(&db).await?[0].color, None);
+    undo::redo(&db).await?;
     assert_eq!(projects::list(&db).await?[0].color.as_deref(), Some("pink"));
     Ok(())
 }

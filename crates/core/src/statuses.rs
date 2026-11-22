@@ -4,6 +4,7 @@ use sqlx::SqliteConnection;
 use crate::{
     ChangeSource, Db, Error, Result, Status, StatusCategory, StatusId, history,
     palette::{self, Look},
+    rows,
 };
 
 pub(crate) fn category_str(c: StatusCategory) -> &'static str {
@@ -114,6 +115,7 @@ pub async fn create(
         new: Some(&created),
     };
     history::record(&mut tx, src, "status", &id.to_string(), &edit).await?;
+    rows::created(&mut tx, src, "statuses", id).await?;
     let status = fetch(&mut tx, StatusId(id)).await?;
     tx.commit().await?;
     Ok(status)
@@ -134,6 +136,7 @@ pub async fn update(
     let Look { icon, color } = look;
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let old = fetch(&mut tx, id).await?;
+    let before = rows::by_key(&mut tx, "statuses", id.0).await?;
     if let Some(n) = &name {
         check_name(n)?;
     }
@@ -158,6 +161,7 @@ pub async fn update(
     .execute(&mut *tx)
     .await
     .map_err(|e| unique_to_conflict(e, &name))?;
+    rows::changed(&mut tx, src, before).await?;
     for (field, before, after) in [
         ("color", json!(old.color), json!(color)),
         ("icon", json!(old.icon), json!(icon)),
@@ -222,9 +226,11 @@ pub async fn delete(db: &Db, id: StatusId, move_issues_to: StatusId) -> Result<(
         )
         .await?;
     }
+    let before = rows::by_key(&mut tx, "statuses", id.0).await?;
     sqlx::query!("DELETE FROM statuses WHERE id = ?", id.0)
         .execute(&mut *tx)
         .await?;
+    rows::changed(&mut tx, ChangeSource::System, before).await?;
     tx.commit().await?;
     Ok(())
 }

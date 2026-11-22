@@ -7,6 +7,7 @@ use crate::{
     history::{self, Edit},
     issues,
     palette::{self, Look},
+    rows,
 };
 
 /// Filters come from saved JSON; a limit keeps a hostile one from overflowing the stack.
@@ -425,6 +426,7 @@ async fn update_view(
         .fetch_optional(&mut *tx)
         .await?
         .ok_or_else(|| Error::NotFound(format!("view {}", id.0)))?;
+    let before = rows::by_key(tx, "views", id.0).await?;
     let old_name: String = old.try_get("name")?;
     let old_icon: Option<String> = old.try_get("icon")?;
     let old_color: Option<String> = old.try_get("color")?;
@@ -453,6 +455,7 @@ async fn update_view(
         .bind(id.0)
         .execute(&mut *tx)
         .await?;
+    rows::changed(tx, src, before).await?;
     Ok(())
 }
 
@@ -474,6 +477,7 @@ async fn insert_view(
     .execute(&mut *tx)
     .await?
     .last_insert_rowid();
+    rows::created(tx, src, "views", id).await?;
     let created = json!(name);
     let edit = Edit {
         field: "created",
@@ -488,13 +492,17 @@ async fn insert_view(
 ///
 /// Fails with `NotFound` for an unknown id, or on a database error.
 pub async fn delete(db: &Db, id: ViewId) -> Result<()> {
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let before = rows::by_key(&mut tx, "views", id.0).await?;
     let done = sqlx::query("DELETE FROM views WHERE id = ?")
         .bind(id.0)
-        .execute(&db.pool)
+        .execute(&mut *tx)
         .await?;
     if done.rows_affected() == 0 {
         return Err(Error::NotFound(format!("view {}", id.0)));
     }
+    rows::changed(&mut tx, ChangeSource::Ui, before).await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -516,6 +524,7 @@ pub async fn reorder(db: &Db, ids: &[ViewId]) -> Result<()> {
             "reorder must list every view exactly once".into(),
         ));
     }
+    let before = rows::all(&mut tx, "views").await?;
     for (position, id) in (0_i64..).zip(ids) {
         sqlx::query("UPDATE views SET position = ? WHERE id = ?")
             .bind(position)
@@ -523,6 +532,7 @@ pub async fn reorder(db: &Db, ids: &[ViewId]) -> Result<()> {
             .execute(&mut *tx)
             .await?;
     }
+    rows::changed(&mut tx, ChangeSource::Ui, before).await?;
     tx.commit().await?;
     Ok(())
 }
