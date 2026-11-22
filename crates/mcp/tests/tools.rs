@@ -598,3 +598,49 @@ fn instructions_name_the_one_tool_that_reaches_the_network() {
     assert!(!text.contains("Never touches"), "{text}");
     assert!(text.contains("import_linear_plan"), "{text}");
 }
+
+#[test]
+fn unknown_argument_names_are_refused() {
+    let (_d, db) = tmp();
+    let r = session(
+        &db,
+        &[
+            ("create_issue", json!({"title": "A"})),
+            ("create_issue", json!({"title": "B", "bogus": 1})),
+            (
+                "update_issue",
+                json!({"key": "ABC-1", "patch": {"bogus": 1}}),
+            ),
+            ("search_issues", json!({"text": "A", "bogus": 1})),
+            ("list_statuses", json!({"bogus": 1})),
+        ],
+    );
+    assert!(r[0].is_ok());
+    for (i, call) in r.iter().enumerate().skip(1) {
+        assert!(call.is_err(), "call {i} accepted an unknown name: {call:?}");
+    }
+}
+
+#[test]
+fn tool_errors_share_one_prefix_form() {
+    let (_d, db) = tmp();
+    let r = session(&db, &[("create_issue", json!({"title": ""}))]);
+    assert_eq!(
+        r[0].as_ref().expect_err("empty title"),
+        "invalid: title is empty"
+    );
+}
+
+#[test]
+fn pin_refuses_an_issue_that_does_not_exist() {
+    let (_d, db) = tmp();
+    let r = session(
+        &db,
+        &[("pin", json!({"kind": "Issue", "target": "ABC-99"}))],
+    );
+    assert!(
+        r[0].as_ref().is_err_and(|e| e.starts_with("not found")),
+        "{:?}",
+        r[0]
+    );
+}
