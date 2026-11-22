@@ -98,7 +98,7 @@
   </Tooltip>
 {/snippet}
 {#snippet addBtn()}<Button icon="filter">Add filter</Button>{/snippet}
-{#snippet groupBtn()}<Button icon="group">Group{def.group_by ? `: ${lookup.name(def.group_by)}` : ''}</Button>{/snippet}
+{#snippet groupBtn()}<Button icon="group">Group{def.group_by && (def.group_by.Fixed !== 'Points' || pointsOn(estimation)) ? `: ${lookup.name(def.group_by)}` : ''}</Button>{/snippet}
 {#snippet sortBtn()}<Button icon="sort">Sort{sort ? `: ${lookup.name(sort.field)}` : ''}</Button>{/snippet}
 {#snippet displayBtn()}<Button icon="eye">Display</Button>{/snippet}
 

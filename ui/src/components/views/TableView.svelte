@@ -66,8 +66,11 @@
   const def = $derived(live.def);
   // Columns whose property def is gone (or fixed field not supported) are skipped, keeping their index in the def.
   const base = $derived(def.columns.length ? def.columns : DEFAULT);
+  // Points is invisible when the estimation setting excludes it: a stored Points column or group is ignored, not rewritten.
+  const groupBy = $derived(def.group_by?.Fixed === 'Points' && !ctx.points ? null : def.group_by);
   const cols = $derived(
     base
+      .filter((ref) => ctx.points || ref.Fixed !== 'Points')
       .map((ref, index) => ({ ref, index, id: colId(ref), kind: kindOf(ref), label: label(ref) }))
       .filter((c): c is typeof c & { kind: EditKind } => c.kind !== null),
   );
@@ -150,7 +153,7 @@
 
   type Group = { name: string; category: StatusCategory; status: boolean; priority?: number; rows: Issue[] };
   const groupOf = (i: Issue): { name: string; category: StatusCategory; status: boolean; priority?: number } => {
-    const field = def.group_by;
+    const field = groupBy;
     if (field?.Fixed === 'Status') {
       const st = statuses.find((s) => s.id === i.status_id);
       return { name: st?.name ?? 'Unknown', category: st?.category ?? 'Backlog', status: true };
@@ -172,12 +175,12 @@
       hit.rows.push(i);
       byName.set(g.name, hit);
     }
-    if ((def as DisplayDef).show_empty_groups && def.group_by?.Fixed === 'Status')
+    if ((def as DisplayDef).show_empty_groups && groupBy?.Fixed === 'Status')
       for (const st of statuses) if (!byName.has(st.name)) byName.set(st.name, { name: st.name, category: st.category, status: true, rows: [], order: st.position });
     return [...byName.values()].sort((a, b) => a.order - b.order);
   });
   function groupOrder(i: Issue): number {
-    const field = def.group_by;
+    const field = groupBy;
     if (field?.Fixed === 'Status') return statuses.find((s) => s.id === i.status_id)?.position ?? Infinity;
     if (field?.Fixed === 'Priority') return i.priority;
     if (field?.Fixed === 'Points') return i.points ?? Infinity;
@@ -383,7 +386,7 @@
     collapsed = next;
   };
   const rowSelected = (i: Issue) => selection.selected.includes(i.id);
-  const grouped = $derived(def.group_by !== null);
+  const grouped = $derived(groupBy !== null);
 </script>
 
 <section class="table-view">

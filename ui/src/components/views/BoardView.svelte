@@ -26,7 +26,7 @@
     patch: (i: Issue) => IssuePatch;
   };
 
-  const groupBy = $derived(view.def.group_by);
+  const groupBy = $derived(view.def.group_by?.Fixed === 'Points' && !ctx.points ? null : view.def.group_by);
   const selectProp = $derived.by(() => {
     const key = groupBy?.Property;
     return propertyDefs.find((d) => d.key === key && d.kind === 'Select') ?? null;
@@ -102,7 +102,7 @@
   let error: string | null = $state(null);
   let ctx = $state.raw<Ctx>(emptyCtx);
   // Key and priority are always on the card; the rest follow the view.
-  const fields = $derived(shown(view.def, BOARD_DEFAULT, true).filter((f) => f.Fixed !== 'Key' && f.Fixed !== 'Priority'));
+  const fields = $derived(shown(view.def, BOARD_DEFAULT, true).filter((f) => f.Fixed !== 'Key' && f.Fixed !== 'Priority' && (ctx.points || f.Fixed !== 'Points')));
 
   async function reload() {
     issues = await api.views.query($state.snapshot(view.def));

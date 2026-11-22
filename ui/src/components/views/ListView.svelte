@@ -64,7 +64,7 @@
   // shortcut: compact height follows the --row-h-compact token value (28), upgrade if the token changes
   const ROW = $derived(compact ? 28 : 32);
   // Key, priority and status have their own leading columns, so they are not repeated.
-  const allFields = $derived(shown(view.def, LIST_DEFAULT).filter((f) => !LEADING.includes(f.Fixed!)));
+  const allFields = $derived(shown(view.def, LIST_DEFAULT).filter((f) => !LEADING.includes(f.Fixed!) && (ctx.points || f.Fixed !== 'Points')));
   let closedParents = $state<number[]>([]);
   const WIDTH: Record<string, string> = { Label: '150px', Project: '140px', DueDate: '56px', Estimate: '72px', Key: '64px', Priority: 'var(--s-8)', Status: '120px', Cycle: '100px', StartDate: '56px', CreatedAt: '56px', UpdatedAt: '56px' };
   const widthOf = (f: FieldRef) => (f.Property === undefined ? (WIDTH[f.Fixed!] ?? '100px') : ({ Select: '120px', MultiSelect: '150px', Checkbox: '56px', Url: '56px', Number: '72px', Date: '72px' } as Record<string, string>)[ctx.defs.find((d) => d.key === f.Property)?.kind ?? ''] ?? '140px');
@@ -122,7 +122,7 @@
     load();
   });
 
-  const groupField = $derived(view.def.group_by?.Fixed ?? null);
+  const groupField = $derived(view.def.group_by?.Fixed === 'Points' && !ctx.points ? null : (view.def.group_by?.Fixed ?? null));
   const groups = $derived.by<Group[]>(() => {
     const by = new Map<string, Group>();
     const put = (i: Issue, g: Omit<Group, 'rows'>) => {
