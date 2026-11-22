@@ -3,7 +3,7 @@
   const list = $derived(Array.isArray(keys) ? keys : [keys]);
 </script>
 
-{#each list as k (k)}<kbd class="kbd">{k}</kbd>{/each}
+{#each list as k, i (i)}<kbd class="kbd">{k}</kbd>{/each}
 
 <style>
   .kbd {

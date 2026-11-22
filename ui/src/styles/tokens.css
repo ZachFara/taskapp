@@ -188,6 +188,7 @@
   --dur-2: 140ms;
   --dur-3: 220ms;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --delay-tooltip: 500ms;
   --dur-spin: 900ms;
   --dur-shimmer: 1400ms;
 
@@ -206,6 +207,9 @@
   --topbar-h: 48px;
   --sidebar-w: 232px;
   --panel-w: 380px;
+  --dialog-sm: 480px;
+  --dialog-md: 640px;
+  --dialog-lg: 880px;
   --sheet-inset: 8px;
 }
 
