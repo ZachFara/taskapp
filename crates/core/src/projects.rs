@@ -28,8 +28,8 @@ fn valid_slug(slug: &str) -> bool {
             .all(|(i, b)| b.is_ascii_lowercase() || b.is_ascii_digit() || (i > 0 && b == b'-'))
 }
 
-/// Only `obsidian://` and `https://` links, or a vault-relative `.md` path. Anything with a
-/// `:` in a path (`javascript:`, `file:`) or escaping the vault (`/`, `..`) is refused.
+/// Only `obsidian://` and `https://` links, or a `.md` path inside the notes folder. Anything with a
+/// `:` in a path (`javascript:`, `file:`) or escaping the notes folder (`/`, `..`) is refused.
 fn valid_doc_link(link: &str) -> bool {
     if link.starts_with("obsidian://") || link.starts_with("https://") {
         return true;
@@ -48,7 +48,7 @@ fn validate(slug: &str, doc_link: Option<&str>) -> Result<()> {
     }
     if let Some(link) = doc_link.filter(|l| !valid_doc_link(l)) {
         return Err(Error::Invalid(format!(
-            "doc link `{link}` must be an obsidian:// or https:// URL, or a vault-relative .md path"
+            "doc link `{link}` must be an obsidian:// or https:// URL, or a .md path inside the notes folder"
         )));
     }
     Ok(())

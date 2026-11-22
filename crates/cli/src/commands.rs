@@ -23,6 +23,9 @@ const SRC: ChangeSource = ChangeSource::Cli;
 pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
     match cmd {
         Cmd::Undo => val(undo::undo(db).await?),
+        Cmd::Setup { name, key, tz } => {
+            val(taskapp_core::workspace::setup(db, &name, &key, tz.as_deref()).await?)
+        }
         Cmd::Redo => val(undo::redo(db).await?),
         Cmd::Template(cmd) => template(db, cmd).await,
         cmd => run_group(db, dir, cmd).await,
@@ -45,7 +48,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Backup(_) => Err(Error::Invalid(
             "backup runs before the database opens".into(),
         )),
-        Cmd::Undo | Cmd::Redo | Cmd::Template(_) => handled_in_run(),
+        Cmd::Undo | Cmd::Redo | Cmd::Setup { .. } | Cmd::Template(_) => handled_in_run(),
         Cmd::History { key } => {
             let id = issue_id(db, &key).await?;
             val(history::list_for(db, "issue", &id.0.to_string()).await?)

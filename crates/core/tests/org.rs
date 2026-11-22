@@ -60,7 +60,7 @@ async fn doc_link_validation() -> R {
     let db = Db::open_in_memory().await?;
     let p = projects::create(&db, "alpha", "Alpha", None, None, ChangeSource::Ui).await?;
     for ok in [
-        "obsidian://open?vault=v&file=plan",
+        "obsidian://open?file=plan",
         "https://example.com/spec",
         "notes/plan.md",
     ] {

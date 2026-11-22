@@ -1,5 +1,5 @@
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
-use chrono_tz::America::New_York;
+use chrono_tz::Europe::Berlin;
 use taskapp_core::{
     ChangeSource, Db, Due, Error, IssueId, IssuePatch, NewIssue, StatusCategory, StatusId, history,
     issues, search, statuses,
@@ -23,8 +23,8 @@ async fn create_assigns_prefixed_sequential_keys() -> R {
     let db = Db::open_in_memory().await?;
     let a = issues::create(&db, new("a"), ChangeSource::Ui).await?;
     let b = issues::create(&db, new("b"), ChangeSource::Ui).await?;
-    assert_eq!((a.key.as_str(), b.key.as_str()), ("ZF-1", "ZF-2"));
-    assert_eq!(issues::get_by_key(&db, "ZF-2").await?.id, b.id);
+    assert_eq!((a.key.as_str(), b.key.as_str()), ("ABC-1", "ABC-2"));
+    assert_eq!(issues::get_by_key(&db, "ABC-2").await?.id, b.id);
     Ok(())
 }
 
@@ -124,14 +124,14 @@ async fn completing_sets_completed_at_and_reopening_clears_it() -> R {
 #[tokio::test]
 async fn due_datetime_survives_dst() -> R {
     let db = Db::open_in_memory().await?;
-    // Entered on 2026-03-01 (EST) for 2026-03-09 09:00, after the 03-08 spring-forward.
-    let utc = New_York
-        .with_ymd_and_hms(2026, 3, 9, 9, 0, 0)
+    // Entered on 2026-03-01 (CET) for 2026-04-02 09:00, after the 03-29 spring-forward.
+    let utc = Berlin
+        .with_ymd_and_hms(2026, 4, 2, 9, 0, 0)
         .unwrap()
         .with_timezone(&Utc);
     let due = Due::DateTime {
         utc,
-        tz: "America/New_York".into(),
+        tz: "Europe/Berlin".into(),
     };
     let i = issues::create(
         &db,
@@ -145,10 +145,10 @@ async fn due_datetime_survives_dst() -> R {
     let Some(Due::DateTime { utc, tz }) = issues::get(&db, i.id).await?.due else {
         panic!("due lost");
     };
-    assert_eq!(tz, "America/New_York");
-    assert_eq!(utc, DateTime::parse_from_rfc3339("2026-03-09T13:00:00Z")?);
+    assert_eq!(tz, "Europe/Berlin");
+    assert_eq!(utc, DateTime::parse_from_rfc3339("2026-04-02T07:00:00Z")?);
     assert_eq!(
-        utc.with_timezone(&New_York).format("%H:%M").to_string(),
+        utc.with_timezone(&Berlin).format("%H:%M").to_string(),
         "09:00"
     );
     Ok(())
@@ -202,7 +202,7 @@ async fn archive_hides_from_children_and_restore_returns_it() -> R {
 #[tokio::test]
 async fn get_by_key_unknown_is_not_found() -> R {
     let db = Db::open_in_memory().await?;
-    for key in ["ZF-1", "nonsense", "XX-1", "ZF-x"] {
+    for key in ["ABC-1", "nonsense", "XX-1", "ABC-x"] {
         let got = issues::get_by_key(&db, key).await;
         assert!(matches!(got, Err(Error::NotFound(_))), "{key}");
     }
@@ -310,7 +310,7 @@ async fn create_in_and_update_in_roll_back_with_the_caller() -> R {
     issues::update_in(&mut tx, keep.id, patch, ChangeSource::Ui).await?;
     tx.rollback().await?;
     assert_eq!(issues::get(&db, keep.id).await?.title, "keep");
-    assert!(issues::get_by_key(&db, "ZF-2").await.is_err());
+    assert!(issues::get_by_key(&db, "ABC-2").await.is_err());
     Ok(())
 }
 

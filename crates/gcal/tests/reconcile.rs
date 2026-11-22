@@ -493,7 +493,7 @@ async fn work_block_becomes_an_event() {
 #[tokio::test]
 async fn digest_alert_uses_the_timezone_setting() {
     let db = db().await;
-    settings::set(&db, "timezone", &"America/New_York")
+    settings::set(&db, "timezone", &"Europe/Berlin")
         .await
         .expect("tz");
     let new = NewIssue {
@@ -510,7 +510,7 @@ async fn digest_alert_uses_the_timezone_setting() {
     mount_list(&s, &[]).await;
     Mock::given(method("POST"))
         .and(path(EVENTS))
-        .and(body_string_contains("2099-01-15T13:00:00"))
+        .and(body_string_contains("2099-01-15T07:00:00"))
         .respond_with(stored("ga", "ea"))
         .expect(1)
         .mount(&s)
