@@ -38,6 +38,9 @@ enum Cmd {
         db: PathBuf,
         #[arg(long, default_value_t = 7878)]
         port: u16,
+        /// The one browser origin allowed to call the server; the harness passes its Vite port.
+        #[arg(long, default_value = UI_ORIGIN)]
+        allow_origin: String,
     },
     /// Fill a database with the fixtures the UI mock uses.
     Seed {
@@ -85,10 +88,10 @@ async fn rpc(
     })
 }
 
-fn router(state: Arc<AppState>, port: u16) -> Router {
+fn router(state: Arc<AppState>, port: u16, origin: String) -> Router {
     // A predicate, not `exact`: the exact form sends the allow header to every origin.
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::predicate(|o, _| o == UI_ORIGIN))
+        .allow_origin(AllowOrigin::predicate(move |o, _| o == origin.as_str()))
         .allow_methods([axum::http::Method::POST])
         .allow_headers([header::CONTENT_TYPE]);
     // Only our own host names: a rebound DNS name still sends the attacker's Host.
@@ -120,7 +123,9 @@ async fn run(cmd: Cmd) -> Result<(), String> {
     let db = Db::open(db).await.map_err(|e| e.to_string())?;
     match cmd {
         Cmd::Seed { .. } => seed::run(&db).await.map_err(|e| e.to_string()),
-        Cmd::Serve { port, .. } => {
+        Cmd::Serve {
+            port, allow_origin, ..
+        } => {
             let state = Arc::new(AppState {
                 db,
                 helper_path: PathBuf::new(),
@@ -131,7 +136,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
             let addr = listener.local_addr().map_err(|e| e.to_string())?;
             println!("listening on {addr}");
-            let app = router(state, addr.port());
+            let app = router(state, addr.port(), allow_origin);
             axum::serve(listener, app).await.map_err(|e| e.to_string())
         }
     }

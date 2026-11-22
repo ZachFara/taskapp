@@ -38,7 +38,8 @@ export type Command = {
   /** Names the key scope for the duplicate-binding check; commands with a `when` and no scope never clash. */
   scope?: string;
   when?: (ctx: Ctx) => boolean;
-  run?: (ctx: Ctx) => void | Promise<void>;
+  /** `count` is the number typed before the key (`5 j`), 1 when none. */
+  run?: (ctx: Ctx, count?: number) => void | Promise<void>;
   page?: (ctx: Ctx) => CommandPage;
   keywords?: string[];
 };

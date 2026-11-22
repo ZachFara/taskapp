@@ -27,9 +27,11 @@ export function attachKeys(ctx: () => Ctx) {
       [c.shortcut ?? []].flat().map((seq) => ({
         seq,
         global: c.global,
-        run: () => {
+        run: (count: number) => {
+          // An open dialog owns the plain keys; only `global` combos such as mod+k reach through it.
+          if (!c.global && document.querySelector('[role=dialog]')) return;
           const x = ctx();
-          if (!c.when || c.when(x)) void c.run?.(x);
+          if (!c.when || c.when(x)) void c.run?.(x, count);
         },
       })),
     ),

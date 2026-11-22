@@ -201,3 +201,42 @@ async fn rejects_non_json_content_type() -> R {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn cors_origin_is_configurable() -> R {
+    let dir = tempfile::tempdir()?;
+    let mut c = command(dir.path(), &dir.path().join("t.db"));
+    c.args(["--allow-origin", "http://localhost:5999"]);
+    let mut child = c.spawn()?;
+    let mut line = String::new();
+    BufReader::new(child.stdout.take().ok_or("no stdout")?).read_line(&mut line)?;
+    let s = Server {
+        base: format!(
+            "http://{}",
+            line.trim()
+                .strip_prefix("listening on ")
+                .ok_or(line.clone())?
+        ),
+        child,
+    };
+    let post = |origin: &'static str| {
+        reqwest::Client::new()
+            .post(format!("{}/rpc/settings_get", s.base))
+            .header("origin", origin)
+            .json(&json!({"key": "k"}))
+            .send()
+    };
+    let ok = post("http://localhost:5999").await?;
+    assert_eq!(
+        ok.headers()["access-control-allow-origin"],
+        "http://localhost:5999"
+    );
+    assert!(
+        post("http://localhost:5173")
+            .await?
+            .headers()
+            .get("access-control-allow-origin")
+            .is_none()
+    );
+    Ok(())
+}

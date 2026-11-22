@@ -25,7 +25,7 @@ export function makeLookup(d: Data) {
       case 'Project': return named(d.projects);
       case 'Cycle': return named(d.cycles.map((c) => ({ id: c.id, name: c.name ?? `${c.start_date} to ${c.end_date}` })));
       case 'Label': return named(d.labels);
-      case 'StatusCategory': return categories.map((c) => ({ value: c, label: c }));
+      case 'StatusCategory': return categories.map((c) => ({ value: c.toLowerCase(), label: c })) // stored lowercase in the db;
       case 'Priority': return priorities.map((label, value) => ({ value, label }));
       default: return [];
     }

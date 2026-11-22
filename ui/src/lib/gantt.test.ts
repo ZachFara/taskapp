@@ -3,7 +3,7 @@ import type { Bar, Issue, Project } from './bindings';
 import { buildRows, dragDates, localDay, rollup, saturdays, shiftLocalDays, tickLabel, unscheduled, zoomBy } from './gantt';
 import { fixtures } from './api.mock';
 
-const issue = (id: number, o: Partial<Issue> = {}): Issue => ({ ...fixtures.issues[0], id, key: `ZF-${id}`, title: `t${id}`, parent_id: null, project_id: 1, start_date: null, due: null, estimate_minutes: null, ...o });
+const issue = (id: number, o: Partial<Issue> = {}): Issue => ({ ...fixtures.issues[0], id, key: `ABC-${id}`, title: `t${id}`, parent_id: null, project_id: 1, start_date: null, due: null, estimate_minutes: null, ...o });
 const bar = (issue_id: number, start: string, end: string): Bar => ({ issue_id, start, end, from_estimate: false });
 const base = { mode: 'issues' as const, projects: fixtures.projects as Project[], milestones: [], critical: [] };
 
@@ -25,7 +25,7 @@ describe('gantt rows', () => {
     const issues = [issue(1), issue(2, { project_id: 2 })];
     const bars = [bar(1, '2026-12-01', '2026-12-02'), bar(2, '2026-12-05', '2026-12-06')];
     const grouped = buildRows({ ...base, issues, bars });
-    expect(grouped.filter((r) => r.kind === 'group')).toMatchObject([{ label: 'Home', start: '2026-12-01' }, { label: 'Work', end: '2026-12-06' }]);
+    expect(grouped.filter((r) => r.kind === 'group')).toMatchObject([{ label: 'Website relaunch', start: '2026-12-01' }, { label: 'Mobile app', end: '2026-12-06' }]);
     expect(buildRows({ ...base, issues: [issues[0]], bars: [bars[0]] }).some((r) => r.kind === 'group')).toBe(false);
   });
 
@@ -39,14 +39,14 @@ describe('gantt date math', () => {
   it('local_day_uses_the_zone_passed_in', () => {
     const t = new Date('2026-12-01T02:30:00Z');
     expect(localDay(t, 'UTC')).toBe('2026-12-01');
-    expect(localDay(t, 'America/New_York')).toBe('2026-11-30');
+    expect(localDay(t, 'US/Eastern')).toBe('2026-11-30');
     expect(localDay(t, 'Pacific/Auckland')).toBe('2026-12-01');
   });
 
   it('shift_local_days_keeps_wall_clock_across_dst', () => {
     // US clocks spring forward on 2026-03-08: 09:00 New York is 14:00Z before and 13:00Z after.
-    expect(shiftLocalDays('2026-03-06T14:00:00Z', 'America/New_York', 3)).toBe('2026-03-09T13:00:00Z');
-    expect(shiftLocalDays('2026-03-09T13:00:00Z', 'America/New_York', -3)).toBe('2026-03-06T14:00:00Z');
+    expect(shiftLocalDays('2026-03-06T14:00:00Z', 'US/Eastern', 3)).toBe('2026-03-09T13:00:00Z');
+    expect(shiftLocalDays('2026-03-09T13:00:00Z', 'US/Eastern', -3)).toBe('2026-03-06T14:00:00Z');
     expect(shiftLocalDays('2026-03-06T14:00:00Z', 'UTC', 3)).toBe('2026-03-09T14:00:00Z');
     // Southern hemisphere zone, falls back on 2026-04-05.
     expect(shiftLocalDays('2026-04-03T00:00:00Z', 'Australia/Sydney', 3)).toBe('2026-04-06T01:00:00Z');

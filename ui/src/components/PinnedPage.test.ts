@@ -34,7 +34,7 @@ afterEach(() => {
 
 describe('PinnedPage', () => {
   it('pinned_page_groups_by_kind', async () => {
-    const mock = await seedPins([['Issue', 'ZF-1'], ['Project', 'home'], ['Issue', 'ZF-2']]);
+    const mock = await seedPins([['Issue', 'ABC-1'], ['Project', 'website'], ['Issue', 'ABC-2']]);
     const target = await open(mock);
     const issueGroup = target.querySelector<HTMLElement>('[data-kind="Issue"]');
     const projectGroup = target.querySelector<HTMLElement>('[data-kind="Project"]');
@@ -44,7 +44,7 @@ describe('PinnedPage', () => {
   });
 
   it('archived_pin_dimmed', async () => {
-    const mock = await seedPins([['Issue', 'ZF-1'], ['Issue', 'ZF-2']]);
+    const mock = await seedPins([['Issue', 'ABC-1'], ['Issue', 'ABC-2']]);
     const real = mock.pins.listResolved;
     mock.pins.listResolved = async () => {
       const rows = await real();
@@ -65,22 +65,35 @@ describe('PinnedPage', () => {
   });
 
   it('drag_reorders_pins', async () => {
-    const mock = await seedPins([['Issue', 'ZF-1'], ['Issue', 'ZF-2'], ['Issue', 'ZF-3']]);
+    const mock = await seedPins([['Issue', 'ABC-1'], ['Issue', 'ABC-2'], ['Issue', 'ABC-3']]);
     const target = await open(mock);
     const [a, , c] = cards(target);
     c.dispatchEvent(new Event('dragstart', { bubbles: true }));
     a.dispatchEvent(new Event('drop', { bubbles: true, cancelable: true }));
     await vi.waitFor(async () => {
       const order = (await mock.pins.listResolved()).map((r) => r.pin.target);
-      expect(order).toEqual(['ZF-3', 'ZF-1', 'ZF-2']);
+      expect(order).toEqual(['ABC-3', 'ABC-1', 'ABC-2']);
     });
   });
 
   it('url_pin_with_non_http_target_is_not_a_link', async () => {
-    const mock = await seedPins([['Url', 'javascript:alert(1)'], ['Url', 'https://example.com']]);
+    // The backend refuses a javascript: pin, so it can only arrive as old data; seed it directly.
+    const url = (id: number, target: string) => ({ id, kind: 'Url' as const, target, title: null, position: id });
+    const mock = createMockApi({ ...fixtures, pins: [url(1, 'javascript:alert(1)'), url(2, 'https://example.com')] });
     const target = await open(mock);
     const links = [...target.querySelectorAll<HTMLAnchorElement>('a')].map((a) => a.getAttribute('href'));
     expect(links).not.toContain('javascript:alert(1)');
     expect(links).toContain('https://example.com');
+  });
+});
+
+describe('PinnedPage unpin', () => {
+  it('unpin_removes_the_pin', async () => {
+    const mock = await seedPins([['Issue', 'ABC-1'], ['Issue', 'ABC-2']]);
+    const target = await open(mock);
+    const first = cards(target)[0];
+    first.querySelector<HTMLButtonElement>('button[aria-label^="Unpin"]')!.click();
+    await vi.waitFor(() => expect(cards(target)).toHaveLength(1));
+    expect((await mock.pins.listResolved()).map((r) => r.pin.target)).toEqual(['ABC-2']);
   });
 });

@@ -28,10 +28,10 @@ const HOUR = 60 * 60_000;
 // The last events array the view handed the calendar.
 const lastEvents = () => stub().setOption.mock.calls.filter(([k]: [string]) => k === 'events').at(-1)?.[1] ?? [];
 
-// Fixtures plus one issue with a timed due in New York on the US DST start day (2026-03-08).
+// Fixtures plus one issue with a timed due in a US Eastern zone on the US DST start day (2026-03-08).
 const withTimedDue = (): typeof fixtures => {
   const base = fixtures.issues[0];
-  const timed: Issue = { ...base, id: 900, key: 'ZF-900', due: { DateTime: { utc: '2026-03-08T13:30:00Z', tz: 'America/New_York' } } };
+  const timed: Issue = { ...base, id: 900, key: 'ABC-900', due: { DateTime: { utc: '2026-03-08T13:30:00Z', tz: 'US/Eastern' } } };
   return { ...fixtures, issues: [...fixtures.issues, timed] };
 };
 
@@ -127,7 +127,7 @@ describe('CalendarView', () => {
 
   it('timed_due_shows_on_its_day_in_its_own_zone', async () => {
     // 23:30 in Tokyo on 10 March is 14:30 UTC on 10 March, but 15:30 UTC on 10 March is 00:30 on 11 March in Tokyo.
-    const late: Issue = { ...fixtures.issues[0], id: 901, key: 'ZF-901', due: { DateTime: { utc: '2026-03-10T15:30:00Z', tz: 'Asia/Tokyo' } } };
+    const late: Issue = { ...fixtures.issues[0], id: 901, key: 'ABC-901', due: { DateTime: { utc: '2026-03-10T15:30:00Z', tz: 'Asia/Tokyo' } } };
     mock = createMockApi({ ...fixtures, issues: [...fixtures.issues, late] });
     setApi(mock);
     render(CalendarView, { props: { view } });
@@ -145,7 +145,7 @@ describe('CalendarView', () => {
     const revert = vi.fn();
     await stub().options.eventDrop({ event: { id: 'due-900', start, end: new Date(start.getTime() + 15 * 60_000), allDay: false }, revert });
     expect(update).toHaveBeenCalledTimes(1);
-    expect(update).toHaveBeenCalledWith(900, { due: { DateTime: { utc: '2026-03-11T13:30:00.000Z', tz: 'America/New_York' } } });
+    expect(update).toHaveBeenCalledWith(900, { due: { DateTime: { utc: '2026-03-11T13:30:00.000Z', tz: 'US/Eastern' } } });
     expect(revert).not.toHaveBeenCalled();
   });
 

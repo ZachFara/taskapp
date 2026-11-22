@@ -35,20 +35,20 @@ afterEach(() => {
 
 describe('ProjectPage', () => {
   it('doc_link_button_shown_only_when_set', async () => {
-    const without = await open('/project/home');
+    const without = await open('/project/website');
     expect(without.querySelector('[data-testid="open-obsidian"]')).toBeNull();
     mounted.forEach((m) => void unmount(m));
     mounted = [];
     document.body.innerHTML = '';
 
-    const withLink = await open('/project/home', seed([{ doc_link: 'obsidian://open?vault=Ark&file=Home' }]));
+    const withLink = await open('/project/website', seed([{ doc_link: 'obsidian://open?vault=Ark&file=Home' }]));
     const button = withLink.querySelector<HTMLButtonElement>('[data-testid="open-obsidian"]');
     expect(button?.textContent).toContain('Open doc');
   });
 
   it('doc_link_not_obsidian_or_https_renders_no_button', async () => {
     for (const doc_link of ['javascript:alert(1)', 'http://example.com/doc', 'file:///etc/passwd', 'ftp://x']) {
-      const target = await open('/project/home', seed([{ doc_link }]));
+      const target = await open('/project/website', seed([{ doc_link }]));
       expect(target.querySelector('[data-testid="open-obsidian"]'), doc_link).toBeNull();
       mounted.forEach((m) => void unmount(m));
       mounted = [];
@@ -57,23 +57,23 @@ describe('ProjectPage', () => {
   });
 
   it('empty_description_hidden', async () => {
-    const target = await open('/project/home', seed([{ description: null }]));
+    const target = await open('/project/website', seed([{ description: null }]));
     expect(target.querySelector('[data-testid="description"]')).toBeNull();
     expect(target.textContent).toContain('Add description');
   });
 
   it('description_shown_when_present', async () => {
-    const target = await open('/project/home', seed([{ description: 'Ship the rewrite' }]));
+    const target = await open('/project/website', seed([{ description: 'Ship the rewrite' }]));
     expect(target.querySelector('[data-testid="description"]')?.textContent).toContain('Ship the rewrite');
     expect(target.textContent).not.toContain('Add description');
   });
 
   it('project_issues_filtered_to_project', async () => {
-    const target = await open('/project/home');
+    const target = await open('/project/website');
     const mock = createMockApi(seed());
     const mine = await mock.issues.create({ title: 'U9 inside', project_id: 1 });
     const other = await mock.issues.create({ title: 'U9 outside', project_id: 2 });
-    const t = await open('/project/home', mock);
+    const t = await open('/project/website', mock);
     await vi.waitFor(() => expect(t.textContent).toContain(mine.title));
     expect(t.textContent).not.toContain(other.title);
   });
@@ -81,7 +81,7 @@ describe('ProjectPage', () => {
   it('header_shows_progress_milestones_and_dates', async () => {
     const mock = createMockApi(seed([{ start_date: '2026-12-01', target_date: '2027-01-31' }]));
     await mock.projects.createMilestone(1, 'Beta', '2026-12-15');
-    const target = await open('/project/home', mock);
+    const target = await open('/project/website', mock);
     const dates = [...target.querySelectorAll<HTMLInputElement>('input[type="date"]')].map((i) => i.value);
     expect(dates).toContain('2026-12-01');
     expect(dates).toContain('2027-01-31');
@@ -91,11 +91,11 @@ describe('ProjectPage', () => {
   });
 
   it('pin_toggle_pins_project', async () => {
-    const target = await open('/project/home');
+    const target = await open('/project/website');
     target.querySelector<HTMLButtonElement>('button[aria-label="Pin project"]')!.click();
     await vi.waitFor(async () => {
       const pins = await api.pins.listResolved();
-      expect(pins.map((p) => p.pin.target)).toEqual(['home']);
+      expect(pins.map((p) => p.pin.target)).toEqual(['website']);
     });
   });
 
@@ -111,12 +111,12 @@ describe('ProjectPage', () => {
     const a = await mock.issues.create({ title: 'U9 a', project_id: 1 });
     await mock.issues.create({ title: 'U9 b', project_id: 1 });
     await mock.issues.update(a.id, { status_id: done.id });
-    const t = await open('/project/home', mock);
+    const t = await open('/project/website', mock);
     expect(t.querySelector('[data-testid="progress"]')?.textContent).toMatch(/1\s*\/\s*2/);
   });
 
   it('layout_switch_changes_view', async () => {
-    const t = await open('/project/home');
+    const t = await open('/project/website');
     const tab = (n: string) => [...t.querySelectorAll<HTMLElement>('[role="tab"]')].find((x) => x.textContent?.includes(n))!;
     expect(tab('List').getAttribute('data-state')).toBe('active');
     tab('Board').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
@@ -125,7 +125,7 @@ describe('ProjectPage', () => {
   });
 
   it('milestone_crud', async () => {
-    const t = await open('/project/home');
+    const t = await open('/project/website');
     const type = async (label: string, v: string) => {
       const el = t.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
       el.value = v;
@@ -154,7 +154,7 @@ describe('ProjectPage', () => {
   });
 
   it('rename_saves_new_name', async () => {
-    const t = await open('/project/home');
+    const t = await open('/project/website');
     t.querySelector<HTMLButtonElement>('button[aria-label="Rename project"]')!.click();
     await tick();
     const el = t.querySelector<HTMLInputElement>('input[aria-label="Project name"]')!;
@@ -165,7 +165,7 @@ describe('ProjectPage', () => {
   });
 
   it('archive_needs_confirm', async () => {
-    const t = await open('/project/home');
+    const t = await open('/project/website');
     t.querySelector<HTMLButtonElement>('button[aria-label="Archive project"]')!.click();
     await tick();
     expect((await api.projects.list())[0].archived_at).toBeNull();

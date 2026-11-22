@@ -67,13 +67,13 @@ describe('ViewPage', () => {
     await waitFor(() => expect(screen.queryByText('Alpha task')).toBeNull());
     expect(screen.getByText('Beta task')).toBeTruthy();
     await waitFor(async () => expect((await saved()).def.filter).toEqual({
-      Cond: { field: { Fixed: 'StatusCategory' }, op: 'In', value: ['Completed'] },
+      Cond: { field: { Fixed: 'StatusCategory' }, op: 'In', value: ['completed'] },
     }), { timeout: 2000 });
   });
 
   it('a_saved_contract_shaped_filter_shows_as_a_chip_and_removes', async () => {
     const user = userEvent.setup();
-    await open({ filter: { And: [{ Cond: { field: { Fixed: 'StatusCategory' }, op: 'In', value: ['Completed'] } }] } });
+    await open({ filter: { And: [{ Cond: { field: { Fixed: 'StatusCategory' }, op: 'In', value: ['completed'] } }] } });
     await waitFor(() => expect(screen.queryByText('Alpha task')).toBeNull());
     expect(screen.getByRole('button', { name: /^Status category is/ })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Remove filter Status category' }));

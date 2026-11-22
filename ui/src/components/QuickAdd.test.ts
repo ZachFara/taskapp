@@ -125,10 +125,10 @@ describe('QuickAdd', () => {
   it('quickadd_project_prefill_adds_project_token', async () => {
     await unmount(app!);
     document.body.innerHTML = '';
-    await api.projects.create('mobile', 'Mobile app', null, null);
+    await api.projects.create('quickadd-proj', 'Quickadd project', null, null);
     await refreshAll();
-    await open({ project_slug: 'mobile' });
-    expect(input().value).toBe('#mobile ');
+    await open({ project_slug: 'quickadd-proj' });
+    expect(input().value).toBe('#quickadd-proj ');
   });
 
   it('quickadd_status_prefill_sets_status_after_create', async () => {

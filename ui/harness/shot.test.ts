@@ -36,10 +36,22 @@ describe('shot', () => {
     const out = outDir();
     const r = await shot(['/view/1', '--mode', 'mock', '--out', out]);
     expect(r.status, r.stderr).toBe(0);
-    expect(statSync(join(out, 'view-1.png')).size).toBeGreaterThan(0);
-    expect(readFileSync(join(out, 'view-1.aria.txt'), 'utf8')).toContain('ZF-1');
-    expect(JSON.parse(readFileSync(join(out, 'view-1.console.json'), 'utf8'))).toEqual([]);
+    expect(statSync(join(out, 'view-1-light-1440.png')).size).toBeGreaterThan(0);
+    expect(readFileSync(join(out, 'view-1-light-1440.aria.txt'), 'utf8')).toContain('ABC-1');
+    expect(JSON.parse(readFileSync(join(out, 'view-1-light-1440.console.json'), 'utf8'))).toEqual([]);
   }, 120_000);
+
+  it('theme_and_size_flags_name_the_output', async () => {
+    const out = outDir();
+    const r = await shot([await page('0'), '--theme', 'dark', '--size', '1024x768', '--out', out]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(readdirSync(out).some((f) => f.endsWith('-dark-1024.png'))).toBe(true);
+  }, 60_000);
+
+  it('parallel_mock_runs_do_not_collide_on_ports', async () => {
+    const runs = await Promise.all([1, 2].map(() => shot(['/view/1', '--mode', 'mock', '--out', outDir()])));
+    for (const r of runs) expect(r.status, r.stderr).toBe(0);
+  }, 180_000);
 
   it('console_error_exits_nonzero', async () => {
     const out = outDir();
