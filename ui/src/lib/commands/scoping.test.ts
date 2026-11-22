@@ -51,10 +51,10 @@ describe('l and shift+l', () => {
     expect(selection.focused).toBe(1);
   });
 
-  it('in an open issue l edits the labels there, not the bulk page', () => {
+  it('in an open issue l opens the labels page for that issue', () => {
     ctx = view('list', { route: '/issue/ABC-1', openIssueId: 1 });
     press('l');
-    expect(events).toEqual([{ name: 'command:issue.detail.edit', detail: 'labels' }]);
+    expect(events).toEqual([labelsPage]);
   });
 
   it.each<[string, Ctx]>([
@@ -103,13 +103,13 @@ describe('layout scopes', () => {
     removeEventListener('command:calendar.next', month);
   });
 
-  it('in the table j and k are the table\'s, not a second move through the selection', () => {
+  it('in the table j moves once, through the selection store', () => {
     ctx = view('table');
     const next = vi.fn();
     addEventListener('command:table.next', next);
     press('j');
-    expect(next).toHaveBeenCalledTimes(1);
-    expect(selection.focused).toBe(1);
+    expect(next).not.toHaveBeenCalled();
+    expect(selection.focused).toBe(2);
     removeEventListener('command:table.next', next);
   });
 });

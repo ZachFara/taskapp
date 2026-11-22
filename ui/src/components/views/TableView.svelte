@@ -287,10 +287,13 @@
     activeCol = c;
   }
 
+  // j/k move through the rows the shared selection holds, so the table publishes them and its layout.
+  $effect(() => {
+    selection.setLayout('table');
+    selection.setColumns([visibleIds]);
+    return () => selection.setColumns([]);
+  });
   // The key commands arrive as window events; each acts on the table's own state.
-  function moveRow(delta: number) {
-    selection.move(visibleIds, delta);
-  }
   function moveCol(delta: number) {
     activeCol = Math.min(Math.max(activeCol + delta, 0), Math.max(cols.length - 1, 0));
   }
@@ -312,8 +315,6 @@
   }
   $effect(() => {
     const handlers: Record<string, () => void> = {
-      next: () => moveRow(1),
-      previous: () => moveRow(-1),
       left: () => moveCol(-1),
       right: () => moveCol(1),
       edit: editActive,
@@ -387,12 +388,6 @@
 </script>
 
 <section class="table-view">
-  <div class="toolbar">
-    <span class="add">
-      <Select label="Add column" placeholder="Add column" items={addable} bind:value={addValue} />
-    </span>
-  </div>
-
   {#if error}
     <p role="alert" class="error">{error}</p>
   {/if}
@@ -430,6 +425,9 @@
               <span class="grip" role="separator" aria-orientation="vertical" aria-label="Resize {col.label}" onpointerdown={(e) => startResize(e, col.id)}></span>
             </th>
           {/each}
+          <th scope="col" class="add-col">
+            <Select label="Add column" placeholder="+" items={addable} bind:value={addValue} />
+          </th>
         </tr>
       </thead>
       {#each groups as g (g.name)}
@@ -520,11 +518,10 @@
     color: var(--ink);
     font-size: var(--fs-md);
   }
-  .toolbar { display: flex; justify-content: flex-end; padding: var(--s-3) var(--s-7) 0; }
-  .add {
-    display: inline-flex;
-    width: 180px;
-  }
+  /* Header labels are quiet text on the sheet; the "+" stays in view at the right edge. */
+  .head :global(.btn) { border-color: transparent; background: transparent; padding: 0 var(--s-2); }
+  .add-col { position: sticky; right: 0; z-index: var(--z-sticky); background: var(--sheet); text-align: end; }
+  .add-col :global(.cx-select) { min-width: 0; }
   .due[data-overdue] { color: var(--signal); font-weight: 700; }
   th.num { text-align: end; }
   .loading {

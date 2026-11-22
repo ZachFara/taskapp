@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { selection } from '../lib/selection.svelte';
   import { onMount, type Component } from 'svelte';
   import type { Layout, SavedView, ViewDef } from '../lib/bindings';
   import { api } from '../lib/api';
@@ -22,6 +23,7 @@
   import Tabs from '../ui/Tabs.svelte';
   import TextInput from '../ui/TextInput.svelte';
   import { navigate } from './routes';
+  import { templates } from '../components/display/templatesApi';
 
   // `layout` in the URL overrides the saved one until the user picks a tab, so the harness can shoot any layout.
   let { params }: { params: { id: string; layout?: string } } = $props();
@@ -64,6 +66,8 @@
   });
 
   const layout = $derived<Layout>((override as Layout) ?? def?.layout ?? 'List');
+  // Commands scope their keys by layout; the timeline does not announce itself, and tabs can change without a route change.
+  $effect(() => selection.setLayout(({ List: 'list', Table: 'table', Board: 'board', Gantt: 'timeline', Calendar: 'calendar' } as const)[layout]));
   const live = $derived(view && def ? { ...view, name, def: { ...def, layout } } : null);
   const filtered = $derived(def?.filter != null);
 
@@ -101,6 +105,22 @@
     await refreshAll();
     navigate(`/view/${v.id}`);
   }
+  // Templates are read from the stored view, so the pending debounced save goes first.
+  async function saveAsTemplate() {
+    const t = templates();
+    if (!view || !def || !t) return;
+    clearTimeout(timer);
+    await api.views.save(view.id, name, def, view.icon, view.color);
+    await t.saveAsTemplate(view.id, null);
+  }
+  async function resetToTemplate() {
+    const t = templates();
+    if (!view || !t) return;
+    clearTimeout(timer);
+    await t.resetToTemplate(view.id);
+    await load();
+    await refreshAll();
+  }
   async function remove() {
     if (!view) return;
     confirmDelete = false;
@@ -125,6 +145,8 @@
       on('command:view.pin', togglePin),
       on('command:view.saveAsNew', saveAsNew),
       on('command:view.delete', () => (confirmDelete = true)),
+      on('command:view.saveAsTemplate', saveAsTemplate),
+      on('command:view.resetToTemplate', resetToTemplate),
     ];
     return () => {
       offs.forEach((f) => f());
@@ -163,6 +185,10 @@
         <Menu>
           {#snippet trigger(props)}<span {...props} class="trig"><IconButton icon="more" label="More" /></span>{/snippet}
           <MenuItem label="Save as new view" icon="copy" onSelect={saveAsNew} />
+          {#if templates()}<MenuItem label="Save as template" icon="bookmark" onSelect={saveAsTemplate} />{/if}
+          {#if templates() && (view as SavedView & { template_id?: number | null } | null)?.template_id != null}
+            <MenuItem label="Reset to template" icon="undo" onSelect={resetToTemplate} />
+          {/if}
           <MenuItem label="Delete view" icon="trash" danger onSelect={() => (confirmDelete = true)} />
         </Menu>
         <CommandButton command="issue.create" variant="primary" />

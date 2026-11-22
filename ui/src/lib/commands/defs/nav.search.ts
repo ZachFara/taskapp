@@ -5,7 +5,8 @@ defineCommand({
   id: 'nav.search',
   label: 'Search',
   icon: 'search',
-  group: 'Navigate',
+  group: 'Navigation',
+  menu: false,
   shortcut: '/',
   run: () => dispatchEvent(new CustomEvent('command:nav.search')),
 });

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { navigate } from '../app/routes';
   import { api } from '../lib/api';
   import Button from '../ui/Button.svelte';
   import Toast from '../ui/Toast.svelte';
@@ -14,12 +15,21 @@
 
 {#if undoToast.value}
   {@const m = undoToast.value}
+  {@const created = /^Created (\S+)$/.exec(m.label)?.[1]}
   <Toast tone={m.tone} ondismiss={dismiss}>
-    {m.label}{#if m.action} · {/if}
+    {m.label}
     {#snippet action()}
       {#if m.action}
-        <Button variant="quiet" onclick={() => (m.action?.run === 'undo' ? runUndo(api) : runRedo(api))}>{m.action.text}</Button>
+        <span class="on-dark">
+          <Button variant="quiet" onclick={() => (m.action?.run === 'undo' ? runUndo(api) : runRedo(api))}>{m.action.text}</Button>
+          {#if created}<Button variant="quiet" onclick={() => (dismiss(), navigate(`/issue/${created}`))}>Open</Button>{/if}
+        </span>
       {/if}
     {/snippet}
   </Toast>
 {/if}
+
+<style>
+  /* The toast is a dark surface in both themes; the buttons borrow its ink so they stay readable. */
+  .on-dark { display: inline-flex; gap: var(--s-2); --ink: var(--tip-ink); --control: var(--tip-ink); --active: transparent; }
+</style>

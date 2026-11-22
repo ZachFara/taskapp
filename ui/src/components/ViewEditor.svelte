@@ -5,13 +5,13 @@
   import { api } from '../lib/api';
   import type { FieldRef, FixedField, ViewDef } from '../lib/bindings';
   import Button from '../ui/Button.svelte';
-  import Checkbox from '../ui/Checkbox.svelte';
   import IconButton from '../ui/IconButton.svelte';
   import Menu from '../ui/Menu.svelte';
   import MenuItem from '../ui/MenuItem.svelte';
   import Popover from '../ui/Popover.svelte';
   import Select from '../ui/Select.svelte';
   import Switch from '../ui/Switch.svelte';
+  import DisplayPanel from './display/DisplayPanel.svelte';
   import FilterChip from './filters/FilterChip.svelte';
   import { fieldKey, makeLookup, parseField, type Data } from './filters/lookup';
   import { buildFilter, newChip, splitFilter, type Chip } from './filters/model';
@@ -72,9 +72,6 @@
   const setGroup = (k: string) => onchange({ group_by: k ? parseField(k) : null });
   const setSort = (k: string) => onchange({ sorts: k ? [{ field: parseField(k), descending: sort?.descending ?? false }] : [] });
   const setDesc = (descending: boolean) => sort && onchange({ sorts: [{ ...sort, descending }] });
-  const hasColumn = (k: string) => def.columns.some((c) => fieldKey(c) === k);
-  const setColumn = (k: string, on: boolean) =>
-    onchange({ columns: on ? [...def.columns, parseField(k)] : def.columns.filter((c) => fieldKey(c) !== k) });
 </script>
 
 <div class="bar">
@@ -93,10 +90,12 @@
     </Menu>
   </div>
   <div class="tools">
+    {#if def.layout !== 'Calendar'}
     <Popover>
       {#snippet trigger(props)}<span {...props} class="trig"><Button icon="group">Group{def.group_by ? `: ${lookup.name(def.group_by)}` : ''}</Button></span>{/snippet}
       <Select label="Group by" placeholder="No grouping" items={[{ value: '', label: 'No grouping' }, ...fieldItems]} bind:value={() => (def.group_by ? fieldKey(def.group_by) : ''), setGroup} />
     </Popover>
+    {/if}
     <Popover>
       {#snippet trigger(props)}<span {...props} class="trig"><Button icon="sort">Sort{sort ? `: ${lookup.name(sort.field)}` : ''}</Button></span>{/snippet}
       <div class="stack">
@@ -106,13 +105,7 @@
     </Popover>
     <Popover>
       {#snippet trigger(props)}<span {...props} class="trig"><Button icon="eye">Display</Button></span>{/snippet}
-      <div class="stack">
-        <Switch label="Show archived" bind:checked={() => def.include_archived, (on) => onchange({ include_archived: on })} />
-        <p class="cap">Table columns</p>
-        {#each allFields as f (fieldKey(f.field))}
-          <Checkbox label={f.name} bind:checked={() => hasColumn(fieldKey(f.field)), (on) => setColumn(fieldKey(f.field), on)} />
-        {/each}
-      </div>
+      <DisplayPanel {def} {onchange} />
     </Popover>
   </div>
 </div>
@@ -123,7 +116,6 @@
   .tools { display: flex; gap: var(--s-3); flex: none; }
   .trig { display: inline-flex; }
   .stack { display: grid; gap: var(--s-4); }
-  .cap { font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-top: var(--s-3); }
   .adv {
     display: inline-flex; align-items: center; gap: var(--s-3); height: var(--row-h-compact); padding: 0 var(--s-4);
     border: 1px dashed var(--control); border-radius: var(--r-ctl); font-size: var(--fs-sm); color: var(--muted);

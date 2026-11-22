@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api } from '../../lib/api';
   import type { Change, Issue } from '../../lib/bindings';
-  import GroupHeader from '../../ui/GroupHeader.svelte';
+  import SectionHeading from './SectionHeading.svelte';
   import { dateOf, humanDate } from './format';
 
   let { issue, rev }: { issue: Issue; rev: number } = $props();
@@ -23,7 +23,7 @@
 </script>
 
 <section aria-label="History">
-  <GroupHeader name="Activity" count={changes.length} category="Completed" {collapsed} ontoggle={() => (collapsed = !collapsed)} />
+  <SectionHeading name="Activity" count={changes.length} {collapsed} ontoggle={() => (collapsed = !collapsed)} />
   {#if !collapsed}
     {#each days as [day, list] (day)}
       <h4>{humanDate(day)}</h4>

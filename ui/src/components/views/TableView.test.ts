@@ -267,6 +267,19 @@ describe('TableView', () => {
     );
   });
 
+  it('publishes_its_rows_and_layout_to_the_selection_store', async () => {
+    await open();
+    expect(selection.layout).toBe('table');
+    expect(selection.columns.flat()).toEqual([1, 2, 3]);
+  });
+
+  it('add_column_is_a_plus_at_the_end_of_the_header_row', async () => {
+    await open();
+    const add = target.querySelector<HTMLButtonElement>('button[aria-label="Add column"]')!;
+    expect(add.textContent?.trim()).toBe('+');
+    expect(add.closest('th')).toBe(target.querySelector('thead th:last-child'));
+  });
+
   it('column_with_deleted_def_is_skipped', async () => {
     await open();
     const heads = [...target.querySelectorAll<HTMLElement>('thead th[data-col]')].map((th) => th.dataset.col);
@@ -291,7 +304,7 @@ describe('TableView', () => {
   it('a_view_without_columns_shows_the_default_set', async () => {
     seeded(viewOf({ columns: [] }));
     await open(viewOf({ columns: [] }));
-    const heads = [...target.querySelectorAll('thead th')].map((th) => th.textContent?.trim().split(/\s+/)[0]);
+    const heads = [...target.querySelectorAll('thead th:not(.add-col)')].map((th) => th.textContent?.trim().split(/\s+/)[0]);
     expect(heads).toEqual(['Key', 'Priority', 'Title', 'Status', 'Project', 'Labels', 'Due', 'Estimate']);
   });
 

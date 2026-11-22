@@ -4,6 +4,7 @@ import { selection } from '../../../selection.svelte';
 
 defineCommand({
   id: 'select.toggle',
+  menu: false,
   label: 'Select issue',
   icon: 'check',
   group: 'Selection',
