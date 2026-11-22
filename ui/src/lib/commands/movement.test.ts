@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { attachKeys, type Ctx } from './index';
 import { selection } from '../selection.svelte';
+import { selectedIssueId } from '../stores.svelte';
 
 const press = (target: Element, key: string, init: KeyboardEventInit = {}) =>
   target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }));
@@ -89,13 +90,27 @@ describe('movement keys', () => {
     expect(selection.peeked).toBe(null);
   });
 
-  it('enter opens the focused issue by its key', async () => {
+  it('enter opens the focused issue in the side panel, not the full page', () => {
     selection.focus(2);
     press(document.body, 'Enter');
+    expect(selectedIssueId.value).toBe(2);
+    expect(navigate).not.toHaveBeenCalled();
+    selectedIssueId.value = null;
+  });
+
+  it('mod+enter opens the full page', async () => {
+    selection.focus(2);
+    press(document.body, 'Enter', { metaKey: true });
     await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith('/issue/ABC-2'));
   });
 
-  it('escape clears the selection, then steps back; an open issue is left to issue.detail.close', () => {
+  it('a count moves that many rows', () => {
+    press(document.body, '3');
+    press(document.body, 'j');
+    expect(selection.focused).toBe(3);
+  });
+
+  it('escape clears the selection; it never steps back out of the app; an open issue is left to issue.detail.close', () => {
     const back = vi.spyOn(history, 'back').mockImplementation(() => {});
     selection.selectAll([1, 2]);
     press(document.body, 'Escape');
@@ -108,7 +123,7 @@ describe('movement keys', () => {
     detach();
     detach = attachKeys(() => ctx({ route: '/projects' }));
     press(document.body, 'Escape');
-    expect(back).toHaveBeenCalledTimes(1);
+    expect(back).not.toHaveBeenCalled();
   });
 
   it('keys do not fire while an input has focus', () => {

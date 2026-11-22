@@ -1,17 +1,16 @@
 import { defineCommand } from '../../registry';
-
 import { selection } from '../../../selection.svelte';
+import { selectedIssueId } from '../../../stores.svelte';
 
+// Opens the side panel over the current view; focus stays in the list so j and k make the panel follow.
 defineCommand({
   id: 'move.open',
   label: 'Open issue',
   icon: 'panel',
-  group: 'Navigation',
+  group: 'Issue',
   shortcut: 'enter',
-  run: async (ctx) => {
-    const id = selection.focused;
-    if (id === null) return;
-    const issue = await ctx.api.issues.get(id);
-    ctx.navigate(`/issue/${issue.key}`);
+  when: (ctx) => ctx.focusedIssueId !== null && !ctx.route.startsWith('/issue/'),
+  run: () => {
+    if (selection.focused !== null) selectedIssueId.value = selection.focused;
   },
 });

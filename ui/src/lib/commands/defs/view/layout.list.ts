@@ -6,7 +6,7 @@ defineCommand({
   label: 'List layout',
   icon: 'list',
   group: 'View',
-  shortcut: '1',
+  shortcut: 'v l',
   when: (ctx) => ctx.route.startsWith('/view/'),
   run: () => dispatchEvent(new CustomEvent('command:view.layout', { detail: 'List' })),
 });

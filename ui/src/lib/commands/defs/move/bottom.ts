@@ -4,6 +4,7 @@ import { selection } from '../../../selection.svelte';
 
 defineCommand({
   id: 'move.bottom',
+  menu: false,
   label: 'Go to bottom',
   icon: 'list',
   group: 'Navigation',

@@ -57,6 +57,7 @@ describe('undo keys', () => {
 
   it('mod+z outside a text field runs undo once, and u does too', async () => {
     const undo = vi.spyOn(api.history, 'undo').mockResolvedValue({ undo: null, redo: null });
+    vi.spyOn(api.history, 'undoStatus').mockResolvedValue({ undo: 'a step', redo: null });
     press(document.body, 'z', { metaKey: true });
     await settle();
     expect(undo).toHaveBeenCalledTimes(1);
