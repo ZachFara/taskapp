@@ -20,8 +20,7 @@ async function open(path: string) {
   app = mount(App, { target: document.body });
   await settle();
 }
-// ABC-2 is Todo, so the Active view lists it; ABC-1 is Backlog and is filtered out.
-async function pickRow(key = 'ABC-2') {
+async function pickRow(key = 'ZF-1') {
   q(`[data-key=${key}]`)!.click();
   await settle();
 }
@@ -45,13 +44,13 @@ describe('App shell', () => {
   it('renders_sidebar_and_page_inside_shell', async () => {
     await open('/view/1');
     expect(q('aside.sidebar')!.textContent).toContain('Active');
-    expect(q('main ul.list li[data-key]')).not.toBeNull();
+    expect(q('main [role=listbox]')).not.toBeNull();
   });
 
   it('click_row_opens_detail_in_panel', async () => {
     await open('/view/1');
     await pickRow();
-    expect(panel()!.querySelector<HTMLInputElement>('[aria-label=Title]')!.value).toBe('Fixture task 2');
+    expect(panel()!.querySelector('[aria-label=Title]')!.textContent).toBe('Fixture task 1');
   });
 
   it('esc_closes_panel_not_page', async () => {

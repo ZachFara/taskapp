@@ -1,40 +1,45 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, unmount } from 'svelte';
-import { createMockApi, fixtures } from '../lib/api.mock';
+import { createMockApi } from '../lib/api.mock';
 import { setApi, type Api } from '../lib/api';
+import type { Issue } from '../lib/bindings';
+import { attachKeys } from '../lib/commands';
 import IssueDetail from './IssueDetail.svelte';
 
 let app: object | undefined;
 let api: Api;
 
-const settle = () => new Promise((r) => setTimeout(r, 20));
-async function open(key: string, wrap?: (a: Api) => Api) {
+const settle = (ms = 30) => new Promise((r) => setTimeout(r, ms));
+/** Mounts the screen on an issue this test creates, so nothing depends on fixture ids or keys. */
+async function open(patch: Partial<Parameters<Api['issues']['create']>[0]> = {}, props: Record<string, unknown> = {}, wrap?: (a: Api) => Api) {
   api = createMockApi();
   setApi(wrap ? wrap(api) : api);
-  app = mount(IssueDetail, { target: document.body, props: { params: { key } } });
+  const issue = await api.issues.create({ title: 'Detail subject', ...patch });
+  app = mount(IssueDetail, { target: document.body, props: { params: { key: issue.key }, ...props } });
   await settle();
+  return issue;
 }
 const q = <T extends Element>(sel: string) => document.querySelector(sel) as T;
-async function type(sel: string, value: string, event = 'change') {
-  const el = q<HTMLInputElement>(sel);
+const byLabel = (label: string) => q<HTMLInputElement>(`[aria-label="${label}"]`);
+async function type(label: string, value: string) {
+  const el = byLabel(label);
   el.value = value;
-  el.dispatchEvent(new Event(event, { bubbles: true }));
+  el.dispatchEvent(new Event('input', { bubbles: true }));
   await settle();
 }
-async function check(sel: string, on: boolean) {
-  const el = q<HTMLInputElement>(sel);
-  el.checked = on;
-  el.dispatchEvent(new Event('change', { bubbles: true }));
-  await settle();
-}
-const click = async (el: Element) => {
+const click = async (el: Element | null) => {
   (el as HTMLElement).click();
   await settle();
 };
-const button = (text: string) => [...document.querySelectorAll('button')].find((b) => b.textContent!.trim() === text || (text.endsWith(' ') && b.textContent!.startsWith(text)))!;
-const field = (name: string) =>
-  [...document.querySelectorAll('label')].find((l) => l.textContent!.startsWith(name))!.querySelector('input, select') as HTMLInputElement;
-const get = (key: string) => api.issues.getByKey(key);
+const buttons = () => [...document.querySelectorAll('button')];
+const button = (text: string) => (buttons().find((b) => b.textContent!.trim() === text) ?? buttons().find((b) => b.textContent!.trim().startsWith(text)))!;
+const row = (name: string) => byLabel(name) as HTMLElement;
+const option = (label: string, text: string) => [...document.querySelectorAll(`[aria-label="${label}"] [role=option]`)].find((o) => o.textContent!.trim().endsWith(text))!;
+const get = (id: number): Promise<Issue> => api.issues.get(id);
+const command = async (name: string) => {
+  dispatchEvent(new CustomEvent(`command:issue.detail.${name}`));
+  await settle();
+};
 
 afterEach(() => {
   if (app) unmount(app);
@@ -43,107 +48,232 @@ afterEach(() => {
 });
 
 describe('IssueDetail', () => {
-  it('edits_title_and_saves', async () => {
-    await open('ABC-1');
-    await type('[aria-label=Title]', 'Renamed');
-    expect((await get('ABC-1')).title).toBe('Renamed');
-  });
-
-  it('due_time_toggle_creates_datetime', async () => {
-    await open('ABC-1');
-    const due = field('Due');
-    due.value = '2026-12-05';
-    due.dispatchEvent(new Event('change', { bubbles: true }));
-    await settle();
-    expect((await get('ABC-1')).due).toEqual({ Date: '2026-12-05' });
-    await check('[aria-label="Due time"]', true);
-    expect((await get('ABC-1')).due?.DateTime?.utc).toBe(new Date('2026-12-05T09:00').toISOString());
-  });
-
-  it('clearing_due_sends_null', async () => {
-    await open('ABC-4'); // fixture with a due date
+  it('edits_title_inline', async () => {
+    const i = await open();
+    await click(byLabel('Title'));
     const spy = vi.spyOn(api.issues, 'update');
-    const due = field('Due');
-    due.value = '';
-    due.dispatchEvent(new Event('change', { bubbles: true }));
+    await type('Title', 'Renamed');
+    q<HTMLFormElement>('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await settle();
-    expect(spy).toHaveBeenCalledWith(4, { due: null });
-    expect((await get('ABC-4')).due).toBeNull();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((await get(i.id)).title).toBe('Renamed');
+    expect(q('h2').textContent).toContain('Renamed');
   });
 
-  it('properties_filtered_by_project_scope', async () => {
-    const seed = structuredClone(fixtures);
-    seed.propertyDefs.push({ key: 'home_only', name: 'Home only', kind: 'Text', options: [], project_id: 1, position: 9 });
-    api = createMockApi(seed);
-    setApi(api);
-    // ABC-2 is in project 1 (home), ABC-1 in project 2 (work).
-    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ABC-2' } } });
+  it('priority_edit_calls_api_once_and_shows_value', async () => {
+    const i = await open();
+    const spy = vi.spyOn(api.issues, 'update');
+    await click(row('Priority'));
+    await click(option('Priority', 'High'));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((await get(i.id)).priority).toBe(3);
+    expect(row('Priority').textContent).toContain('High');
+  });
+
+  it('status_edit_calls_api_once_and_shows_value', async () => {
+    const i = await open();
+    const statuses = await api.statuses.list();
+    const other = statuses.find((s) => s.id !== i.status_id)!;
+    const spy = vi.spyOn(api.issues, 'update');
+    await click(row('Status'));
+    await click(option('Status', other.name));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((await get(i.id)).status_id).toBe(other.id);
+    expect(row('Status').textContent).toContain(other.name);
+  });
+
+  it('estimate_edit_calls_api_once_and_shows_value', async () => {
+    const i = await open();
+    const spy = vi.spyOn(api.issues, 'update');
+    await click(row('Estimate'));
+    await type('Estimate (min)', '90');
+    q<HTMLFormElement>('form.stack').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await settle();
-    expect(q('[aria-label=Properties]').textContent).toContain('Home only');
-    unmount(app);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((await get(i.id)).estimate_minutes).toBe(90);
+    expect(row('Estimate').textContent).toContain('1h 30m');
+  });
+
+  it('due_date_edit_calls_api_once_and_clearing_sends_null', async () => {
+    const i = await open();
+    const spy = vi.spyOn(api.issues, 'update');
+    await click(row('Due'));
+    await type('Due date', '2026-12-05');
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((await get(i.id)).due).toEqual({ Date: '2026-12-05' });
+    expect(row('Due').textContent).toContain('2026-12-05');
+    await type('Due date', '');
+    expect(spy).toHaveBeenLastCalledWith(i.id, { due: null });
+    expect((await get(i.id)).due).toBeNull();
+  });
+
+  it('label_toggle_calls_api_once_and_shows_value', async () => {
+    const i = await open();
+    const l = await api.labels.create('Urgent-ish', 'red', null);
+    unmount(app!);
     document.body.innerHTML = '';
-    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ABC-1' } } });
+    app = mount(IssueDetail, { target: document.body, props: { params: { key: i.key } } });
     await settle();
-    expect(q('[aria-label=Properties]').textContent).not.toContain('Home only');
-    expect(q('[aria-label=Properties]').textContent).toContain('Area');
+    const spy = vi.spyOn(api.labels, 'addLabel');
+    await click(row('Labels'));
+    await click(q(`[aria-label="${l.name}"]`));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((await get(i.id)).label_ids).toEqual([l.id]);
+    expect(row('Labels').textContent).toContain(l.name);
   });
 
-  it('add_blocking_relation', async () => {
-    await open('ABC-1');
-    await type('[aria-label="Find issue"]', 'Fixture task 2', 'input');
-    await click(button('ABC-2 '));
-    expect(await api.relations.forIssue(1)).toEqual([{ from: 1, to: 2, kind: 'Blocks' }]);
-    expect(q('[aria-label=Relations]').textContent).toContain('blocks ABC-2');
-  });
-
-  it('cycle_error_shown', async () => {
-    const seed = { ...structuredClone(fixtures), cycles: [{ id: 1, number: 1, name: 'C1', start_date: '2026-12-01', end_date: '2026-12-14' }] };
-    api = createMockApi(seed);
-    setApi({ ...api, issues: { ...api.issues, update: async () => { throw { kind: 'Conflict', message: 'cycle in parent chain' }; } } });
-    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ABC-1' } } });
+  it('custom_property_edit_shows_value', async () => {
+    const i = await open();
+    await api.properties.createDef?.({ key: 'note', name: 'Note', kind: 'Text', options: [], project_id: null, position: 9 } as never).catch(() => {});
+    const defs = await api.properties.listDefs();
+    const d = defs.find((x) => x.kind === 'Number')!;
+    unmount(app!);
+    document.body.innerHTML = '';
+    app = mount(IssueDetail, { target: document.body, props: { params: { key: i.key } } });
     await settle();
-    const cycle = field('Cycle');
-    cycle.value = '1';
-    cycle.dispatchEvent(new Event('change', { bubbles: true }));
+    const spy = vi.spyOn(api.properties, 'setValue');
+    await click(row(d.name));
+    await type(`${d.name} value`, '7');
+    q<HTMLFormElement>('form.stack').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await settle();
-    expect(q('[role=alert]').textContent).toContain('cycle in parent chain');
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(row(d.name).textContent).toContain('7');
   });
 
-  it('comment_posts', async () => {
-    await open('ABC-1');
-    await type('[aria-label="New comment"]', 'hello **there**', 'input');
-    await click(button('Comment')!);
-    expect(q('[aria-label=Comments]').innerHTML).toContain('<strong>there</strong>');
-    expect(await api.comments.list(1)).toHaveLength(1);
-  });
-
-  it('history_tab_lists_changes', async () => {
-    await open('ABC-1');
-    await type('[aria-label=Title]', 'Changed');
-    await click(button('History'));
-    expect(q('[aria-label=History]').textContent).toContain('title');
-    expect(q('[aria-label=History]').textContent).toContain('"Changed"');
-  });
-
-  it('script_in_description_is_sanitized', async () => {
-    const seed = structuredClone(fixtures);
-    seed.issues[0].description = '<script>window.pwned = 1</script> <img src=x onerror="window.pwned=1">';
-    api = createMockApi(seed);
-    setApi(api);
-    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ABC-1' } } });
-    await settle();
+  it('markdown_is_sanitised', async () => {
+    await open({ description: '<script>window.pwned = 1</script>\n\n<img src=x onerror="window.pwned=1">\n\n**bold**' });
     const box = q('[aria-label=Description]');
     expect(box.querySelector('script, [onerror]')).toBeNull();
     expect(box.innerHTML).not.toContain('onerror');
+    expect(box.innerHTML).toContain('<strong>bold</strong>');
   });
 
-  it('sub_issue_cannot_be_the_issue_itself', async () => {
-    await open('ABC-1');
-    await type('[aria-label="Add sub-issue"]', 'Fixture', 'input');
-    const labels = [...document.querySelectorAll('[aria-label=Sub-issues] .results button')].map((b) => b.textContent);
-    expect(labels.some((t) => t!.startsWith('ABC-1 '))).toBe(false);
-    expect(labels.some((t) => t!.startsWith('ABC-2 '))).toBe(true);
-    await click(button('ABC-2 '));
-    expect((await get('ABC-2')).parent_id).toBe(1);
+  it('description_edit_preview_and_save', async () => {
+    const i = await open({ description: 'old' });
+    await click(byLabel('Edit description'));
+    await type('Description text', 'new *text*');
+    await click(button('Preview'));
+    expect(q('[aria-label="Description preview"]').innerHTML).toContain('<em>text</em>');
+    await click(button('Save'));
+    expect((await get(i.id)).description).toBe('new *text*');
+  });
+
+  it('sub_issue_quick_add_and_progress', async () => {
+    const i = await open();
+    await type('New sub-issue title', 'Child one');
+    q<HTMLFormElement>('[aria-label=Sub-issues] form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await settle();
+    const kids = await api.issues.children(i.id);
+    expect(kids.map((k) => k.title)).toEqual(['Child one']);
+    expect(q('[aria-label=Sub-issues]').textContent).toContain('Child one');
+    expect(q('[role=progressbar]').textContent).toContain('0 of 1 done');
+  });
+
+  it('sub_issue_picker_never_offers_the_issue_itself', async () => {
+    const i = await open({ title: 'Selfish subject' });
+    const other = await api.issues.create({ title: 'Selfish other' });
+    await type('Add sub-issue', 'Selfish');
+    const keys = [...document.querySelectorAll('[aria-label=Sub-issues] .results button')].map((b) => b.textContent);
+    expect(keys.some((t) => t!.includes(i.key + ' '))).toBe(false);
+    await click(button(other.key));
+    expect((await get(other.id)).parent_id).toBe(i.id);
+  });
+
+  it('relation_add_and_remove', async () => {
+    const i = await open({ title: 'Rel subject' });
+    const other = await api.issues.create({ title: 'Rel other' });
+    await type('Find issue', 'Rel other');
+    await click(button(other.key));
+    expect(await api.relations.forIssue(i.id)).toEqual([{ from: i.id, to: other.id, kind: 'Blocks' }]);
+    expect(q('[aria-label=Relations]').textContent).toContain(`blocks ${other.key}`);
+    await click(byLabel(`Remove relation to ${other.key}`));
+    expect(await api.relations.forIssue(i.id)).toEqual([]);
+  });
+
+  it('comment_posts_and_history_is_dated', async () => {
+    const i = await open();
+    await type('New comment', 'hello **there**');
+    await click(button('Comment'));
+    expect(q('[aria-label=Comments]').innerHTML).toContain('<strong>there</strong>');
+    expect(await api.comments.list(i.id)).toHaveLength(1);
+    await click(byLabel('Title'));
+    await type('Title', 'Changed');
+    q<HTMLFormElement>('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await settle();
+    expect(q('[aria-label=History]').textContent).toContain('Changed');
+    expect(q('[aria-label=History] h4').textContent).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('pin_and_archive_actions', async () => {
+    const i = await open();
+    await click(byLabel('Pin issue'));
+    expect((await api.pins.listResolved()).map((p) => p.pin.target)).toEqual([i.key]);
+    await click(byLabel('Unpin issue'));
+    expect(await api.pins.listResolved()).toEqual([]);
+    await click(byLabel('Archive issue'));
+    expect((await get(i.id)).archived_at).not.toBeNull();
+    expect(q('.arch').textContent).toContain('Archived');
+  });
+
+  it('cycle_error_is_shown', async () => {
+    await open({}, {}, (a) => ({ ...a, issues: { ...a.issues, update: async () => { throw { kind: 'Conflict', message: 'cycle in parent chain' }; } } }));
+    await click(row('Priority'));
+    await click(option('Priority', 'High'));
+    expect(q('[role=alert]').textContent).toContain('cycle in parent chain');
+  });
+
+  it('esc_closes_editor_before_panel', async () => {
+    const onclose = vi.fn();
+    await open({}, { mode: 'panel', onclose });
+    await click(row('Priority'));
+    expect(option('Priority', 'High')).toBeTruthy();
+    await command('close');
+    expect(document.querySelector('[aria-label=Priority][role=listbox]')).toBeNull();
+    expect(onclose).not.toHaveBeenCalled();
+    await settle(100);
+    await command('close');
+    expect(onclose).toHaveBeenCalledTimes(1);
+  });
+
+  describe('through the real key registry', () => {
+    let detach: () => void;
+    const ctx = () => ({ route: '/issue/x', selection: [], focusedIssueId: null, openIssueId: null, api, navigate: () => {} });
+    const press = async (key: string) => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+      await settle();
+    };
+    afterEach(() => detach?.());
+
+    it('esc_closes_the_open_editor_first_then_the_panel', async () => {
+      const onclose = vi.fn();
+      await open({}, { mode: 'panel', onclose });
+      detach = attachKeys(ctx);
+      await click(row('Priority'));
+      expect(q('[role=listbox][aria-label=Priority]')).not.toBeNull();
+      await press('Escape');
+      expect(q('[role=listbox][aria-label=Priority]')).toBeNull();
+      expect(onclose).not.toHaveBeenCalled();
+      await settle(100);
+      await press('Escape');
+      expect(onclose).toHaveBeenCalledTimes(1);
+    });
+
+    it('brackets_move_to_the_next_and_previous_issue', async () => {
+      const onopen = vi.fn();
+      const mid = await open({ title: 'Mid' }, { onopen });
+      await api.issues.create({ title: 'After' });
+      const keys = (await api.views.query({ filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false })).map((i) => i.key);
+      // Remount so the neighbour list includes the issue created after mount.
+      unmount(app!);
+      document.body.innerHTML = '';
+      app = mount(IssueDetail, { target: document.body, props: { params: { key: mid.key }, onopen } });
+      await settle();
+      detach = attachKeys(ctx);
+      const at = keys.indexOf(mid.key);
+      await press(']');
+      expect(onopen).toHaveBeenLastCalledWith(keys[at + 1]);
+      await press('[');
+      expect(onopen).toHaveBeenLastCalledWith(keys[at - 1]);
+    });
   });
 });

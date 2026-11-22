@@ -25,6 +25,13 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	issuesBulkUpdate: (ids: IssueId[], patch: BulkPatch, options?: InvokeOptions) => __TAURI_INVOKE<null>("issues_bulk_update", { ids, patch }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	issuesGet: (id: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<Issue>("issues_get", { id }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -637,6 +644,16 @@ export type Bar = {
 	start: string,
 	end: string,
 	from_estimate: boolean,
+};
+
+/**  One edit for a whole selection: the patch, labels to add or remove, and a relation from each issue to `add_relation.1`. */
+export type BulkPatch = {
+	patch?: IssuePatch,
+	add_labels?: LabelId[],
+	remove_labels?: LabelId[],
+	add_relation?: [RelationKind, IssueId] | null,
+	/**  `Some(true)` archives, `Some(false)` restores. */
+	archive?: boolean | null,
 };
 
 /**  One row of change history. */
