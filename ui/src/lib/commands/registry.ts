@@ -10,8 +10,8 @@ export type Scope = 'global' | Layout | 'detail' | 'list-edit';
 
 export type Ctx = {
   route: string;
-  /** Undefined when the screen has not said; layout scopes then stay live on view routes. */
-  layout?: Layout;
+  /** Undefined when the screen has not said (layout scopes are then live and equal to `global` in rank); null when no view is shown. */
+  layout?: Layout | null;
   selection: number[];
   focusedIssueId: number | null;
   openIssueId: number | null;
@@ -90,13 +90,13 @@ export const rankOf = (c: Pick<Command, 'id' | 'scope'>, ctx?: Ctx) => {
   return RANK[s] === 1 && ctx?.layout === undefined && ctx ? 0 : RANK[s];
 };
 
-/** Whether a command's scope is live in `ctx`. A layout scope is live on every view route while the layout is unknown. */
+/** Whether a command's scope is live in `ctx`. A layout scope is live everywhere while the layout is unknown (the command's own `when` still applies). */
 export function inScope(c: Pick<Command, 'id' | 'scope'>, ctx: Ctx) {
   const s = scopeOf(c);
   if (s === 'global') return true;
   if (s === 'detail') return !!ctx.route?.startsWith('/issue/') || (ctx.openIssueId ?? null) !== null;
   const layout = s === 'list-edit' ? 'list' : s;
-  return ctx.layout === undefined ? !!ctx.route?.startsWith('/view/') : ctx.layout === layout;
+  return ctx.layout === undefined || ctx.layout === layout;
 }
 
 /** Keys taken off a command by a ruling that outranks the file that defines it. */

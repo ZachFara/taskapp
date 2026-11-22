@@ -4,7 +4,7 @@ import { activeCommands, clashes, keysOf, type Command, type Ctx, type Layout } 
 
 // Walks every registered command in every state the app can be in and fails when two commands that are live at the
 // same moment take the same key, or when one key is the start of another's sequence ("g" and "g g").
-const base: Ctx = { route: '/', selection: [], focusedIssueId: null, openIssueId: null, api: {} as Ctx['api'], navigate: () => {} };
+const base: Ctx = { layout: null, route: '/', selection: [], focusedIssueId: null, openIssueId: null, api: {} as Ctx['api'], navigate: () => {} };
 const layouts: Layout[] = ['list', 'table', 'board', 'calendar', 'timeline'];
 
 const states: [string, Ctx, { editing?: boolean; timeline?: boolean }][] = [

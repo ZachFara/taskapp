@@ -230,7 +230,7 @@ describe('TableView', () => {
     cell('ABC-1', 'fixed:Title').click();
     await flush();
     expect(activeCell()).toBe('ABC-1|fixed:Title');
-    press(window, 'l');
+    press(window, 'ArrowRight');
     await flush();
     expect(activeCell()).toBe('ABC-1|prop:effort');
     press(window, 'ArrowDown');
