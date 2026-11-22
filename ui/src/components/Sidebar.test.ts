@@ -131,3 +131,17 @@ describe('Sidebar', () => {
     expect(location.pathname).toBe('/settings/general');
   });
 });
+
+describe('Sidebar icons', () => {
+  it('a view without its own icon shows the icon of its layout', async () => {
+    const board = { ...def, layout: 'Board' as const };
+    await open(createMockApi({ ...seed, views: [{ id: 1, name: 'Kanban', def: board, position: 0, icon: null, color: null }] }));
+    expect(row('Kanban').querySelector('[data-icon]')?.getAttribute('data-icon')).toBe('board');
+  });
+
+  it('a project shows the project icon, not the hollow circle', async () => {
+    await open();
+    const first = fixtures.projects[0].name;
+    expect(row(first).querySelector('[data-icon]')?.getAttribute('data-icon')).toBe('project');
+  });
+});

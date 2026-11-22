@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mountSettings, press, setField } from '../settings/testing';
+import { mountSettings, press } from '../settings/testing';
 import ImportPage from './ImportPage.svelte';
 
 const csv = [
@@ -104,6 +104,25 @@ describe('ImportPage CSV', () => {
     await press(target, 'Import 2 issues');
     await press(target, 'Undo import');
     expect(undo).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ImportPage drop and mapping', () => {
+  it('a CSV dropped on the drop area is read like a chosen file', async () => {
+    const { target } = await mountSettings(ImportPage);
+    const drop = target.querySelector<HTMLElement>('.drop')!;
+    const dropped = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(dropped, 'dataTransfer', { value: { files: [new File([csv], 'issues.csv', { type: 'text/csv' })] } });
+    drop.dispatchEvent(dropped);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(target.textContent).toContain('issues.csv');
+    expect(rowFor(target, 'Summary')).toContain('Title');
+  });
+
+  it('a quoted header with a comma is one column', async () => {
+    const { target } = await mountSettings(ImportPage);
+    await upload(target, '"Title, long",Body\nFix,Users');
+    expect(rowFor(target, 'Title, long')).toContain('Title');
   });
 });
 

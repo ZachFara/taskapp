@@ -74,7 +74,7 @@ describe('Templates', () => {
     await openRow(target, 'Bug report');
     await press(target, 'Delete template');
     expect(calls).not.toContain('templates.delete');
-    await press(target, 'Delete');
+    await press(document.body, 'Delete');
     expect(calls.filter((c) => c === 'templates.delete')).toHaveLength(1);
   });
 
@@ -99,5 +99,15 @@ describe('Templates', () => {
     await press(target, 'Try it');
     expect(calls.filter((c) => c === 'templates.apply')).toHaveLength(1);
     expect(field(target, 'Template name').value).toBe('Bug report');
+  });
+
+  it('the icon and colour come from the shared picker, and delete asks in a dialog', async () => {
+    const { target } = await mountSettings(Templates, { templates: { list: async () => [tpl()] } });
+    await openRow(target, 'Bug report');
+    expect(target.querySelector('[aria-label="Template icon"]')).toBeNull();
+    expect(target.querySelector('[aria-label="Template colour"]')).toBeNull();
+    expect(target.querySelector('[aria-label="Template icon and colour"]')).not.toBeNull();
+    await press(target, 'Delete template');
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
   });
 });

@@ -6,8 +6,10 @@
   import Button from '../../ui/Button.svelte';
   import Checkbox from '../../ui/Checkbox.svelte';
   import Contour from '../../ui/Contour.svelte';
+  import Dialog from '../../ui/Dialog.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
   import EntityIcon from '../../ui/EntityIcon.svelte';
+  import IconColorPicker from '../pickers/IconColorPicker.svelte';
   import IconButton from '../../ui/IconButton.svelte';
   import PageHeader from '../../ui/PageHeader.svelte';
   import Select from '../../ui/Select.svelte';
@@ -33,7 +35,6 @@
     subs: string[];
   };
 
-  const COLORS = ['gray', 'red', 'orange', 'amber', 'yellow', 'green', 'teal', 'cyan', 'blue', 'indigo', 'purple', 'pink'];
   const PRIORITIES = ['No priority', 'Low', 'Medium', 'High', 'Urgent'].map((label, i) => ({ value: String(i), label }));
   const SLUG = /^[a-z0-9-]+$/;
 
@@ -163,7 +164,7 @@
   const remaining = (i: number) => draft.subs.length - 1 - i;
 </script>
 
-<PageHeader title="Templates" icon="layers">
+<PageHeader title="Templates" icon="icon:layers">
   {#snippet actions()}
     <Button variant="primary" icon="plus" tooltip={{ label: 'New template' }} onclick={startNew}>New template</Button>
   {/snippet}
@@ -210,8 +211,11 @@
       <div class="grid">
         <TextInput label="Template name" bind:value={draft.name} placeholder="Bug report" invalid={attempted && !draft.name.trim()} />
         <TextInput label="Template slug" bind:value={draft.slug} placeholder="bug" invalid={attempted && !!slugError} />
-        <TextInput label="Template icon" bind:value={draft.icon} placeholder="bug" />
-        <Select label="Template colour" bind:value={draft.color} items={COLORS.map((c) => ({ value: c, label: c }))} placeholder="Default" />
+        <IconColorPicker
+          label="Template icon and colour"
+          value={{ icon: draft.icon || null, color: draft.color || null }}
+          onchange={(v) => { draft.icon = v.icon ?? ''; draft.color = v.color ?? ''; }}
+        />
         <TextInput label="Title prefix" bind:value={draft.title_prefix} placeholder="[Bug] " />
         <Select label="Default status" bind:value={draft.status_id} items={statuses.map((s) => ({ value: String(s.id), label: s.name }))} placeholder="Not set" />
         <Select label="Default priority" bind:value={draft.priority} items={PRIORITIES} placeholder="Not set" />
@@ -263,19 +267,19 @@
         <Button variant="primary" onclick={save}>Save template</Button>
         <Button disabled={draft.id == null} onclick={tryIt}>Try it</Button>
         {#if draft.id != null}
-          {#if confirming}
-            <span class="confirm">Delete this template?
-              <Button variant="danger" onclick={remove}>Delete</Button>
-              <Button onclick={() => (confirming = false)}>Cancel</Button>
-            </span>
-          {:else}
-            <Button variant="danger" onclick={() => (confirming = true)}>Delete template</Button>
-          {/if}
+          <Button variant="danger" onclick={() => (confirming = true)}>Delete template</Button>
         {/if}
       </footer>
     {/if}
   </section>
 </div>
+
+<Dialog bind:open={confirming} title="Delete this template?" description="The template goes. Issues already made from it stay.">
+  {#snippet actions()}
+    <Button onclick={() => (confirming = false)}>Cancel</Button>
+    <Button variant="danger" onclick={remove}>Delete</Button>
+  {/snippet}
+</Dialog>
 
 <style>
   .tpl { display: grid; grid-template-columns: minmax(14rem, 1fr) minmax(0, 2.2fr); gap: var(--s-6); align-items: start; }
