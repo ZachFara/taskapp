@@ -20,6 +20,7 @@ enum Field {
     Start,
     Due,
     Estimate,
+    Points,
     Property(String),
 }
 
@@ -35,6 +36,7 @@ impl Field {
             "start_date" => Field::Start,
             "due_date" => Field::Due,
             "estimate" => Field::Estimate,
+            "points" => Field::Points,
             p if p
                 .strip_prefix("property:")
                 .is_some_and(|n| !n.trim().is_empty()) =>
@@ -43,7 +45,7 @@ impl Field {
             }
             other => {
                 return Err(Error::Invalid(format!(
-                    "unknown field `{other}`; use title, description, status, priority, project, labels, start_date, due_date, estimate or property:<name>"
+                    "unknown field `{other}`; use title, description, status, priority, project, labels, start_date, due_date, estimate, points or property:<name>"
                 )));
             }
         })
@@ -101,7 +103,8 @@ pub fn guess_mapping(headers: &[String]) -> BTreeMap<String, String> {
         "labels" | "label" | "tags" => Some("labels"),
         "start" | "start date" => Some("start_date"),
         "due" | "due date" | "deadline" => Some("due_date"),
-        "estimate" | "points" => Some("estimate"),
+        "estimate" => Some("estimate"),
+        "points" => Some("points"),
         _ => None,
     };
     headers
@@ -192,6 +195,13 @@ struct Ctx<'a> {
     statuses: &'a [String],
 }
 
+fn points(cell: &str) -> std::result::Result<f64, String> {
+    cell.parse()
+        .ok()
+        .filter(|p: &f64| crate::issues::valid_points(*p))
+        .ok_or_else(|| format!("`{cell}` is not points (0 or more, one decimal)"))
+}
+
 fn row_issue(
     ctx: &Ctx<'_>,
     cells: &[String],
@@ -208,6 +218,7 @@ fn row_issue(
         start_date: None,
         due_date: None,
         estimate_minutes: None,
+        points: None,
         properties: Map::new(),
         parent: None,
         cycle: None,
@@ -244,6 +255,7 @@ fn row_issue(
                         .map_err(|_| format!("`{cell}` is not a whole number of minutes"))?,
                 );
             }
+            Field::Points => i.points = Some(points(cell)?),
             Field::Property(name) => {
                 let def = &ctx.defs[name];
                 i.properties.insert(def.key.clone(), prop_value(def, cell)?);
@@ -257,7 +269,7 @@ fn row_issue(
 }
 
 /// Builds the plan for `text`. `mapping` goes from column name to field (`title`, `description`,
-/// `status`, `priority`, `project`, `labels`, `start_date`, `due_date`, `estimate` in minutes, or
+/// `status`, `priority`, `project`, `labels`, `start_date`, `due_date`, `estimate` in minutes, `points`, or
 /// `property:<name>`); `None` guesses it from the headers. Writes nothing.
 ///
 /// # Errors

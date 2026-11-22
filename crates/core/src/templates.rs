@@ -20,6 +20,7 @@ pub struct TemplateFields {
     pub project_id: Option<ProjectId>,
     pub label_ids: Vec<LabelId>,
     pub estimate_minutes: Option<u32>,
+    pub points: Option<f64>,
     pub properties: Map<String, Value>,
 }
 
@@ -324,6 +325,7 @@ fn from_fields(title: String, f: TemplateFields) -> NewIssue {
         project_id: f.project_id,
         label_ids: Some(f.label_ids),
         estimate_minutes: f.estimate_minutes,
+        points: f.points,
         properties: Some(f.properties),
         ..NewIssue::default()
     }
@@ -388,6 +390,7 @@ async fn apply_in(
         start_date: overrides.start_date,
         due: overrides.due,
         estimate_minutes: overrides.estimate_minutes.or(base.estimate_minutes),
+        points: overrides.points.or(base.points),
         properties: Some(props),
         created_at: overrides.created_at,
         completed_at: overrides.completed_at,

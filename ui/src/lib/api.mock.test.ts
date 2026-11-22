@@ -138,3 +138,54 @@ describe('mock workspace and quick add', () => {
     expect(new Date(parsed.due!.DateTime!.utc).getUTCHours()).toBe(0);
   });
 });
+
+describe('mock view templates', () => {
+  it('first-run setup seeds three templates once, the planning table listing every property', async () => {
+    const mock = createMockApi({ ...fixtures, workspace: undefined, viewTemplates: [] }, 'UTC');
+    await mock.workspace.setup('Studio', 'STU', null);
+    await mock.workspace.setup('Studio', 'STD', null);
+    const t = await mock.view.templatesList();
+    expect(t.map((x) => x.name)).toEqual(['Status board', 'Planning table', 'This week']);
+    expect(t[1].def.columns).toContainEqual({ Property: 'effort' });
+  });
+
+  it('create from a template copies its definition, and undo removes the view', async () => {
+    const mock = createMockApi();
+    const [board] = await mock.view.templatesList();
+    const v = await mock.views.createFromTemplate(board.id, null);
+    expect(v).toMatchObject({ name: 'Status board', template_id: board.id, def: board.def });
+    await mock.history.undo();
+    expect((await mock.views.list()).some((x) => x.id === v.id)).toBe(false);
+  });
+});
+
+describe('mock points and progress', () => {
+  it('seeds about two thirds of the issues with points and a three-week history', async () => {
+    const mock = createMockApi();
+    const rows = await mock.views.query(def(null));
+    expect(rows.filter((i) => i.points != null)).toHaveLength(16);
+    const s = await mock.insights.progress({ Project: 2 }, 'points', null, null);
+    const last = s.days.at(-1)!;
+    expect(s.days.length).toBeGreaterThan(14);
+    expect(s.days[0].scope).toBeGreaterThan(0);
+    expect(last.scope).toBeGreaterThan(last.completed);
+    expect(last.started).toBeGreaterThanOrEqual(last.completed);
+  });
+
+  it('velocity falls back to weeks when there are no cycles', async () => {
+    const mock = createMockApi({ ...fixtures, cycles: [] });
+    const v = await mock.insights.velocity({ View: 1 }, 'count', 3);
+    expect(v).toHaveLength(3);
+    expect(v[0].label).toMatch(/^Week of [A-Z][a-z]{2} \d+$/);
+    expect(new Date(`${v[2].start}T00:00:00Z`).getUTCDay()).toBe(1);
+  });
+
+  it('a points change is undoable and cleared with null', async () => {
+    const mock = createMockApi();
+    await mock.issues.update(2, { points: 3.5 });
+    expect((await mock.issues.get(2)).points).toBe(3.5);
+    await mock.history.undo();
+    expect((await mock.issues.get(2)).points).toBeNull();
+    await expect(mock.issues.update(2, { points: 0.25 })).rejects.toMatchObject({ kind: 'Invalid' });
+  });
+});

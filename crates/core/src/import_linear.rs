@@ -158,7 +158,7 @@ fn names(v: &Value) -> Vec<String> {
         .collect()
 }
 
-fn add_node(plan: &mut ImportPlan, n: &Value) -> std::result::Result<(), String> {
+fn add_node(plan: &mut ImportPlan, n: &Value, as_points: bool) -> std::result::Result<(), String> {
     let text = |k: &str| n[k].as_str().map(str::to_owned);
     let id = text("identifier").ok_or("no identifier")?;
     let title = text("title")
@@ -205,11 +205,15 @@ fn add_node(plan: &mut ImportPlan, n: &Value) -> std::result::Result<(), String>
         labels: names(&n["labels"]),
         start_date: None,
         due_date: day(&n["dueDate"]),
-        // One estimate point is one hour.
+        // Where the workspace counts points the estimate is points; otherwise one point is one hour.
         estimate_minutes: n["estimate"]
             .as_f64()
+            .filter(|_| !as_points)
             .and_then(|e| format!("{:.0}", e * 60.0).parse().ok())
             .filter(|m| *m > 0),
+        points: n["estimate"]
+            .as_f64()
+            .filter(|e| as_points && *e > 0.0 && crate::issues::valid_points(*e)),
         properties: serde_json::Map::new(),
         parent: text_of(&n["parent"], "identifier"),
         cycle: cycle.map(|(s, _)| s),
@@ -252,13 +256,19 @@ pub async fn plan(db: &Db, api: &impl LinearApi) -> Result<ImportPlan> {
         source: "linear".into(),
         ..ImportPlan::default()
     };
+    let as_points = !matches!(
+        crate::settings::get::<String>(db, "estimation")
+            .await?
+            .as_deref(),
+        Some("time" | "none")
+    );
     let (mut after, mut row, mut skipped) = (Value::Null, 0u32, vec![]);
     loop {
         let data = api.query(QUERY, json!({ "after": after })).await?;
         let page = &data["issues"];
         for n in page["nodes"].as_array().into_iter().flatten() {
             row += 1;
-            if let Err(reason) = add_node(&mut plan, n) {
+            if let Err(reason) = add_node(&mut plan, n, as_points) {
                 skipped.push(Skipped { row, reason });
             }
         }

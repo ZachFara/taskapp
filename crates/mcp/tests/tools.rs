@@ -52,6 +52,14 @@ const TOOL_NAMES: &[&str] = &[
     "undo_status",
     "workspace_status",
     "workspace_setup",
+    "list_view_templates",
+    "save_view_as_template",
+    "create_view_from_template",
+    "reset_view_to_template",
+    "delete_view_template",
+    "set_points",
+    "insights_progress",
+    "insights_velocity",
 ];
 
 /// Runs one server session, sending each call only after the previous reply (the server handles
@@ -301,6 +309,46 @@ fn writes_record_agent_source() {
 }
 
 #[test]
+fn points_and_progress_tools() {
+    let (_d, db) = tmp();
+    let r = session(
+        &db,
+        &[
+            ("create_project", json!({"slug": "p", "name": "P"})),
+            ("create_issue", json!({"title": "ABC a", "project_id": 1})),
+            ("set_points", json!({"key": "ABC-1", "points": 5})),
+            ("set_points", json!({"key": "ABC-1", "points": 0.25})),
+            (
+                "insights_progress",
+                json!({"scope": {"Project": 1}, "measure": "points", "from": "2026-01-01", "to": "2026-01-01"}),
+            ),
+            (
+                "insights_velocity",
+                json!({"scope": {"Project": 1}, "measure": "count", "periods": 2}),
+            ),
+            ("set_points", json!({"key": "ABC-1", "points": null})),
+        ],
+    );
+    assert_eq!(r[2].as_ref().expect("set")["points"], 5.0);
+    assert!(
+        r[3].as_ref().is_err_and(|e| e.contains("invalid")),
+        "{:?}",
+        r[3]
+    );
+    assert_eq!(
+        r[4].as_ref().expect("progress")["days"]
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(
+        r[5].as_ref().expect("velocity").as_array().map(Vec::len),
+        Some(2)
+    );
+    assert_eq!(r[6].as_ref().expect("cleared")["points"], Value::Null);
+}
+
+#[test]
 fn errors_are_tool_errors_not_crashes() {
     let (_d, db) = tmp();
     let r = session(
@@ -452,4 +500,38 @@ fn workspace_setup_then_status() {
     assert_eq!(r[0].as_ref().expect("status")["setup_done"], false);
     assert_eq!(r[1].as_ref().expect("setup")["key"], "XY");
     assert_eq!(r[2].as_ref().expect("status")["name"], "Cairn");
+}
+
+#[test]
+fn view_templates_round_trip() {
+    let (_d, db) = tmp();
+    let r = session(
+        &db,
+        &[
+            (
+                "save_view_as_template",
+                json!({"view_id": 1, "name": "ABC t"}),
+            ),
+            ("create_view_from_template", json!({"template_id": 1})),
+            ("reset_view_to_template", json!({"view_id": 4})),
+            ("list_view_templates", json!({})),
+            ("delete_view_template", json!({"id": 1})),
+        ],
+    );
+    let t = r[0].as_ref().expect("saved");
+    assert_eq!(t["name"], "ABC t");
+    let v = r[1].as_ref().expect("created");
+    assert_eq!(
+        (v["name"].as_str(), v["template_id"].as_i64()),
+        (Some("ABC t"), Some(1))
+    );
+    assert!(
+        r[2].is_ok()
+            && r[3]
+                .as_ref()
+                .expect("list")
+                .as_array()
+                .is_some_and(|a| a.len() == 1)
+    );
+    assert_eq!(r[4].as_ref().expect("deleted")["deleted"], true);
 }

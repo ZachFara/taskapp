@@ -3,7 +3,8 @@ use serde::{Serialize, de::DeserializeOwned};
 use crate::{ChangeSource, Db, Error, Result, rows};
 
 /// Setting keys: `issue_prefix`, `reminders_list_id`, `gcal_enabled`, `gcal_calendar_id`, `export_enabled`,
-/// `export_dir`, `export_remote`, `backup_dir`, `sync_status`. Values are JSON.
+/// `export_dir`, `export_remote`, `backup_dir`, `sync_status`, `estimation` (none, points, time, both), `point_scale`
+/// (fibonacci, linear, powers, tshirt). Values are JSON.
 ///
 /// # Errors
 /// Fails when the query fails or the stored value is not a `T`.
@@ -19,6 +20,20 @@ pub async fn get<T: DeserializeOwned>(db: &Db, key: &str) -> Result<Option<T>> {
 /// Fails when the value cannot be encoded or the write fails.
 pub async fn set<T: Serialize>(db: &Db, key: &str, value: &T) -> Result<()> {
     let json = serde_json::to_string(value).map_err(|e| Error::Invalid(e.to_string()))?;
+    let allowed: Option<&[&str]> = match key {
+        "estimation" => Some(&["none", "points", "time", "both"]),
+        "point_scale" => Some(&["fibonacci", "linear", "powers", "tshirt"]),
+        _ => None,
+    };
+    if let Some(allowed) = allowed {
+        let ok = serde_json::from_str::<String>(&json).is_ok_and(|v| allowed.contains(&v.as_str()));
+        if !ok {
+            return Err(Error::Invalid(format!(
+                "setting {key} must be one of {}",
+                allowed.join(", ")
+            )));
+        }
+    }
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let before = rows::by_key(&mut tx, "settings", key).await?;
     sqlx::query!(

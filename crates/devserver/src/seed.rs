@@ -1,12 +1,12 @@
 //! The same fixtures as `ui/src/lib/api.mock.ts`, created through core so the real and mock modes match.
 
-use chrono::{Days, NaiveDate, Utc};
+use chrono::{Days, NaiveDate, TimeZone, Utc};
 use serde_json::{Map, Value, json};
 use taskapp_core::{
     ChangeSource::Ui, Db, Due, Error, IssueId, LabelId, MilestoneId, NewIssue, ProjectId,
     PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, StatusId,
-    TemplateInput, ViewDef, ViewId, cycles, issues, labels, palette::Look, projects, properties,
-    relations, templates, views, workspace,
+    TemplateInput, ViewDef, ViewId, cycles, history, issues, labels, palette::Look, projects,
+    properties, relations, templates, views, workspace,
 };
 
 fn def(
@@ -49,6 +49,48 @@ struct Row {
     area: &'static str,
     effort: u32,
 }
+
+/// Story points by issue number; the issues not listed have none (the mock lists the same).
+const POINTS: [(i64, f64); 16] = [
+    (1, 5.0),
+    (3, 3.0),
+    (4, 8.0),
+    (5, 2.0),
+    (7, 13.0),
+    (8, 3.0),
+    (10, 5.0),
+    (11, 8.0),
+    (13, 5.0),
+    (14, 1.0),
+    (15, 2.0),
+    (16, 5.0),
+    (17, 3.0),
+    (19, 8.0),
+    (20, 3.0),
+    (23, 1.0),
+];
+
+/// Status moves of the last three weeks as (issue, days ago, from, to), oldest first per issue. Every issue
+/// starts in Todo (2); the last move ends in the status the issue has now.
+const MOVES: [(i64, i64, i64, i64); 14] = [
+    (3, 22, 2, 3),
+    (3, 17, 3, 4),
+    (4, 20, 2, 3),
+    (10, 18, 2, 3),
+    (10, 11, 3, 4),
+    (10, 5, 4, 3),
+    (13, 15, 2, 3),
+    (13, 9, 3, 4),
+    (15, 14, 2, 3),
+    (15, 12, 3, 4),
+    (1, 12, 2, 3),
+    (7, 9, 2, 3),
+    (8, 8, 2, 3),
+    (16, 5, 2, 3),
+];
+/// Cancellations and point revisions: (issue, days ago, from, to).
+const CANCELS: [(i64, i64, i64, i64); 1] = [(22, 4, 2, 5)];
+const REVISIONS: [(i64, i64, f64, f64); 2] = [(4, 12, 5.0, 8.0), (7, 7, 8.0, 13.0)];
 
 /// The same workspace as `ui/src/lib/api.mock.ts`, which the contract tests compare with this one.
 const E: Row = Row {
@@ -336,7 +378,7 @@ static ROWS: [Row; 24] = [
 ];
 
 /// Fills an empty database with a believable workspace: three projects, six labels, two cycles, two milestones,
-/// two templates, four views, three properties, 24 issues. Statuses and the first three views come from the migration.
+/// two issue templates, three view templates, four views, three properties, 24 issues. Statuses and the first three views come from the migration.
 ///
 /// # Errors
 /// Fails when a core call fails, for example on a database that already holds these rows.
@@ -354,7 +396,35 @@ pub async fn run(db: &Db) -> Result<()> {
         let (from, to) = (IssueId(from), IssueId(to));
         relations::add(db, Relation { from, to, kind }, Ui).await?;
     }
+    seed_history(db).await?;
     seed_views(db, today).await
+}
+
+/// Backdated status and points changes written through `history::record_past` (rows with no undo step), so
+/// progress charts have a three-week shape. Each lands at 12:00 UTC on its day; the issues were created with
+/// their final values, so the first row's old value is what they started with.
+async fn seed_history(db: &Db) -> Result<()> {
+    let today = Utc::now().date_naive();
+    let when = |ago: i64| {
+        let noon = at(today, -ago).and_hms_opt(12, 0, 0).unwrap_or_default();
+        Utc.from_utc_datetime(&noon)
+    };
+    let status = MOVES
+        .iter()
+        .chain(&CANCELS)
+        .map(|&(n, ago, from, to)| (n, ago, "status_id", json!(from), json!(to)));
+    let points = REVISIONS
+        .iter()
+        .map(|&(n, ago, from, to)| (n, ago, "points", json!(from), json!(to)));
+    for (n, ago, field, old, new) in status.chain(points) {
+        let edit = history::Edit {
+            field,
+            old: Some(&old),
+            new: Some(&new),
+        };
+        history::record_past(db, when(ago), Ui, "issue", &n.to_string(), &edit).await?;
+    }
+    Ok(())
 }
 
 fn bad(e: &serde_json::Error) -> Error {
@@ -372,7 +442,6 @@ fn at(today: NaiveDate, days: i64) -> NaiveDate {
 }
 
 async fn reference_data(db: &Db) -> Result<()> {
-    workspace::setup(db, "Cairn", "ABC", Some("UTC")).await?;
     for (slug, name) in [
         ("website", "Website relaunch"),
         ("mobile", "Mobile app"),
@@ -407,6 +476,8 @@ async fn reference_data(db: &Db) -> Result<()> {
     ] {
         properties::create_def(db, d, Ui).await?;
     }
+    // After the properties, so the planning-table template lists them.
+    workspace::setup(db, "Cairn", "ABC", Some("UTC")).await?;
     for t in [
         json!({"name": "Bug", "slug": "bug", "icon": "icon:flag", "color": "red", "body": {
             "title_prefix": "Bug: ",
@@ -424,6 +495,7 @@ async fn reference_data(db: &Db) -> Result<()> {
 }
 
 async fn issue(db: &Db, today: NaiveDate, r: &Row, k: usize) -> Result<()> {
+    let n = i64::try_from(k + 1).unwrap_or(0);
     let mut props = Map::new();
     if !r.area.is_empty() {
         props.insert("area".into(), json!(r.area));
@@ -448,6 +520,7 @@ async fn issue(db: &Db, today: NaiveDate, r: &Row, k: usize) -> Result<()> {
             start_date: r.start.map(|d| at(today, d)),
             due: r.due.map(|d| Due::Date(at(today, d))),
             estimate_minutes: (r.minutes > 0).then_some(r.minutes),
+            points: POINTS.iter().find(|p| p.0 == n).map(|p| p.1),
             properties: Some(props),
             created_at: Some(created),
             ..NewIssue::default()

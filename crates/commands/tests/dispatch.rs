@@ -202,3 +202,45 @@ async fn reorder_statuses_and_pin_many_are_one_undo_step_each() -> R {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn insights_commands_take_the_wire_shapes() -> R {
+    let s = state().await;
+    let p = dispatch(
+        &s,
+        "projects_create",
+        json!({"slug": "alpha", "name": "Alpha", "icon": null, "color": null}),
+    )
+    .await?;
+    let scope = json!({"Project": p["id"]});
+    let args =
+        json!({"scope": scope, "measure": "points", "from": "2026-01-01", "to": "2026-01-02"});
+    let out = dispatch(&s, "insights_progress", args).await?;
+    assert_eq!(out["measure"], "points");
+    assert_eq!(
+        out["days"][0],
+        json!({"date": "2026-01-01", "scope": 0.0, "started": 0.0, "completed": 0.0})
+    );
+    let v = dispatch(
+        &s,
+        "insights_velocity",
+        json!({"scope": scope, "measure": "count", "periods": 2}),
+    )
+    .await?;
+    assert_eq!(v.as_array().map(Vec::len), Some(2));
+    let issue = dispatch(
+        &s,
+        "issues_create",
+        json!({"input": {"title": "ABC a", "points": 3.0}}),
+    )
+    .await?;
+    assert_eq!(issue["points"], 3.0);
+    let issue = dispatch(
+        &s,
+        "issues_update",
+        json!({"id": issue["id"], "patch": {"points": null}}),
+    )
+    .await?;
+    assert_eq!(issue["points"], json!(null));
+    Ok(())
+}

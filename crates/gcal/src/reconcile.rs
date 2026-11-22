@@ -199,6 +199,7 @@ async fn desired(db: &Db) -> Result<Vec<DesiredEvent>> {
         layout: Layout::List,
         columns: vec![],
         include_archived: false,
+        ..ViewDef::default()
     };
     let issues = views::query(db, &def).await?;
     // SQLite julianday() cannot parse chrono's MIN/MAX years, so an unbounded range matches nothing.

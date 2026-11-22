@@ -12,6 +12,7 @@ pub mod comments;
 pub mod cycles;
 pub mod history;
 pub mod import;
+pub mod insights;
 pub mod issues;
 pub mod labels;
 pub mod palette;
@@ -27,6 +28,7 @@ pub mod settings;
 pub mod statuses;
 pub mod templates;
 pub mod undo;
+pub mod view_templates;
 pub mod views;
 pub mod workspace;
 

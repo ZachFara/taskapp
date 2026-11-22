@@ -340,6 +340,7 @@ async fn view_save_rename_delete() -> R {
         layout: Layout::List,
         columns: vec![],
         include_archived: false,
+        ..ViewDef::default()
     };
     let base = views::list(&db).await?.len();
     let view = history::step(
@@ -480,6 +481,7 @@ async fn an_import_creating_a_label_and_a_project_is_undone_in_one_step() -> R {
             start_date: None,
             due_date: None,
             estimate_minutes: None,
+            points: None,
             properties: serde_json::Map::new(),
             parent: None,
             cycle: None,

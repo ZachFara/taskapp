@@ -10,13 +10,15 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::Value;
 use taskapp_core::{
     Applied, AppliedTemplate, Bar, BulkPatch, Change, ChangeSource, Comment, CommentId, Cycle,
-    CycleId, Db, Error, ImportPlan, Issue, IssueId, IssuePatch, IssueTemplate, Label, LabelId,
-    Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId, PinKind, Project, ProjectId,
-    PropertyDef, PropertyKind, Relation, Reschedule, ResolvedPin, Result, SavedView, SelectOption,
-    Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus,
-    ViewDef, ViewId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks, bulk, comments,
-    cycles, history, import, issues, labels, pins, projects, properties, quickadd, relations,
-    schedule, search, settings, statuses, templates, undo, views, workspace,
+    CycleId, Db, Error, ImportPlan, Issue, IssueId, IssuePatch, IssueStats, IssueTemplate, Label,
+    LabelId, Measure, Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId, PinKind,
+    ProgressScope, ProgressSeries, Project, ProjectId, PropertyDef, PropertyKind, Relation,
+    Reschedule, ResolvedPin, Result, SavedView, SelectOption, Status, StatusCategory, StatusId,
+    SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewId,
+    ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks, bulk,
+    comments, cycles, history, import, insights, issues, labels, pins, projects, properties,
+    quickadd, relations, schedule, search, settings, statuses, templates, undo, view_templates,
+    views, workspace,
 };
 
 pub struct AppState {
@@ -48,12 +50,8 @@ async fn view_issues(s: &AppState, id: ViewId) -> Result<Vec<Issue>> {
 /// Every issue, archived included.
 fn all_issues_def() -> ViewDef {
     ViewDef {
-        filter: None,
-        sorts: vec![],
-        group_by: None,
-        layout: taskapp_core::Layout::List,
-        columns: vec![],
         include_archived: true,
+        ..ViewDef::default()
     }
 }
 
@@ -250,12 +248,36 @@ macro_rules! with_commands {
             }
             views_delete(s, id: ViewId) -> () { views::delete(&s.db, id).await }
             views_reorder(s, ids: Vec<ViewId>) -> () { views::reorder(&s.db, &ids).await }
+            views_stats(s, def: ViewDef) -> Vec<IssueStats> { views::stats(&s.db, &def).await }
+            views_create_from_template(s, template_id: ViewTemplateId, name: Option<String>) -> SavedView {
+                view_templates::create_view(&s.db, template_id, name.as_deref(), ChangeSource::Ui).await
+            }
+            views_save_as_template(s, view_id: ViewId, name: Option<String>) -> ViewTemplate {
+                view_templates::from_view(&s.db, view_id, name.as_deref(), ChangeSource::Ui).await
+            }
+            views_reset_to_template(s, view_id: ViewId) -> SavedView {
+                view_templates::reset_view(&s.db, view_id, ChangeSource::Ui).await
+            }
+            view_templates_list(s) -> Vec<ViewTemplate> { view_templates::list(&s.db).await }
+            view_templates_create(s, name: String, def: ViewDef, icon: Option<String>, color: Option<String>) -> ViewTemplate {
+                view_templates::create(&s.db, &name, def, icon, color, ChangeSource::Ui).await
+            }
+            view_templates_update(s, template: ViewTemplate) -> ViewTemplate {
+                view_templates::update(&s.db, template, ChangeSource::Ui).await
+            }
+            view_templates_delete(s, id: ViewTemplateId) -> () { view_templates::delete(&s.db, id, ChangeSource::Ui).await }
 
             import_csv_plan(s, csv: String, mapping: Option<Vec<(String, String)>>) -> ImportPlan {
                 let mapping = mapping.map(|m| m.into_iter().collect());
                 import::csv::plan(&s.db, &csv, mapping.as_ref()).await
             }
             import_apply(s, plan: ImportPlan) -> Applied { import::apply(&s.db, &plan).await }
+
+            insights_progress(s, scope: ProgressScope, measure: Measure, from: Option<NaiveDate>, to: Option<NaiveDate>)
+                -> ProgressSeries { insights::progress(&s.db, scope, measure, from, to).await }
+            insights_velocity(s, scope: ProgressScope, measure: Measure, periods: u32) -> Vec<VelocityPeriod> {
+                insights::velocity(&s.db, scope, measure, periods).await
+            }
 
             search_search(s, text: String, limit: u32) -> Vec<Issue> { search::search(&s.db, &text, limit).await }
 

@@ -7,15 +7,16 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use taskapp_core::{
-    ChangeSource, CycleId, Db, Due, Error, IssueId, IssuePatch, LabelId, NewIssue, PinId, PinKind,
-    ProjectId, PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, StatusId,
-    TemplateId, ViewDef, ViewId, backup, comments, cycles, history, import, issues, labels, pins,
-    projects, properties, quickadd, relations, search, templates, undo, views,
+    ChangeSource, CycleId, Db, Due, Error, IssueId, IssuePatch, LabelId, Measure, NewIssue, PinId,
+    PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind, Relation, RelationKind, Result,
+    SelectOption, StatusId, TemplateId, ViewDef, ViewId, ViewTemplateId, backup, comments, cycles,
+    history, import, insights, issues, labels, pins, projects, properties, quickadd, relations,
+    search, templates, undo, view_templates, views,
 };
 
 use crate::{
-    Cmd, CommentCmd, CycleCmd, ImportCmd, IssueCmd, LabelCmd, PinCmd, ProjectCmd, PropertyCmd,
-    RelationCmd, TemplateCmd, ViewCmd,
+    Cmd, CommentCmd, CycleCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd, PinCmd, ProjectCmd,
+    PropertyCmd, RelationCmd, ScopeArgs, TemplateCmd, ViewCmd,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
@@ -28,6 +29,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         }
         Cmd::Redo => val(undo::redo(db).await?),
         Cmd::Template(cmd) => template(db, cmd).await,
+        Cmd::Insights(cmd) => insights(db, cmd).await,
         cmd => run_group(db, dir, cmd).await,
     }
 }
@@ -48,7 +50,9 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Backup(_) => Err(Error::Invalid(
             "backup runs before the database opens".into(),
         )),
-        Cmd::Undo | Cmd::Redo | Cmd::Setup { .. } | Cmd::Template(_) => handled_in_run(),
+        Cmd::Undo | Cmd::Redo | Cmd::Setup { .. } | Cmd::Template(_) | Cmd::Insights(_) => {
+            handled_in_run()
+        }
         Cmd::History { key } => {
             let id = issue_id(db, &key).await?;
             val(history::list_for(db, "issue", &id.0.to_string()).await?)
@@ -85,6 +89,7 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
             project,
             due,
             estimate,
+            points,
             created_at,
             completed_at,
             properties,
@@ -111,6 +116,7 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
                 project_id: project.map(ProjectId),
                 due: due.as_deref().map(date).transpose()?.map(Due::Date),
                 estimate_minutes: estimate,
+                points,
                 ..NewIssue::default()
             };
             val(issues::create(db, new, source(migration)).await?)
@@ -135,6 +141,8 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         status,
         due,
         clear_due,
+        points,
+        clear_points,
     } = cmd
     else {
         unreachable!("issue_update is only called with Update");
@@ -154,13 +162,73 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         priority: check_priority(priority)?,
         status_id: status.map(StatusId),
         due,
+        points: if clear_points {
+            Some(None)
+        } else {
+            points.map(Some)
+        },
         ..IssuePatch::default()
     };
     val(issues::update(db, id, patch, SRC).await?)
 }
 
+fn scope(a: &ScopeArgs) -> Result<(ProgressScope, Measure)> {
+    let scope = match (a.project, a.cycle, a.view) {
+        (Some(p), None, None) => ProgressScope::Project(ProjectId(p)),
+        (None, Some(c), None) => ProgressScope::Cycle(CycleId(c)),
+        (None, None, Some(v)) => ProgressScope::View(ViewId(v)),
+        _ => {
+            return Err(Error::Invalid(
+                "pass exactly one of --project, --cycle or --view".into(),
+            ));
+        }
+    };
+    let measure = serde_json::from_value(json!(a.measure)).map_err(|_| {
+        Error::Invalid(format!(
+            "measure {} must be points, count or time",
+            a.measure
+        ))
+    })?;
+    Ok((scope, measure))
+}
+
+async fn insights(db: &Db, cmd: InsightsCmd) -> Result<Value> {
+    match cmd {
+        InsightsCmd::Progress { scope: s, from, to } => {
+            let (scope, measure) = scope(&s)?;
+            let (from, to) = (
+                from.as_deref().map(date).transpose()?,
+                to.as_deref().map(date).transpose()?,
+            );
+            val(insights::progress(db, scope, measure, from, to).await?)
+        }
+        InsightsCmd::Velocity { scope: s, periods } => {
+            let (scope, measure) = scope(&s)?;
+            val(insights::velocity(db, scope, measure, periods).await?)
+        }
+    }
+}
+
 async fn view(db: &Db, cmd: ViewCmd) -> Result<Value> {
-    let ViewCmd::Query { def, id } = cmd;
+    let (def, id) = match cmd {
+        ViewCmd::Query { def, id } => (def, id),
+        ViewCmd::Templates => return val(view_templates::list(db).await?),
+        ViewCmd::SaveAsTemplate { view_id, name } => {
+            let t = view_templates::from_view(db, ViewId(view_id), name.as_deref(), SRC);
+            return val(t.await?);
+        }
+        ViewCmd::FromTemplate { template_id, name } => {
+            let id = ViewTemplateId(template_id);
+            return val(view_templates::create_view(db, id, name.as_deref(), SRC).await?);
+        }
+        ViewCmd::Reset { view_id } => {
+            return val(view_templates::reset_view(db, ViewId(view_id), SRC).await?);
+        }
+        ViewCmd::DeleteTemplate { id } => {
+            view_templates::delete(db, ViewTemplateId(id), SRC).await?;
+            return Ok(json!({ "deleted": true }));
+        }
+    };
     let def: ViewDef = match (def, id) {
         (Some(text), None) => serde_json::from_str(&text)
             .map_err(|e| Error::Invalid(format!("view definition: {e}")))?,

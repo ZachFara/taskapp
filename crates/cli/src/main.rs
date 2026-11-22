@@ -51,6 +51,9 @@ enum Cmd {
     Pin(PinCmd),
     #[command(subcommand)]
     Template(TemplateCmd),
+    /// Progress and velocity over time, rebuilt from history.
+    #[command(subcommand)]
+    Insights(InsightsCmd),
     /// Change history of an issue.
     History { key: String },
     /// Undo the newest step, whatever made it (UI, agent or CLI).
@@ -128,6 +131,9 @@ enum IssueCmd {
         /// Estimate in minutes.
         #[arg(long)]
         estimate: Option<u32>,
+        /// Points: 0 or more, one decimal.
+        #[arg(long)]
+        points: Option<f64>,
         /// Original creation time, RFC 3339.
         #[arg(long)]
         created_at: Option<String>,
@@ -167,6 +173,12 @@ enum IssueCmd {
         /// Remove the due date.
         #[arg(long)]
         clear_due: bool,
+        /// Points: 0 or more, one decimal.
+        #[arg(long, conflicts_with = "clear_points")]
+        points: Option<f64>,
+        /// Remove the points.
+        #[arg(long)]
+        clear_points: bool,
     },
     Get {
         key: String,
@@ -181,6 +193,42 @@ enum IssueCmd {
     },
 }
 
+/// What a chart covers: exactly one of the three ids.
+#[derive(clap::Args)]
+struct ScopeArgs {
+    #[arg(long, group = "scope")]
+    project: Option<i64>,
+    #[arg(long, group = "scope")]
+    cycle: Option<i64>,
+    #[arg(long, group = "scope")]
+    view: Option<i64>,
+    /// points, count or time (minutes).
+    #[arg(long, default_value = "points")]
+    measure: String,
+}
+
+#[derive(Subcommand)]
+enum InsightsCmd {
+    /// Per day scope, started and completed; the range defaults to the scope's own dates.
+    Progress {
+        #[command(flatten)]
+        scope: ScopeArgs,
+        /// First day, YYYY-MM-DD.
+        #[arg(long)]
+        from: Option<String>,
+        /// Last day, YYYY-MM-DD.
+        #[arg(long)]
+        to: Option<String>,
+    },
+    /// Completed per cycle, or per week when there are no cycles.
+    Velocity {
+        #[command(flatten)]
+        scope: ScopeArgs,
+        #[arg(long, default_value_t = 6)]
+        periods: u32,
+    },
+}
+
 #[derive(Subcommand)]
 enum ViewCmd {
     /// Run a view: an ad hoc JSON definition, or a saved view by id.
@@ -189,6 +237,27 @@ enum ViewCmd {
         def: Option<String>,
         #[arg(long)]
         id: Option<i64>,
+    },
+    /// List view templates.
+    Templates,
+    /// Make a template from a saved view.
+    SaveAsTemplate {
+        view_id: i64,
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Make a saved view from a template.
+    FromTemplate {
+        template_id: i64,
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Put a view made from a template back to the template's definition.
+    Reset {
+        view_id: i64,
+    },
+    DeleteTemplate {
+        id: i64,
     },
 }
 

@@ -91,9 +91,14 @@ const estimate = (w: string) => {
   return n > 0 && n <= 4_294_967_295 ? n : null;
 };
 
+const points = (w: string) => {
+  const m = /^(?:(\d+(?:\.\d)?)pt|pt(\d+(?:\.\d)?))$/.exec(w);
+  return m ? Number(m[1] ?? m[2]) : null;
+};
+
 export function parseQuickadd(input: string, today: string, tz: string): ParsedQuickAdd {
   const tokens = input.split(/\s+/).filter(Boolean);
-  const out = { dueDate: null as string | null, time: null as [[number, number], string] | null, start: null as string | null, priority: null as number | null, slug: null as string | null, labels: [] as string[], estimate: null as number | null };
+  const out = { dueDate: null as string | null, time: null as [[number, number], string] | null, start: null as string | null, priority: null as number | null, slug: null as string | null, labels: [] as string[], estimate: null as number | null, points: null as number | null };
   const title: string[] = [];
   for (let i = 0; i < tokens.length; ) {
     const raw = tokens[i];
@@ -107,6 +112,7 @@ export function parseQuickadd(input: string, today: string, tz: string): ParsedQ
     else if (w.length > 1 && w.startsWith('#')) { out.slug = w.slice(1); used = 1; }
     else if (raw.length > 1 && raw.startsWith('@')) { out.labels.push(raw.slice(1)); used = 1; }
     else if (estimate(w) !== null) { out.estimate = estimate(w); used = 1; }
+    else if (points(w) !== null) { out.points = points(w); used = 1; }
     else if (w === 'by' || w === 'due') date(i + 1, (d) => (out.dueDate = d), 1);
     else if (w === 'start') date(i + 1, (d) => (out.start = d), 1);
     else if (w === 'at') {
@@ -123,6 +129,6 @@ export function parseQuickadd(input: string, today: string, tz: string): ParsedQ
   }
   return {
     title: title.length ? title.join(' ') : tokens.join(' '), due, start_date: out.start, priority: out.priority,
-    project_slug: out.slug, label_names: out.labels, estimate_minutes: out.estimate,
+    project_slug: out.slug, label_names: out.labels, estimate_minutes: out.estimate, points: out.points,
   };
 }

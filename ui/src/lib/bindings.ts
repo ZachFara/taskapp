@@ -466,6 +466,62 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	viewsStats: (def: ViewDef, options?: InvokeOptions) => __TAURI_INVOKE<IssueStats[]>("views_stats", { def }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewsCreateFromTemplate: (templateId: ViewTemplateId, name: string | null, options?: InvokeOptions) => __TAURI_INVOKE<SavedView>("views_create_from_template", { templateId, name }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewsSaveAsTemplate: (viewId: ViewId, name: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ViewTemplate>("views_save_as_template", { viewId, name }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewsResetToTemplate: (viewId: ViewId, options?: InvokeOptions) => __TAURI_INVOKE<SavedView>("views_reset_to_template", { viewId }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewTemplatesList: (options?: InvokeOptions) => __TAURI_INVOKE<ViewTemplate[]>("view_templates_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewTemplatesCreate: (name: string, def: ViewDef, icon: string | null, color: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ViewTemplate>("view_templates_create", { name, def, icon, color }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewTemplatesUpdate: (template: ViewTemplate, options?: InvokeOptions) => __TAURI_INVOKE<ViewTemplate>("view_templates_update", { template }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewTemplatesDelete: (id: ViewTemplateId, options?: InvokeOptions) => __TAURI_INVOKE<null>("view_templates_delete", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	importCsvPlan: (csv: string, mapping: ([string, string])[] | null, options?: InvokeOptions) => __TAURI_INVOKE<ImportPlan>("import_csv_plan", { csv, mapping }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -474,6 +530,20 @@ export const commands = {
 	 * As that command.
 	 */
 	importApply: (plan: ImportPlan, options?: InvokeOptions) => __TAURI_INVOKE<Applied>("import_apply", { plan }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	insightsProgress: (scope: ProgressScope, measure: Measure, from: string | null, to: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ProgressSeries>("insights_progress", { scope, measure, from, to }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	insightsVelocity: (scope: ProgressScope, measure: Measure, periods: number, options?: InvokeOptions) => __TAURI_INVOKE<VelocityPeriod[]>("insights_velocity", { scope, measure, periods }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -713,6 +783,8 @@ export type Cycle = {
 
 export type CycleId = number;
 
+export type Density = "comfortable" | "compact";
+
 export type Due = ({ Date: string }) & { DateTime?: never } | 
 /**  `tz` is an IANA name. */
 ({ DateTime: {
@@ -734,7 +806,7 @@ export type Filter = ({ And: Filter[] }) & { Cond?: never; Not?: never; Or?: nev
 	value: Value,
 } }) & { And?: never; Not?: never; Or?: never };
 
-export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived";
+export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "Points" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount";
 
 /**
  *  Everything an import would create. The lists of statuses, labels, projects, cycles and property
@@ -770,6 +842,8 @@ export type Issue = {
 	start_date: string | null,
 	due: Due | null,
 	estimate_minutes: number | null,
+	/**  At least 0, one decimal at most (checked on write). */
+	points: number | null,
 	properties: { [key in string]: Value },
 	created_at: string,
 	updated_at: string,
@@ -793,7 +867,17 @@ export type IssuePatch = {
 	start_date?: string | null,
 	due?: Due | null,
 	estimate_minutes?: number | null,
+	points?: number | null,
 	properties?: { [key in string]: Value } | null,
+};
+
+/**  The counts a view can display that an issue row does not carry. */
+export type IssueStats = {
+	issue_id: IssueId,
+	sub_total: number,
+	sub_done: number,
+	relations: number,
+	comments: number,
 };
 
 export type IssueTemplate = {
@@ -819,6 +903,9 @@ export type LabelId = number;
 
 export type Layout = "List" | "Table" | "Board" | "Gantt" | "Calendar";
 
+/**  What is summed: story points, issue count, or estimated time (minutes). */
+export type Measure = "points" | "count" | "time";
+
 export type Milestone = {
 	id: MilestoneId,
 	project_id: ProjectId,
@@ -842,6 +929,7 @@ export type NewIssue = {
 	start_date?: string | null,
 	due?: Due | null,
 	estimate_minutes?: number | null,
+	points?: number | null,
 	properties?: { [key in string]: Value } | null,
 	created_at?: string | null,
 	completed_at?: string | null,
@@ -857,6 +945,7 @@ export type ParsedQuickAdd = {
 	project_slug: string | null,
 	label_names: string[],
 	estimate_minutes: number | null,
+	points: number | null,
 };
 
 export type Pin = {
@@ -892,6 +981,7 @@ export type PlanIssue = {
 	start_date: string | null,
 	due_date: string | null,
 	estimate_minutes: number | null,
+	points?: number | null,
 	properties: { [key in string]: Value },
 	parent: string | null,
 	cycle: string | null,
@@ -906,6 +996,26 @@ export type PlanRelation = {
 export type PlanStatus = {
 	name: string,
 	category: StatusCategory,
+};
+
+/**  The totals at the end of one local day. */
+export type ProgressDay = {
+	date: string,
+	/**  Every issue that existed and is not canceled. */
+	scope: number | null,
+	/**  Those whose status category is started or completed. */
+	started: number | null,
+	completed: number | null,
+};
+
+/**  What a progress chart is about: the issues of a project or cycle, or those a saved view shows now. */
+export type ProgressScope = ({ Project: ProjectId }) & { Cycle?: never; View?: never } | ({ Cycle: CycleId }) & { Project?: never; View?: never } | ({ View: ViewId }) & { Cycle?: never; Project?: never };
+
+export type ProgressSeries = {
+	days: ProgressDay[],
+	measure: Measure,
+	from: string,
+	to: string,
 };
 
 export type Project = {
@@ -963,6 +1073,8 @@ export type SavedView = {
 	position: number,
 	icon: string | null,
 	color: string | null,
+	/**  The template the view was made from, for "Reset to template". */
+	template_id: ViewTemplateId | null,
 };
 
 export type SelectOption = {
@@ -1002,6 +1114,8 @@ export type SubIssue = {
 	fields?: TemplateFields,
 };
 
+export type SubIssues = "nest" | "flat" | "hide";
+
 export type SyncState = "Off" | ({ Ok: {
 	at: string,
 } }) & { Error?: never } | ({ Error: {
@@ -1032,6 +1146,7 @@ export type TemplateFields = {
 	project_id?: ProjectId | null,
 	label_ids?: LabelId[],
 	estimate_minutes?: number | null,
+	points?: number | null,
 	properties?: { [key in string]: Value },
 };
 
@@ -1054,6 +1169,18 @@ export type UndoStatus = {
 
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value };
 
+/**  Completed in one cycle or week. */
+export type VelocityPeriod = {
+	start: string,
+	end: string,
+	label: string,
+	completed: number | null,
+};
+
+/**
+ *  `columns` is the ordered list of displayed fields in every layout; empty means the layout's default.
+ *  The display settings default so views stored before they existed still load.
+ */
 export type ViewDef = {
 	filter: Filter | null,
 	sorts: Sort[],
@@ -1061,9 +1188,27 @@ export type ViewDef = {
 	layout: Layout,
 	columns: FieldRef[],
 	include_archived: boolean,
+	density?: Density,
+	show_empty_groups?: boolean,
+	show_sub_issues?: SubIssues,
+	/**  The board's card fields; empty means `columns`. */
+	card_fields?: FieldRef[],
+	show_weekends?: boolean,
 };
 
 export type ViewId = number;
+
+/**  A saved view definition that new views start from. */
+export type ViewTemplate = {
+	id: ViewTemplateId,
+	name: string,
+	icon: string | null,
+	color: string | null,
+	def: ViewDef,
+	position: number,
+};
+
+export type ViewTemplateId = number;
 
 export type WorkBlock = {
 	id: WorkBlockId,

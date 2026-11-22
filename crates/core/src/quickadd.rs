@@ -47,6 +47,7 @@ pub fn parse(input: &str, today: NaiveDate, tz: &str) -> ParsedQuickAdd {
         project_slug: parts.slug,
         label_names: parts.labels,
         estimate_minutes: parts.estimate,
+        points: parts.points,
     }
 }
 
@@ -120,6 +121,7 @@ pub async fn new_issue(db: &Db, input: &str, today: NaiveDate, tz: &str) -> Resu
         start_date: parsed.start_date,
         due: parsed.due,
         estimate_minutes: parsed.estimate_minutes,
+        points: parsed.points,
         properties: None,
         created_at: None,
         completed_at: None,
@@ -135,6 +137,7 @@ struct Parts<'a> {
     slug: Option<String>,
     labels: Vec<String>,
     estimate: Option<u32>,
+    points: Option<f64>,
 }
 
 /// Consumes the token(s) at `i` into `p`; returns how many were consumed (0 = plain title word).
@@ -155,6 +158,10 @@ fn take<'a>(tokens: &[&'a str], i: usize, today: NaiveDate, p: &mut Parts<'a>) -
     }
     if let Some(minutes) = estimate(&w) {
         p.estimate = Some(minutes);
+        return 1;
+    }
+    if let Some(pts) = points(&w) {
+        p.points = Some(pts);
         return 1;
     }
     match w.as_str() {
@@ -200,6 +207,16 @@ fn estimate(w: &str) -> Option<u32> {
         _ => return None,
     };
     n.checked_mul(per_unit).filter(|m| *m > 0)
+}
+
+/// `3pt`, `0.5pt` or `pt3`: at most one decimal, like the stored value.
+fn points(w: &str) -> Option<f64> {
+    let n = w.strip_suffix("pt").or_else(|| w.strip_prefix("pt"))?;
+    let (whole, frac) = n.split_once('.').map_or((n, None), |(w, f)| (w, Some(f)));
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    (digits(whole) && frac.is_none_or(|f| f.len() == 1 && digits(f)))
+        .then(|| n.parse().ok())
+        .flatten()
 }
 
 /// A date starting at token `i`; returns the date and how many tokens it used.

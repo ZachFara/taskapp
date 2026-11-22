@@ -28,6 +28,7 @@ const ISSUE_FIELDS: &[&str] = &[
     "start_date",
     "due",
     "estimate_minutes",
+    "points",
     "properties",
 ];
 
@@ -147,6 +148,7 @@ const DESCRIPTIVE: &[&str] = &[
     "property_def",
     "status",
     "view",
+    "view_template",
     "template",
 ];
 
