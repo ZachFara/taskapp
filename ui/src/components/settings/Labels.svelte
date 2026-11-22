@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SectionHead from './SectionHead.svelte';
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
   import type { Label } from '../../lib/bindings';
@@ -47,10 +48,7 @@
 </script>
 
 <div class="es">
-  <header class="es-head">
-    <h2>Labels</h2>
-    <p>Free-form tags you can put on any issue. Pick a colour and an icon so they read at a glance.</p>
-  </header>
+  <SectionHead lede="Free-form tags you can put on any issue. Pick a colour and an icon so they read at a glance." />
 
   {#if labels.length}
     <ul class="es-list">

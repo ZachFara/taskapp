@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SectionHead from './SectionHead.svelte';
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
   import Button from '../../ui/Button.svelte';
@@ -46,13 +47,7 @@
   }
 </script>
 
-<div class="st-head">
-  <h2>Google Calendar</h2>
-  <p class="st-lede">
-    Use a dedicated calendar for these events, and view it in the Google Calendar phone app
-    so reminders reach your phone.
-  </p>
-</div>
+<SectionHead lede="Use a dedicated calendar for these events, and view it in the Google Calendar phone app so reminders reach your phone." />
 
 <div class="st-card">
   <span

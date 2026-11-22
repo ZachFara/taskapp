@@ -75,6 +75,24 @@ describe('ViewsPage templates', () => {
     expect(row.textContent).toContain('Table');
   });
 
+  it('a timeline layout is named Timeline, never Gantt', async () => {
+    const prev = tpl.def.layout;
+    tpl.def.layout = 'Gantt';
+    try {
+      fakeTemplates();
+      const { target } = await open();
+      const row = await vi.waitFor(() => {
+        const el = target.querySelector<HTMLElement>('[data-template-id="7"]');
+        expect(el).not.toBeNull();
+        return el!;
+      });
+      expect(row.textContent).toContain('Timeline');
+      expect(row.textContent).not.toContain('Gantt');
+    } finally {
+      tpl.def.layout = prev;
+    }
+  });
+
   it('set_as_default_saves_the_default_template_setting', async () => {
     fakeTemplates();
     const { mock, target } = await open();

@@ -16,9 +16,11 @@
   import Select from '../ui/Select.svelte';
   import TextInput from '../ui/TextInput.svelte';
 
+  // The layout is stored as Gantt; users see it as Timeline.
+  const layoutName = (l: string) => (l === 'Gantt' ? 'Timeline' : l);
   const layouts: { value: string; label: string }[] = (['List', 'Board', 'Table', 'Gantt', 'Calendar'] as Layout[]).map((l) => ({
     value: l,
-    label: l === 'Gantt' ? 'Timeline' : l,
+    label: layoutName(l),
   }));
 
   let views = $state<SavedView[]>([]);
@@ -107,10 +109,10 @@
           <ListRow onpick={() => navigate(`/view/${v.id}`)}>
             <EntityIcon icon={v.icon ?? 'icon:layers'} color={v.color} />
             <span class="name">{v.name}</span>
-            <Pill>{v.def.layout}</Pill>
+            <Pill>{layoutName(v.def.layout)}</Pill>
             {#if pinned.has(`/view/${v.id}`)}<Pill>Pinned</Pill>{/if}
           </ListRow>
-          <IconButton icon="trash" label={`Delete ${v.name}`} onclick={() => ((doomed = v), (confirming = true))} />
+          <div class="tools"><IconButton icon="trash" label={`Delete ${v.name}`} onclick={() => ((doomed = v), (confirming = true))} /></div>
         </li>
       {/each}
     </ul>
@@ -127,13 +129,15 @@
             <div class="trow">
               <EntityIcon icon={t.icon ?? 'icon:layers'} color={t.color} />
               <span class="name">{t.name}</span>
-              <Pill>{t.def.layout}</Pill>
+              <Pill>{layoutName(t.def.layout)}</Pill>
               {#if defaultId === t.id}<Pill>Default</Pill>{/if}
             </div>
-            <IconButton icon="star" label="Set as default" disabled={defaultId === t.id} onclick={() => makeDefault(t)} />
-            <IconButton icon="edit" label={`Rename ${t.name}`} onclick={() => openEdit(t, false)} />
-            <IconButton icon="layers" label={`Edit ${t.name}`} onclick={() => openEdit(t, true)} />
-            <IconButton icon="trash" label={`Delete ${t.name}`} onclick={() => ((doomedTpl = t), (confirmingTpl = true))} />
+            <div class="tools">
+              <IconButton icon="star" label="Set as default" disabled={defaultId === t.id} onclick={() => makeDefault(t)} />
+              <IconButton icon="edit" label={`Rename ${t.name}`} onclick={() => openEdit(t, false)} />
+              <IconButton icon="layers" label={`Edit ${t.name}`} onclick={() => openEdit(t, true)} />
+              <IconButton icon="trash" label={`Delete ${t.name}`} onclick={() => ((doomedTpl = t), (confirmingTpl = true))} />
+            </div>
           </li>
         {/each}
       </ul>
@@ -173,6 +177,8 @@
   .rows { list-style: none; margin: 0; padding: 0; }
   .row { display: flex; align-items: center; gap: var(--s-3); padding-right: var(--s-4); border-bottom: 1px solid var(--border); }
   .name { font-weight: 600; margin-right: auto; }
+  .tools { display: flex; gap: var(--s-1); opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+  .row:hover .tools, .row:focus-within .tools { opacity: 1; }
   .trow { flex: 1; display: flex; align-items: center; gap: var(--s-5); height: var(--row-h); padding: 0 var(--s-7); }
   .section { font-size: var(--fs-13); font-weight: 600; margin: var(--s-7) 0 var(--s-3); color: var(--muted); }
   .hint { color: var(--muted); margin: 0 0 var(--s-4); }
