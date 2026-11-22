@@ -6,6 +6,7 @@ use crate::{
     ChangeSource, Cycle, CycleId, Db, Error, Result,
     history::{self, Edit},
     palette::{self, Look},
+    rows,
 };
 
 /// Icon and color are checked the same way on create and update.
@@ -129,6 +130,7 @@ pub async fn create(
     .await?
     .last_insert_rowid();
     ensure_no_overlap(&mut tx, id, start_date, end_date).await?;
+    rows::created(&mut tx, src, "cycles", id).await?;
     let number = sqlx::query_scalar!(
         r#"SELECT number AS "number!: i64" FROM cycles WHERE id = ?"#,
         id
@@ -162,6 +164,7 @@ pub async fn update(db: &Db, mut cycle: Cycle, src: ChangeSource) -> Result<Cycl
     cycle.color = check_look(cycle.icon.as_deref(), cycle.color.as_deref())?;
     let id = cycle.id.0;
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let before = rows::by_key(&mut tx, "cycles", id).await?;
     let old = sqlx::query!(
         r#"SELECT name, start_date AS "start_date!: NaiveDate", end_date AS "end_date!: NaiveDate",
                   icon, color
@@ -212,6 +215,7 @@ pub async fn update(db: &Db, mut cycle: Cycle, src: ChangeSource) -> Result<Cycl
     .execute(&mut *tx)
     .await?;
     ensure_no_overlap(&mut tx, id, cycle.start_date, cycle.end_date).await?;
+    rows::changed(&mut tx, src, before).await?;
     tx.commit().await?;
     Ok(cycle)
 }
@@ -248,9 +252,11 @@ pub async fn delete(db: &Db, id: CycleId, src: ChangeSource) -> Result<()> {
     sqlx::query!("UPDATE issues SET cycle_id = NULL WHERE cycle_id = ?", cid)
         .execute(&mut *tx)
         .await?;
+    let before = rows::by_key(&mut tx, "cycles", cid).await?;
     sqlx::query!("DELETE FROM cycles WHERE id = ?", cid)
         .execute(&mut *tx)
         .await?;
+    rows::changed(&mut tx, src, before).await?;
     tx.commit().await?;
     Ok(())
 }
