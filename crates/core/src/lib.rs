@@ -13,6 +13,7 @@ pub mod history;
 pub mod import;
 pub mod issues;
 pub mod labels;
+pub mod palette;
 pub mod pins;
 pub mod projects;
 pub mod properties;

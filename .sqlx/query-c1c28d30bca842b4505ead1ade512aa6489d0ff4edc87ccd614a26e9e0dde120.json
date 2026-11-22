@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", number AS \"number!: i64\", name,\n                  start_date AS \"start_date!: NaiveDate\", end_date AS \"end_date!: NaiveDate\"\n           FROM cycles ORDER BY number",
+  "query": "SELECT id AS \"id!: i64\", number AS \"number!: i64\", name,\n                  start_date AS \"start_date!: NaiveDate\", end_date AS \"end_date!: NaiveDate\",\n                  icon, color\n           FROM cycles ORDER BY number",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,16 @@
         "name": "end_date!: NaiveDate",
         "ordinal": 4,
         "type_info": "Text"
+      },
+      {
+        "name": "icon",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "color",
+        "ordinal": 6,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -37,8 +47,10 @@
       false,
       true,
       false,
-      false
+      false,
+      true,
+      true
     ]
   },
-  "hash": "b71d50f5ec215397042bd7b4045d29cb944fe59515fc03535f6fd35e8f966d67"
+  "hash": "c1c28d30bca842b4505ead1ade512aa6489d0ff4edc87ccd614a26e9e0dde120"
 }

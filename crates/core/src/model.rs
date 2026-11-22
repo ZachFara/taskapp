@@ -189,7 +189,11 @@ pub struct Status {
     pub name: String,
     pub category: StatusCategory,
     pub position: i32,
+    /// A palette key.
     pub color: String,
+    /// The reference hex for `color`, for showing it without the palette.
+    pub color_hex: String,
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -202,6 +206,8 @@ pub struct Project {
     pub start_date: Option<NaiveDate>,
     pub target_date: Option<NaiveDate>,
     pub archived_at: Option<DateTime<Utc>>,
+    pub icon: Option<String>,
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -219,13 +225,19 @@ pub struct Cycle {
     pub name: Option<String>,
     pub start_date: NaiveDate,
     pub end_date: NaiveDate,
+    pub icon: Option<String>,
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct Label {
     pub id: LabelId,
     pub name: String,
+    /// A palette key.
     pub color: String,
+    /// The reference hex for `color`, for showing it without the palette.
+    pub color_hex: String,
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -380,6 +392,8 @@ pub struct SavedView {
     pub name: String,
     pub def: ViewDef,
     pub position: i32,
+    pub icon: Option<String>,
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

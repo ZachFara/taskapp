@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", name, category, position, color FROM statuses WHERE id = ?",
+  "query": "SELECT id AS \"id!: i64\", name, category, position, color, icon FROM statuses WHERE id = ?",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,11 @@
         "name": "color",
         "ordinal": 4,
         "type_info": "Text"
+      },
+      {
+        "name": "icon",
+        "ordinal": 5,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -37,8 +42,9 @@
       false,
       false,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "14db31eb84de9d063b480a97ca985cd8b128af47c968f459b93d137774e99088"
+  "hash": "255fb35ace421e17c2e898070754ec0f9ef1dce4d73f8b9c71c6f064c4aca589"
 }

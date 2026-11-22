@@ -222,7 +222,14 @@ enum PropertyCmd {
 #[derive(Subcommand)]
 enum ProjectCmd {
     List,
-    Create { slug: String, name: String },
+    Create {
+        slug: String,
+        name: String,
+        #[arg(long)]
+        icon: Option<String>,
+        #[arg(long)]
+        color: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -237,6 +244,12 @@ enum CycleCmd {
         end: String,
         #[arg(long)]
         name: Option<String>,
+        /// Palette key or #rrggbb.
+        #[arg(long)]
+        color: Option<String>,
+        /// icon:<id> or emoji:<emoji>.
+        #[arg(long)]
+        icon: Option<String>,
     },
 }
 
@@ -293,7 +306,12 @@ impl TemplateArgs {
 #[derive(Subcommand)]
 enum LabelCmd {
     List,
-    Create { name: String, color: String },
+    Create {
+        name: String,
+        color: String,
+        #[arg(long)]
+        icon: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]

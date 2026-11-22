@@ -124,11 +124,11 @@ macro_rules! with_commands {
             }
 
             statuses_list(s) -> Vec<Status> { statuses::list(&s.db).await }
-            statuses_create(s, name: String, category: StatusCategory, color: String) -> Status {
-                statuses::create(&s.db, &name, category, &color).await
+            statuses_create(s, name: String, category: StatusCategory, color: String, icon: Option<String>) -> Status {
+                statuses::create(&s.db, &name, category, &color, icon, ChangeSource::Ui).await
             }
-            statuses_update(s, id: StatusId, name: Option<String>, color: Option<String>, position: Option<i32>)
-                -> Status { statuses::update(&s.db, id, name, color, position).await }
+            statuses_update(s, id: StatusId, name: Option<String>, color: Option<String>, position: Option<i32>, icon: Option<String>)
+                -> Status { statuses::update(&s.db, id, name, position, taskapp_core::palette::Look { icon, color }, ChangeSource::Ui).await }
             statuses_delete(s, id: StatusId, move_issues_to: StatusId) -> () {
                 statuses::delete(&s.db, id, move_issues_to).await
             }
@@ -153,8 +153,8 @@ macro_rules! with_commands {
             }
 
             projects_list(s) -> Vec<Project> { projects::list(&s.db).await }
-            projects_create(s, slug: String, name: String) -> Project {
-                projects::create(&s.db, &slug, &name, ChangeSource::Ui).await
+            projects_create(s, slug: String, name: String, icon: Option<String>, color: Option<String>) -> Project {
+                projects::create(&s.db, &slug, &name, icon, color, ChangeSource::Ui).await
             }
             projects_update(s, project: Project) -> Project { projects::update(&s.db, project, ChangeSource::Ui).await }
             projects_delete(s, id: ProjectId) -> () { projects::delete(&s.db, id, ChangeSource::Ui).await }
@@ -174,15 +174,15 @@ macro_rules! with_commands {
             }
 
             cycles_list(s) -> Vec<Cycle> { cycles::list(&s.db).await }
-            cycles_create(s, name: Option<String>, start_date: NaiveDate, end_date: NaiveDate) -> Cycle {
-                cycles::create(&s.db, name, start_date, end_date, ChangeSource::Ui).await
+            cycles_create(s, name: Option<String>, start_date: NaiveDate, end_date: NaiveDate, icon: Option<String>, color: Option<String>) -> Cycle {
+                cycles::create(&s.db, name, start_date, end_date, taskapp_core::palette::Look { icon, color }, ChangeSource::Ui).await
             }
             cycles_update(s, cycle: Cycle) -> Cycle { cycles::update(&s.db, cycle, ChangeSource::Ui).await }
             cycles_delete(s, id: CycleId) -> () { cycles::delete(&s.db, id, ChangeSource::Ui).await }
 
             labels_list(s) -> Vec<Label> { labels::list(&s.db).await }
-            labels_create(s, name: String, color: String) -> Label {
-                labels::create(&s.db, &name, &color, ChangeSource::Ui).await
+            labels_create(s, name: String, color: String, icon: Option<String>) -> Label {
+                labels::create(&s.db, &name, &color, icon, ChangeSource::Ui).await
             }
             labels_update(s, label: Label) -> Label { labels::update(&s.db, label, ChangeSource::Ui).await }
             labels_delete(s, id: LabelId) -> () { labels::delete(&s.db, id, ChangeSource::Ui).await }
@@ -231,8 +231,8 @@ macro_rules! with_commands {
 
             views_query(s, def: ViewDef) -> Vec<Issue> { views::query(&s.db, &def).await }
             views_list(s) -> Vec<SavedView> { views::list(&s.db).await }
-            views_save(s, id: Option<ViewId>, name: String, def: ViewDef) -> SavedView {
-                views::save(&s.db, id, &name, def).await
+            views_save(s, id: Option<ViewId>, name: String, def: ViewDef, icon: Option<String>, color: Option<String>) -> SavedView {
+                views::save(&s.db, id, &name, def, taskapp_core::palette::Look { icon, color }, ChangeSource::Ui).await
             }
             views_delete(s, id: ViewId) -> () { views::delete(&s.db, id).await }
             views_reorder(s, ids: Vec<ViewId>) -> () { views::reorder(&s.db, &ids).await }

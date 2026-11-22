@@ -47,6 +47,7 @@ impl Db {
             .run(&pool)
             .await
             .map_err(sqlx::Error::from)?;
+        crate::palette::map_legacy_colors(&pool).await?;
         Ok(Db { pool })
     }
 

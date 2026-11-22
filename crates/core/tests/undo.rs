@@ -166,7 +166,7 @@ async fn undo_and_redo_are_recorded_with_their_own_source_and_never_loop() -> R 
 async fn undo_refuses_a_step_it_cannot_reverse() -> R {
     let db = Db::open_in_memory().await?;
     history::step("Create label", async {
-        labels::create(&db, "ABC bug", "#ffffff", UI).await
+        labels::create(&db, "ABC bug", "#ffffff", None, UI).await
     })
     .await?;
     let err = undo::undo(&db).await.expect_err("not covered");
@@ -177,7 +177,15 @@ async fn undo_refuses_a_step_it_cannot_reverse() -> R {
 #[tokio::test]
 async fn undo_refuses_when_the_old_status_was_deleted() -> R {
     let db = Db::open_in_memory().await?;
-    let extra = statuses::create(&db, "ABC extra", StatusCategory::Started, "#ffffff").await?;
+    let extra = statuses::create(
+        &db,
+        "ABC extra",
+        StatusCategory::Started,
+        "#ffffff",
+        None,
+        UI,
+    )
+    .await?;
     let a = issues::create(
         &db,
         NewIssue {

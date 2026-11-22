@@ -223,16 +223,35 @@ async fn property(db: &Db, dir: &Path, cmd: PropertyCmd) -> Result<Value> {
 async fn project(db: &Db, cmd: ProjectCmd) -> Result<Value> {
     match cmd {
         ProjectCmd::List => val(projects::list(db).await?),
-        ProjectCmd::Create { slug, name } => val(projects::create(db, &slug, &name, SRC).await?),
+        ProjectCmd::Create {
+            slug,
+            name,
+            icon,
+            color,
+        } => val(projects::create(db, &slug, &name, icon, color, SRC).await?),
     }
 }
 
 async fn cycle(db: &Db, cmd: CycleCmd) -> Result<Value> {
     match cmd {
         CycleCmd::List => val(cycles::list(db).await?),
-        CycleCmd::Create { start, end, name } => {
+        CycleCmd::Create {
+            start,
+            end,
+            name,
+            icon,
+            color,
+        } => {
             let (start, end) = (date(&start)?, date(&end)?);
-            val(cycles::create(db, name, start, end, SRC).await?)
+            val(cycles::create(
+                db,
+                name,
+                start,
+                end,
+                taskapp_core::palette::Look { icon, color },
+                SRC,
+            )
+            .await?)
         }
     }
 }
@@ -261,7 +280,9 @@ async fn template(db: &Db, cmd: TemplateCmd) -> Result<Value> {
 async fn label(db: &Db, cmd: LabelCmd) -> Result<Value> {
     match cmd {
         LabelCmd::List => val(labels::list(db).await?),
-        LabelCmd::Create { name, color } => val(labels::create(db, &name, &color, SRC).await?),
+        LabelCmd::Create { name, color, icon } => {
+            val(labels::create(db, &name, &color, icon, SRC).await?)
+        }
     }
 }
 

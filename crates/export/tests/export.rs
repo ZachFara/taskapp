@@ -32,18 +32,19 @@ async fn seeded() -> Result<Db, Box<dyn std::error::Error>> {
 
 /// Projects, cycles, labels, two linked issues, a relation and a comment.
 async fn seed_issues(db: &Db) -> Result<(IssueId, IssueId), Box<dyn std::error::Error>> {
-    let app = projects::create(db, "app", "App", SRC).await?;
+    let app = projects::create(db, "app", "App", None, None, SRC).await?;
     let v1 = projects::create_milestone(db, app.id, "v1", Some(day(2026, 3, 1)), SRC).await?;
     let sprint = cycles::create(
         db,
         Some("Sprint".into()),
         day(2026, 1, 1),
         day(2026, 1, 14),
+        taskapp_core::palette::Look::default(),
         SRC,
     )
     .await?;
-    let bug = labels::create(db, "bug", "#ff0000", SRC).await?;
-    labels::create(db, "backend", "#00ff00", SRC).await?;
+    let bug = labels::create(db, "bug", "#ff0000", None, SRC).await?;
+    labels::create(db, "backend", "#00ff00", None, SRC).await?;
     let docs = issues::create(
         db,
         NewIssue {
@@ -141,6 +142,8 @@ async fn seed_rest(db: &Db, docs: IssueId, ship: IssueId) -> R {
             columns: vec![],
             include_archived: false,
         },
+        taskapp_core::palette::Look::default(),
+        SRC,
     )
     .await?;
     pins::pin(db, PinKind::Url, "https://example.com", Some("Site".into())).await?;
@@ -406,7 +409,10 @@ async fn rebuild_existing_db_error_names_the_guard() -> R {
 async fn unsafe_project_slug_refused() -> R {
     for slug in ["a/b", "a.b", "..", ""] {
         let db = Db::open_in_memory().await?;
-        if projects::create(&db, slug, "P", SRC).await.is_err() {
+        if projects::create(&db, slug, "P", None, None, SRC)
+            .await
+            .is_err()
+        {
             continue;
         }
         let dir = tempfile::tempdir()?;
