@@ -322,7 +322,7 @@
     {#each fields as f (f.Property ?? f.Fixed)}<span data-right={rightAligned(f) ? '' : undefined}>{fieldName(f, ctx.defs)}</span>{/each}
   </div>
   <div class="scroller" role="presentation" bind:this={scroller} onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}>
-    <ul class="list" role="listbox" aria-multiselectable="true" data-density={compact ? 'compact' : undefined} aria-label={view.name} style:height="{total}px">
+    <ul class="list" role="grid" aria-multiselectable="true" data-density={compact ? 'compact' : undefined} aria-label={view.name} style:height="{total}px">
       {#each slice as { item, top } (top)}
         {#if 'head' in item}
           <li class="head" role="presentation" style:top="{top}px">
@@ -345,7 +345,7 @@
           {@const chosen = selection.selected.includes(i.id)}
           <li
             class="row"
-            role="option"
+            role="row"
             aria-selected={chosen}
             data-key={i.key}
             data-id={i.id}
