@@ -1,25 +1,30 @@
 <script lang="ts">
   import type { StatusCategory } from '../lib/bindings';
   import Icon from './Icon.svelte';
+  import type { Snippet } from 'svelte';
   import StatusGlyph from './StatusGlyph.svelte';
 
   // The legend band. The tone step follows the status category, so the list reads like map elevation:
-  // the further along, the deeper the band.
+  // the further along, the deeper the band. A group that is not a status (project, priority, cycle, label)
+  // passes `tone` 1-4 and, if it likes, a `leading` snippet such as an EntityIcon.
   let {
     name,
     count,
     category,
+    tone = 1,
+    leading,
     collapsed = false,
     ontoggle,
     onadd,
-  }: { name: string; count: number; category: StatusCategory; collapsed?: boolean; ontoggle?: () => void; onadd?: () => void } = $props();
-  const step = { Backlog: 1, Unstarted: 2, Started: 3, Completed: 4, Canceled: 1 } as const;
+  }: { name: string; count: number; category?: StatusCategory; tone?: 1 | 2 | 3 | 4; leading?: Snippet; collapsed?: boolean; ontoggle?: () => void; onadd?: () => void } = $props();
+  const steps = { Backlog: 1, Unstarted: 2, Started: 3, Completed: 4, Canceled: 1 } as const;
+  const step = $derived(category ? steps[category] : tone);
 </script>
 
-<div class="band" style:--tone={`var(--band-${step[category]})`} data-step={step[category]}>
+<div class="band" style:--tone={`var(--band-${step})`} data-step={step}>
   <button class="toggle" type="button" aria-expanded={!collapsed} aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`} onclick={ontoggle}>
     <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={12} />
-    <StatusGlyph {category} />
+    {#if category}<StatusGlyph {category} />{:else}{@render leading?.()}{/if}
     <span class="name">{name}</span>
     <span class="count">{count}</span>
   </button>

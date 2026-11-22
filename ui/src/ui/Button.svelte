@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { mergeProps } from 'bits-ui';
   import type { Snippet } from 'svelte';
   import Icon from './Icon.svelte';
   import Kbd from './Kbd.svelte';
@@ -13,8 +14,10 @@
     type?: 'button' | 'submit';
     onclick?: (e: MouseEvent) => void;
     children?: Snippet;
+    // Trigger props from a bits-ui Popover/Menu/Tooltip trigger land here.
+    [key: string]: unknown;
   };
-  let { variant = 'quiet', icon, kbd, tooltip, disabled = false, type = 'button', onclick, children }: Props = $props();
+  let { variant = 'quiet', icon, kbd, tooltip, disabled = false, type = 'button', onclick, children, ...rest }: Props = $props();
 </script>
 
 {#snippet face()}
@@ -26,11 +29,11 @@
 {#if tooltip}
   <Tooltip label={tooltip.label} shortcut={tooltip.shortcut}>
     {#snippet children(props)}
-      <button {...props} class="btn" data-variant={variant} {type} {disabled} {onclick}>{@render face()}</button>
+      <button {...mergeProps(props, rest)} class="btn" data-variant={variant} {type} {disabled} {onclick}>{@render face()}</button>
     {/snippet}
   </Tooltip>
 {:else}
-  <button class="btn" data-variant={variant} {type} {disabled} {onclick}>{@render face()}</button>
+  <button {...rest} class="btn" data-variant={variant} {type} {disabled} {onclick}>{@render face()}</button>
 {/if}
 
 <style>

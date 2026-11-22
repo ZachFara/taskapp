@@ -27,6 +27,23 @@ Review everything at `/design` (every token and primitive, every state, light an
   has a core and the signal colour). Group headers use `GroupHeader`, whose band step follows the status category.
 - Frame surfaces set `data-on-frame` so the focus ring uses `--focus-frame`.
 
+## Primitive notes (follow-ups)
+- `Kbd`: keys by position, so `['g','g']` renders two keys.
+- `Dialog`: `size` sm 480 / md 640 / lg 880 (`--dialog-*`). `title` and the footer are optional; a bare dialog
+  (command menu, cheat sheet) passes `label` for its accessible name and has no footer unless `actions` is given.
+- `Tooltip`: open delay is `--delay-tooltip` (500ms), read once when the tooltip mounts.
+- `PageHeader`: `editable` + `onrename(value)` (click the title; Enter or blur saves, Esc cancels, empty or
+  unchanged is ignored). `title` may be a snippet instead of a string.
+- `Button`, `IconButton`: extra props are spread onto the `<button>` and merged with the tooltip's, so they work
+  directly as bits-ui Popover/Menu/Tooltip triggers.
+- `ContextMenu`: `area` snippet opens it on right-click; children are the same `MenuItem`s as `Menu`.
+- `ListRow`: `focused` (signal left edge), `selected` (selection tint), `onpick`; focus and selection stay with the caller.
+- `TextInput`: `type` text/search/number/date/time/password, `onchange(value)`, other attributes pass through.
+  `Checkbox`: `onchange(checked)` besides `bind:checked`.
+- `GroupHeader`: a status group passes `category`; any other group passes `tone` 1-4 and an optional `leading`
+  snippet (for example an `EntityIcon`) instead of a status glyph.
+- Registry types: `CommandPage.multi`, `CommandPage.parse`, item `checked`, and `run(count?)`; the engine does not use them yet.
+
 ## Adding a theme
 1. Copy the `[data-theme="light"]` block in `tokens.css`, rename the selector (for example `[data-theme="dusk"]`), and
    change values only. Keep every role and all 12 `--c-*` keys; `tokens.test.ts` checks that every theme block defines

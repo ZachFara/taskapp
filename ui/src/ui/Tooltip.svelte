@@ -3,7 +3,7 @@
   import type { Snippet } from 'svelte';
   import Kbd from './Kbd.svelte';
 
-  // Action name plus its shortcut. Opens after 500ms of hover, and at once on keyboard focus.
+  // Action name plus its shortcut. Opens after --delay-tooltip of hover, and at once on keyboard focus.
   let {
     label,
     shortcut,
@@ -13,9 +13,11 @@
     shortcut?: string | string[];
     children: Snippet<[Record<string, unknown>]>;
   } = $props();
+  // The token is read once per tooltip; 500 only covers a page where tokens.css is absent.
+  const delay = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--delay-tooltip')) || 500;
 </script>
 
-<Tooltip.Provider delayDuration={500} skipDelayDuration={0}>
+<Tooltip.Provider delayDuration={delay} skipDelayDuration={0}>
   <Tooltip.Root>
     <Tooltip.Trigger>
       {#snippet child({ props })}{@render children(props)}{/snippet}
