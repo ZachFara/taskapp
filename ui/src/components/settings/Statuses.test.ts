@@ -30,12 +30,13 @@ describe('Statuses', () => {
     expect(field(target, 'Name of QA')).toBeTruthy();
   });
 
-  it('moves a status up by swapping the two positions (two updates)', async () => {
+  it('moves a status up with one reorder call and no updates', async () => {
     const { target, calls, api } = await mountSettings(Statuses);
     await add(target, 'Started', 'Aaa');
     await add(target, 'Started', 'Bbb');
     await clickLabel('Move Bbb up');
-    expect(calls.filter((c) => c === 'statuses.update')).toHaveLength(2);
+    expect(calls.filter((c) => c === 'statuses.reorder')).toHaveLength(1);
+    expect(calls.filter((c) => c === 'statuses.update')).toHaveLength(0);
     const names = (await api.statuses.list()).map((s) => s.name);
     expect(names.indexOf('Bbb')).toBeLessThan(names.indexOf('Aaa'));
   });

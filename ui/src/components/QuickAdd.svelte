@@ -87,25 +87,21 @@
     const value = text.trim();
     if (!value || (slashQuery !== null && !template)) return;
     let issue: Issue;
-    // Writes made for this create; the Undo in the toast reverts exactly these.
-    let steps = 1;
     try {
-      if (status_id !== null && !template) {
-        // The quick-add grammar has no status token, so the parsed fields go into one create call with the status.
-        const p = await api.issues.parseQuickadd(value);
+      if (status_id !== null) {
+        // The quick-add grammar has no status token, so the parsed fields and the status go into one write:
+        // a template apply or a create, either way one undo step.
+        const text = template ? value.slice(template.slug.length + 1).trim() : value;
+        const p = await api.issues.parseQuickadd(text);
         const found = await api.labels.list();
         const label_ids = p.label_names.flatMap((n) => found.find((l) => l.name.toLowerCase() === n.toLowerCase())?.id ?? []);
-        issue = await api.issues.create({
+        const fields = {
           title: p.title, due: p.due, start_date: p.start_date, priority: p.priority, estimate_minutes: p.estimate_minutes,
-          project_id: projects.find((x) => x.slug === p.project_slug)?.id ?? null, label_ids, status_id,
-        });
+          project_id: projects.find((x) => x.slug === p.project_slug)?.id ?? null, label_ids: label_ids.length ? label_ids : null, status_id,
+        };
+        issue = template ? (await api.templates.apply(template.id, fields)).issue : await api.issues.create(fields);
       } else {
         issue = await api.issues.createFromQuickadd(value);
-        // shortcut: a template create cannot carry a status, so it is a second write; upgrade when quick-add takes one.
-        if (status_id !== null) {
-          await api.issues.update(issue.id, { status_id });
-          steps = 2;
-        }
       }
     } catch (err) {
       // Keep the text so a failed create can be fixed and retried.
@@ -115,7 +111,7 @@
     oncreated?.({
       issue,
       undo: async () => {
-        for (let i = 0; i < steps; i++) await api.history.undo();
+        await api.history.undo();
         void refreshAll().catch(() => {});
       },
     });
