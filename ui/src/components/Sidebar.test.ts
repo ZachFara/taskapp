@@ -101,4 +101,33 @@ describe('Sidebar', () => {
     expect(window.open).toHaveBeenCalledTimes(1);
     expect(pushed).not.toHaveBeenCalled();
   });
+
+  it('active_route_gets_the_current_page_marker', async () => {
+    const api = createMockApi(seed);
+    setApi(api);
+    app = mount(Sidebar, { target: document.body, props: { route: '/view/2' } });
+    await settle();
+    const on = [...document.querySelectorAll('[aria-current=page]')].map((a) => a.textContent);
+    expect(on).toEqual(['Beta']);
+  });
+
+  it('sections_collapse_and_show_counts', async () => {
+    await open();
+    const head = document.querySelector<HTMLButtonElement>('[aria-label=Views] .head')!;
+    expect(head.textContent).toContain('3');
+    expect(head.getAttribute('aria-expanded')).toBe('true');
+    head.click();
+    await settle();
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    expect(names('[aria-label=Views]')).toEqual([]);
+  });
+
+  it('top_items_and_settings_navigate', async () => {
+    await open();
+    const link = (t: string) => [...document.querySelectorAll('a')].find((a) => a.textContent === t)!;
+    link('My issues').click();
+    expect(location.pathname).toBe('/my');
+    link('Settings').click();
+    expect(location.pathname).toBe('/settings/general');
+  });
 });
