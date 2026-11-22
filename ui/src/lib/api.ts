@@ -38,7 +38,7 @@ const wire = new Map<string, [string, string[]]>(
 );
 
 export function httpApi(base = 'http://127.0.0.1:7878'): Api {
-  return build(async (key, args) => {
+  return watchWrites(build(async (key, args) => {
     const [cmd, names] = wire.get(key)!;
     const body = Object.fromEntries(names.map((n, i) => [snake(n), args[i] ?? null]));
     const res = await fetch(`${base}/rpc/${cmd}`, {
@@ -49,15 +49,38 @@ export function httpApi(base = 'http://127.0.0.1:7878'): Api {
     const json = await res.json();
     if (json.error) throw json.error;
     return json.ok;
-  });
+  }));
+}
+
+// Reads never change history; undo and redo show their own toast, so a second one would overwrite it.
+const READ = /^(get|list|query|search|status|progress|children|parse|plan|for|bars|criticalPath|between|undoStatus)/;
+const watched = new WeakSet<Api>();
+
+/** Makes every write tell the app (`history:wrote`) once it succeeds, so the undo toast can name the step. Wraps in place. */
+function watchWrites(a: Api): Api {
+  if (watched.has(a)) return a;
+  watched.add(a);
+  for (const [mod, fns] of Object.entries(a) as [string, Record<string, (...args: unknown[]) => Promise<unknown>>][]) {
+    if (mod === 'history') continue;
+    for (const [name, fn] of Object.entries(fns)) {
+      if (READ.test(name)) continue;
+      fns[name] = async (...args) => {
+        const out = await fn(...args);
+        window.dispatchEvent(new Event('history:wrote'));
+        return out;
+      };
+    }
+  }
+  return a;
 }
 
 const mode = import.meta.env.VITE_API_MODE;
 
-export let api: Api =
-  mode === 'mock' ? createMockApi() : mode === 'http' ? httpApi() : build((key, args) => (commands as any)[key](...args));
+export let api: Api = watchWrites(
+  mode === 'mock' ? createMockApi() : mode === 'http' ? httpApi() : build((key, args) => (commands as any)[key](...args)),
+);
 
 /** Swaps the implementation; tests use it to install the mock. */
 export function setApi(impl: Api) {
-  api = impl;
+  api = watchWrites(impl);
 }
