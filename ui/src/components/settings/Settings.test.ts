@@ -33,8 +33,8 @@ describe('Settings', () => {
     expect(target.querySelector('h2')?.textContent).toMatch(/no settings page/i);
   });
 
-  it('g s opens settings on the general section', async () => {
-    expect(shortcutFor('settings.open')).toBe('g s');
-    expect(labelFor('settings.open')).toBe('Settings');
+  it('g s opens settings (the nav command owns the key)', async () => {
+    expect(shortcutFor('nav.settings')).toBe('g s');
+    expect(labelFor('nav.settings')).toBe('Go to Settings');
   });
 });
