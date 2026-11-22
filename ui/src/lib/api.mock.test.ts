@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api, httpApi, setApi } from './api';
-import { createMockApi } from './api.mock';
+import { createMockApi, fixtures } from './api.mock';
 import type { TemplateFields, ViewDef } from './bindings';
 
 const def = (filter: ViewDef['filter']): ViewDef => ({
@@ -12,8 +12,8 @@ afterEach(() => vi.unstubAllGlobals());
 describe('mock api', () => {
   it('create assigns sequential keys', async () => {
     const mock = createMockApi();
-    expect((await mock.issues.create({ title: 'a' })).key).toBe('ZF-21');
-    expect((await mock.issues.create({ title: 'b' })).key).toBe('ZF-22');
+    expect((await mock.issues.create({ title: 'a' })).key).toBe('ABC-21');
+    expect((await mock.issues.create({ title: 'b' })).key).toBe('ABC-22');
   });
 
   it('undo and redo move an issue edit back and forth', async () => {
@@ -46,9 +46,9 @@ describe('mock api', () => {
     const plan = await mock.import.csvPlan('Title,Other\nOne\nTwo\n', null);
     expect(plan.issues).toHaveLength(2);
     expect(plan.unmapped).toEqual(['Other']);
-    expect(await mock.issues.getByKey('ZF-21').catch(() => null)).toBeNull();
+    expect(await mock.issues.getByKey('ABC-21').catch(() => null)).toBeNull();
     expect((await mock.import.apply(plan)).created).toBe(2);
-    expect((await mock.issues.getByKey('ZF-22')).title).toBe('Two');
+    expect((await mock.issues.getByKey('ABC-22')).title).toBe('Two');
   });
 
   it('setApi swaps implementation', async () => {
@@ -72,7 +72,7 @@ describe('mock templates', () => {
       name: 'Bug', slug: 'bug', icon: null, color: null,
       body: { title_prefix: 'Bug: ', fields: fields({ priority: 3 }), sub_issues: [{ title: 'Repro', fields: fields() }] },
     });
-    const issue = await mock.issues.createFromQuickadd('/bug Fix login !1');
+    const issue = await mock.issues.createFromQuickadd('/bug Fix login p1');
     expect(issue.title).toBe('Bug: Fix login');
     expect(issue.priority).toBe(1);
     expect((await mock.issues.children(issue.id)).map((i) => i.title)).toEqual(['Repro']);
@@ -107,7 +107,23 @@ describe('http transport', () => {
   });
 
   it('turns an error body into a rejection with its kind', async () => {
-    stubFetch({ error: { kind: 'NotFound', message: 'issue ZF-99' } });
-    await expect(httpApi().issues.getByKey('ZF-99')).rejects.toEqual({ kind: 'NotFound', message: 'issue ZF-99' });
+    stubFetch({ error: { kind: 'NotFound', message: 'issue ABC-99' } });
+    await expect(httpApi().issues.getByKey('ABC-99')).rejects.toEqual({ kind: 'NotFound', message: 'issue ABC-99' });
+  });
+});
+
+describe('mock workspace and quick add', () => {
+  it('setup_on_a_fresh_mock_sets_the_prefix_and_reports_done', async () => {
+    const mock = createMockApi({ ...fixtures, workspace: undefined }, 'UTC');
+    expect(await mock.workspace.status()).toMatchObject({ setup_done: false });
+    await mock.workspace.setup('Studio', 'STU', 'Europe/Berlin');
+    expect(await mock.workspace.status()).toEqual({ setup_done: true, name: 'Studio', key: 'STU', timezone: 'Europe/Berlin' });
+    expect((await mock.issues.create({ title: 'x' })).key).toBe('STU-21');
+  });
+
+  it('a_time_of_day_is_read_in_the_given_zone', async () => {
+    const parsed = await createMockApi(fixtures, 'Asia/Tokyo').issues.parseQuickadd('call at 9am');
+    expect(parsed.due).toMatchObject({ DateTime: { tz: 'Asia/Tokyo' } });
+    expect(new Date(parsed.due!.DateTime!.utc).getUTCHours()).toBe(0);
   });
 });

@@ -35,20 +35,20 @@ afterEach(() => {
 
 describe('ProjectPage', () => {
   it('doc_link_button_shown_only_when_set', async () => {
-    const without = await open('/project/home');
+    const without = await open('/project/website');
     expect(without.querySelector('[data-testid="open-obsidian"]')).toBeNull();
     mounted.forEach((m) => void unmount(m));
     mounted = [];
     document.body.innerHTML = '';
 
-    const withLink = await open('/project/home', seed([{ doc_link: 'obsidian://open?vault=Ark&file=Home' }]));
+    const withLink = await open('/project/website', seed([{ doc_link: 'obsidian://open?vault=Ark&file=Home' }]));
     const button = withLink.querySelector<HTMLButtonElement>('[data-testid="open-obsidian"]');
     expect(button?.textContent).toContain('Open in Obsidian');
   });
 
   it('doc_link_not_obsidian_or_https_renders_no_button', async () => {
     for (const doc_link of ['javascript:alert(1)', 'http://example.com/doc', 'file:///etc/passwd', 'ftp://x']) {
-      const target = await open('/project/home', seed([{ doc_link }]));
+      const target = await open('/project/website', seed([{ doc_link }]));
       expect(target.querySelector('[data-testid="open-obsidian"]'), doc_link).toBeNull();
       mounted.forEach((m) => void unmount(m));
       mounted = [];
@@ -57,19 +57,19 @@ describe('ProjectPage', () => {
   });
 
   it('empty_description_hidden', async () => {
-    const target = await open('/project/home', seed([{ description: null }]));
+    const target = await open('/project/website', seed([{ description: null }]));
     expect(target.querySelector('[data-testid="description"]')).toBeNull();
     expect(target.textContent).toContain('Add description');
   });
 
   it('description_shown_when_present', async () => {
-    const target = await open('/project/home', seed([{ description: 'Ship the rewrite' }]));
+    const target = await open('/project/website', seed([{ description: 'Ship the rewrite' }]));
     expect(target.querySelector('[data-testid="description"]')?.textContent).toContain('Ship the rewrite');
     expect(target.textContent).not.toContain('Add description');
   });
 
   it('project_issues_filtered_to_project', async () => {
-    const target = await open('/project/home');
+    const target = await open('/project/website');
     const keys = [...target.querySelectorAll('[data-issue-key]')].map((el) => el.getAttribute('data-issue-key'));
     const expected = fixtures.issues.filter((i) => i.project_id === 1).map((i) => i.key);
     expect(expected.length).toBeGreaterThan(0);
@@ -79,7 +79,7 @@ describe('ProjectPage', () => {
   it('header_shows_progress_milestones_and_dates', async () => {
     const mock = createMockApi(seed([{ start_date: '2026-12-01', target_date: '2027-01-31' }]));
     await mock.projects.createMilestone(1, 'Beta', '2026-12-15');
-    const target = await open('/project/home', mock);
+    const target = await open('/project/website', mock);
     expect(target.textContent).toContain('2026-12-01');
     expect(target.textContent).toContain('2027-01-31');
     expect(target.textContent).toMatch(/\d+ \/ \d+ done/);
@@ -88,11 +88,11 @@ describe('ProjectPage', () => {
   });
 
   it('pin_toggle_pins_project', async () => {
-    const target = await open('/project/home');
+    const target = await open('/project/website');
     target.querySelector<HTMLButtonElement>('[data-testid="pin-toggle"]')!.click();
     await vi.waitFor(async () => {
       const pins = await api.pins.listResolved();
-      expect(pins.map((p) => p.pin.target)).toEqual(['home']);
+      expect(pins.map((p) => p.pin.target)).toEqual(['website']);
     });
   });
 

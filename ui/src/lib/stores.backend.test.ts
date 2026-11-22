@@ -23,6 +23,6 @@ it('db-changed reloads the stores and open-issue navigates', async () => {
   await listenToBackend();
   handlers['db-changed']({ payload: null });
   await vi.waitFor(() => expect(api.views.list).toHaveBeenCalled());
-  handlers['open-issue']({ payload: 'ZF-7' });
-  expect(location.pathname).toBe('/issue/ZF-7');
+  handlers['open-issue']({ payload: 'ABC-7' });
+  expect(location.pathname).toBe('/issue/ABC-7');
 });

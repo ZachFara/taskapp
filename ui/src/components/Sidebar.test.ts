@@ -48,7 +48,7 @@ describe('Sidebar', () => {
   it('pinned_section_lists_and_reorders', async () => {
     const api = createMockApi(seed);
     await api.pins.pin('View', '1', 'One');
-    await api.pins.pin('Project', 'home', 'Home');
+    await api.pins.pin('Project', 'website', 'Home');
     await open(api);
     expect(names('[aria-label=Pinned]')).toEqual(['One', 'Home']);
     dragOnto('Home', 'One');
@@ -78,7 +78,7 @@ describe('Sidebar', () => {
   it('reorder_with_failed_api_restores_old_order', async () => {
     const api = createMockApi(seed);
     await api.pins.pin('View', '1', 'One');
-    await api.pins.pin('Project', 'home', 'Home');
+    await api.pins.pin('Project', 'website', 'Home');
     api.pins.reorder = async () => {
       throw { kind: 'Io', message: 'disk full' };
     };
@@ -90,9 +90,9 @@ describe('Sidebar', () => {
   });
 
   it('external_pin_opens_externally', async () => {
-    const api = createMockApi(seed);
-    await api.pins.pin('Url', 'https://example.com/x', 'Site');
-    await api.pins.pin('Url', 'javascript:alert(1)', 'Bad');
+    // The backend refuses a javascript: pin, so it can only arrive as old data; seed it directly.
+    const url = (id: number, target: string, title: string) => ({ id, kind: 'Url' as const, target, title, position: id });
+    const api = createMockApi({ ...seed, pins: [url(1, 'https://example.com/x', 'Site'), url(2, 'javascript:alert(1)', 'Bad')] });
     await open(api);
     const pushed = vi.spyOn(history, 'pushState');
     row('Site').querySelector('a')!.click();

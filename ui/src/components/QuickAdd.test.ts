@@ -36,8 +36,8 @@ afterEach(() => {
 
 describe('QuickAdd', () => {
   it('quickadd_preview_shows_parsed_chips', async () => {
-    await type('Buy milk !2 #home');
-    expect([...document.querySelectorAll('.chip')].map((c) => c.textContent)).toEqual(['Priority 2', '#home']);
+    await type('Buy milk p2 #website');
+    expect([...document.querySelectorAll('.chip')].map((c) => c.textContent)).toEqual(['Priority 2', '#website']);
   });
 
   it('quickadd_enter_creates_and_closes', async () => {

@@ -5,7 +5,7 @@ import { field, mountSettings, press, setField } from './testing';
 describe('General', () => {
   it('shows the saved issue prefix', async () => {
     const { target } = await mountSettings(General);
-    expect(field(target, 'Issue prefix').value).toBe('ZF');
+    expect(field(target, 'Issue prefix').value).toBe('ABC');
   });
 
   it('issue prefix rejects lowercase and empty values', async () => {

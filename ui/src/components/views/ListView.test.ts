@@ -9,7 +9,7 @@ const groupBy: ViewDef = { filter: null, sorts: [], group_by: { Fixed: 'Status' 
 const viewSeed = (def: Partial<ViewDef> = {}) => [{ id: 1, name: 'All', def: { ...groupBy, ...def }, position: 0 }];
 
 const issue = (n: number, over: Partial<Issue> = {}): Issue => ({
-  ...fixtures.issues[0], id: n, key: `ZF-${n}`, title: `Row ${n}`, status_id: 1, priority: 0, project_id: null,
+  ...fixtures.issues[0], id: n, key: `ABC-${n}`, title: `Row ${n}`, status_id: 1, priority: 0, project_id: null,
   start_date: null, due: null, estimate_minutes: null, properties: {}, ...over,
 });
 
@@ -66,7 +66,7 @@ describe('ListView', () => {
     const { mock, target } = await open({ ...fixtures, views: viewSeed() });
     await vi.waitFor(() => expect(rows(target).length).toBeGreaterThan(0));
     const spy = vi.spyOn(mock.issues, 'update');
-    const id = Number(selected(target)!.replace('ZF-', ''));
+    const id = Number(selected(target)!.replace('ABC-', ''));
     press('s');
     flushSync();
     [...target.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Done')!.click();
@@ -77,7 +77,7 @@ describe('ListView', () => {
     const { mock, target } = await open({ ...fixtures, views: viewSeed() });
     await vi.waitFor(() => expect(rows(target).length).toBeGreaterThan(0));
     const spy = vi.spyOn(mock.issues, 'update');
-    const id = Number(selected(target)!.replace('ZF-', ''));
+    const id = Number(selected(target)!.replace('ABC-', ''));
     press('p');
     flushSync();
     [...target.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Urgent')!.click();

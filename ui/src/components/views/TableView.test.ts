@@ -54,7 +54,7 @@ async function open() {
   target = document.body.appendChild(document.createElement('div'));
   app = mount(TableView, { target, props: { view: seed.views[0] as SavedView } });
   await flush();
-  await vi.waitFor(() => expect(cell('ZF-1', 'prop:effort')?.textContent?.trim()).toBe('1'));
+  await vi.waitFor(() => expect(cell('ABC-1', 'prop:effort')?.textContent?.trim()).toBe('1'));
 }
 
 async function startEdit(key: string, col: string) {
@@ -80,17 +80,17 @@ describe('TableView', () => {
   it('edit_number_property_saves', async () => {
     const save = vi.spyOn(mock.properties, 'setValue');
     await open();
-    const input = await startEdit('ZF-1', 'prop:effort');
+    const input = await startEdit('ABC-1', 'prop:effort');
     type(input, '5');
     press(input, 'Enter');
     await vi.waitFor(() => expect(save).toHaveBeenCalledWith(1, 'effort', 5));
-    await vi.waitFor(() => expect(cell('ZF-1', 'prop:effort').textContent?.trim()).toBe('5'));
+    await vi.waitFor(() => expect(cell('ABC-1', 'prop:effort').textContent?.trim()).toBe('5'));
   });
 
   it('non_numeric_number_is_rejected_before_api', async () => {
     const save = vi.spyOn(mock.properties, 'setValue');
     await open();
-    const input = await startEdit('ZF-1', 'prop:effort');
+    const input = await startEdit('ABC-1', 'prop:effort');
     type(input, 'abc');
     press(input, 'Enter');
     await flush();
@@ -101,47 +101,47 @@ describe('TableView', () => {
   it('invalid_value_reverts_with_message', async () => {
     const save = vi.spyOn(mock.properties, 'setValue').mockRejectedValueOnce({ kind: 'Invalid', message: 'effort is out of range' });
     await open();
-    const input = await startEdit('ZF-1', 'prop:effort');
+    const input = await startEdit('ABC-1', 'prop:effort');
     type(input, '7');
     press(input, 'Enter');
     await vi.waitFor(() => expect(alertText()).toBe('effort is out of range'));
     expect(save).toHaveBeenCalledWith(1, 'effort', 7);
-    expect(cell('ZF-1', 'prop:effort').querySelector('input')).toBeNull();
-    expect(cell('ZF-1', 'prop:effort').textContent?.trim()).toBe('1');
+    expect(cell('ABC-1', 'prop:effort').querySelector('input')).toBeNull();
+    expect(cell('ABC-1', 'prop:effort').textContent?.trim()).toBe('1');
   });
 
   it('esc_while_editing_restores_without_api_call', async () => {
     const save = vi.spyOn(mock.properties, 'setValue');
     const update = vi.spyOn(mock.issues, 'update');
     await open();
-    const input = await startEdit('ZF-1', 'prop:effort');
+    const input = await startEdit('ABC-1', 'prop:effort');
     type(input, '9');
     press(input, 'Escape');
     await flush();
-    expect(cell('ZF-1', 'prop:effort').querySelector('input')).toBeNull();
-    expect(cell('ZF-1', 'prop:effort').textContent?.trim()).toBe('1');
+    expect(cell('ABC-1', 'prop:effort').querySelector('input')).toBeNull();
+    expect(cell('ABC-1', 'prop:effort').textContent?.trim()).toBe('1');
     expect(save).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
   });
 
   it('arrow_navigation', async () => {
     await open();
-    expect(activeCell()).toBe('ZF-1|fixed:Title');
+    expect(activeCell()).toBe('ABC-1|fixed:Title');
     press(grid(), 'ArrowRight');
     await flush();
-    expect(activeCell()).toBe('ZF-1|prop:effort');
+    expect(activeCell()).toBe('ABC-1|prop:effort');
     press(grid(), 'ArrowDown');
     await flush();
-    expect(activeCell()).toBe('ZF-2|prop:effort');
+    expect(activeCell()).toBe('ABC-2|prop:effort');
     press(grid(), 'ArrowUp');
     press(grid(), 'ArrowUp');
     await flush();
-    expect(activeCell()).toBe('ZF-1|prop:effort');
+    expect(activeCell()).toBe('ABC-1|prop:effort');
     press(grid(), 'ArrowLeft');
     press(grid(), 'ArrowLeft');
     press(grid(), 'ArrowLeft');
     await flush();
-    expect(activeCell()).toBe('ZF-1|fixed:Title');
+    expect(activeCell()).toBe('ABC-1|fixed:Title');
   });
 
   it('add_column_updates_view_def', async () => {
@@ -176,15 +176,15 @@ describe('TableView', () => {
 
   it('jk_and_enter_work_from_anywhere', async () => {
     await open();
-    cell('ZF-1', 'fixed:Title').click();
+    cell('ABC-1', 'fixed:Title').click();
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' }));
     flushSync();
-    expect(activeCell()).toBe('ZF-2|fixed:Title');
+    expect(activeCell()).toBe('ABC-2|fixed:Title');
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k' }));
     flushSync();
-    expect(activeCell()).toBe('ZF-1|fixed:Title');
+    expect(activeCell()).toBe('ABC-1|fixed:Title');
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
     await flush();
-    expect(cell('ZF-1', 'fixed:Title').querySelector('input')).not.toBeNull();
+    expect(cell('ABC-1', 'fixed:Title').querySelector('input')).not.toBeNull();
   });
 });

@@ -31,7 +31,7 @@ const lastEvents = () => stub().setOption.mock.calls.filter(([k]: [string]) => k
 // Fixtures plus one issue with a timed due in New York on the US DST start day (2026-03-08).
 const withTimedDue = (): typeof fixtures => {
   const base = fixtures.issues[0];
-  const timed: Issue = { ...base, id: 900, key: 'ZF-900', due: { DateTime: { utc: '2026-03-08T13:30:00Z', tz: 'America/New_York' } } };
+  const timed: Issue = { ...base, id: 900, key: 'ABC-900', due: { DateTime: { utc: '2026-03-08T13:30:00Z', tz: 'America/New_York' } } };
   return { ...fixtures, issues: [...fixtures.issues, timed] };
 };
 

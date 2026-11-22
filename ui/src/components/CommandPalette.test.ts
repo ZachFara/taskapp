@@ -44,10 +44,10 @@ describe('CommandPalette', () => {
   });
 
   it('palette_finds_issue_by_key', async () => {
-    await type('zf-7');
-    expect(rows().some((r) => r?.includes('ZF-7 Fixture task 7'))).toBe(true);
+    await type('abc-7');
+    expect(rows().some((r) => r?.includes('ABC-7 Fixture task 7'))).toBe(true);
     press(input(), 'Enter');
-    expect(location.pathname).toBe('/issue/ZF-7');
+    expect(location.pathname).toBe('/issue/ABC-7');
   });
 
   it('arrow_keys_move_the_selection', async () => {

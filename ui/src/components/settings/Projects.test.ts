@@ -5,8 +5,8 @@ import { mountSettings, press, setField } from './testing';
 describe('Projects', () => {
   it('lists projects from the store', async () => {
     const { target } = await mountSettings(Projects);
-    expect(target.textContent).toContain('Home');
-    expect(target.textContent).toContain('Work');
+    expect(target.textContent).toContain('Website relaunch');
+    expect(target.textContent).toContain('Mobile app');
   });
 
   it('creates a project', async () => {

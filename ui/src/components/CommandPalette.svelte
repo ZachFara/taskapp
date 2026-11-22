@@ -40,7 +40,7 @@
     const mine = ++seq;
     if (!q) return void (found = []);
     const rows = await api.search.search(q, 8).catch(() => []);
-    // A key such as ZF-3 is matched exactly; full-text search does not index keys.
+    // A key such as ABC-3 is matched exactly; full-text search does not index keys.
     if (/^[a-z]+-\d+$/i.test(q)) {
       const hit = await api.issues.getByKey(q.toUpperCase()).catch(() => null);
       if (hit && !rows.some((r) => r.id === hit.id)) rows.unshift(hit);

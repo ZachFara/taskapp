@@ -75,34 +75,34 @@ describe('BoardView', () => {
   it('drop_updates_status', async () => {
     const root = await render(seedWith({}));
     const update = vi.spyOn(api.issues, 'update');
-    drag(root, 'ZF-1', 'Todo');
+    drag(root, 'ABC-1', 'Todo');
     expect(update).toHaveBeenCalledWith(1, { status_id: 2 });
-    expect(column(root, 'Todo').contains(card(root, 'ZF-1'))).toBe(true);
+    expect(column(root, 'Todo').contains(card(root, 'ABC-1'))).toBe(true);
   });
 
   it('group_by_select_property_columns', async () => {
     const root = await render(seedWith({}), boardView({ Property: 'area' }));
     expect(columnNames(root)).toEqual(['home', 'work', 'None']);
     const update = vi.spyOn(api.issues, 'update');
-    drag(root, 'ZF-1', 'work');
+    drag(root, 'ABC-1', 'work');
     expect(update).toHaveBeenCalledWith(1, { properties: { area: 'work', effort: 1 } });
   });
 
   it('drop_on_same_column_calls_no_api', async () => {
     const root = await render(seedWith({}));
     const update = vi.spyOn(api.issues, 'update');
-    drag(root, 'ZF-1', 'Backlog');
+    drag(root, 'ABC-1', 'Backlog');
     expect(update).not.toHaveBeenCalled();
   });
 
   it('failed_update_moves_card_back_and_shows_error', async () => {
     const root = await render(seedWith({}));
     vi.spyOn(api.issues, 'update').mockRejectedValue({ kind: 'Invalid', message: 'status is archived' });
-    drag(root, 'ZF-1', 'Todo');
+    drag(root, 'ABC-1', 'Todo');
     await vi.waitFor(() => expect(root.querySelector('[role="alert"]')?.textContent).toContain('status is archived'));
     flushSync();
-    expect(column(root, 'Backlog').contains(card(root, 'ZF-1'))).toBe(true);
-    expect(column(root, 'Todo').contains(card(root, 'ZF-1'))).toBe(false);
+    expect(column(root, 'Backlog').contains(card(root, 'ABC-1'))).toBe(true);
+    expect(column(root, 'Todo').contains(card(root, 'ABC-1'))).toBe(false);
   });
 
   it('empty_status_column_still_renders', async () => {
@@ -116,9 +116,9 @@ describe('BoardView', () => {
     const labels = [{ id: 1, name: 'bug', color: '#f00' }];
     const issues = fixtures.issues.map((i) => (i.id === 1 ? { ...i, label_ids: [1], priority: 3 } : i));
     const root = await render(seedWith({ labels, issues }));
-    await vi.waitFor(() => expect(card(root, 'ZF-1').textContent).toContain('bug'));
-    const text = card(root, 'ZF-1').textContent ?? '';
-    expect(text).toContain('ZF-1');
+    await vi.waitFor(() => expect(card(root, 'ABC-1').textContent).toContain('bug'));
+    const text = card(root, 'ABC-1').textContent ?? '';
+    expect(text).toContain('ABC-1');
     expect(text).toContain('Fixture task 1');
     expect(text).toContain('P3');
   });

@@ -7,7 +7,7 @@ import type { Issue, SavedView, ViewDef } from '../../lib/bindings';
 import GanttView from './GanttView.svelte';
 
 const def: ViewDef = { filter: null, sorts: [], group_by: null, layout: 'Gantt', columns: [], include_archived: false };
-const issue = (id: number, o: Partial<Issue> = {}): Issue => ({ ...fixtures.issues[0], id, key: `ZF-${id}`, title: `t${id}`, parent_id: null, project_id: 1, start_date: null, due: null, estimate_minutes: null, ...o });
+const issue = (id: number, o: Partial<Issue> = {}): Issue => ({ ...fixtures.issues[0], id, key: `ABC-${id}`, title: `t${id}`, parent_id: null, project_id: 1, start_date: null, due: null, estimate_minutes: null, ...o });
 const dated = (id: number, start: string, end: string, o: Partial<Issue> = {}) => issue(id, { start_date: start, due: { Date: end }, ...o });
 
 let view: ReturnType<typeof mount> | undefined;
@@ -43,7 +43,7 @@ describe('GanttView', () => {
     await block();
     const update = vi.spyOn(api.issues, 'update');
     dragBy(bar('issue-1'), 28);
-    await vi.waitFor(() => expect(document.querySelector('.toast')?.textContent).toContain('Also moves ZF-2'));
+    await vi.waitFor(() => expect(document.querySelector('.toast')?.textContent).toContain('Also moves ABC-2'));
     expect(update).not.toHaveBeenCalled();
     (document.querySelectorAll('.toast button')[0] as HTMLElement).click();
     await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(2));
@@ -99,7 +99,7 @@ describe('GanttView', () => {
   it('multi_project_timeline_groups_by_project', async () => {
     await show([dated(1, '2026-12-01', '2026-12-03'), dated(2, '2026-12-05', '2026-12-07', { project_id: 2 })]);
     const labels = [...document.querySelectorAll('.label.group')].map((l) => l.textContent);
-    expect(labels).toEqual(['Home', 'Work']);
+    expect(labels).toEqual(['Website relaunch', 'Mobile app']);
     expect(bar('group-1')).not.toBeNull();
     expect(bar('group-2')).not.toBeNull();
   });
@@ -115,7 +115,7 @@ describe('GanttView', () => {
   it('empty_view_shows_empty_state_and_unscheduled_lane', async () => {
     await show([issue(9, { estimate_minutes: 480 })]);
     expect(document.querySelector('.empty')?.textContent).toContain('Nothing scheduled');
-    expect(document.querySelector('.lane')?.textContent).toContain('ZF-9');
+    expect(document.querySelector('.lane')?.textContent).toContain('ABC-9');
   });
 
   it('parent_without_dated_children_has_no_rollup_bar', async () => {
