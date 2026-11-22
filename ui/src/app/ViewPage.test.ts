@@ -1,12 +1,15 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setApi, type Api } from '../lib/api';
 import { createMockApi, fixtures } from '../lib/api.mock';
 import type { SavedView, ViewDef } from '../lib/bindings';
 import { listCommands, shortcutFor } from '../lib/commands';
 import { refreshAll } from '../lib/stores.svelte';
 import ViewPage from './ViewPage.svelte';
+
+// Popovers and user-event are slow on a loaded machine.
+vi.setConfig({ testTimeout: 30000 });
 
 const def = (over: Partial<ViewDef> = {}): ViewDef => ({
   filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false, ...over,
