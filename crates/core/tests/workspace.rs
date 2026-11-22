@@ -122,3 +122,19 @@ async fn prefix_migration_only_moves_an_empty_default_database() -> R {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn setup_is_one_undoable_step() -> R {
+    use taskapp_core::{history, undo};
+    let db = Db::open_in_memory().await?;
+    let before = workspace::status(&db).await?;
+    history::step(
+        "workspace_setup",
+        workspace::setup(&db, "Cairn", "XY", Some("Europe/Berlin")),
+    )
+    .await?;
+    assert!(workspace::status(&db).await?.setup_done);
+    undo::undo(&db).await?;
+    assert_eq!(workspace::status(&db).await?, before);
+    Ok(())
+}
