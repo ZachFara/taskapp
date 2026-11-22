@@ -1,5 +1,6 @@
 import { createRawSnippet, mount, tick, unmount } from 'svelte';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { shortcutFor } from '../lib/commands';
 import { setApi } from '../lib/api';
 import { createMockApi } from '../lib/api.mock';
 import Shell from './Shell.svelte';
@@ -10,8 +11,6 @@ const settle = async () => {
   for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
   await tick();
 };
-const press = (target: EventTarget, key: string, init: KeyboardEventInit = {}) =>
-  target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...init }));
 
 beforeEach(() => setApi(createMockApi()));
 afterEach(() => {
@@ -26,18 +25,6 @@ async function open() {
 }
 
 describe('Shell', () => {
-  it('cmd_k_opens_and_esc_closes', async () => {
-    await open();
-    expect(document.querySelector('[role=dialog]')).toBeNull();
-    press(window, 'k', { metaKey: true });
-    await settle();
-    const input = document.querySelector<HTMLInputElement>('[role=dialog] input')!;
-    expect(input).not.toBeNull();
-    press(input, 'Escape');
-    await settle();
-    expect(document.querySelector('[role=dialog]')).toBeNull();
-  });
-
   it('sync_error_shows_indicator', async () => {
     const api = createMockApi();
     api.sync.status = async () => ({ reminders: 'Off', gcal: { Error: { at: 'now', message: 'token expired' } }, export: 'Off' });
@@ -62,21 +49,40 @@ describe('Shell', () => {
     expect(document.querySelector('.dot.error')).toBeNull();
   });
 
-  it('slash_opens_palette_and_g_i_g_v_navigate', async () => {
-    history.replaceState(null, '', '/');
+  it('search_field_calls_back_and_the_buttons_run_their_commands', async () => {
+    const onsearch = vi.fn();
+    const help = vi.fn();
+    addEventListener('command:help.shortcuts', help);
+    app = mount(Shell, { target: document.body, props: { children: body, onsearch } });
+    await settle();
+    document.querySelector<HTMLButtonElement>('[aria-label="Search or run a command"]')!.click();
+    document.querySelector<HTMLButtonElement>('[aria-label="Keyboard shortcuts"]')!.click();
+    removeEventListener('command:help.shortcuts', help);
+    expect(onsearch).toHaveBeenCalledOnce();
+    expect(help).toHaveBeenCalledOnce();
+    expect(document.body.textContent).toContain('Create issue');
+  });
+
+  it('legend_shows_the_keys_the_registry_holds', async () => {
     await open();
-    press(window, '/');
+    const legend = document.querySelector('footer.legend')!.textContent!;
+    expect(legend).toContain('move');
+    expect(legend).toContain(shortcutFor('move.down'));
+    expect(legend).toContain('⌘K');
+    expect(legend).toContain('commands');
+    expect(legend).toContain('status');
+  });
+
+  it('breadcrumb_marks_the_last_part_as_current', async () => {
+    app = mount(Shell, { target: document.body, props: { children: body, crumb: ['Projects', 'Home'] } });
     await settle();
-    expect(document.querySelector('[role=dialog] input')).not.toBeNull();
-    press(document.querySelector('[role=dialog] input')!, 'Escape');
+    expect(document.querySelector('[aria-current=page]')!.textContent).toBe('Home');
+  });
+
+  it('panel_renders_only_when_open_and_after_the_main_view', async () => {
+    const panel = createRawSnippet(() => ({ render: () => '<p>detail</p>' }));
+    app = mount(Shell, { target: document.body, props: { children: body, panel, panelOpen: true } });
     await settle();
-    press(window, 'g');
-    press(window, 'i');
-    expect(location.pathname).toBe('/view/1');
-    history.replaceState(null, '', '/');
-    press(window, 'g');
-    press(window, 'v');
-    await settle();
-    expect(document.querySelector('[role=dialog]')).not.toBeNull();
+    expect(document.querySelector('aside.panel')!.textContent).toContain('detail');
   });
 });
