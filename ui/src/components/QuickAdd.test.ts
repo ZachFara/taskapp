@@ -70,12 +70,12 @@ describe('QuickAdd', () => {
   });
 
   it('quickadd_slash_lists_templates_and_inserts_slug', async () => {
-    await api.templates.create({ name: 'Bug report', slug: 'bug', icon: null, color: null, body: {} });
+    await api.templates.create({ name: 'Incident', slug: 'incident', icon: null, color: null, body: {} });
     await type('/');
-    expect(options()).toEqual(['/bug Bug report']);
-    (document.querySelector('[role=option]') as HTMLElement).click();
+    expect(options()).toContain('/incident Incident');
+    ([...document.querySelectorAll('[role=option]')].find((o) => o.textContent?.includes('/incident')) as HTMLElement).click();
     await settle();
-    expect(input().value).toBe('/bug ');
+    expect(input().value).toBe('/incident ');
   });
 
   it('quickadd_enter_creates_and_closes', async () => {

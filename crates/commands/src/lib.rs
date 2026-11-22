@@ -114,6 +114,9 @@ macro_rules! with_commands {
             issues_bulk_update(s, ids: Vec<IssueId>, patch: BulkPatch) -> () {
                 bulk::update(&s.db, &ids, patch, ChangeSource::Ui).await
             }
+            issues_duplicate(s, ids: Vec<IssueId>) -> Vec<Issue> {
+                bulk::duplicate(&s.db, &ids, ChangeSource::Ui).await
+            }
             issues_get(s, id: IssueId) -> Issue { issues::get(&s.db, id).await }
             issues_get_by_key(s, key: String) -> Issue { issues::get_by_key(&s.db, &key).await }
             issues_archive(s, id: IssueId) -> () { issues::archive(&s.db, id, ChangeSource::Ui).await }

@@ -6,6 +6,7 @@ defineCommand({
   label: 'Set estimate',
   icon: 'clock',
   group: 'Issue',
+  scope: 'detail',
   shortcut: 'e',
   when: (c) => c.route.startsWith('/issue/') || c.openIssueId !== null,
   run: () => dispatchEvent(new CustomEvent('command:issue.detail.edit', { detail: 'estimate' })),

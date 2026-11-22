@@ -10,10 +10,21 @@ const def = (filter: ViewDef['filter']): ViewDef => ({
 afterEach(() => vi.unstubAllGlobals());
 
 describe('mock api', () => {
+  it('ships a neutral sample workspace', async () => {
+    const mock = createMockApi();
+    const rows = await mock.views.query(def(null));
+    expect(rows).toHaveLength(24);
+    expect(rows.some((i) => /fixture/i.test(i.title))).toBe(false);
+    expect((await mock.labels.list()).every((l) => l.icon)).toBe(true);
+    expect(await mock.templates.list()).toHaveLength(2);
+    expect((await mock.views.list()).map((v) => v.name)).toContain('This week');
+    expect(rows.some((i) => i.due?.Date && i.due.Date < new Date().toISOString().slice(0, 10))).toBe(true);
+  });
+
   it('create assigns sequential keys', async () => {
     const mock = createMockApi();
-    expect((await mock.issues.create({ title: 'a' })).key).toBe('ABC-21');
-    expect((await mock.issues.create({ title: 'b' })).key).toBe('ABC-22');
+    expect((await mock.issues.create({ title: 'a' })).key).toBe('ABC-25');
+    expect((await mock.issues.create({ title: 'b' })).key).toBe('ABC-26');
   });
 
   it('undo and redo move an issue edit back and forth', async () => {
@@ -46,9 +57,9 @@ describe('mock api', () => {
     const plan = await mock.import.csvPlan('Title,Other\nOne\nTwo\n', null);
     expect(plan.issues).toHaveLength(2);
     expect(plan.unmapped).toEqual(['Other']);
-    expect(await mock.issues.getByKey('ABC-21').catch(() => null)).toBeNull();
+    expect(await mock.issues.getByKey('ABC-25').catch(() => null)).toBeNull();
     expect((await mock.import.apply(plan)).created).toBe(2);
-    expect((await mock.issues.getByKey('ABC-22')).title).toBe('Two');
+    expect((await mock.issues.getByKey('ABC-26')).title).toBe('Two');
   });
 
   it('setApi swaps implementation', async () => {
@@ -69,10 +80,10 @@ describe('mock templates', () => {
   it('quick-add /slug applies the template, its sub-issues, and the text overrides', async () => {
     const mock = createMockApi();
     await mock.templates.create({
-      name: 'Bug', slug: 'bug', icon: null, color: null,
+      name: 'Defect', slug: 'defect', icon: null, color: null,
       body: { title_prefix: 'Bug: ', fields: fields({ priority: 3 }), sub_issues: [{ title: 'Repro', fields: fields() }] },
     });
-    const issue = await mock.issues.createFromQuickadd('/bug Fix login p1');
+    const issue = await mock.issues.createFromQuickadd('/defect Fix login p1');
     expect(issue.title).toBe('Bug: Fix login');
     expect(issue.priority).toBe(1);
     expect((await mock.issues.children(issue.id)).map((i) => i.title)).toEqual(['Repro']);
@@ -80,7 +91,7 @@ describe('mock templates', () => {
 
   it('text with a slash after the first word is a plain title', async () => {
     const mock = createMockApi();
-    await mock.templates.create({ name: 'Bug', slug: 'bug', icon: null, color: null, body: { title_prefix: '', fields: fields(), sub_issues: [] } });
+    await mock.templates.create({ name: 'Defect', slug: 'defect', icon: null, color: null, body: { title_prefix: '', fields: fields(), sub_issues: [] } });
     expect((await mock.issues.createFromQuickadd('/usr/bin is full')).title).toBe('/usr/bin is full');
   });
 
@@ -118,7 +129,7 @@ describe('mock workspace and quick add', () => {
     expect(await mock.workspace.status()).toMatchObject({ setup_done: false, name: null });
     await mock.workspace.setup("Studio", "STU", "Europe/Berlin");
     expect(await mock.workspace.status()).toEqual({ setup_done: true, name: 'Studio', key: 'STU', timezone: 'Europe/Berlin' });
-    expect((await mock.issues.create({ title: 'x' })).key).toBe('STU-21');
+    expect((await mock.issues.create({ title: 'x' })).key).toBe('STU-25');
   });
 
   it('a_time_of_day_is_read_in_the_given_zone', async () => {

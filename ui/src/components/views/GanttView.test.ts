@@ -113,7 +113,7 @@ describe('GanttView', () => {
   });
 
   it('empty_view_shows_empty_state_and_unscheduled_lane', async () => {
-    await show([issue(9, { estimate_minutes: 480 })]);
+    await show([issue(9, { estimate_minutes: 480 })], {}, { cycles: [], milestones: [] });
     expect(document.querySelector('.empty')?.textContent).toContain('Nothing scheduled');
     expect(document.querySelector('.todo')?.textContent).toContain('ABC-9');
   });

@@ -6,6 +6,7 @@ defineCommand({
   label: 'Change priority',
   icon: 'flag',
   group: 'Issue',
+  scope: 'detail',
   shortcut: 'p',
   when: (c) => c.route.startsWith('/issue/') || c.openIssueId !== null,
   run: () => dispatchEvent(new CustomEvent('command:issue.detail.edit', { detail: 'priority' })),

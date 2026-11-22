@@ -6,6 +6,7 @@ defineCommand({
   label: 'Go to today',
   icon: 'calendar',
   group: 'Calendar',
+  scope: 'calendar',
   shortcut: 't',
   when: (ctx) => ctx.route.startsWith('/view/'),
   run: () => dispatchEvent(new CustomEvent('command:calendar.today')),

@@ -6,6 +6,7 @@ defineCommand({
   label: 'Copy issue key',
   icon: 'copy',
   group: 'Issue',
+  scope: 'detail',
   noShortcutReason: 'the key in the header copies on click',
   when: (c) => c.route.startsWith('/issue/') || c.openIssueId !== null,
   run: () => dispatchEvent(new CustomEvent('command:issue.detail.copyKey')),

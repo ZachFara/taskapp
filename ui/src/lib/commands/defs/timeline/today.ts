@@ -6,6 +6,7 @@ defineCommand({
   label: 'Timeline: go to today',
   icon: 'target',
   group: 'Timeline',
+  scope: 'timeline',
   shortcut: 't',
   when: () => !!document.querySelector('[data-timeline]'),
   run: () => dispatchEvent(new CustomEvent('command:timeline.today')),

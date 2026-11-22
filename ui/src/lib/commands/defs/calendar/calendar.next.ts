@@ -6,6 +6,7 @@ defineCommand({
   label: 'Next week or month',
   icon: 'chevron-right',
   group: 'Calendar',
+  scope: 'calendar',
   shortcut: ']',
   when: (ctx) => ctx.route.startsWith('/view/'),
   run: () => dispatchEvent(new CustomEvent('command:calendar.next')),

@@ -1,3 +1,8 @@
+import type { Layout } from './commands/registry';
+
+/** What the list screen shares with commands: its visible ids in order (for movement) and the row being renamed. */
+export const listState = $state<{ ids: number[]; editing: number | null }>({ ids: [], editing: null });
+
 /** Focused row and selected rows of the current view; views pass their ordered ids in. */
 export function createSelection() {
   let focused = $state<number | null>(null);
@@ -5,7 +10,15 @@ export function createSelection() {
   let anchor: number | null = null;
   let columns = $state<number[][]>([]);
   let peeked = $state<number | null>(null);
+  let layout = $state<Layout | undefined>();
   return {
+    /** The layout the open view shows; the view sets it so keys can be scoped to it (undefined off a view). */
+    get layout() {
+      return layout;
+    },
+    setLayout(l: Layout | undefined) {
+      layout = l;
+    },
     /** Ordered visible ids per column (a list has one column); the views publish them. */
     get columns() {
       return columns;

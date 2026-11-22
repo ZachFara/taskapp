@@ -6,6 +6,7 @@ defineCommand({
   label: 'Change status',
   icon: 'circle',
   group: 'Issue',
+  scope: 'detail',
   shortcut: 's',
   when: (c) => c.route.startsWith('/issue/') || c.openIssueId !== null,
   run: () => dispatchEvent(new CustomEvent('command:issue.detail.edit', { detail: 'status' })),

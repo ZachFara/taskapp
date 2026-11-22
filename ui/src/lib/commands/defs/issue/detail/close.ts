@@ -6,6 +6,7 @@ defineCommand({
   label: 'Close issue',
   icon: 'close',
   group: 'Issue',
+  scope: 'detail',
   shortcut: 'escape',
   when: (c) => c.route.startsWith('/issue/') || c.openIssueId !== null,
   run: () => dispatchEvent(new CustomEvent('command:issue.detail.close')),
