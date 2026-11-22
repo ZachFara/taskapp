@@ -27,7 +27,7 @@ beforeEach(async () => {
 describe('issue commands', () => {
   it('registers every action with its key', () => {
     const keys: Record<string, string> = {
-      'issue.status': 's', 'issue.priority': 'p', 'issue.labels': 'l', 'issue.project': 'm', 'issue.cycle': 'shift+c',
+      'issue.status': 's', 'issue.priority': 'p', 'issue.labels': 'shift+l', 'issue.project': 'm', 'issue.cycle': 'shift+c',
       'issue.due': 'd', 'issue.start': 'shift+d', 'issue.estimate': 'e', 'issue.property': 'a', 'issue.relation': 'r',
       'issue.parent': 'shift+p', 'issue.pin': '.', 'issue.archive': '#', 'issue.copyKey': 'mod+c',
       'issue.copyLink': 'mod+shift+c', 'issue.duplicate': 'mod+d', 'issue.delete': 'delete',
