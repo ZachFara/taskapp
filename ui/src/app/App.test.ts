@@ -1,5 +1,5 @@
 import { flushSync, mount, unmount } from 'svelte';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, setApi } from '../lib/api';
 import { createMockApi } from '../lib/api.mock';
 import { setTheme } from '../lib/theme.svelte';
@@ -86,7 +86,7 @@ describe('sidebar and frame', () => {
   it('theme_button_switches_data_theme', async () => {
     setTheme('light');
     await open('/my');
-    q<HTMLButtonElement>('button[aria-label^="Theme"]')!.click();
+    q<HTMLButtonElement>('button[aria-label^="Switch theme"]')!.click();
     await settle();
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
   });
@@ -140,16 +140,35 @@ describe('issue panel', () => {
 
   it('opens_for_the_selected_issue', async () => {
     await withIssue();
-    expect(q<HTMLInputElement>('aside.panel [aria-label=Title]')!.value).toBe('Panel probe');
+    expect(q('aside.panel [aria-label=Title]')!.textContent).toBe('Panel probe');
   });
 
   it('esc_closes_the_panel_and_keeps_the_page', async () => {
     await withIssue();
+    await new Promise((r) => setTimeout(r, 100));
     press('Escape');
     await settle();
     expect(q('aside.panel')).toBeNull();
     expect(location.pathname).toBe('/my');
     expect(selectedIssueId.value).toBeNull();
+  });
+
+  it('esc_closes_an_open_editor_first_then_the_panel_without_going_back', async () => {
+    await withIssue();
+    const back = vi.spyOn(history, 'back');
+    dispatchEvent(new CustomEvent('command:issue.detail.edit', { detail: 'priority' }));
+    await settle();
+    expect(q('[role=listbox][aria-label=Priority]')).not.toBeNull();
+    press('Escape');
+    await settle();
+    expect(q('[role=listbox][aria-label=Priority]')).toBeNull();
+    expect(q('aside.panel')).not.toBeNull();
+    await new Promise((r) => setTimeout(r, 100));
+    press('Escape');
+    await settle();
+    expect(q('aside.panel')).toBeNull();
+    expect(back).not.toHaveBeenCalled();
+    back.mockRestore();
   });
 
   it('esc_with_palette_open_keeps_the_panel', async () => {
@@ -204,7 +223,7 @@ describe('views inside the frame', () => {
     const { issue } = await withView();
     q(`[data-key=${issue.key}]`)!.click();
     await settle();
-    expect(q<HTMLInputElement>('aside.panel [aria-label=Title]')!.value).toBe('Row probe');
+    expect(q('aside.panel [aria-label=Title]')!.textContent).toBe('Row probe');
   });
 
   it('rename_view_saves_and_refreshes_the_sidebar', async () => {

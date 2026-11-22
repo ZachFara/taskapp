@@ -23,7 +23,7 @@
   // 'loading' draws nothing, so a set-up workspace never flashes the setup screen.
   let setup = $state<'loading' | 'needed' | 'done'>('loading');
   let overlay = $state<'palette' | 'quickadd' | null>(null);
-  let cheat = $state(false);
+  let cheat = $state(false); // CheatSheet opens itself on help.shortcuts; this only lets the root close it
 
   // Rows from every view select through `selectedIssueId`; the peek key goes through the selection store.
   const panelId = $derived(selectedIssueId.value ?? selection.peeked);
@@ -68,35 +68,28 @@
       ['command:palette.open', () => (overlay = 'palette')],
       ['command:nav.search', () => (overlay = 'palette')],
       ['command:issue.create', () => (overlay = 'quickadd')],
-      ['command:help.shortcuts', () => (cheat = true)],
     ];
     on.forEach(([n, f]) => addEventListener(n, f));
     return () => on.forEach(([n, f]) => removeEventListener(n, f));
   });
 
-  // Opening the panel adds a history entry, so Esc (move.escape goes back while an issue is open) closes it and keeps the page.
-  let pushed = false;
+  // Moving to another page leaves the panel behind.
   $effect(() => {
-    if (panelId !== null && !pushed) history.pushState({ panel: true }, '');
-    pushed = panelId !== null;
+    path;
+    selectedIssueId.value = null;
   });
 
-  function closePanel() {
-    selectedIssueId.value = null;
-    // togglePeek only ever closes the peek of the focused row, so point focus at it first.
-    if (selection.peeked !== null) {
-      selection.focus(selection.peeked);
-      selection.togglePeek();
-    }
-  }
-
-  function onpop() {
-    path = location.pathname;
-    if (!history.state?.panel) closePanel();
-  }
-
-  // Props the panel takes from its own task; unknown props are ignored until that lands.
-  const detailProps = $derived({ params: { key: panelKey ?? '' }, mode: 'panel', onclose: closePanel, onopen: () => panelKey && navigate(`/issue/${panelKey}`) });
+  // Deferred a microtask: every handler of the same Esc press must still see the issue open (move.escape checks
+  // `openIssueId` right after issue.detail.close has run), or the second one would also act.
+  const closePanel = () =>
+    queueMicrotask(() => {
+      selectedIssueId.value = null;
+      // togglePeek only ever closes the peek of the focused row, so point focus at it first.
+      if (selection.peeked !== null) {
+        selection.focus(selection.peeked);
+        selection.togglePeek();
+      }
+    });
 
   async function created({ issue }: { issue: { key: string } }) {
     const key = issue.key;
@@ -107,16 +100,16 @@
   }
 </script>
 
-<svelte:window onpopstate={onpop} />
+<svelte:window onpopstate={() => (path = location.pathname)} />
 
 {#if setup === 'needed'}
   <Setup ondone={() => (setup = 'done')} />
 {:else if setup === 'done'}
-  <Shell {crumb} panelOpen={panelKey !== null} onsearch={() => (overlay = 'palette')} onhelp={() => (cheat = true)}>
+  <Shell {crumb} panelOpen={panelKey !== null} onsearch={() => (overlay = 'palette')}>
     {#snippet sidebar()}<Sidebar route={path} />{/snippet}
     {#snippet panel()}
       {#if panelKey !== null}
-        {#key panelKey}<IssueDetail {...detailProps} />{/key}
+        {#key panelKey}<IssueDetail params={{ key: panelKey }} mode="panel" onclose={closePanel} onopen={(k) => navigate(`/issue/${k}`)} />{/key}
       {/if}
     {/snippet}
     {#if Page}
@@ -131,7 +124,7 @@
   {:else if overlay === 'quickadd'}
     <QuickAdd onclose={() => (overlay = null)} oncreated={created} />
   {/if}
-  {#if cheat}<CheatSheet onclose={() => (cheat = false)} />{/if}
+  <CheatSheet bind:open={cheat} />
   <div class="toasts"><UndoToast /></div>
 {/if}
 

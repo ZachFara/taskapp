@@ -95,7 +95,7 @@ describe('movement keys', () => {
     await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith('/issue/ABC-2'));
   });
 
-  it('escape closes the panel first, then clears the selection, then steps back', () => {
+  it('escape clears the selection, then steps back; an open issue is left to issue.detail.close', () => {
     const back = vi.spyOn(history, 'back').mockImplementation(() => {});
     selection.selectAll([1, 2]);
     press(document.body, 'Escape');
@@ -103,6 +103,10 @@ describe('movement keys', () => {
     expect(selection.selected).toEqual([]);
     detach();
     detach = attachKeys(() => ctx({ openIssueId: 2 }));
+    press(document.body, 'Escape');
+    expect(back).not.toHaveBeenCalled();
+    detach();
+    detach = attachKeys(() => ctx({ route: '/projects' }));
     press(document.body, 'Escape');
     expect(back).toHaveBeenCalledTimes(1);
   });

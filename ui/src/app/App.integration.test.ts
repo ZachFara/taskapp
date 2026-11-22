@@ -5,9 +5,8 @@ import { createMockApi } from '../lib/api.mock';
 import { dismiss } from '../components/undoState.svelte';
 import App from './App.svelte';
 
-// The real QuickAdd and CheatSheet are replaced by probes so the root's wiring (not their insides) is under test.
+// The real QuickAdd is replaced by a probe so the root's wiring (not its insides) is under test.
 vi.mock('../components/QuickAdd.svelte', async () => ({ default: (await import('./testing/QuickAddProbe.svelte')).default }));
-vi.mock('../components/CheatSheet.svelte', async () => ({ default: (await import('./testing/CheatProbe.svelte')).default }));
 
 let app: ReturnType<typeof mount> | null = null;
 const settle = async () => {
@@ -32,15 +31,12 @@ afterEach(() => {
 });
 
 describe('app root overlays', () => {
-  it('question_mark_opens_the_cheat_sheet_and_it_closes_itself', async () => {
+  it('question_mark_opens_the_real_cheat_sheet', async () => {
     await open();
-    expect(q('[data-cheat]')).toBeNull();
+    expect(q('[role=dialog]')).toBeNull();
     press('?', { shiftKey: true });
     await settle();
-    expect(q('[data-cheat]')).not.toBeNull();
-    q('[data-cheat]')!.click();
-    await settle();
-    expect(q('[data-cheat]')).toBeNull();
+    expect(q('[role=dialog]')!.textContent).toContain('Keyboard shortcuts');
   });
 
   it('created_issue_closes_quick_add_and_toasts_with_undo', async () => {

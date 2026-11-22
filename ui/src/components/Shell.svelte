@@ -5,10 +5,9 @@
   import type { SyncStatus } from '../lib/bindings';
   import { shortcutFor } from '../lib/commands';
   import { refreshAll } from '../lib/stores.svelte';
-  import { cycleTheme, theme } from '../lib/theme.svelte';
-  import Contour from '../ui/Contour.svelte';
+    import Contour from '../ui/Contour.svelte';
   import Icon from '../ui/Icon.svelte';
-  import IconButton from '../ui/IconButton.svelte';
+  import CommandButton from './CommandButton.svelte';
   import Kbd from '../ui/Kbd.svelte';
 
   // The frame: sidebar and top bar are one field, the page is a sheet set into it, the issue panel docks inside the sheet.
@@ -19,8 +18,7 @@
     crumb = [],
     panelOpen = false,
     onsearch,
-    onhelp,
-  }: { sidebar?: Snippet; panel?: Snippet; children: Snippet; crumb?: string[]; panelOpen?: boolean; onsearch?: () => void; onhelp?: () => void } = $props();
+  }: { sidebar?: Snippet; panel?: Snippet; children: Snippet; crumb?: string[]; panelOpen?: boolean; onsearch?: () => void } = $props();
 
   let sync = $state<SyncStatus | null>(null);
   const syncError = $derived(
@@ -46,8 +44,6 @@
       .map(([ids, text]) => ({ text, keys: ids.map((id) => shortcutFor(id)).filter((k): k is string => !!k).map(keyName) }))
       .filter((h) => h.keys.length),
   );
-
-  const themeIcon = { light: 'sun', dark: 'moon', system: 'circle' } as const;
 
   // The panel is dragged by its left edge; its width lives in the --panel-w token's place, clamped to the sheet.
   let width = $state<number | null>(null);
@@ -85,8 +81,9 @@
       <span data-kbd-inherit><Kbd keys="⌘K" /></span>
     </button>
     <div class="tools">
-      <IconButton icon="help" label="Keyboard shortcuts" shortcut="?" onclick={() => onhelp?.()} />
-      <IconButton icon={themeIcon[theme.mode]} label={`Theme: ${theme.mode}`} onclick={cycleTheme} />
+      <CommandButton command="issue.create" variant="primary" />
+      <CommandButton command="help.shortcuts" iconOnly />
+      <CommandButton command="theme.cycle" iconOnly />
     </div>
   </header>
   <aside class="sidebar">{@render sidebar?.()}</aside>
@@ -136,7 +133,7 @@
   .search { display: flex; align-items: center; gap: var(--s-4); height: var(--ctl-h); padding: 0 var(--s-3) 0 var(--s-5); border: 0; border-radius: var(--r-ctl); background: var(--frame-inset); color: var(--frame-muted); font: inherit; text-align: left; }
   .search:hover { color: var(--frame-ink); }
   .search span:first-of-type { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tools { display: flex; justify-content: flex-end; gap: var(--s-2); }
+  .tools { display: flex; align-items: center; justify-content: flex-end; gap: var(--s-2); }
   .tools :global(.ib) { color: var(--frame-ink); background: var(--frame-raised); }
   .tools :global(.ib:hover:not(:disabled)) { background: var(--frame-inset); color: var(--frame-ink); }
   .sidebar { grid-area: side; min-height: 0; overflow: auto; }

@@ -49,15 +49,18 @@ describe('Shell', () => {
     expect(document.querySelector('.dot.error')).toBeNull();
   });
 
-  it('search_field_and_help_button_call_back', async () => {
+  it('search_field_calls_back_and_the_buttons_run_their_commands', async () => {
     const onsearch = vi.fn();
-    const onhelp = vi.fn();
-    app = mount(Shell, { target: document.body, props: { children: body, onsearch, onhelp } });
+    const help = vi.fn();
+    addEventListener('command:help.shortcuts', help);
+    app = mount(Shell, { target: document.body, props: { children: body, onsearch } });
     await settle();
     document.querySelector<HTMLButtonElement>('[aria-label="Search or run a command"]')!.click();
     document.querySelector<HTMLButtonElement>('[aria-label="Keyboard shortcuts"]')!.click();
+    removeEventListener('command:help.shortcuts', help);
     expect(onsearch).toHaveBeenCalledOnce();
-    expect(onhelp).toHaveBeenCalledOnce();
+    expect(help).toHaveBeenCalledOnce();
+    expect(document.body.textContent).toContain('Create issue');
   });
 
   it('legend_shows_the_keys_the_registry_holds', async () => {
@@ -67,6 +70,7 @@ describe('Shell', () => {
     expect(legend).toContain(shortcutFor('move.down'));
     expect(legend).toContain('⌘K');
     expect(legend).toContain('commands');
+    expect(legend).toContain('status');
   });
 
   it('breadcrumb_marks_the_last_part_as_current', async () => {

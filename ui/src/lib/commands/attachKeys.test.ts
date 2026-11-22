@@ -19,9 +19,9 @@ defineCommand({ id: 'test.plain', label: 'Plain', icon: 'plus', group: 'Test', s
 describe('attachKeys', () => {
   it('passes_the_typed_count_to_run', () => {
     detach = attachKeys(() => ctx);
-    press('5');
+    press('7');
     press('Q', { shiftKey: true });
-    expect(count).toHaveBeenLastCalledWith(5);
+    expect(count).toHaveBeenLastCalledWith(7);
   });
 
   it('count_is_1_without_a_prefix', () => {
