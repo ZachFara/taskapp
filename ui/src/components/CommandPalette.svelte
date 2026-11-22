@@ -215,7 +215,7 @@
     <Dialog.Overlay class="cp-overlay" />
     <Dialog.Content
       class="cp"
-      aria-label="Command menu"
+      aria-label="Command palette"
       aria-describedby={undefined}
       onOpenAutoFocus={(e) => { e.preventDefault(); inputEl?.focus(); }}
       onEscapeKeydown={(e) => { e.preventDefault(); back(); }}
