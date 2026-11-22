@@ -1,4 +1,4 @@
-import type { Bar, Issue, Milestone, Project } from './bindings';
+import type { Bar, Issue, Milestone, Project, Status, StatusCategory } from './bindings';
 
 // Pixels per day. shortcut: fixed widths, upgrade to fit-to-width when a view is rarely wider than the screen.
 export const ZOOMS = { Day: 40, Week: 14, Month: 4, Quarter: 1.5 } as const;
@@ -34,6 +34,7 @@ export type Row = {
   issueId?: number;
   projectId?: number;
   critical?: boolean;
+  category?: StatusCategory;
   estimated?: boolean;
 };
 
@@ -44,6 +45,7 @@ type Input = {
   projects: Project[];
   milestones: Milestone[];
   critical: number[];
+  statuses?: Status[];
 };
 
 const milestoneRows = (ms: Milestone[], indent: number): Row[] =>
@@ -52,7 +54,7 @@ const milestoneRows = (ms: Milestone[], indent: number): Row[] =>
   }));
 
 /** Rows top to bottom. Issues mode groups by project when the view spans several; parents with dated children get a roll-up bar. */
-export function buildRows({ mode, issues, bars, projects, milestones, critical }: Input): Row[] {
+export function buildRows({ mode, issues, bars, projects, milestones, critical, statuses = [] }: Input): Row[] {
   if (mode === 'projects') {
     return projects.flatMap((p): Row[] => [
       ...(p.start_date && p.target_date
@@ -75,6 +77,7 @@ export function buildRows({ mode, issues, bars, projects, milestones, critical }
       ? [{
           id: `issue-${i.id}`, kind: kidSpan ? 'rollup' : 'bar', label: `${i.key} ${i.title}`, indent, issueId: i.id,
           start: span.start, end: span.end, critical: critical.includes(i.id), estimated: !kidSpan && own?.from_estimate,
+          category: statuses.find((s) => s.id === i.status_id)?.category,
         }]
       : [];
     return [...row, ...kids.flatMap((k) => issueRows(k, indent + 1))];
@@ -99,9 +102,9 @@ export function buildRows({ mode, issues, bars, projects, milestones, critical }
 /** Issues with an estimate and no dates, for the side lane. */
 export const unscheduled = (issues: Issue[]) => issues.filter((i) => i.estimate_minutes && !i.start_date && !i.due);
 
-/** First and last day to draw, padded; `today` when nothing is dated. */
+/** First and last day to draw, padded; always includes `today` so the marker is on the chart. */
 export function range(rows: Row[], today: string): Span {
-  const r = rollup(rows.filter((x) => x.start && x.end) as Span[]) ?? { start: today, end: today };
+  const r = rollup([...(rows.filter((x) => x.start && x.end) as Span[]), { start: today, end: today }])!;
   return { start: addDays(r.start, -3), end: addDays(r.end, 14) };
 }
 
@@ -122,3 +125,31 @@ export function shiftLocalDays(utc: string, tz: string, days: number): string {
   const guess = wall - offsetAt(tz, wall - offsetAt(tz, t));
   return new Date(wall - offsetAt(tz, guess)).toISOString().replace('.000Z', 'Z');
 }
+
+/** The calendar day of an instant in `tz` (the zone is passed in so the result never depends on the machine). */
+export const localDay = (now: Date, tz: string) => new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(now);
+
+/** New span after dragging the whole bar or one edge by `d` days; an edge stops at the other edge. */
+export function dragDates(s: Span, mode: 'move' | 'start' | 'end', d: number): Span {
+  if (mode === 'move') return { start: addDays(s.start, d), end: addDays(s.end, d) };
+  if (mode === 'start') {
+    const start = addDays(s.start, d);
+    return { start: start > s.end ? s.end : start, end: s.end };
+  }
+  const end = addDays(s.end, d);
+  return { start: s.start, end: end < s.start ? s.start : end };
+}
+
+const ORDER: Zoom[] = ['Day', 'Week', 'Month', 'Quarter'];
+/** One zoom step: 1 is closer (Day), -1 is further out (Quarter); clamps at the ends. */
+export const zoomBy = (z: Zoom, dir: 1 | -1): Zoom => ORDER[Math.min(3, Math.max(0, ORDER.indexOf(z) - dir))];
+
+/** Day offsets from `start` of every Saturday in the next `days` days; a weekend band is two days from there. */
+export const saturdays = (start: string, days: number) =>
+  Array.from({ length: days }, (_, k) => k).filter((k) => new Date(`${addDays(start, k)}T00:00:00Z`).getUTCDay() === 6);
+
+const fmt = (o: Intl.DateTimeFormatOptions) => (date: string) => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...o }).format(new Date(`${date}T00:00:00Z`));
+const dayFmt = (d: string) => `${fmt({ weekday: 'short' })(d)} ${+d.slice(8)}`;
+const weekFmt = fmt({ month: 'short', day: 'numeric' });
+const monthFmt = fmt({ month: 'short', year: 'numeric' });
+export const tickLabel = (date: string, z: Zoom) => (z === 'Day' ? dayFmt(date) : z === 'Week' ? weekFmt(date) : monthFmt(date));
