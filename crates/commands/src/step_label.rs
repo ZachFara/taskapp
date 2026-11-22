@@ -40,13 +40,11 @@ fn bulk(args: &Value) -> String {
     }
     let set: Vec<&str> = patch["patch"]
         .as_object()
-        .map(|o| {
-            o.iter()
-                .filter(|(_, v)| !v.is_null())
-                .map(|(k, _)| k.as_str())
-                .collect()
-        })
-        .unwrap_or_default();
+        .into_iter()
+        .flatten()
+        .filter(|(_, v)| !v.is_null())
+        .map(|(k, _)| k.as_str())
+        .collect();
     match set.as_slice() {
         [one] => format!(
             "Set {} on {}",
