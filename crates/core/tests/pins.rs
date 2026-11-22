@@ -1,4 +1,4 @@
-use taskapp_core::{Db, Error, PinId, PinKind, pins};
+use taskapp_core::{Db, Error, PinId, PinKind, history, pins};
 
 type R = Result<(), Box<dyn std::error::Error>>;
 
@@ -237,5 +237,55 @@ async fn pins_survive_project_slug_rename_and_prefix_change() -> R {
         .map(|p| p.route)
         .collect();
     assert_eq!(routes, ["/project/house", "/issue/AB-1"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn reorder_undo_restores_positions() -> R {
+    let db = Db::open_in_memory().await?;
+    let a = pins::pin(&db, PinKind::Url, "https://a.example", None).await?;
+    let b = pins::pin(&db, PinKind::Url, "https://b.example", None).await?;
+    history::step("Reorder", pins::reorder(&db, &[b.id, a.id])).await?;
+    taskapp_core::undo::undo(&db).await?;
+    let ids: Vec<_> = pins::list_resolved(&db)
+        .await?
+        .into_iter()
+        .map(|r| r.pin.id)
+        .collect();
+    assert_eq!(ids, vec![a.id, b.id]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn set_pins_and_unpins_many_targets_in_one_undo_step() -> R {
+    let db = Db::open_in_memory().await?;
+    let urls = [
+        "https://a.example".to_owned(),
+        "https://b.example".to_owned(),
+    ];
+    history::step("Pin", pins::set(&db, PinKind::Url, &urls, true)).await?;
+    assert_eq!(pins::list_resolved(&db).await?.len(), 2);
+    // Pinning again is a no-op, not a second pin.
+    pins::set(&db, PinKind::Url, &urls, true).await?;
+    assert_eq!(pins::list_resolved(&db).await?.len(), 2);
+
+    history::step("Unpin", pins::set(&db, PinKind::Url, &urls, false)).await?;
+    assert_eq!(pins::list_resolved(&db).await?.len(), 0);
+    taskapp_core::undo::undo(&db).await?;
+    assert_eq!(pins::list_resolved(&db).await?.len(), 2);
+    taskapp_core::undo::undo(&db).await?;
+    assert_eq!(pins::list_resolved(&db).await?.len(), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn set_with_one_invalid_target_changes_nothing() -> R {
+    let db = Db::open_in_memory().await?;
+    let mixed = ["https://a.example".to_owned(), "ftp://nope".to_owned()];
+    assert!(matches!(
+        pins::set(&db, PinKind::Url, &mixed, true).await,
+        Err(Error::Invalid(_))
+    ));
+    assert_eq!(pins::list_resolved(&db).await?.len(), 0);
     Ok(())
 }

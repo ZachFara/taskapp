@@ -140,6 +140,9 @@ macro_rules! with_commands {
             }
             statuses_update(s, id: StatusId, name: Option<String>, color: Option<String>, position: Option<i32>, icon: Option<String>)
                 -> Status { statuses::update(&s.db, id, name, position, taskapp_core::palette::Look { icon, color }, ChangeSource::Ui).await }
+            statuses_reorder(s, ids_in_order: Vec<StatusId>) -> () {
+                statuses::reorder(&s.db, &ids_in_order, ChangeSource::Ui).await
+            }
             statuses_delete(s, id: StatusId, move_issues_to: StatusId) -> () {
                 statuses::delete(&s.db, id, move_issues_to).await
             }
@@ -258,6 +261,9 @@ macro_rules! with_commands {
 
             pins_pin(s, kind: PinKind, target: String, title: Option<String>) -> Pin {
                 pins::pin(&s.db, kind, &target, title).await
+            }
+            pins_set(s, kind: PinKind, targets: Vec<String>, pinned: bool) -> () {
+                pins::set(&s.db, kind, &targets, pinned).await
             }
             pins_unpin(s, id: PinId) -> () { pins::unpin(&s.db, id).await }
             pins_reorder(s, ids_in_order: Vec<PinId>) -> () { pins::reorder(&s.db, &ids_in_order).await }
