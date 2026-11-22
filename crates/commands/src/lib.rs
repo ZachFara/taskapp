@@ -4,6 +4,8 @@
 //! table, and (through the macro the app passes in) the Tauri wrappers. Commands that need a sync crate
 //! are not here; the app defines them itself.
 
+mod step_label;
+
 use std::{future::Future, path::PathBuf};
 
 use chrono::{DateTime, NaiveDate, Utc};
@@ -70,8 +72,16 @@ macro_rules! define {
         $(
             #[doc = "Forwards to core with `ChangeSource::Ui`.\n\n# Errors\nFails as the core function it forwards to does."]
             pub async fn $name($s: &AppState $(, $a: $t)*) -> Result<$r> {
-                // One command call is one undoable step.
-                history::step(stringify!($name), async move $body).await
+                // One command call is one undoable step, named once the outcome is known.
+                let args = serde_json::json!({ $(stringify!($a): &$a),* });
+                let name = stringify!($name);
+                history::step(&step_label::step_label(name, &args, None), async move {
+                    let out: Result<$r> = (async move $body).await;
+                    let out = out?;
+                    let shown = serde_json::to_value(&out).unwrap_or(Value::Null);
+                    history::relabel(&$s.db, &step_label::step_label(name, &args, Some(&shown))).await?;
+                    Ok(out)
+                }).await
             })*
 
         const TABLE: &[(&str, Handler)] = &[$((stringify!($name), |st, args| Box::pin(async move {
