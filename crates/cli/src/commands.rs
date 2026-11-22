@@ -9,8 +9,9 @@ use serde_json::{Map, Value, json};
 use taskapp_core::{
     ChangeSource, CycleId, Db, Due, Error, IssueId, IssuePatch, LabelId, NewIssue, PinId, PinKind,
     ProjectId, PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, StatusId,
-    TemplateId, ViewDef, ViewId, backup, comments, cycles, history, import, issues, labels, pins,
-    projects, properties, quickadd, relations, search, templates, undo, views,
+    TemplateId, ViewDef, ViewId, ViewTemplateId, backup, comments, cycles, history, import, issues,
+    labels, pins, projects, properties, quickadd, relations, search, templates, undo,
+    view_templates, views,
 };
 
 use crate::{
@@ -160,7 +161,25 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
 }
 
 async fn view(db: &Db, cmd: ViewCmd) -> Result<Value> {
-    let ViewCmd::Query { def, id } = cmd;
+    let (def, id) = match cmd {
+        ViewCmd::Query { def, id } => (def, id),
+        ViewCmd::Templates => return val(view_templates::list(db).await?),
+        ViewCmd::SaveAsTemplate { view_id, name } => {
+            let t = view_templates::from_view(db, ViewId(view_id), name.as_deref(), SRC);
+            return val(t.await?);
+        }
+        ViewCmd::FromTemplate { template_id, name } => {
+            let id = ViewTemplateId(template_id);
+            return val(view_templates::create_view(db, id, name.as_deref(), SRC).await?);
+        }
+        ViewCmd::Reset { view_id } => {
+            return val(view_templates::reset_view(db, ViewId(view_id), SRC).await?);
+        }
+        ViewCmd::DeleteTemplate { id } => {
+            view_templates::delete(db, ViewTemplateId(id), SRC).await?;
+            return Ok(json!({ "deleted": true }));
+        }
+    };
     let def: ViewDef = match (def, id) {
         (Some(text), None) => serde_json::from_str(&text)
             .map_err(|e| Error::Invalid(format!("view definition: {e}")))?,

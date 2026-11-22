@@ -14,6 +14,7 @@ fn def(filter: Option<Filter>) -> ViewDef {
         layout: Layout::List,
         columns: vec![],
         include_archived: false,
+        ..ViewDef::default()
     }
 }
 

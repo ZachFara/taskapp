@@ -147,6 +147,7 @@ const DESCRIPTIVE: &[&str] = &[
     "property_def",
     "status",
     "view",
+    "view_template",
     "template",
 ];
 

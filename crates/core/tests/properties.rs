@@ -268,6 +268,7 @@ async fn delete_def_removes_values_and_cleans_views() -> R {
         layout: taskapp_core::Layout::List,
         columns: vec![prop("area"), prop("keep")],
         include_archived: false,
+        ..ViewDef::default()
     };
     view(&db, &v).await;
     properties::delete_def(&db, "area", Ui).await?;
@@ -301,6 +302,7 @@ async fn delete_def_single_condition_view_has_no_filter() -> R {
                 layout: taskapp_core::Layout::List,
                 columns: vec![],
                 include_archived: false,
+                ..ViewDef::default()
             },
         )
         .await;

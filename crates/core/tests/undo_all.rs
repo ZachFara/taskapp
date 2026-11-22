@@ -340,6 +340,7 @@ async fn view_save_rename_delete() -> R {
         layout: Layout::List,
         columns: vec![],
         include_archived: false,
+        ..ViewDef::default()
     };
     let base = views::list(&db).await?.len();
     let view = history::step(

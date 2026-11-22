@@ -18,6 +18,7 @@ ids!(
     CycleId,
     LabelId,
     ViewId,
+    ViewTemplateId,
     CommentId,
     WorkBlockId,
     PinId,
@@ -338,6 +339,10 @@ pub enum FixedField {
     UpdatedAt,
     CompletedAt,
     Archived,
+    Key,
+    SubIssueProgress,
+    RelationCount,
+    CommentCount,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -379,8 +384,11 @@ pub struct Sort {
     pub descending: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type,
+)]
 pub enum Layout {
+    #[default]
     List,
     Table,
     Board,
@@ -388,6 +396,29 @@ pub enum Layout {
     Calendar,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum Density {
+    #[default]
+    Comfortable,
+    Compact,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum SubIssues {
+    #[default]
+    Nest,
+    Flat,
+    Hide,
+}
+
+const fn yes() -> bool {
+    true
+}
+
+/// `columns` is the ordered list of displayed fields in every layout; empty means the layout's default.
+/// The display settings default so views stored before they existed still load.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct ViewDef {
     pub filter: Option<Filter>,
@@ -396,6 +427,35 @@ pub struct ViewDef {
     pub layout: Layout,
     pub columns: Vec<FieldRef>,
     pub include_archived: bool,
+    #[serde(default)]
+    pub density: Density,
+    #[serde(default)]
+    pub show_empty_groups: bool,
+    #[serde(default)]
+    pub show_sub_issues: SubIssues,
+    /// The board's card fields; empty means `columns`.
+    #[serde(default)]
+    pub card_fields: Vec<FieldRef>,
+    #[serde(default = "yes")]
+    pub show_weekends: bool,
+}
+
+impl Default for ViewDef {
+    fn default() -> Self {
+        Self {
+            filter: None,
+            sorts: vec![],
+            group_by: None,
+            layout: Layout::default(),
+            columns: vec![],
+            include_archived: false,
+            density: Density::default(),
+            show_empty_groups: false,
+            show_sub_issues: SubIssues::default(),
+            card_fields: vec![],
+            show_weekends: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -406,6 +466,29 @@ pub struct SavedView {
     pub position: i32,
     pub icon: Option<String>,
     pub color: Option<String>,
+    /// The template the view was made from, for "Reset to template".
+    pub template_id: Option<ViewTemplateId>,
+}
+
+/// A saved view definition that new views start from.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct ViewTemplate {
+    pub id: ViewTemplateId,
+    pub name: String,
+    pub icon: Option<String>,
+    pub color: Option<String>,
+    pub def: ViewDef,
+    pub position: i32,
+}
+
+/// The counts a view can display that an issue row does not carry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct IssueStats {
+    pub issue_id: IssueId,
+    pub sub_total: u32,
+    pub sub_done: u32,
+    pub relations: u32,
+    pub comments: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

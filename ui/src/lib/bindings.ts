@@ -466,6 +466,62 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	viewsStats: (def: ViewDef, options?: InvokeOptions) => __TAURI_INVOKE<IssueStats[]>("views_stats", { def }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewsCreateFromTemplate: (templateId: ViewTemplateId, name: string | null, options?: InvokeOptions) => __TAURI_INVOKE<SavedView>("views_create_from_template", { templateId, name }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewsSaveAsTemplate: (viewId: ViewId, name: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ViewTemplate>("views_save_as_template", { viewId, name }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewsResetToTemplate: (viewId: ViewId, options?: InvokeOptions) => __TAURI_INVOKE<SavedView>("views_reset_to_template", { viewId }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewTemplatesList: (options?: InvokeOptions) => __TAURI_INVOKE<ViewTemplate[]>("view_templates_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewTemplatesCreate: (name: string, def: ViewDef, icon: string | null, color: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ViewTemplate>("view_templates_create", { name, def, icon, color }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewTemplatesUpdate: (template: ViewTemplate, options?: InvokeOptions) => __TAURI_INVOKE<ViewTemplate>("view_templates_update", { template }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewTemplatesDelete: (id: ViewTemplateId, options?: InvokeOptions) => __TAURI_INVOKE<null>("view_templates_delete", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	importCsvPlan: (csv: string, mapping: ([string, string])[] | null, options?: InvokeOptions) => __TAURI_INVOKE<ImportPlan>("import_csv_plan", { csv, mapping }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -713,6 +769,8 @@ export type Cycle = {
 
 export type CycleId = number;
 
+export type Density = "comfortable" | "compact";
+
 export type Due = ({ Date: string }) & { DateTime?: never } | 
 /**  `tz` is an IANA name. */
 ({ DateTime: {
@@ -734,7 +792,7 @@ export type Filter = ({ And: Filter[] }) & { Cond?: never; Not?: never; Or?: nev
 	value: Value,
 } }) & { And?: never; Not?: never; Or?: never };
 
-export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived";
+export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount";
 
 /**
  *  Everything an import would create. The lists of statuses, labels, projects, cycles and property
@@ -794,6 +852,15 @@ export type IssuePatch = {
 	due?: Due | null,
 	estimate_minutes?: number | null,
 	properties?: { [key in string]: Value } | null,
+};
+
+/**  The counts a view can display that an issue row does not carry. */
+export type IssueStats = {
+	issue_id: IssueId,
+	sub_total: number,
+	sub_done: number,
+	relations: number,
+	comments: number,
 };
 
 export type IssueTemplate = {
@@ -963,6 +1030,8 @@ export type SavedView = {
 	position: number,
 	icon: string | null,
 	color: string | null,
+	/**  The template the view was made from, for "Reset to template". */
+	template_id: ViewTemplateId | null,
 };
 
 export type SelectOption = {
@@ -1001,6 +1070,8 @@ export type SubIssue = {
 	title?: string,
 	fields?: TemplateFields,
 };
+
+export type SubIssues = "nest" | "flat" | "hide";
 
 export type SyncState = "Off" | ({ Ok: {
 	at: string,
@@ -1054,6 +1125,10 @@ export type UndoStatus = {
 
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value };
 
+/**
+ *  `columns` is the ordered list of displayed fields in every layout; empty means the layout's default.
+ *  The display settings default so views stored before they existed still load.
+ */
 export type ViewDef = {
 	filter: Filter | null,
 	sorts: Sort[],
@@ -1061,9 +1136,27 @@ export type ViewDef = {
 	layout: Layout,
 	columns: FieldRef[],
 	include_archived: boolean,
+	density?: Density,
+	show_empty_groups?: boolean,
+	show_sub_issues?: SubIssues,
+	/**  The board's card fields; empty means `columns`. */
+	card_fields?: FieldRef[],
+	show_weekends?: boolean,
 };
 
 export type ViewId = number;
+
+/**  A saved view definition that new views start from. */
+export type ViewTemplate = {
+	id: ViewTemplateId,
+	name: string,
+	icon: string | null,
+	color: string | null,
+	def: ViewDef,
+	position: number,
+};
+
+export type ViewTemplateId = number;
 
 export type WorkBlock = {
 	id: WorkBlockId,

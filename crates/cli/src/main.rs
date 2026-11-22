@@ -190,6 +190,27 @@ enum ViewCmd {
         #[arg(long)]
         id: Option<i64>,
     },
+    /// List view templates.
+    Templates,
+    /// Make a template from a saved view.
+    SaveAsTemplate {
+        view_id: i64,
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Make a saved view from a template.
+    FromTemplate {
+        template_id: i64,
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Put a view made from a template back to the template's definition.
+    Reset {
+        view_id: i64,
+    },
+    DeleteTemplate {
+        id: i64,
+    },
 }
 
 #[derive(Subcommand)]

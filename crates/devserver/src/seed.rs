@@ -336,7 +336,7 @@ static ROWS: [Row; 24] = [
 ];
 
 /// Fills an empty database with a believable workspace: three projects, six labels, two cycles, two milestones,
-/// two templates, four views, three properties, 24 issues. Statuses and the first three views come from the migration.
+/// two issue templates, three view templates, four views, three properties, 24 issues. Statuses and the first three views come from the migration.
 ///
 /// # Errors
 /// Fails when a core call fails, for example on a database that already holds these rows.
@@ -372,7 +372,6 @@ fn at(today: NaiveDate, days: i64) -> NaiveDate {
 }
 
 async fn reference_data(db: &Db) -> Result<()> {
-    workspace::setup(db, "Cairn", "ABC", Some("UTC")).await?;
     for (slug, name) in [
         ("website", "Website relaunch"),
         ("mobile", "Mobile app"),
@@ -407,6 +406,8 @@ async fn reference_data(db: &Db) -> Result<()> {
     ] {
         properties::create_def(db, d, Ui).await?;
     }
+    // After the properties, so the planning-table template lists them.
+    workspace::setup(db, "Cairn", "ABC", Some("UTC")).await?;
     for t in [
         json!({"name": "Bug", "slug": "bug", "icon": "icon:flag", "color": "red", "body": {
             "title_prefix": "Bug: ",

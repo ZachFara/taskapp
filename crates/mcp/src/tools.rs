@@ -10,7 +10,7 @@ use taskapp_core::{
     ChangeSource, Db, Issue, IssuePatch, NewIssue, Project, PropertyDef, PropertyKind, Relation,
     RelationKind, SelectOption, StatusCategory, TemplateInput, ViewDef, backup, comments, cycles,
     history, import, issues, labels, pins, projects, properties, relations, search, statuses,
-    templates, undo, views, workspace,
+    templates, undo, view_templates, views, workspace,
 };
 
 type Res<T> = Result<T, String>;
@@ -153,6 +153,31 @@ const TOOLS: &[Row] = &[
         "Change history of an issue. Args: key.",
         &["key"],
     ),
+    (
+        "list_view_templates",
+        "Saved view templates (definitions that new views start from). No args.",
+        &[],
+    ),
+    (
+        "save_view_as_template",
+        "Make a view template from a saved view. Args: view_id, name (optional).",
+        &["view_id"],
+    ),
+    (
+        "create_view_from_template",
+        "Make a saved view from a template (its whole definition). Args: template_id, name (optional).",
+        &["template_id"],
+    ),
+    (
+        "reset_view_to_template",
+        "Put a view made from a template back to the template's definition. Args: view_id.",
+        &["view_id"],
+    ),
+    (
+        "delete_view_template",
+        "Delete a view template; views made from it keep their definition. Args: id.",
+        &["id"],
+    ),
     ("list_templates", "Saved issue templates. No args.", &[]),
     (
         "create_template",
@@ -267,6 +292,11 @@ impl Server {
             "search_issues" | "query_view" | "get_issue" | "create_issue" | "update_issue"
             | "archive_issue" | "add_comment" | "add_relation" | "remove_relation"
             | "bulk_update" | "get_history" => self.issue_tool(name, args).await,
+            "list_view_templates"
+            | "save_view_as_template"
+            | "create_view_from_template"
+            | "reset_view_to_template"
+            | "delete_view_template" => self.view_template_tool(name, args).await,
             "list_templates" | "create_template" | "update_template" | "delete_template"
             | "apply_template" => self.template_tool(name, args).await,
             "list_properties"
@@ -490,6 +520,32 @@ impl Server {
                 let prop = arg::<String>(a, "property")?;
                 let done = properties::set_value(db, issue.id, &prop, value, s).await;
                 ok(&done.map_err(|e| ce(&e))?)
+            }
+        }
+    }
+
+    async fn view_template_tool(&self, name: &str, a: &Value) -> Res<Value> {
+        let (db, s) = (&self.db, src(a));
+        let label: Option<String> = opt(a, "name")?;
+        match name {
+            "list_view_templates" => ok(&view_templates::list(db).await.map_err(|e| ce(&e))?),
+            "save_view_as_template" => {
+                let t = view_templates::from_view(db, arg(a, "view_id")?, label.as_deref(), s);
+                ok(&t.await.map_err(|e| ce(&e))?)
+            }
+            "create_view_from_template" => {
+                let v =
+                    view_templates::create_view(db, arg(a, "template_id")?, label.as_deref(), s);
+                ok(&v.await.map_err(|e| ce(&e))?)
+            }
+            "reset_view_to_template" => {
+                let v = view_templates::reset_view(db, arg(a, "view_id")?, s);
+                ok(&v.await.map_err(|e| ce(&e))?)
+            }
+            _ => {
+                let done = view_templates::delete(db, arg(a, "id")?, s);
+                done.await.map_err(|e| ce(&e))?;
+                Ok(json!({ "deleted": true }))
             }
         }
     }
