@@ -20,7 +20,8 @@ ids!(
     ViewId,
     CommentId,
     WorkBlockId,
-    PinId
+    PinId,
+    TemplateId
 );
 
 /// A patch field that can also be cleared: absent is `None`, set to null is `Some(None)`.

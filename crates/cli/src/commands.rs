@@ -9,13 +9,13 @@ use serde_json::{Map, Value, json};
 use taskapp_core::{
     ChangeSource, CycleId, Db, Due, Error, IssueId, IssuePatch, LabelId, NewIssue, PinId, PinKind,
     ProjectId, PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, StatusId,
-    ViewDef, ViewId, backup, comments, cycles, history, issues, labels, pins, projects, properties,
-    quickadd, relations, search, views,
+    TemplateId, ViewDef, ViewId, backup, comments, cycles, history, issues, labels, pins, projects,
+    properties, quickadd, relations, search, templates, views,
 };
 
 use crate::{
     Cmd, CommentCmd, CycleCmd, IssueCmd, LabelCmd, PinCmd, ProjectCmd, PropertyCmd, RelationCmd,
-    ViewCmd,
+    TemplateCmd, ViewCmd,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
@@ -29,16 +29,13 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Project(cmd) => project(db, cmd).await,
         Cmd::Cycle(cmd) => cycle(db, cmd).await,
         Cmd::Label(cmd) => label(db, cmd).await,
+        Cmd::Template(cmd) => template(db, cmd).await,
         Cmd::Comment(CommentCmd::Add {
             key,
             body,
             created_at,
             migration,
-        }) => {
-            let id = issue_id(db, &key).await?;
-            let at = created_at.as_deref().map(timestamp).transpose()?;
-            val(comments::add_comment(db, id, &body, at, source(migration)).await?)
-        }
+        }) => comment_add(db, &key, &body, created_at.as_deref(), migration).await,
         Cmd::Relation(cmd) => relation(db, cmd).await,
         Cmd::Pin(cmd) => pin(db, cmd).await,
         Cmd::Backup(_) => Err(Error::Invalid(
@@ -49,6 +46,18 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
             val(history::list_for(db, "issue", &id.0.to_string()).await?)
         }
     }
+}
+
+async fn comment_add(
+    db: &Db,
+    key: &str,
+    body: &str,
+    created_at: Option<&str>,
+    migration: bool,
+) -> Result<Value> {
+    let id = issue_id(db, key).await?;
+    let at = created_at.map(timestamp).transpose()?;
+    val(comments::add_comment(db, id, body, at, source(migration)).await?)
 }
 
 async fn add(db: &Db, text: &str, tz: Option<&str>) -> Result<Value> {
@@ -228,6 +237,27 @@ async fn cycle(db: &Db, cmd: CycleCmd) -> Result<Value> {
             val(cycles::create(db, name, start, end, SRC).await?)
         }
     }
+}
+
+async fn template(db: &Db, cmd: TemplateCmd) -> Result<Value> {
+    Ok(match cmd {
+        TemplateCmd::List => val(templates::list(db).await?)?,
+        TemplateCmd::Create { t } => val(templates::create(db, t.input()?, SRC).await?)?,
+        TemplateCmd::Update { id, t } => {
+            val(templates::update(db, TemplateId(id), t.input()?, SRC).await?)?
+        }
+        TemplateCmd::Delete { id } => {
+            templates::delete(db, TemplateId(id), SRC).await?;
+            json!({ "deleted": id })
+        }
+        TemplateCmd::Apply { id, title } => {
+            let overrides = NewIssue {
+                title: title.unwrap_or_default(),
+                ..NewIssue::default()
+            };
+            val(templates::apply(db, TemplateId(id), overrides, SRC).await?)?
+        }
+    })
 }
 
 async fn label(db: &Db, cmd: LabelCmd) -> Result<Value> {

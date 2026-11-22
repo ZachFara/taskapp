@@ -9,13 +9,13 @@ use std::{future::Future, path::PathBuf};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::Value;
 use taskapp_core::{
-    Bar, Change, ChangeSource, Comment, CommentId, Cycle, CycleId, Db, Error, Issue, IssueId,
-    IssuePatch, Label, LabelId, Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId,
-    PinKind, Project, ProjectId, PropertyDef, PropertyKind, Relation, Reschedule, ResolvedPin,
-    Result, SavedView, SelectOption, Status, StatusCategory, StatusId, SyncState, SyncStatus,
-    ViewDef, ViewId, WorkBlock, WorkBlockId, backup, blocks, comments, cycles, history, issues,
-    labels, pins, projects, properties, quickadd, relations, schedule, search, settings, statuses,
-    views,
+    Applied, Bar, Change, ChangeSource, Comment, CommentId, Cycle, CycleId, Db, Error, Issue,
+    IssueId, IssuePatch, IssueTemplate, Label, LabelId, Milestone, MilestoneId, NewIssue,
+    ParsedQuickAdd, Pin, PinId, PinKind, Project, ProjectId, PropertyDef, PropertyKind, Relation,
+    Reschedule, ResolvedPin, Result, SavedView, SelectOption, Status, StatusCategory, StatusId,
+    SyncState, SyncStatus, TemplateId, TemplateInput, ViewDef, ViewId, WorkBlock, WorkBlockId,
+    backup, blocks, comments, cycles, history, issues, labels, pins, projects, properties,
+    quickadd, relations, schedule, search, settings, statuses, templates, views,
 };
 
 pub struct AppState {
@@ -187,6 +187,18 @@ macro_rules! with_commands {
             }
             labels_remove_label(s, issue: IssueId, label: LabelId) -> () {
                 labels::remove_label(&s.db, issue, label, ChangeSource::Ui).await
+            }
+
+            templates_list(s) -> Vec<IssueTemplate> { templates::list(&s.db).await }
+            templates_create(s, input: TemplateInput) -> IssueTemplate {
+                templates::create(&s.db, input, ChangeSource::Ui).await
+            }
+            templates_update(s, id: TemplateId, input: TemplateInput) -> IssueTemplate {
+                templates::update(&s.db, id, input, ChangeSource::Ui).await
+            }
+            templates_delete(s, id: TemplateId) -> () { templates::delete(&s.db, id, ChangeSource::Ui).await }
+            templates_apply(s, id: TemplateId, overrides: NewIssue) -> Applied {
+                templates::apply(&s.db, id, overrides, ChangeSource::Ui).await
             }
 
             comments_list(s, issue: IssueId) -> Vec<Comment> { comments::list(&s.db, issue).await }

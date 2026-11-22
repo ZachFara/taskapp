@@ -291,6 +291,41 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	templatesList: (options?: InvokeOptions) => __TAURI_INVOKE<IssueTemplate[]>("templates_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	templatesCreate: (input: TemplateInput, options?: InvokeOptions) => __TAURI_INVOKE<IssueTemplate>("templates_create", { input }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	templatesUpdate: (id: TemplateId, input: TemplateInput, options?: InvokeOptions) => __TAURI_INVOKE<IssueTemplate>("templates_update", { id, input }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	templatesDelete: (id: TemplateId, options?: InvokeOptions) => __TAURI_INVOKE<null>("templates_delete", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	templatesApply: (id: TemplateId, overrides: NewIssue, options?: InvokeOptions) => __TAURI_INVOKE<Applied>("templates_apply", { id, overrides }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	commentsList: (issue: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<Comment[]>("comments_list", { issue }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -533,6 +568,16 @@ export const commands = {
 };
 
 /* Types */
+/**
+ *  The issue and sub-issues a template created. `skipped` names references the template
+ *  no longer resolves (a deleted label, project or status); those fields were left unset.
+ */
+export type Applied = {
+	issue: Issue,
+	sub_issues: Issue[],
+	skipped: string[],
+};
+
 export type Bar = {
 	issue_id: IssueId,
 	start: string,
@@ -636,6 +681,15 @@ export type IssuePatch = {
 	due?: Due | null,
 	estimate_minutes?: number | null,
 	properties?: { [key in string]: Value } | null,
+};
+
+export type IssueTemplate = {
+	id: TemplateId,
+	name: string,
+	slug: string,
+	icon: string | null,
+	color: string | null,
+	body: TemplateBody,
 };
 
 export type Label = {
@@ -775,6 +829,11 @@ export type StatusCategory = "Backlog" | "Unstarted" | "Started" | "Completed" |
 
 export type StatusId = number;
 
+export type SubIssue = {
+	title?: string,
+	fields?: TemplateFields,
+};
+
 export type SyncState = "Off" | ({ Ok: {
 	at: string,
 } }) & { Error?: never } | ({ Error: {
@@ -788,6 +847,35 @@ export type SyncStatus = {
 	export: SyncState,
 	/**  Absent in statuses saved before backups reported here. */
 	backup?: SyncState,
+};
+
+/**  Stored as JSON. `title_prefix` is put before the issue's own title. */
+export type TemplateBody = {
+	title_prefix?: string,
+	fields?: TemplateFields,
+	sub_issues?: SubIssue[],
+};
+
+/**  The fields a template prefills. Each is a default; an override on the issue wins. */
+export type TemplateFields = {
+	description?: string | null,
+	status_id?: StatusId | null,
+	priority?: number | null,
+	project_id?: ProjectId | null,
+	label_ids?: LabelId[],
+	estimate_minutes?: number | null,
+	properties?: { [key in string]: Value },
+};
+
+export type TemplateId = number;
+
+/**  What create and update take: the whole template, replaced on update. */
+export type TemplateInput = {
+	name: string,
+	slug: string,
+	icon: string | null,
+	color: string | null,
+	body: TemplateBody,
 };
 
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value };

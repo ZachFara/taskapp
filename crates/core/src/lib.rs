@@ -21,8 +21,10 @@ pub mod schedule;
 pub mod search;
 pub mod settings;
 pub mod statuses;
+pub mod templates;
 pub mod views;
 
 pub use db::Db;
 pub use error::{Error, Result};
 pub use model::*;
+pub use templates::{Applied, IssueTemplate, TemplateInput};

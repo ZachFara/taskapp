@@ -8,8 +8,9 @@ use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Map, Value, json};
 use taskapp_core::{
     ChangeSource, Db, Issue, IssuePatch, NewIssue, Project, PropertyDef, PropertyKind, Relation,
-    RelationKind, SelectOption, StatusCategory, ViewDef, backup, comments, cycles, history, issues,
-    labels, pins, projects, properties, relations, search, statuses, views,
+    RelationKind, SelectOption, StatusCategory, TemplateInput, ViewDef, backup, comments, cycles,
+    history, issues, labels, pins, projects, properties, relations, search, statuses, templates,
+    views,
 };
 
 type Res<T> = Result<T, String>;
@@ -137,6 +138,23 @@ const TOOLS: &[Row] = &[
         "Change history of an issue. Args: key.",
         &["key"],
     ),
+    ("list_templates", "Saved issue templates. No args.", &[]),
+    (
+        "create_template",
+        "Create a template. Args: name, slug (lowercase, digits, dashes; used as /slug in quick-add), icon, color, body (title_prefix, fields, sub_issues).",
+        &["name", "slug", "body"],
+    ),
+    (
+        "update_template",
+        "Replace a template. Args: id, name, slug, icon, color, body.",
+        &["id", "name", "slug", "body"],
+    ),
+    ("delete_template", "Delete a template. Args: id.", &["id"]),
+    (
+        "apply_template",
+        "Create an issue and its sub-issues from a template. Args: id, overrides (NewIssue fields; they win over the template). Returns skipped references.",
+        &["id"],
+    ),
 ];
 
 pub fn definitions() -> Vec<Tool> {
@@ -200,6 +218,8 @@ impl Server {
             "search_issues" | "query_view" | "get_issue" | "create_issue" | "update_issue"
             | "archive_issue" | "add_comment" | "add_relation" | "remove_relation"
             | "bulk_update" | "get_history" => self.issue_tool(name, &args).await,
+            "list_templates" | "create_template" | "update_template" | "delete_template"
+            | "apply_template" => self.template_tool(name, &args).await,
             "list_properties"
             | "create_property"
             | "rename_property"
@@ -398,6 +418,38 @@ impl Server {
                 let prop = arg::<String>(a, "property")?;
                 let done = properties::set_value(db, issue.id, &prop, value, s).await;
                 ok(&done.map_err(|e| ce(&e))?)
+            }
+        }
+    }
+
+    async fn template_tool(&self, name: &str, a: &Value) -> Res<Value> {
+        let db = &self.db;
+        let s = src(a);
+        match name {
+            "list_templates" => ok(&templates::list(db).await.map_err(|e| ce(&e))?),
+            "create_template" => {
+                let input: TemplateInput =
+                    serde_json::from_value(a.clone()).map_err(|e| e.to_string())?;
+                ok(&templates::create(db, input, s).await.map_err(|e| ce(&e))?)
+            }
+            "update_template" => {
+                let input: TemplateInput =
+                    serde_json::from_value(a.clone()).map_err(|e| e.to_string())?;
+                ok(&templates::update(db, arg(a, "id")?, input, s)
+                    .await
+                    .map_err(|e| ce(&e))?)
+            }
+            "delete_template" => {
+                templates::delete(db, arg(a, "id")?, s)
+                    .await
+                    .map_err(|e| ce(&e))?;
+                Ok(json!({ "deleted": true }))
+            }
+            _ => {
+                let overrides: NewIssue = opt(a, "overrides")?.unwrap_or_default();
+                ok(&templates::apply(db, arg(a, "id")?, overrides, s)
+                    .await
+                    .map_err(|e| ce(&e))?)
             }
         }
     }
