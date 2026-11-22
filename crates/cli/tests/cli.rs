@@ -363,3 +363,17 @@ fn comment_add_accepts_created_at_and_migration() {
     );
     assert_eq!(c["created_at"], "2023-05-06T07:08:09Z");
 }
+
+#[test]
+fn import_csv_shows_plan_then_applies() {
+    let (dir, db) = fresh();
+    let file = dir.path().join("in.csv");
+    std::fs::write(&file, "Title,Tags\nOne,a\nTwo,b\n").expect("write csv");
+    let path = file.to_str().expect("utf8 path");
+    let plan = run_json(&db, &["import", "csv", path]);
+    assert_eq!(plan["issues"].as_array().map(Vec::len), Some(2));
+    assert!(!run(&db, &["issue", "get", "ZF-1"]).status.success());
+    let done = run_json(&db, &["import", "csv", path, "--apply"]);
+    assert_eq!(done["applied"]["created"], 2);
+    assert_eq!(run_json(&db, &["issue", "get", "ZF-2"])["title"], "Two");
+}

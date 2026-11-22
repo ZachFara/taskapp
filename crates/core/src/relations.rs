@@ -1,3 +1,5 @@
+use sqlx::SqliteConnection;
+
 use crate::history::{self, Edit};
 use crate::{ChangeSource, Db, Error, IssueId, Relation, RelationKind, Result};
 
@@ -29,11 +31,22 @@ fn to_json(rel: &Relation) -> Result<serde_json::Value> {
 /// `Invalid` for a self-relation, `NotFound` for an unknown issue, `Conflict` when a `Blocks` edge
 /// would close a cycle.
 pub async fn add(db: &Db, rel: Relation, src: ChangeSource) -> Result<()> {
+    let mut tx = db.pool.begin().await?;
+    add_in(&mut tx, rel, src).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// [`add`] inside the caller's transaction, which the caller commits.
+pub(crate) async fn add_in(
+    tx: &mut SqliteConnection,
+    rel: Relation,
+    src: ChangeSource,
+) -> Result<()> {
     if rel.from == rel.to {
         return Err(Error::Invalid("an issue cannot relate to itself".into()));
     }
     let (from, to, kind) = (rel.from.0, rel.to.0, kind_str(rel.kind));
-    let mut tx = db.pool.begin().await?;
     // The cycle check and the insert are one statement, so a concurrent writer cannot slip an edge between them.
     let done = sqlx::query!(
         "WITH RECURSIVE reach(id) AS (
@@ -54,13 +67,12 @@ pub async fn add(db: &Db, rel: Relation, src: ChangeSource) -> Result<()> {
             old: None,
             new: Some(&new),
         };
-        history::record(&mut tx, src, "issue", &from.to_string(), &edit).await?;
-    } else if exists(&mut tx, from, to, kind).await? {
+        history::record(tx, src, "issue", &from.to_string(), &edit).await?;
+    } else if exists(tx, from, to, kind).await? {
         return Ok(());
     } else {
         return Err(Error::Conflict("would create a dependency cycle".into()));
     }
-    tx.commit().await?;
     Ok(())
 }
 
