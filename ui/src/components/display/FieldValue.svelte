@@ -5,6 +5,7 @@
   import Icon from '../../ui/Icon.svelte';
   import Pill from '../../ui/Pill.svelte';
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
+  import { priorityGlyph } from '../../lib/priority';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import { dayText, dueDay } from '../views/dates';
   import { issues } from '../../lib/stores.svelte';
@@ -26,8 +27,7 @@
   const cycle = $derived(ctx.cycles.find((c) => c.id === issue.cycle_id));
   const labels = $derived(issue.label_ids.flatMap((id) => ctx.labels.find((l) => l.id === id) ?? []));
   const due = $derived(dueDay(issue, ctx.tz));
-  // Backend priority 0 none, 1 urgent ... 4 low; the glyph counts the other way.
-  const level = $derived(issue.priority === 0 ? 0 : 5 - issue.priority);
+  const level = $derived(priorityGlyph(issue.priority));
 </script>
 
 {#if field.Property !== undefined}

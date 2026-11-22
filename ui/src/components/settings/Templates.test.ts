@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { IssueTemplate } from '../../lib/bindings';
 import Templates from './Templates.svelte';
-import { field, mountSettings, press, setField } from './testing';
+import { field, mountSettings, pick, press, setField } from './testing';
 
 const tpl = (over: Partial<IssueTemplate> = {}): IssueTemplate => ({
   id: 1,
@@ -47,6 +47,19 @@ describe('Templates', () => {
     await press(target, 'Save template');
     expect(calls.filter((c) => c === 'templates.create')).toHaveLength(1);
     expect(sent[0]).toMatchObject({ name: 'Meeting', slug: 'meeting', body: { title_prefix: 'Mtg: ' } });
+  });
+
+  it('saves the backend number for the chosen default priority', async () => {
+    const sent: { body: { fields?: { priority?: number } } }[] = [];
+    const { target } = await mountSettings(Templates, {
+      templates: { create: async (input: never) => { sent.push(input); return tpl({ id: 9, name: 'Urgent bug', slug: 'ub' }); } },
+    });
+    await press(target, 'New template');
+    await setField(target, 'Template name', 'Urgent bug');
+    await setField(target, 'Template slug', 'ub');
+    await pick(target, 'Default priority', 'Urgent');
+    await press(target, 'Save template');
+    expect(sent[0].body.fields?.priority).toBe(1);
   });
 
   it('rejects a slug with capitals or spaces and does not call the api', async () => {

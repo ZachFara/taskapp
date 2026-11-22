@@ -176,4 +176,52 @@ describe('walk project', { timeout: 25_000 }, () => {
     await page.evaluate(() => dispatchEvent(new CustomEvent('command:milestone.new')));
     await page.getByLabel('Milestone name').waitFor();
   });
+
+  // Priority means the same on every screen: whichever way it was set, the list, table, board and detail all say Urgent.
+  // The mock has no db-changed event, so each tab switch mounts a view that reads the rows fresh.
+  const urgentEverywhere = async (title: string) => {
+    const mark = (loc: import('@playwright/test').Locator) => loc.locator('[role=img][aria-label=Urgent][data-level="4"]').first();
+    const row = () => page.locator('li[data-key]').filter({ hasText: title });
+    await pw(mark(row())).toBeVisible();
+    await page.getByRole('tab', { name: 'Table' }).click();
+    await pw(mark(page.locator('tr[data-key]').filter({ hasText: title }))).toBeVisible();
+    await page.getByRole('tab', { name: 'Board' }).click();
+    await pw(mark(page.locator('[data-issue]').filter({ hasText: title }))).toBeVisible();
+    await page.getByRole('tab', { name: 'List' }).click();
+    await row().first().click();
+    await pw(page.locator('aside.panel').getByText('Urgent').first()).toBeVisible();
+  };
+
+  it('R4-09 priority Urgent from the detail panel shows Urgent in list, table, board and detail', async () => {
+    await open();
+    await rows().first().click();
+    await press('Enter');
+    const title = (await page.locator('aside.panel h2').first().innerText()).trim();
+    await page.locator('aside.panel').getByRole('button', { name: /^Priority/ }).click();
+    await page.getByRole('option', { name: 'Urgent' }).click();
+    await urgentEverywhere(title);
+  });
+
+  it('R4-09 priority Urgent from the p command shows Urgent in list, table, board and detail', async () => {
+    await open();
+    await rows().first().click();
+    const title = (await rows().first().locator('.title').first().innerText()).trim();
+    await press('p');
+    await palette().getByRole('option', { name: 'Urgent' }).click();
+    await urgentEverywhere(title);
+  });
+
+  it('R4-09 priority Urgent from quick add p1 shows Urgent in list, table, board and detail', async () => {
+    await open();
+    await press('c');
+    await page.getByLabel('Title, with quick-add tokens').fill('Walk urgent p1');
+    await press('Enter');
+    await pw(page.getByRole('status').getByRole('button', { name: /Undo/ })).toBeVisible();
+    // A new issue starts in the first status, which the Active view hides; move it into view.
+    await page.getByRole('button', { name: /^Remove filter/ }).first().click();
+    await page.locator('li[data-key]').filter({ hasText: 'Walk urgent' }).first().click();
+    await press('s');
+    await palette().getByRole('option', { name: 'Todo' }).click();
+    await urgentEverywhere('Walk urgent');
+  });
 });

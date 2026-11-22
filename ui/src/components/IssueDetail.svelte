@@ -69,7 +69,14 @@
       error = (e as { message?: string }).message ?? String(e);
     }
     await load();
+    // The list behind the panel reads its own rows, so tell it something changed.
+    if (mode === 'panel') dispatchEvent(new Event('command:view.refresh'));
   }
+  // A command (the p menu, a status key) wrote to this issue while it is open.
+  $effect(() => {
+    addEventListener('command:view.refresh', load);
+    return () => removeEventListener('command:view.refresh', load);
+  });
   const save = (patch: IssuePatch) => act(api.issues.update(issue!.id, patch));
 
   $effect(() => {

@@ -15,6 +15,7 @@
   import MenuItem from '../../ui/MenuItem.svelte';
   import Pill from '../../ui/Pill.svelte';
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
+  import { priorityGlyph, priorityName, priorityOrder } from '../../lib/priority';
   import Skeleton from '../../ui/Skeleton.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import Tooltip from '../../ui/Tooltip.svelte';
@@ -29,9 +30,6 @@
   const OVERSCAN = 10;
   const WINDOW_ABOVE = 300;
   const FALLBACK_VIEWPORT = 800;
-  const PRIORITY_NAMES = ['No priority', 'Low', 'Medium', 'High', 'Urgent'];
-  // Backend priority: 0 none, 1 urgent ... 4 low. The glyph counts the other way round.
-  const glyph = (p: number) => (p === 0 ? 0 : 5 - p);
 
   let { view }: { view: SavedView } = $props();
 
@@ -144,7 +142,7 @@
       } else if (groupField === 'Cycle') {
         put(i, { key: `c${i.cycle_id}`, ...base, kind: 'cycle', ...named(cycles, i.cycle_id, 'No cycle', (c) => c.name ?? `Cycle ${c.number}`), patch: { cycle_id: i.cycle_id } });
       } else if (groupField === 'Priority') {
-        put(i, { key: `r${i.priority}`, ...base, kind: 'priority', name: i.priority === 0 ? PRIORITY_NAMES[0] : PRIORITY_NAMES[glyph(i.priority)], order: i.priority === 0 ? 9 : i.priority, patch: { priority: i.priority } });
+        put(i, { key: `r${i.priority}`, ...base, kind: 'priority', name: priorityName(i.priority), order: priorityOrder(i.priority), patch: { priority: i.priority } });
       } else if (groupField === 'Points') {
         put(i, { key: `pt${i.points}`, ...base, kind: 'points', name: pointsName(i.points), order: i.points ?? Infinity, patch: { points: i.points } });
       } else if (groupField === 'Label') {
@@ -294,7 +292,7 @@
 
 {#snippet lead(g: Group)}
   {#if g.kind === 'priority'}
-    <PriorityGlyph level={g.rows[0] ? glyph(g.rows[0].priority) : 0} />
+    <PriorityGlyph level={g.rows[0] ? priorityGlyph(g.rows[0].priority) : 0} />
   {:else if g.kind === 'project' || g.kind === 'label'}
     {@const r = g.ref as Project | Label | undefined}
     <EntityIcon icon={(r as Project | undefined)?.icon ?? (g.kind === 'label' ? 'icon:tag' : 'icon:project')} color={r?.color} size={14} />
@@ -365,7 +363,7 @@
                 <Checkbox checked={chosen} label={`Select ${i.key}`} />
               {/if}
             </span>
-            <span class="prio"><PriorityGlyph level={glyph(i.priority)} /></span>
+            <span class="prio"><PriorityGlyph level={priorityGlyph(i.priority)} /></span>
             <span class="key">{i.key}</span>
             {#snippet statusBtn(tp: Record<string, unknown>)}
               <button

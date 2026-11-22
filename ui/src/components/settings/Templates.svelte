@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
+  import { PRIORITY_OPTIONS } from '../../lib/priority';
   import type { IssueTemplate, Label, TemplateBody, TemplateFields, TemplateInput } from '../../lib/bindings';
   import { projects, propertyDefs, refreshAll, statuses } from '../../lib/stores.svelte';
   import Button from '../../ui/Button.svelte';
@@ -35,7 +36,7 @@
     subs: string[];
   };
 
-  const PRIORITIES = ['No priority', 'Low', 'Medium', 'High', 'Urgent'].map((label, i) => ({ value: String(i), label }));
+  const PRIORITIES = PRIORITY_OPTIONS.map(({ value, name }) => ({ value: String(value), label: name }));
   const SLUG = /^[a-z0-9-]+$/;
 
   const blank = (): Draft => ({

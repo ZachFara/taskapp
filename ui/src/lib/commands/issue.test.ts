@@ -140,7 +140,7 @@ describe('issue commands', () => {
     const item = (await itemsOf(cmd('issue.priority'), ctx(sel))).find((i) => i.label === 'High')!;
     await item.run();
     expect(bulk).toHaveBeenCalledTimes(1);
-    expect(bulk).toHaveBeenCalledWith(sel, expect.objectContaining({ patch: { priority: 3 } }));
+    expect(bulk).toHaveBeenCalledWith(sel, expect.objectContaining({ patch: { priority: 2 } }));
   });
 
   it('falls back to the focused, then the open issue when nothing is selected', async () => {
