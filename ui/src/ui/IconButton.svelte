@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { mergeProps } from 'bits-ui';
   import Icon from './Icon.svelte';
   import Tooltip from './Tooltip.svelte';
 
@@ -10,6 +11,7 @@
     pressed,
     disabled = false,
     onclick,
+    ...rest
   }: {
     icon: string;
     label: string;
@@ -17,12 +19,13 @@
     pressed?: boolean;
     disabled?: boolean;
     onclick?: (e: MouseEvent) => void;
+    [key: string]: unknown;
   } = $props();
 </script>
 
 <Tooltip {label} {shortcut}>
   {#snippet children(props)}
-    <button {...props} class="ib" type="button" aria-label={label} aria-pressed={pressed} {disabled} {onclick}>
+    <button {...mergeProps(props, rest)} class="ib" type="button" aria-label={label} aria-pressed={pressed} {disabled} {onclick}>
       <Icon name={icon} />
     </button>
   {/snippet}

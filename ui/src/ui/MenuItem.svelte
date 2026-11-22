@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { DropdownMenu } from 'bits-ui';
+  import { ContextMenu, DropdownMenu } from 'bits-ui';
+  import { getContext } from 'svelte';
   import Icon from './Icon.svelte';
   import Kbd from './Kbd.svelte';
 
@@ -11,13 +12,15 @@
     disabled = false,
     onSelect,
   }: { label: string; icon?: string; shortcut?: string | string[]; danger?: boolean; disabled?: boolean; onSelect?: () => void } = $props();
+  // ContextMenu sets this so the same MenuItem works under both menus.
+  const Item = getContext('cx-menu') === 'context' ? ContextMenu.Item : DropdownMenu.Item;
 </script>
 
-<DropdownMenu.Item class="cx-item" {disabled} {onSelect} data-danger={danger || undefined}>
+<Item class="cx-item" {disabled} {onSelect} data-danger={danger || undefined}>
   <span class="lead">{#if icon}<Icon name={icon} />{/if}</span>
   <span class="name">{label}</span>
   {#if shortcut}<Kbd keys={shortcut} />{/if}
-</DropdownMenu.Item>
+</Item>
 
 <style>
   :global(.cx-item) {

@@ -8,9 +8,23 @@ export type Ctx = {
   api: Api;
   navigate: (path: string) => void;
 };
+/**
+ * A second palette step. `multi`: several items may be checked (each shows `checked`) before the page is confirmed,
+ * and `run` then receives how many were chosen. `parse`: free text typed into the palette becomes an extra
+ * item (label shown, value kept), or null when the text is not a value for this page.
+ */
 export type CommandPage = {
   title: string;
-  items: { id: string; label: string; icon?: string; keywords?: string[]; run: () => void | Promise<void> }[];
+  multi?: boolean;
+  parse?: (text: string) => { label: string; value: unknown } | null;
+  items: {
+    id: string;
+    label: string;
+    icon?: string;
+    keywords?: string[];
+    checked?: boolean;
+    run: (count?: number) => void | Promise<void>;
+  }[];
 };
 export type Command = {
   id: string;

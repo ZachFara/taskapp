@@ -7,18 +7,22 @@
     disabled = false,
     invalid = false,
     oninput,
+    onchange,
+    ...rest
   }: {
     value?: string;
     placeholder?: string;
     label: string;
-    type?: 'text' | 'search' | 'number' | 'date' | 'password';
+    type?: 'text' | 'search' | 'number' | 'date' | 'time' | 'password';
     disabled?: boolean;
     invalid?: boolean;
     oninput?: (e: Event) => void;
+    onchange?: (value: string) => void;
+    [key: string]: unknown;
   } = $props();
 </script>
 
-<input class="field" {type} {placeholder} {disabled} aria-label={label} aria-invalid={invalid || undefined} bind:value {oninput} />
+<input class="field" {type} {placeholder} {disabled} aria-label={label} aria-invalid={invalid || undefined} bind:value {oninput} onchange={(e) => onchange?.(e.currentTarget.value)} {...rest} />
 
 <style>
   .field {

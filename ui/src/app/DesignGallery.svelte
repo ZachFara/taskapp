@@ -3,6 +3,8 @@
   import { ICON_IDS } from '../ui/icons';
   import Button from '../ui/Button.svelte';
   import Checkbox from '../ui/Checkbox.svelte';
+  import ContextMenu from '../ui/ContextMenu.svelte';
+  import ListRow from '../ui/ListRow.svelte';
   import Dialog from '../ui/Dialog.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import EntityIcon from '../ui/EntityIcon.svelte';
@@ -57,6 +59,11 @@
   });
 
   let layout = $state('list');
+  let bare = $state(false);
+  let dialogSize = $state<'sm' | 'md' | 'lg'>('md');
+  let rowPicked = $state(1);
+  let heading = $state('Editable title');
+  let lastChange = $state('none');
   let checked = $state(true);
   let mixed = $state(false);
   let on = $state(true);
@@ -223,8 +230,15 @@
             <div class="pop"><b>Due date</b><TextInput type="date" label="Due date" value="" /></div>
           </Popover>
           <Button variant="quiet" onclick={() => (dialog = true)}>Dialog</Button>
+          <Button variant="quiet" onclick={() => { dialogSize = 'md'; bare = true; }}>Bare dialog md</Button>
+          <Button variant="quiet" onclick={() => { dialogSize = 'lg'; bare = true; }}>Bare dialog lg</Button>
+          <ContextMenu>
+            {#snippet area()}<div class="ctx">Right-click here</div>{/snippet}
+            <MenuItem label="Rename" icon="edit" shortcut="R" />
+            <MenuItem label="Delete" icon="trash" danger />
+          </ContextMenu>
           <Tooltip label="Hover or focus me" shortcut="?">
-            {#snippet children(props)}<button {...props} class="plain">Tooltip (500ms)</button>{/snippet}
+            {#snippet children(props)}<button {...props} class="plain">Tooltip (--delay-tooltip)</button>{/snippet}
           </Tooltip>
         </div>
         <div class="line">
@@ -252,6 +266,25 @@
       </section>
 
       <section>
+        <h2>Editable page header, list rows, field callbacks</h2>
+        <div class="demo">
+          <PageHeader title={heading} editable onrename={(v) => (heading = v)} />
+          <PageHeader>
+            {#snippet title()}Title snippet <Pill>slot</Pill>{/snippet}
+          </PageHeader>
+          {#each [1, 2, 3] as n}
+            <ListRow focused={n === 2} selected={n === rowPicked} onpick={() => (rowPicked = n)}>Cycle {n}</ListRow>
+          {/each}
+        </div>
+        <div class="line">
+          <TextInput type="time" label="Time" value="09:00" onchange={(v) => (lastChange = v)} />
+          <TextInput type="number" label="Number" value="3" onchange={(v) => (lastChange = v)} />
+          <Checkbox checked={false} label="Callback" onchange={(c) => (lastChange = String(c))} />
+          <span class="note">onchange: {lastChange}</span>
+        </div>
+      </section>
+
+      <section>
         <h2>Group headers (legend bands)</h2>
         <div class="demo">
           <GroupHeader name="Backlog" count={5} category="Backlog" />
@@ -259,6 +292,9 @@
           <GroupHeader name="In Progress" count={4} category="Started" />
           <GroupHeader name="Done" count={3} category="Completed" {collapsed} ontoggle={() => (collapsed = !collapsed)} />
           <GroupHeader name="Canceled" count={1} category="Canceled" />
+          <GroupHeader name="Mobile app" count={4} tone={2}>
+            {#snippet leading()}<EntityIcon icon="icon:layers" color="blue" />{/snippet}
+          </GroupHeader>
         </div>
       </section>
 
@@ -278,6 +314,9 @@
       <Button variant="quiet" onclick={() => (dialog = false)}>Cancel</Button>
       <Button variant="danger" onclick={() => (dialog = false)}>Delete view</Button>
     {/snippet}
+  </Dialog>
+  <Dialog bind:open={bare} size={dialogSize} label="Bare dialog">
+    <div class="pop"><b>Bare {dialogSize} dialog</b><Button variant="quiet" onclick={() => (bare = false)}>Close</Button></div>
   </Dialog>
 </div>
 
@@ -339,6 +378,7 @@
   .line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-5); }
   .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 320px)); gap: var(--s-5) var(--s-7); }
   .fields .line, .fields :global(textarea) { grid-column: 1 / -1; }
+  .ctx { padding: var(--s-7); border: 1px dashed var(--control); border-radius: var(--r-ctl); color: var(--muted); }
   .pop { display: grid; gap: var(--s-4); }
   .plain { border: 0; background: transparent; color: var(--ink); text-decoration: underline dotted; padding: var(--s-2); }
   .demo { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--r-ctl); overflow: hidden; background: var(--sheet); }
