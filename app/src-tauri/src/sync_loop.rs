@@ -167,7 +167,7 @@ pub fn resolve_helper(bundled: PathBuf) -> PathBuf {
 /// touch none of these, so a reconcile cannot trigger itself.
 /// shortcut: any issue, status or work block edit counts, not only fields that reach the calendar.
 const CALENDAR_FINGERPRINT: &str = "SELECT \
-    (SELECT coalesce(max(id), 0) FROM changes) || '/' || \
+    (SELECT coalesce(max(id), 0) FROM changes WHERE entity <> 'row:settings') || '/' || \
     (SELECT count(*) || coalesce(max(updated_at), '') FROM issues) || '/' || \
     (SELECT count(*) || coalesce(max(start_utc), '') || coalesce(max(end_utc), '') FROM work_blocks) || '/' || \
     (SELECT count(*) || coalesce(max(id), 0) FROM statuses)";
