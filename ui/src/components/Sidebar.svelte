@@ -74,7 +74,7 @@
   }
 </script>
 
-<script module>
+<script module lang="ts">
   const label = (c: Cycle) => c.name ?? `${c.start_date} to ${c.end_date}`;
 </script>
 

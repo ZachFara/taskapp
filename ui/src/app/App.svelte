@@ -95,11 +95,11 @@
     if (!history.state?.panel) closePanel();
   }
 
-  // Props the panel and quick-add take from other screens' tasks; unknown props are ignored until those land.
+  // Props the panel takes from its own task; unknown props are ignored until that lands.
   const detailProps = $derived({ params: { key: panelKey ?? '' }, mode: 'panel', onclose: closePanel, onopen: () => panelKey && navigate(`/issue/${panelKey}`) });
 
-  async function created(i: { key?: string } | string) {
-    const key = typeof i === 'string' ? i : i?.key;
+  async function created({ issue }: { issue: { key: string } }) {
+    const key = issue.key;
     overlay = null;
     // The write's own toast names the backend's step; wait for it, then say what was made.
     await onWrote();
