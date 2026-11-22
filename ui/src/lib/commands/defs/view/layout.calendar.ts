@@ -6,7 +6,7 @@ defineCommand({
   label: 'Calendar layout',
   icon: 'calendar',
   group: 'View',
-  shortcut: '5',
+  shortcut: 'v c',
   when: (ctx) => ctx.route.startsWith('/view/'),
   run: () => dispatchEvent(new CustomEvent('command:view.layout', { detail: 'Calendar' })),
 });

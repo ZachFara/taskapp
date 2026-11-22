@@ -6,7 +6,7 @@ defineCommand({
   label: 'Table layout',
   icon: 'table',
   group: 'View',
-  shortcut: '3',
+  shortcut: 'v t',
   when: (ctx) => ctx.route.startsWith('/view/'),
   run: () => dispatchEvent(new CustomEvent('command:view.layout', { detail: 'Table' })),
 });

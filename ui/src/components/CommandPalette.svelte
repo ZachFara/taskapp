@@ -1,10 +1,10 @@
 <script lang="ts">
   import { Dialog } from 'bits-ui';
-  import { tick, untrack } from 'svelte';
+  import { getContext, onMount, tick, untrack } from 'svelte';
   import { navigate } from '../app/routes';
   import { api } from '../lib/api';
   import type { Cycle, Issue, Label } from '../lib/bindings';
-  import { listCommands, shortcutFor, type Command, type CommandPage, type Ctx } from '../lib/commands';
+  import { listCommands, sectionOf, shortcutFor, type Command, type CommandPage, type Ctx } from '../lib/commands';
   import { rank } from '../lib/commands/match';
   import { selection } from '../lib/selection.svelte';
   import { issues, projects, statuses, views } from '../lib/stores.svelte';
@@ -14,7 +14,7 @@
   import Skeleton from '../ui/Skeleton.svelte';
   import StatusGlyph from '../ui/StatusGlyph.svelte';
 
-  let { onclose, oncreate }: { onclose: () => void; oncreate: () => void } = $props();
+  let { onclose, oncreate, page: startPage }: { onclose: () => void; oncreate: () => void; page?: string } = $props();
 
   // A page may also be multi-pick (stays open, items show a check) or free-input (`parse` turns the typed text into
   // one preview row); the registry type does not carry these yet, so they are read here as optional extras.
@@ -54,7 +54,14 @@
   const recent = (globalThis as { __cairnRecent?: string[] }).__cairnRecent ?? ((globalThis as { __cairnRecent?: string[] }).__cairnRecent = []);
 
   const issueByKey = () => /^\/issue\/([^/]+)/.exec(location.pathname)?.[1];
+  // The app's live context knows the layout and the open panel; a bare mount (tests) falls back to reading the page.
+  const live = getContext<(() => Ctx) | undefined>('cmdctx');
   const ctx = (): Ctx => {
+    if (live) {
+      const c = live();
+      const one = c.selection.length ? c.selection : c.focusedIssueId !== null ? [c.focusedIssueId] : [];
+      return { ...c, selection: [...one] };
+    }
     const open = issues.find((i) => i.key === issueByKey());
     return {
       route: location.pathname,
@@ -80,23 +87,30 @@
   // Sync pages show at once; an async page or one with `load()` shows a skeleton row until its items are in.
   async function openPage(c: Command) {
     const made = c.page!(ctx()) as Page | Promise<Page>;
-    const sync = !('then' in made);
+    // pageOf hands back the page at once with its items still loading, so a Promise inside counts as loading too.
+    const sync = !('then' in made) && !((made as Page).items instanceof Promise);
     const first = sync ? (made as Page) : null;
     const entry = { title: first?.title ?? c.label, cmd: c, page: first ?? ({ title: c.label, items: [] } as Page), loading: !sync || !!first?.load };
     stack.push(entry);
     const at = stack.length - 1;
     const page = sync ? (made as Page) : await (made as Promise<Page>);
-    const items = page.load ? await page.load() : undefined;
+    const items = page.load ? await page.load() : page.items instanceof Promise ? await page.items : undefined;
     if (stack[at]?.cmd.id !== c.id) return;
     stack[at] = { title: page.title, cmd: c, page: Array.isArray(items) ? { ...page, items } : page, loading: false };
   }
+
+  // A key on a page command (`s`, `d`) opens the menu straight at that page.
+  onMount(() => {
+    const c = startPage ? listCommands(ctx(), { all: true }).find((x) => x.id === startPage) : undefined;
+    if (c?.page) void openPage(c);
+  });
 
   const commandRows = (): Row[] =>
     listCommands(ctx()).map((c) => ({
       id: `cmd:${c.id}`,
       label: c.page ? `${c.label}…` : c.label,
       keywords: [c.label, ...(c.keywords ?? [])],
-      group: c.when ? contextTitle : c.group,
+      group: sectionOf(c) === 'Issue' ? contextTitle : sectionOf(c),
       icon: c.icon,
       keys: shortcutFor(c.id),
       more: !!c.page,
@@ -141,7 +155,8 @@
         run: async () => {
           await it.run();
           if (top.page.multi) {
-            stack[stack.length - 1] = { ...top, page: (await Promise.resolve(top.cmd.page!(ctx()))) as Page };
+            const again = (await Promise.resolve(top.cmd.page!(ctx()))) as Page;
+            stack[stack.length - 1] = { ...top, page: { ...again, items: await again.items } };
             await tick();
           } else onclose();
         },

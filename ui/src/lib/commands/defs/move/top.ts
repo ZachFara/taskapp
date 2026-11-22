@@ -4,6 +4,7 @@ import { selection } from '../../../selection.svelte';
 
 defineCommand({
   id: 'move.top',
+  menu: false,
   label: 'Go to top',
   icon: 'list',
   group: 'Navigation',
