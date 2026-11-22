@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 
-use crate::{Db, Error, IssueId, Result, WorkBlock, WorkBlockId};
+use crate::{ChangeSource, Db, Error, IssueId, Result, WorkBlock, WorkBlockId, rows};
 
 /// A block ends strictly after it starts.
 fn check_span(start: DateTime<Utc>, end: DateTime<Utc>) -> Result<()> {
@@ -24,15 +24,18 @@ pub async fn create_block(
     end: DateTime<Utc>,
 ) -> Result<WorkBlock> {
     check_span(start, end)?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let id = sqlx::query!(
         "INSERT INTO work_blocks (issue_id, start_utc, end_utc) VALUES (?, ?, ?)",
         issue.0,
         start,
         end
     )
-    .execute(&db.pool)
+    .execute(&mut *tx)
     .await?
     .last_insert_rowid();
+    rows::created(&mut tx, ChangeSource::Ui, "work_blocks", id).await?;
+    tx.commit().await?;
     Ok(WorkBlock {
         id: WorkBlockId(id),
         issue_id: issue,
@@ -51,13 +54,15 @@ pub async fn move_block(
     end: DateTime<Utc>,
 ) -> Result<WorkBlock> {
     check_span(start, end)?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let before = rows::by_key(&mut tx, "work_blocks", id.0).await?;
     let done = sqlx::query!(
         "UPDATE work_blocks SET start_utc = ?, end_utc = ? WHERE id = ?",
         start,
         end,
         id.0
     )
-    .execute(&db.pool)
+    .execute(&mut *tx)
     .await?
     .rows_affected();
     if done == 0 {
@@ -67,8 +72,10 @@ pub async fn move_block(
         r#"SELECT issue_id AS "issue_id!: i64" FROM work_blocks WHERE id = ?"#,
         id.0
     )
-    .fetch_one(&db.pool)
+    .fetch_one(&mut *tx)
     .await?;
+    rows::changed(&mut tx, ChangeSource::Ui, before).await?;
+    tx.commit().await?;
     Ok(WorkBlock {
         id,
         issue_id: IssueId(issue),
@@ -81,13 +88,17 @@ pub async fn move_block(
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn delete_block(db: &Db, id: WorkBlockId) -> Result<()> {
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let before = rows::by_key(&mut tx, "work_blocks", id.0).await?;
     let done = sqlx::query!("DELETE FROM work_blocks WHERE id = ?", id.0)
-        .execute(&db.pool)
+        .execute(&mut *tx)
         .await?
         .rows_affected();
     if done == 0 {
         return Err(Error::NotFound(format!("work block {}", id.0)));
     }
+    rows::changed(&mut tx, ChangeSource::Ui, before).await?;
+    tx.commit().await?;
     Ok(())
 }
 

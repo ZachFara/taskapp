@@ -1,7 +1,10 @@
 use sqlx::SqliteConnection;
 
-use crate::history::{self, Edit};
-use crate::{ChangeSource, Db, Error, IssueId, Relation, RelationKind, Result};
+use crate::{
+    ChangeSource, Db, Error, IssueId, Relation, RelationKind, Result,
+    history::{self, Edit},
+    rows,
+};
 
 fn kind_str(k: RelationKind) -> &'static str {
     match k {
@@ -61,6 +64,7 @@ pub(crate) async fn add_in(
     .await
     .map_err(|e| missing_issue(e, &rel))?;
     if done.rows_affected() == 1 {
+        rows::created(tx, src, "relations", done.last_insert_rowid()).await?;
         let new = to_json(&rel)?;
         let edit = Edit {
             field: "relation",
@@ -105,6 +109,14 @@ async fn exists(tx: &mut sqlx::SqliteConnection, from: i64, to: i64, kind: &str)
 pub async fn remove(db: &Db, rel: Relation, src: ChangeSource) -> Result<()> {
     let (from, to, kind) = (rel.from.0, rel.to.0, kind_str(rel.kind));
     let mut tx = db.pool.begin().await?;
+    let id: Option<i64> =
+        sqlx::query_scalar("SELECT id FROM relations WHERE from_id = ? AND to_id = ? AND kind = ?")
+            .bind(from)
+            .bind(to)
+            .bind(kind)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let before = rows::by_key(&mut tx, "relations", id.unwrap_or(0)).await?;
     let done = sqlx::query!(
         "DELETE FROM relations WHERE from_id = ? AND to_id = ? AND kind = ?",
         from,
@@ -114,6 +126,7 @@ pub async fn remove(db: &Db, rel: Relation, src: ChangeSource) -> Result<()> {
     .execute(&mut *tx)
     .await?;
     if done.rows_affected() == 1 {
+        rows::changed(&mut tx, src, before).await?;
         let old = to_json(&rel)?;
         let edit = Edit {
             field: "relation",
