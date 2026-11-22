@@ -36,6 +36,11 @@ afterEach(() => {
 });
 
 describe('App shell', () => {
+  it('root_path_opens_a_page_not_not_found', async () => {
+    await open('/');
+    expect(document.body.textContent).not.toContain('Not found');
+  });
+
   it('renders_sidebar_and_page_inside_shell', async () => {
     await open('/view/1');
     expect(q('aside.sidebar')!.textContent).toContain('Active');
