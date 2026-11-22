@@ -8,7 +8,7 @@ defineCommand({
   label: 'Move down',
   icon: 'list',
   group: 'Navigation',
-  shortcut: 'j',
+  shortcut: ['j', 'arrowdown'],
   run: (_, n = 1) => {
     selection.move(selection.columns.flat(), n);
   },
