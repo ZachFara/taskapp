@@ -5,7 +5,6 @@
   import { currentViewId, issues, propertyDefs, refreshAll, statuses, views } from '../../lib/stores.svelte';
   import Checkbox from '../../ui/Checkbox.svelte';
   import CommandButton from '../CommandButton.svelte';
-  import EntityIcon from '../../ui/EntityIcon.svelte';
   import IssueMenu from './IssueMenu.svelte';
   import { api } from '../../lib/api';
   import type { Label, Project } from '../../lib/bindings';
@@ -13,17 +12,19 @@
   import EmptyState from '../../ui/EmptyState.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
   import IconButton from '../../ui/IconButton.svelte';
-  import Pill from '../../ui/Pill.svelte';
     import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
   import Select from '../../ui/Select.svelte';
   import Skeleton from '../../ui/Skeleton.svelte';
-  import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import TextInput from '../../ui/TextInput.svelte';
   import Button from '../../ui/Button.svelte';
+  import Popover from '../../ui/Popover.svelte';
+  import DisplayPanel from '../display/DisplayPanel.svelte';
+  import FieldValue from '../display/FieldValue.svelte';
+  import { emptyCtx, loadCtx, type Ctx, type DisplayDef } from '../display/types';
 
   let { view }: { view: SavedView } = $props();
 
-  type EditKind = PropertyKind | 'Status' | 'Priority' | 'Project' | 'Labels';
+  type EditKind = PropertyKind | 'Status' | 'Priority' | 'Project' | 'Labels' | 'Read';
   // Fixed fields a table can show and edit. Others are left out of the column picker and skipped in views.
   const FIXED: Partial<Record<FixedField, { label: string; kind: EditKind }>> = {
     Title: { label: 'Title', kind: 'Text' },
@@ -34,6 +35,10 @@
     Estimate: { label: 'Estimate', kind: 'Number' },
     Project: { label: 'Project', kind: 'Project' },
     Label: { label: 'Labels', kind: 'Labels' },
+    // Shown through FieldValue and not editable here.
+    Key: { label: 'Key', kind: 'Read' }, Milestone: { label: 'Milestone', kind: 'Read' }, Cycle: { label: 'Cycle', kind: 'Read' },
+    Parent: { label: 'Parent', kind: 'Read' }, SubIssueProgress: { label: 'Sub-issues', kind: 'Read' }, RelationCount: { label: 'Relations', kind: 'Read' },
+    CommentCount: { label: 'Comments', kind: 'Read' }, CreatedAt: { label: 'Created', kind: 'Read' }, UpdatedAt: { label: 'Updated', kind: 'Read' },
   };
   // A view with no columns of its own shows these.
   const DEFAULT: FieldRef[] = ['Priority', 'Title', 'Status', 'Project', 'Label', 'DueDate', 'Estimate'].map((f) => ({ Fixed: f as FixedField }));
@@ -68,15 +73,6 @@
   function label(ref: FieldRef) {
     return ref.Property !== undefined ? (propertyDefs.find((d) => d.key === ref.Property)?.name ?? '') : FIXED[ref.Fixed!]!.label;
   }
-  const addable = $derived([
-    ...Object.entries(FIXED)
-      .filter(([f]) => !base.some((c) => c.Fixed === f))
-      .map(([f, m]) => ({ value: `fixed:${f}`, label: m!.label })),
-    ...propertyDefs
-      .filter((d) => !base.some((c) => c.Property === d.key))
-      .map((d) => ({ value: `prop:${d.key}`, label: d.name })),
-  ]);
-
   let editing = $state<{ row: number; col: number } | null>(null);
   let draft = $state('');
   let original = $state('');
@@ -91,6 +87,11 @@
   let projects = $state.raw<Project[]>([]);
   let labels = $state.raw<Label[]>([]);
   let tz = $state('UTC');
+  let ctx = $state.raw<Ctx>(emptyCtx);
+  $effect(() => {
+    const d = $state.snapshot(def);
+    loadCtx(d).then((c) => (ctx = c));
+  });
 
   onMount(() => {
     currentViewId.value = view.id;
@@ -118,16 +119,6 @@
       : ref.Property !== undefined
         ? (propertyDefs.find((d) => d.key === ref.Property)?.options ?? []).map((o) => ({ value: o.value, label: o.value }))
         : [];
-  const colorOf = (ref: FieldRef, value: string) =>
-    propertyDefs.find((d) => d.key === ref.Property)?.options.find((o) => o.value === value)?.color;
-  const show = (v: Value, kind: EditKind): string => {
-    if (v === null || v === '') return '';
-    if (kind === 'Status') return statuses.find((s) => s.id === v)?.name ?? String(v);
-    if (kind === 'Priority') return PRIORITY[v as number] ?? '';
-    if (typeof v === 'boolean') return v ? 'Yes' : 'No';
-    if (Array.isArray(v)) return v.join(', ');
-    return typeof v === 'object' ? JSON.stringify(v) : String(v);
-  };
   const draftOf = (v: Value, kind: EditKind) => (v === null ? '' : kind === 'Status' ? String(v) : Array.isArray(v) ? v.join(', ') : String(v));
 
   // Sorting is per visit and stays client-side; the query order is the base order.
@@ -178,6 +169,8 @@
       hit.rows.push(i);
       byName.set(g.name, hit);
     }
+    if ((def as DisplayDef).show_empty_groups && def.group_by?.Fixed === 'Status')
+      for (const st of statuses) if (!byName.has(st.name)) byName.set(st.name, { name: st.name, category: st.category, status: true, rows: [], order: st.position });
     return [...byName.values()].sort((a, b) => a.order - b.order);
   });
   function groupOrder(i: Issue): number {
@@ -192,7 +185,7 @@
 
   function startEdit(issue: Issue, c: number) {
     const col = cols[c];
-    if (!col || col.kind === 'Project' || col.kind === 'Labels') return;
+    if (!col || col.kind === 'Project' || col.kind === 'Labels' || col.kind === 'Read') return;
     if (col.kind === 'Checkbox') return void save(issue, col, raw(issue, col.ref) !== true);
     editing = { row: visibleIds.indexOf(issue.id), col: c };
     original = draft = draftOf(raw(issue, col.ref), col.kind);
@@ -340,14 +333,16 @@
     }
   }
 
-  let addValue = $state('');
-  $effect(() => {
-    const id = addValue;
-    if (!id) return;
-    addValue = '';
-    const ref: FieldRef = id.startsWith('prop:') ? { Property: id.slice(5) } : { Fixed: id.slice(6) as FixedField };
-    untrack(() => void saveColumns([...base, ref]));
-  });
+  // Every Display panel change is saved with the rest of the view.
+  async function changeDisplay(patch: Partial<DisplayDef>) {
+    try {
+      await api.views.save(view.id, live.name, { ...def, ...patch });
+      await refreshAll();
+      error = null;
+    } catch (e) {
+      error = (e as { message?: string }).message ?? String(e);
+    }
+  }
 
   function moveColumn(index: number, delta: number) {
     const columns = [...base];
@@ -426,7 +421,10 @@
             </th>
           {/each}
           <th scope="col" class="add-col">
-            <Select label="Add column" placeholder="+" items={addable} bind:value={addValue} />
+            <Popover>
+              {#snippet trigger(props)}<span {...props} class="trig"><IconButton icon="plus" label="Add field" /></span>{/snippet}
+              <DisplayPanel {def} onchange={changeDisplay} />
+            </Popover>
           </th>
         </tr>
       </thead>
@@ -471,30 +469,10 @@
                       </form>
                     {:else if col.kind === 'Checkbox'}
                       <Checkbox label={`${col.label} for ${issue.key}`} bind:checked={() => raw(issue, col.ref) === true, (v) => void save(issue, col, v)} />
-                    {:else if col.kind === 'Select' && typeof raw(issue, col.ref) === 'string'}
-                      <Pill color={colorOf(col.ref, raw(issue, col.ref) as string)}>{raw(issue, col.ref)}</Pill>
-                    {:else if col.kind === 'MultiSelect' && Array.isArray(raw(issue, col.ref))}
-                      {#each raw(issue, col.ref) as v (v)}<Pill color={colorOf(col.ref, v as string)}>{v}</Pill>{/each}
-                    {:else if col.kind === 'Status'}
-                      <span class="status">
-                        <StatusGlyph category={statuses.find((s) => s.id === issue.status_id)?.category ?? 'Backlog'} size={14} />
-                        {show(raw(issue, col.ref), col.kind)}
-                      </span>
-                    {:else if col.kind === 'Priority'}
-                      <span class="status">
-                        <PriorityGlyph level={glyphLevel(issue.priority)} size={14} label={PRIORITY[issue.priority]} />
-                        {show(raw(issue, col.ref), col.kind)}
-                      </span>
-                    {:else if col.kind === 'Project'}
-                      {@const p = projects.find((x) => x.id === issue.project_id)}
-                      {#if p}<span class="status"><EntityIcon icon={p.icon ?? 'icon:project'} color={p.color} size={14} />{p.name}</span>{/if}
-                    {:else if col.kind === 'Labels'}
-                      {#each issue.label_ids as id (id)}{@const l = labels.find((x) => x.id === id)}{#if l}<Pill color={l.color}>{l.name}</Pill>{/if}{/each}
-                    {:else if col.ref.Fixed === 'DueDate'}
-                      {@const d = dueDay(issue, tz)}
-                      <span class="due" data-overdue={isOverdue(issue, statuses.find((s) => s.id === issue.status_id)?.category, tz) ? '' : undefined}>{d ? dayText(d) : ''}</span>
                     {:else}
-                      {show(raw(issue, col.ref), col.kind)}
+                      <span class="due" data-overdue={col.ref.Fixed === 'DueDate' && isOverdue(issue, statuses.find((s) => s.id === issue.status_id)?.category, tz) ? '' : undefined}>
+                        <FieldValue field={col.ref} {issue} {ctx} />
+                      </span>
                     {/if}
                   </td>
                 {/each}
@@ -521,7 +499,7 @@
   /* Header labels are quiet text on the sheet; the "+" stays in view at the right edge. */
   .head :global(.btn) { border-color: transparent; background: transparent; padding: 0 var(--s-2); }
   .add-col { position: sticky; right: 0; z-index: var(--z-sticky); background: var(--sheet); text-align: end; }
-  .add-col :global(.cx-select) { min-width: 0; }
+  .trig { display: inline-flex; }
   .due[data-overdue] { color: var(--signal); font-weight: 700; }
   th.num { text-align: end; }
   .loading {

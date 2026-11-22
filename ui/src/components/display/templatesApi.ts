@@ -1,9 +1,7 @@
 import { api } from '../../lib/api';
-import type { SavedView, ViewDef } from '../../lib/bindings';
+import type { SavedView, ViewDef, ViewTemplate } from '../../lib/bindings';
 
-// Shapes the backend will generate (view templates). Until it lands, `templates()` is null and the UI hides templates.
-export type ViewTemplate = { id: number; name: string; icon: string | null; color: string | null; def: ViewDef; position: number };
-
+export type { ViewTemplate };
 export type TemplateApi = {
   list(): Promise<ViewTemplate[]>;
   create(name: string, def: ViewDef, icon: string | null, color: string | null): Promise<ViewTemplate>;
@@ -14,33 +12,22 @@ export type TemplateApi = {
   resetToTemplate(viewId: number): Promise<SavedView>;
 };
 
-// Tests inject a fake here; `undefined` means "look it up on the api", `null` means "not available".
-let injected: TemplateApi | null | undefined;
+// Tests inject a fake here; null goes back to the real api.
+let injected: TemplateApi | null = null;
 export function setTemplateApi(a: TemplateApi | null) {
   injected = a;
 }
 
-type Loose = {
-  viewTemplates?: Omit<TemplateApi, 'createFromTemplate' | 'saveAsTemplate' | 'resetToTemplate'>;
-  views?: Partial<Pick<TemplateApi, 'createFromTemplate' | 'saveAsTemplate' | 'resetToTemplate'>>;
-};
-
-export function templates(): TemplateApi | null {
-  if (injected !== undefined) return injected;
-  const a = api as unknown as Loose;
-  const vt = a.viewTemplates;
-  const v = a.views;
-  if (!vt || !v?.createFromTemplate || !v.saveAsTemplate || !v.resetToTemplate) return null;
-  return {
-    list: () => vt.list(),
-    create: (name, def, icon, color) => vt.create(name, def, icon, color),
-    update: (t) => vt.update(t),
-    delete: (id) => vt.delete(id),
-    createFromTemplate: (id, name) => v.createFromTemplate!(id, name),
-    saveAsTemplate: (id, name) => v.saveAsTemplate!(id, name),
-    resetToTemplate: (id) => v.resetToTemplate!(id),
+export const templates = (): TemplateApi =>
+  injected ?? {
+    list: () => api.view.templatesList(),
+    create: (name, def, icon, color) => api.view.templatesCreate(name, def, icon, color),
+    update: (t) => api.view.templatesUpdate(t),
+    delete: (id) => api.view.templatesDelete(id),
+    createFromTemplate: (id, name) => api.views.createFromTemplate(id, name),
+    saveAsTemplate: (id, name) => api.views.saveAsTemplate(id, name),
+    resetToTemplate: (id) => api.views.resetToTemplate(id),
   };
-}
 
 const DEFAULT_KEY = 'default_view_template';
 

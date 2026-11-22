@@ -96,15 +96,17 @@
   let loaded = $state(false);
   let error: string | null = $state(null);
   let ctx = $state.raw<Ctx>(emptyCtx);
-  const fields = $derived(shown(view.def, BOARD_DEFAULT, true));
+  // Key and priority are always on the card; the rest follow the view.
+  const fields = $derived(shown(view.def, BOARD_DEFAULT, true).filter((f) => f.Fixed !== 'Key' && f.Fixed !== 'Priority'));
 
   async function reload() {
     issues = await api.views.query($state.snapshot(view.def));
     loaded = true;
   }
-  onMount(async () => {
-    ctx = await loadCtx();
-    await reload();
+  onMount(reload);
+  $effect(() => {
+    const d = $state.snapshot(view.def);
+    loadCtx(d).then((c) => (ctx = c));
   });
 
   const byColumn = $derived(columns.map((col) => ({ col, cards: issues.filter(col.holds) })));

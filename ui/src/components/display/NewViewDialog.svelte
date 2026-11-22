@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../../lib/api';
-  import type { ViewDef } from '../../lib/bindings';
+  import type { SavedView, ViewDef } from '../../lib/bindings';
   import { navigate } from '../../app/routes';
   import Button from '../../ui/Button.svelte';
   import Dialog from '../../ui/Dialog.svelte';
@@ -8,19 +8,18 @@
   import Pill from '../../ui/Pill.svelte';
   import { defaultTemplateId, templates, type ViewTemplate } from './templatesApi';
 
-  let { open = $bindable(false) }: { open?: boolean } = $props();
+  // `current` is set when opened from a view, which adds "Copy of current view".
+  let { open = $bindable(false), current }: { open?: boolean; current?: SavedView | null } = $props();
 
   const blank: ViewDef = { filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false };
-  // 'blank' or a template id. "Copy of current view" is the view menu's "Save as new view", so it is not repeated here.
-  let choice = $state<'blank' | number>('blank');
+  let choice = $state<'blank' | 'copy' | number>('blank');
   let list = $state<ViewTemplate[]>([]);
   let busy = $state(false);
 
   $effect(() => {
     if (!open) return;
-    const t = templates();
     (async () => {
-      list = t ? await t.list() : [];
+      list = await templates().list();
       const d = await defaultTemplateId();
       choice = d !== null && list.some((x) => x.id === d) ? d : 'blank';
     })();
@@ -29,11 +28,12 @@
   async function create() {
     busy = true;
     try {
-      const t = templates();
       const v =
-        choice === 'blank' || !t
+        choice === 'blank'
           ? await api.views.save(null, 'Untitled view', blank, null, null)
-          : await t.createFromTemplate(choice, null);
+          : choice === 'copy'
+            ? await api.views.save(null, `${current!.name} copy`, current!.def, current!.icon, current!.color)
+            : await templates().createFromTemplate(choice, null);
       open = false;
       navigate(`/view/${v.id}`);
     } finally {
@@ -52,6 +52,12 @@
       <span class="name">Blank</span>
       <Pill>List</Pill>
     </ListRow>
+    {#if current}
+      <ListRow selected={choice === 'copy'} onpick={() => (choice = 'copy')}>
+        <span class="name">Copy of current view</span>
+        <Pill>{current.def.layout}</Pill>
+      </ListRow>
+    {/if}
     {#each list as t (t.id)}
       <ListRow selected={choice === t.id} onpick={() => (choice = t.id)}>
         <span class="name">{t.name}</span>
