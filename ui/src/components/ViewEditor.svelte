@@ -90,10 +90,12 @@
     </Menu>
   </div>
   <div class="tools">
+    {#if def.layout !== 'Calendar'}
     <Popover>
       {#snippet trigger(props)}<span {...props} class="trig"><Button icon="group">Group{def.group_by ? `: ${lookup.name(def.group_by)}` : ''}</Button></span>{/snippet}
       <Select label="Group by" placeholder="No grouping" items={[{ value: '', label: 'No grouping' }, ...fieldItems]} bind:value={() => (def.group_by ? fieldKey(def.group_by) : ''), setGroup} />
     </Popover>
+    {/if}
     <Popover>
       {#snippet trigger(props)}<span {...props} class="trig"><Button icon="sort">Sort{sort ? `: ${lookup.name(sort.field)}` : ''}</Button></span>{/snippet}
       <div class="stack">

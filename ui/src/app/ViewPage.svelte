@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { selection } from '../lib/selection.svelte';
   import { onMount, type Component } from 'svelte';
   import type { Layout, SavedView, ViewDef } from '../lib/bindings';
   import { api } from '../lib/api';
@@ -64,6 +65,8 @@
   });
 
   const layout = $derived<Layout>((override as Layout) ?? def?.layout ?? 'List');
+  // Commands scope their keys by layout; the timeline does not announce itself, and tabs can change without a route change.
+  $effect(() => selection.setLayout(({ List: 'list', Table: 'table', Board: 'board', Gantt: 'timeline', Calendar: 'calendar' } as const)[layout]));
   const live = $derived(view && def ? { ...view, name, def: { ...def, layout } } : null);
   const filtered = $derived(def?.filter != null);
 
