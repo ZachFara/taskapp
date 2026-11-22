@@ -21,6 +21,7 @@ pub mod schedule;
 pub mod search;
 pub mod settings;
 pub mod statuses;
+pub mod undo;
 pub mod views;
 
 pub use db::Db;

@@ -32,7 +32,7 @@ fn is_done(c: StatusCategory) -> bool {
     matches!(c, StatusCategory::Completed | StatusCategory::Canceled)
 }
 
-async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Issue> {
+pub(crate) async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Issue> {
     let r = sqlx::query!(
         r#"SELECT id AS "id!: i64", number, title, description, status_id, priority,
                   project_id, milestone_id, parent_id, cycle_id,
@@ -532,7 +532,19 @@ pub async fn get_by_key(db: &Db, key: &str) -> Result<Issue> {
 
 async fn set_archived(db: &Db, id: IssueId, src: ChangeSource, archive: bool) -> Result<()> {
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
-    let issue = fetch(&mut tx, id).await?;
+    set_archived_in(&mut tx, id, src, archive).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Archives or restores inside the caller's transaction; already in that state is a no-op.
+pub(crate) async fn set_archived_in(
+    tx: &mut SqliteConnection,
+    id: IssueId,
+    src: ChangeSource,
+    archive: bool,
+) -> Result<()> {
+    let issue = fetch(tx, id).await?;
     if issue.archived_at.is_some() == archive {
         return Ok(());
     }
@@ -546,9 +558,7 @@ async fn set_archived(db: &Db, id: IssueId, src: ChangeSource, archive: bool) ->
             .map_or(Value::Null, |t| Value::from(t.to_rfc3339())),
         at.map_or(Value::Null, |t| Value::from(t.to_rfc3339())),
     );
-    record_all(&mut tx, src, id, &[("archived_at", old, new)]).await?;
-    tx.commit().await?;
-    Ok(())
+    record_all(tx, src, id, &[("archived_at", old, new)]).await
 }
 
 /// Archiving an archived issue is a no-op.
