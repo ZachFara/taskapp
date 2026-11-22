@@ -4,6 +4,10 @@ import { shortcutFor } from '../lib/commands';
 import { setApi } from '../lib/api';
 import { createMockApi } from '../lib/api.mock';
 import Shell from './Shell.svelte';
+import { readFileSync } from 'node:fs';
+
+// Run from ui/ (pnpm -C ui test), so the path is relative to the package root.
+const baseCss = readFileSync('src/styles/base.css', 'utf8');
 
 let app: ReturnType<typeof mount> | null = null;
 const body = createRawSnippet(() => ({ render: () => '<p>main view</p>' }));
@@ -60,7 +64,7 @@ describe('Shell', () => {
     removeEventListener('command:help.shortcuts', help);
     expect(onsearch).toHaveBeenCalledOnce();
     expect(help).toHaveBeenCalledOnce();
-    expect(document.body.textContent).toContain('Create issue');
+    expect(document.querySelector('header .tools')!.textContent).not.toContain('Create issue');
   });
 
   it('legend_shows_the_keys_the_registry_holds', async () => {
@@ -84,5 +88,21 @@ describe('Shell', () => {
     app = mount(Shell, { target: document.body, props: { children: body, panel, panelOpen: true } });
     await settle();
     expect(document.querySelector('aside.panel')!.textContent).toContain('detail');
+  });
+
+  it('app_root_carries_the_base_type_class', async () => {
+    await open();
+    expect(document.querySelector('.app')!.classList.contains('cairn-root')).toBe(true);
+  });
+
+  it('base_css_sets_the_body_font_so_every_screen_gets_the_app_face', () => {
+    expect(baseCss).toMatch(/body\s*\{[^}]*font:[^}]*var\(--font\)/);
+  });
+
+  it('top_bar_has_no_second_create_issue_button', async () => {
+    await open();
+    const labels = [...document.querySelectorAll('header button')].map((b) => b.textContent?.trim());
+    expect(labels).not.toContain('Create issue');
+    expect(labels).not.toContain('New issue');
   });
 });

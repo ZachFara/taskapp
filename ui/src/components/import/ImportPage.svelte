@@ -2,6 +2,8 @@
   import { api } from '../../lib/api';
   import type { ImportPlan } from '../../lib/bindings';
   import { navigate } from '../../app/routes';
+  import { runUndo } from '../undoState.svelte';
+  import { parseCsv } from './csv';
   import Button from '../../ui/Button.svelte';
   import PageHeader from '../../ui/PageHeader.svelte';
   import Select from '../../ui/Select.svelte';
@@ -49,10 +51,9 @@
   let undone = $state(false);
   let error = $state('');
 
-  // shortcut: display-only split on commas; the core parser handles quoted fields, so a sample may look off for those.
-  const lines = $derived(csvText.split(/\r?\n/).filter((l) => l.trim() !== ''));
-  const headers = $derived(lines[0] ? lines[0].split(',').map((h) => h.trim()) : []);
-  const sample = (i: number) => lines[1]?.split(',')[i]?.trim() ?? '';
+  const rows = $derived(parseCsv(csvText));
+  const headers = $derived((rows[0] ?? []).map((h) => h.trim()));
+  const sample = (i: number) => rows[1]?.[i]?.trim() ?? '';
 
   const pairs = $derived(
     headers.flatMap((h): [string, string][] => {
@@ -67,12 +68,10 @@
   const planValid = $derived(plan !== null && planPairs === JSON.stringify(pairs));
   const count = $derived(plan?.issues?.length ?? 0);
 
-  async function onFile(e: Event) {
-    const file = (e.currentTarget as HTMLInputElement).files?.[0];
-    if (!file) return;
+  async function load(file: File) {
     csvText = await file.text();
     fileName = file.name;
-    mapping = Object.fromEntries(csvText.split(/\r?\n/)[0].split(',').map((h) => [h.trim(), guess(h)]));
+    mapping = Object.fromEntries((parseCsv(csvText)[0] ?? []).map((h) => [h.trim(), guess(h)]));
     propName = {};
     plan = null;
     done = null;
@@ -105,10 +104,21 @@
     }
   }
 
+  const onFile = (e: Event) => {
+    const file = (e.currentTarget as HTMLInputElement).files?.[0];
+    if (file) void load(file);
+  };
+  // The drop area takes a file the same way the picker does; the browser default (opening the file) is suppressed.
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer?.files?.[0];
+    if (file) void load(file);
+  };
+
   async function undo() {
     error = '';
     try {
-      await api.history.undo();
+      await runUndo(api);
       undone = true;
     } catch (e) {
       error = msg(e);
@@ -141,12 +151,12 @@
 {/snippet}
 
 <section class="import">
-  <PageHeader title="Import" icon="download" tabs={tabsSlot} />
+  <PageHeader title="Import" icon="icon:download" tabs={tabsSlot} />
 
   {#if source === 'csv'}
     <div class="step">
       <h2><span class="num">1</span> Choose a file</h2>
-      <label class="drop" data-has-file={fileName !== ''}>
+      <label class="drop" data-has-file={fileName !== ''} ondragover={(e) => e.preventDefault()} ondrop={onDrop}>
         <input class="sr" type="file" accept=".csv,text/csv" aria-label="CSV file" onchange={onFile} />
         <span class="drop-title">{fileName || 'Choose a CSV file'}</span>
         <span class="drop-hint">The first row is the header. Each row becomes one issue.</span>
@@ -166,7 +176,7 @@
                 <th scope="row">{h}</th>
                 <td class="sample">{sample(i)}</td>
                 <td>
-                  <Select bind:value={mapping[h]} label={`Map ${h}`} items={FIELDS} />
+                  <Select bind:value={() => mapping[h], (v) => (mapping[h] = v)} label={`Map ${h}`} items={FIELDS} />
                   {#if mapping[h] === 'property'}
                     <TextInput bind:value={propName[h]} label={`Property name for ${h}`} placeholder="Property name" invalid={!propName[h]?.trim()} />
                   {/if}
