@@ -37,7 +37,7 @@ pub(crate) async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Is
         r#"SELECT id AS "id!: i64", number, title, description, status_id, priority,
                   project_id, milestone_id, parent_id, cycle_id,
                   start_date AS "start_date: NaiveDate", due_date AS "due_date: NaiveDate",
-                  due_time_utc AS "due_time_utc: DateTime<Utc>", due_tz, estimate_minutes, properties,
+                  due_time_utc AS "due_time_utc: DateTime<Utc>", due_tz, estimate_minutes, points, properties,
                   created_at AS "created_at: DateTime<Utc>", updated_at AS "updated_at: DateTime<Utc>",
                   completed_at AS "completed_at: DateTime<Utc>", archived_at AS "archived_at: DateTime<Utc>"
            FROM issues WHERE id = ?"#,
@@ -79,6 +79,7 @@ pub(crate) async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Is
             .map(u32::try_from)
             .transpose()
             .map_err(bad)?,
+        points: r.points,
         properties: serde_json::from_str(&r.properties).map_err(bad)?,
         created_at: r.created_at,
         updated_at: r.updated_at,
@@ -127,6 +128,7 @@ pub(crate) fn issue_from_row(r: &SqliteRow, prefix: &str) -> Result<Issue> {
         estimate_minutes: opt("estimate_minutes")?
             .map(|m| u32::try_from(m).map_err(|e| Error::Invalid(e.to_string())))
             .transpose()?,
+        points: r.try_get("points")?,
         properties: serde_json::from_str::<Map<String, Value>>(&props)
             .map_err(|e| Error::Invalid(format!("issue properties: {e}")))?,
         created_at: r.try_get("created_at")?,
@@ -145,7 +147,24 @@ pub(crate) async fn issues_from_rows(
     rows.iter().map(|r| issue_from_row(r, &prefix)).collect()
 }
 
-fn check_fields(title: &str, priority: u8) -> Result<()> {
+/// At least 0 and at most one decimal, so a scale and a free number both fit.
+pub(crate) fn valid_points(p: f64) -> bool {
+    let tenths = p * 10.0;
+    p.is_finite() && p >= 0.0 && (tenths - tenths.round()).abs() <= 1e-6
+}
+
+fn check_points(points: Option<f64>) -> Result<()> {
+    let Some(p) = points else { return Ok(()) };
+    if !valid_points(p) {
+        return Err(Error::Invalid(format!(
+            "points {p} must be 0 or more with at most one decimal"
+        )));
+    }
+    Ok(())
+}
+
+fn check_fields(title: &str, priority: u8, points: Option<f64>) -> Result<()> {
+    check_points(points)?;
     if title.trim().is_empty() {
         return Err(Error::Invalid("title is empty".into()));
     }
@@ -254,7 +273,7 @@ pub async fn create_in(
     src: ChangeSource,
 ) -> Result<Issue> {
     let priority = new.priority.unwrap_or(0);
-    check_fields(&new.title, priority)?;
+    check_fields(&new.title, priority, new.points)?;
     check_props(tx, None, new.properties.as_ref()).await?;
     let status = match new.status_id {
         Some(s) => s,
@@ -280,10 +299,10 @@ pub async fn create_in(
     let (parent, cycle) = (new.parent_id.map(|p| p.0), new.cycle_id.map(|c| c.0));
     let id = sqlx::query!(
         "INSERT INTO issues (number, title, description, status_id, priority, project_id, milestone_id,
-           parent_id, cycle_id, start_date, due_date, due_time_utc, due_tz, estimate_minutes, properties,
+           parent_id, cycle_id, start_date, due_date, due_time_utc, due_tz, estimate_minutes, points, properties,
            created_at, updated_at, completed_at)
          VALUES ((SELECT COALESCE(MAX(number), 0) + 1 FROM issues), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-           ?, ?, ?)",
+           ?, ?, ?, ?)",
         new.title,
         description,
         status.0,
@@ -297,6 +316,7 @@ pub async fn create_in(
         due.utc,
         due.tz,
         new.estimate_minutes,
+        new.points,
         props,
         created,
         created,
@@ -341,6 +361,7 @@ fn apply_patch(old: &Issue, p: IssuePatch) -> Issue {
     n.start_date = p.start_date.unwrap_or(n.start_date);
     n.due = p.due.unwrap_or(n.due);
     n.estimate_minutes = p.estimate_minutes.unwrap_or(n.estimate_minutes);
+    n.points = p.points.unwrap_or(n.points);
     if let Some(mut l) = p.label_ids {
         l.sort_by_key(|l| l.0);
         l.dedup();
@@ -418,6 +439,7 @@ fn changes(old: &Issue, n: &Issue) -> Vec<(&'static str, Value, Value)> {
         &old.estimate_minutes,
         &n.estimate_minutes,
     );
+    diff(&mut c, "points", &old.points, &n.points);
     diff(&mut c, "properties", &old.properties, &n.properties);
     c
 }
@@ -468,7 +490,7 @@ pub async fn update_in(
 ) -> Result<Issue> {
     let old = fetch(tx, id).await?;
     let mut new = apply_patch(&old, patch);
-    check_fields(&new.title, new.priority)?;
+    check_fields(&new.title, new.priority, new.points)?;
     check_parent(tx, id, new.parent_id).await?;
     check_props(tx, Some(&old.properties), Some(&new.properties)).await?;
     let cs = changes(&old, &new);
@@ -495,7 +517,7 @@ pub async fn update_in(
     sqlx::query!(
         "UPDATE issues SET title = ?, description = ?, status_id = ?, priority = ?, project_id = ?,
            milestone_id = ?, parent_id = ?, cycle_id = ?, start_date = ?, due_date = ?, due_time_utc = ?,
-           due_tz = ?, estimate_minutes = ?, properties = ?, updated_at = ?, completed_at = ? WHERE id = ?",
+           due_tz = ?, estimate_minutes = ?, points = ?, properties = ?, updated_at = ?, completed_at = ? WHERE id = ?",
         new.title,
         new.description,
         new.status_id.0,
@@ -509,6 +531,7 @@ pub async fn update_in(
         due.utc,
         due.tz,
         new.estimate_minutes,
+        new.points,
         props,
         new.updated_at,
         new.completed_at,

@@ -252,6 +252,8 @@ fn pages() -> Pages {
 #[tokio::test]
 async fn linear_fixture_maps_states_labels_relations_and_sub_issues() -> R {
     let db = Db::open_in_memory().await?;
+    // Where the workspace counts time, one Linear point is one hour.
+    taskapp_core::settings::set(&db, "estimation", &"time").await?;
     let plan: ImportPlan = linear::plan(&db, &pages()).await?;
     assert_eq!(plan.issues.len(), 2);
     let names: Vec<_> = plan.statuses.iter().map(|s| s.name.as_str()).collect();
@@ -282,6 +284,22 @@ async fn linear_fixture_maps_states_labels_relations_and_sub_issues() -> R {
     // Second run: nothing new.
     let again = linear::plan(&db, &pages()).await?;
     assert_eq!(again.issues, []);
+    Ok(())
+}
+
+#[tokio::test]
+async fn linear_estimate_becomes_points_where_the_workspace_uses_points() -> R {
+    let db = Db::open_in_memory().await?;
+    let plan = linear::plan(&db, &pages()).await?;
+    assert_eq!(
+        (plan.issues[0].points, plan.issues[0].estimate_minutes),
+        (Some(3.0), None)
+    );
+    apply(&db, &plan).await?;
+    let got: Option<f64> = sqlx::query_scalar("SELECT points FROM issues WHERE title = 'Parent'")
+        .fetch_one(&db.pool)
+        .await?;
+    assert_eq!(got, Some(3.0));
     Ok(())
 }
 

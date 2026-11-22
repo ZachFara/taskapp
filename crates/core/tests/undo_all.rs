@@ -481,6 +481,7 @@ async fn an_import_creating_a_label_and_a_project_is_undone_in_one_step() -> R {
             start_date: None,
             due_date: None,
             estimate_minutes: None,
+            points: None,
             properties: serde_json::Map::new(),
             parent: None,
             cycle: None,

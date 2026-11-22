@@ -233,6 +233,7 @@ fn fixed_col(x: FixedField) -> Result<Col> {
         FixedField::StartDate => ("issues.start_date", false),
         FixedField::DueDate => ("issues.due_date", false),
         FixedField::Estimate => ("issues.estimate_minutes", false),
+        FixedField::Points => ("issues.points", false),
         FixedField::CreatedAt => ("issues.created_at", false),
         FixedField::UpdatedAt => ("issues.updated_at", false),
         FixedField::CompletedAt => ("issues.completed_at", false),

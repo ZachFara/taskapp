@@ -12,6 +12,7 @@ pub mod comments;
 pub mod cycles;
 pub mod history;
 pub mod import;
+pub mod insights;
 pub mod issues;
 pub mod labels;
 pub mod palette;

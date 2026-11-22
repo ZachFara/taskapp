@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", number, title, description, status_id, priority,\n                  project_id, milestone_id, parent_id, cycle_id,\n                  start_date AS \"start_date: NaiveDate\", due_date AS \"due_date: NaiveDate\",\n                  due_time_utc AS \"due_time_utc: DateTime<Utc>\", due_tz, estimate_minutes, properties,\n                  created_at AS \"created_at: DateTime<Utc>\", updated_at AS \"updated_at: DateTime<Utc>\",\n                  completed_at AS \"completed_at: DateTime<Utc>\", archived_at AS \"archived_at: DateTime<Utc>\"\n           FROM issues WHERE id = ?",
+  "query": "SELECT id AS \"id!: i64\", number, title, description, status_id, priority,\n                  project_id, milestone_id, parent_id, cycle_id,\n                  start_date AS \"start_date: NaiveDate\", due_date AS \"due_date: NaiveDate\",\n                  due_time_utc AS \"due_time_utc: DateTime<Utc>\", due_tz, estimate_minutes, points, properties,\n                  created_at AS \"created_at: DateTime<Utc>\", updated_at AS \"updated_at: DateTime<Utc>\",\n                  completed_at AS \"completed_at: DateTime<Utc>\", archived_at AS \"archived_at: DateTime<Utc>\"\n           FROM issues WHERE id = ?",
   "describe": {
     "columns": [
       {
@@ -79,28 +79,33 @@
         "type_info": "Integer"
       },
       {
-        "name": "properties",
+        "name": "points",
         "ordinal": 15,
-        "type_info": "Text"
+        "type_info": "Float"
       },
       {
-        "name": "created_at: DateTime<Utc>",
+        "name": "properties",
         "ordinal": 16,
         "type_info": "Text"
       },
       {
-        "name": "updated_at: DateTime<Utc>",
+        "name": "created_at: DateTime<Utc>",
         "ordinal": 17,
         "type_info": "Text"
       },
       {
-        "name": "completed_at: DateTime<Utc>",
+        "name": "updated_at: DateTime<Utc>",
         "ordinal": 18,
         "type_info": "Text"
       },
       {
-        "name": "archived_at: DateTime<Utc>",
+        "name": "completed_at: DateTime<Utc>",
         "ordinal": 19,
+        "type_info": "Text"
+      },
+      {
+        "name": "archived_at: DateTime<Utc>",
+        "ordinal": 20,
         "type_info": "Text"
       }
     ],
@@ -123,6 +128,7 @@
       true,
       true,
       true,
+      true,
       false,
       false,
       false,
@@ -130,5 +136,5 @@
       true
     ]
   },
-  "hash": "7c0138554b78107108a822d06a2b64e7b42d2715c2fa4b12346ff2082fc79e9c"
+  "hash": "b8273ec7a9a4a4652f0e02b992b11a83bf09a96e56c40693473f00290ba40ec1"
 }
