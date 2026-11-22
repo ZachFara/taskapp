@@ -4,11 +4,12 @@ import { selection } from '../../../selection.svelte';
 
 defineCommand({
   id: 'move.down',
+  menu: false,
   label: 'Move down',
   icon: 'list',
   group: 'Navigation',
-  shortcut: 'j',
-  run: () => {
-    selection.move(selection.columns.flat(), 1);
+  shortcut: ['j', 'arrowdown'],
+  run: (_, n = 1) => {
+    selection.move(selection.columns.flat(), n);
   },
 });

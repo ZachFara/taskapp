@@ -36,26 +36,26 @@ defineCommand({
   when: (c) => c.selection.length > 0, run: (c) => ran('ctx', c.selection),
 });
 defineCommand({
-  id: 'test.page', label: 'Zebra set status', icon: 'circle', group: 'Issue', noShortcutReason: 'test',
+  id: 'test.page', label: 'Zebra set status', icon: 'circle', group: 'Test', noShortcutReason: 'test',
   page: () => ({ title: 'Set status', items: [
     { id: 'a', label: 'Alpha', run: () => picked('Alpha') },
     { id: 'b', label: 'Beta', run: () => picked('Beta') },
   ] }),
 });
 defineCommand({
-  id: 'test.multi', label: 'Zebra toggle labels', icon: 'tag', group: 'Issue', noShortcutReason: 'test',
+  id: 'test.multi', label: 'Zebra toggle labels', icon: 'tag', group: 'Test', noShortcutReason: 'test',
   page: () => ({ title: 'Labels', multi: true, items: ['x', 'y'].map((id) => ({
     id, label: `Label ${id}`, checked: () => checked.has(id),
     run: () => void (checked.has(id) ? checked.delete(id) : checked.add(id)),
   })) }),
 } as never);
 defineCommand({
-  id: 'test.free', label: 'Zebra set due', icon: 'calendar', group: 'Issue', noShortcutReason: 'test',
+  id: 'test.free', label: 'Zebra set due', icon: 'calendar', group: 'Test', noShortcutReason: 'test',
   page: () => ({ title: 'Due date', items: [], parse: (t: string) => (t === 'fri' ? { label: 'Due Friday', run: () => picked('fri') } : null) }),
 } as never);
 let release: (() => void) | undefined;
 defineCommand({
-  id: 'test.slow', label: 'Zebra slow page', icon: 'tag', group: 'Issue', noShortcutReason: 'test',
+  id: 'test.slow', label: 'Zebra slow page', icon: 'tag', group: 'Test', noShortcutReason: 'test',
   page: () => new Promise((done) => { release = () => done({ title: 'Slow', items: [{ id: 'k', label: 'Kappa', checked: true, run: () => {} }] }); }),
 } as never);
 
@@ -83,19 +83,29 @@ describe('CommandPalette', () => {
     expect(document.querySelector('[role=option] kbd')?.textContent).toBe('alt+z');
   });
 
-  it('contextual_commands_come_first_under_a_selection_header', async () => {
+  it('issue_actions_show_under_a_selection_header', async () => {
     const a = await api.issues.create({ title: 'P1' });
     const b = await api.issues.create({ title: 'P2' });
     selection.selectAll([a.id, b.id]);
     unmount(app!);
     app = mount(CommandPalette, { target: document.body, props: { onclose, oncreate } });
     await settle();
-    expect(rows()[0]).toContain('Zebra on selection');
     expect(document.body.textContent).toContain('2 issues selected');
+    await type('zebra on selection');
+    expect(rows()[0]).toContain('Zebra on selection');
     press('Enter');
     await settle();
     expect(ran).toHaveBeenCalledWith('ctx', [a.id, b.id]);
     expect(onclose).toHaveBeenCalled();
+  });
+
+  it('a start page opens the menu straight at that page with an empty query', async () => {
+    unmount(app!);
+    app = mount(CommandPalette, { target: document.body, props: { onclose, oncreate, page: 'test.page' } });
+    await settle();
+    expect(document.querySelector('.crumb')?.textContent).toContain('Set status');
+    expect(input().value).toBe('');
+    expect(rows()).toEqual([expect.stringContaining('Alpha'), expect.stringContaining('Beta')]);
   });
 
   it('nested_page_opens_and_backspace_on_empty_goes_back', async () => {

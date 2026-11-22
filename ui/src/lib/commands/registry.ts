@@ -54,6 +54,8 @@ export type Command = {
   run?: (ctx: Ctx, count?: number) => void | Promise<void>;
   page?: (ctx: Ctx) => CommandPage;
   keywords?: string[];
+  /** false keeps it out of the command menu and the right-click menu (movement keys and the like). */
+  menu?: boolean;
 };
 
 const commands = new Map<string, Command>();
@@ -65,10 +67,26 @@ export function defineCommand(c: Command) {
   return c;
 }
 
-/** Commands whose `when` passes (all of them with `all`), contextual ones first. */
+/** Whether the context has an issue an `Issue` command could act on. */
+const hasIssue = (ctx: Ctx) => ctx.selection.length > 0 || ctx.focusedIssueId !== null || ctx.openIssueId !== null || !!ctx.route?.startsWith('/issue/');
+
+/** Menu sections in display order; a command lands in the one named for its group. */
+export const SECTIONS = ['Issue', 'Go to', 'Actions', 'Create', 'Settings and help'] as const;
+const SECTION_OF: Record<string, (typeof SECTIONS)[number]> = {
+  Issue: 'Issue', Navigation: 'Go to', Navigate: 'Go to', Create: 'Create', Settings: 'Settings and help', Help: 'Settings and help',
+};
+export const sectionOf = (c: Pick<Command, 'group'>) => SECTION_OF[c.group] ?? 'Actions';
+
+/**
+ * What a menu may offer in `ctx`: in scope, `when` passing, not hidden from menus, issue actions only with an issue to
+ * act on. Ordered by section (issue actions, go to, view actions, create, settings and help). With `all`, every command.
+ */
 export function listCommands(ctx: Ctx, opts: { all?: boolean } = {}) {
-  const list = [...commands.values()].filter((c) => opts.all || (inScope(c, ctx) && (!c.when || c.when(ctx))));
-  return [...list.filter((c) => c.when), ...list.filter((c) => !c.when)];
+  if (opts.all) return [...commands.values()];
+  const live = [...commands.values()].filter(
+    (c) => c.menu !== false && inScope(c, ctx) && (!c.when || c.when(ctx)) && (sectionOf(c) !== 'Issue' || hasIssue(ctx)),
+  );
+  return SECTIONS.flatMap((s) => live.filter((c) => sectionOf(c) === s));
 }
 
 export const labelFor = (id: string) => commands.get(id)?.label;

@@ -10,13 +10,13 @@ export function createSelection() {
   let anchor: number | null = null;
   let columns = $state<number[][]>([]);
   let peeked = $state<number | null>(null);
-  let layout = $state<Layout | undefined>();
+  let layout = $state<Layout | null | undefined>();
   return {
     /** The layout the open view shows; the view sets it so keys can be scoped to it (undefined off a view). */
     get layout() {
       return layout;
     },
-    setLayout(l: Layout | undefined) {
+    setLayout(l: Layout | null | undefined) {
       layout = l;
     },
     /** Ordered visible ids per column (a list has one column); the views publish them. */

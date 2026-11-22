@@ -2,7 +2,7 @@
   import { api } from '../../lib/api';
   import type { Comment, Issue } from '../../lib/bindings';
   import Button from '../../ui/Button.svelte';
-  import GroupHeader from '../../ui/GroupHeader.svelte';
+  import SectionHeading from './SectionHeading.svelte';
   import TextArea from '../../ui/TextArea.svelte';
   import { humanDate } from './format';
   import { renderMarkdown } from './markdown';
@@ -19,7 +19,7 @@
 </script>
 
 <section aria-label="Comments">
-  <GroupHeader name="Comments" count={comments.length} category="Started" {collapsed} ontoggle={() => (collapsed = !collapsed)} />
+  <SectionHeading name="Comments" count={comments.length} {collapsed} ontoggle={() => (collapsed = !collapsed)} />
   {#if !collapsed}
     {#each comments as c (c.id)}
       <article class="comment">

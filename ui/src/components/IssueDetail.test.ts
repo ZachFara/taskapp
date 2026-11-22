@@ -252,6 +252,19 @@ describe('IssueDetail', () => {
     expect(q('[aria-label=Sub-issues]').querySelectorAll('input').length).toBe(1);
   });
 
+  it('sections_are_plain_headings_and_only_status_groups_get_bands', async () => {
+    await open();
+    expect(document.querySelectorAll('[data-step]').length).toBe(0);
+    for (const s of ['Sub-issues', 'Relations', 'Comments', 'Activity']) {
+      expect(q(`[data-section-heading="${s}"]`)).not.toBeNull();
+    }
+  });
+
+  it('activity_has_no_add_button', async () => {
+    await open();
+    expect(byLabel('Add to Activity')).toBeNull();
+  });
+
   it('due_time_uses_a_time_input', async () => {
     await open({ project_id: 1 });
     await click(row('Due'));

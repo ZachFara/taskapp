@@ -44,15 +44,15 @@ describe('ViewPage', () => {
     await waitFor(async () => expect((await saved()).def.layout).toBe('Board'), { timeout: 2000 });
   });
 
-  it('keys_1_to_5_are_layout_commands', async () => {
+  it('v_then_a_letter_switches_layout', async () => {
     const { container } = await open();
     const ctx = { route: '/view/1', selection: [], focusedIssueId: null, openIssueId: null, api: mock, navigate: () => {} };
     const layouts = ['List', 'Board', 'Table', 'Gantt', 'Calendar'];
     const cmds = listCommands(ctx)
       .filter((c) => c.id.startsWith('view.layout.'))
       .sort((a, b) => String(a.shortcut).localeCompare(String(b.shortcut)));
-    expect(cmds.map((c) => shortcutFor(c.id))).toEqual(['1', '2', '3', '4', '5']);
-    await cmds[1].run!(ctx);
+    expect(cmds.map((c) => shortcutFor(c.id))).toEqual(['v b', 'v c', 'v g', 'v l', 'v t']);
+    await cmds[0].run!(ctx); // v b: board
     await waitFor(() => expect(container.querySelector('[data-column]')).not.toBeNull());
     await waitFor(async () => expect((await saved()).def.layout).toBe(layouts[1]), { timeout: 2000 });
   });
