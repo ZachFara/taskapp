@@ -7,6 +7,8 @@
   import { api } from '../../lib/api';
   import { labelFor, shortcutFor } from '../../lib/commands';
   import type { Due, Issue, SavedView, Status, StatusCategory, WorkBlock } from '../../lib/bindings';
+  import FieldValue from '../display/FieldValue.svelte';
+  import { emptyCtx, loadCtx, showWeekends, type Ctx } from '../display/types';
   import Button from '../../ui/Button.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
@@ -39,6 +41,9 @@
   let mode = $state(readMode());
   let anchor = new Date();
   let calendar = $state<any>();
+  let ctx = $state.raw<Ctx>(emptyCtx);
+  // The chip shows the title plus up to two displayed fields; a view with none of its own stays title-only.
+  const chipFields = $derived(view.def.columns.slice(0, 2));
 
   const message = (e: unknown) => (e as { message?: string })?.message ?? String(e);
   const blockId = (id: string) => Number(id.slice('block-'.length));
@@ -77,7 +82,7 @@
   function dueEvents(i: Issue) {
     const due: Due | null = i.due;
     if (!due) return [];
-    const extendedProps = { key: i.key, category: categoryOf(i) };
+    const extendedProps = { key: i.key, category: categoryOf(i), issue: i };
     const title = i.title;
     if ('Date' in due) {
       return [{ id: `due-${i.id}`, title, start: due.Date, allDay: true, editable: true, durationEditable: false, classNames: ['due'], extendedProps }];
@@ -97,7 +102,7 @@
         start: new Date(b.start_utc),
         end: new Date(b.end_utc),
         classNames: ['block'],
-        extendedProps: { key: issue?.key, category: issue ? categoryOf(issue) : 'Backlog' },
+        extendedProps: { key: issue?.key, category: issue ? categoryOf(issue) : 'Backlog', issue },
       };
     }),
     ...issues.flatMap(dueEvents),
@@ -267,6 +272,7 @@
       timeGridWeek: { dayHeaderFormat: (d: Date) => `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${d.getDate()}` },
     },
     headerToolbar: false,
+    hiddenDays: showWeekends(view.def) ? [] : [0, 6],
     editable: true,
     eventStartEditable: true,
     eventDurationEditable: true,
@@ -283,7 +289,7 @@
     options.firstDay = (await getWeekStart()) === 'monday' ? 1 : 0;
     calendar?.setOption('firstDay', options.firstDay);
     try {
-      [statuses, issues] = await Promise.all([api.statuses.list(), api.views.query(view.def)]);
+      [statuses, issues, ctx] = await Promise.all([api.statuses.list(), api.views.query(view.def), loadCtx()]);
       loaded = true;
     } catch (e) {
       error = message(e);
@@ -316,6 +322,7 @@
           <span class="chip" data-key={x.key} title={x.key}>
             {#if x.category}<StatusGlyph category={x.category} size={12} />{/if}
             <span class="text">{info.event.title}</span>
+            {#if x.issue}{#each chipFields as f (f.Property ?? f.Fixed)}<span class="fv"><FieldValue field={f} issue={x.issue} {ctx} /></span>{/each}{/if}
           </span>
         {/snippet}
       </Calendar>
@@ -381,6 +388,7 @@
   .grid :global(.ec-event) { border: 0; border-left: 3px solid var(--control); border-radius: var(--r-sm); }
   .grid :global(.ec-event.due) { border-left-color: var(--stone); }
   .grid :global(.ec-event.block) { --ec-event-bg-color: var(--band-3); border-left-color: var(--accent); }
+  .fv { flex: none; display: inline-flex; }
   .chip { display: flex; align-items: center; gap: var(--s-3); min-width: 0; padding: var(--s-1) var(--s-3); font-size: var(--fs-sm); }
   .text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .key { font-weight: 700; color: var(--muted); margin-right: var(--s-2); }
