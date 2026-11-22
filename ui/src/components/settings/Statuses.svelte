@@ -51,16 +51,13 @@
     if (next && next !== s.name) void write(() => api.statuses.update(s.id, next, null, null, null));
   };
 
-  // Positions are global and ties break by id, so a move hands the category's own positions to the new order.
+  // One reorder call hands the category the new order; the backend keeps it one undo step.
   function move(s: Status, to: number) {
-    const list = inCategory(s.category);
-    const from = list.findIndex((x) => x.id === s.id);
-    if (to < 0 || to >= list.length || to === from) return;
-    const slots = list.map((x) => x.position);
-    const order = [...list];
+    const order = inCategory(s.category);
+    const from = order.findIndex((x) => x.id === s.id);
+    if (to < 0 || to >= order.length || to === from) return;
     order.splice(to, 0, ...order.splice(from, 1));
-    const changed = order.flatMap((x, i) => (x.position === slots[i] ? [] : [api.statuses.update(x.id, null, null, slots[i], null)]));
-    void write(() => Promise.all(changed));
+    void write(() => api.statuses.reorder(order.map((x) => x.id)));
   }
 
   function drop(s: Status) {

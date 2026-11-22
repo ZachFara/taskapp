@@ -92,7 +92,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, templates, relations, comments, views, milestones] as unknown[][];
+  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, templates, relations, comments, views, milestones, pins] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -145,6 +145,11 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   // Issue history only, in the order the backend records it; other entities' history is not shown by any screen.
   const rec = (issue: number, field: string, old: Value, value: Value, source: Change['source'] = 'Ui') =>
     void changes.push({ id: next(changes), at: now(), source, entity: 'issue', entity_id: String(issue), field, old_value: old, new_value: value });
+  const checkPin = (kind: Pin['kind'], target: string) => {
+    const lower = target.toLowerCase();
+    const valid = kind === 'Url' ? /^(https?|obsidian):\/\//.test(lower) : kind === 'Note' ? lower.startsWith('obsidian://') : target.trim() !== '';
+    if (!valid) fail('Invalid', `pin target ${JSON.stringify(target)} for ${kind.toLowerCase()}`);
+  };
   const next = (rows: { id: number }[]) => Math.max(0, ...rows.map((r) => r.id)) + 1;
   const find = <T extends { id: number }>(rows: T[], id: number, what: string) =>
     rows.find((r) => r.id === id) ?? fail('NotFound', `${what} ${id}`);
@@ -494,6 +499,15 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         const key = colorKey(color) ?? st.color;
         return Object.assign(st, { name: name ?? st.name, color: key, color_hex: hexOf(key)!, position: position ?? st.position, icon: icon ?? st.icon });
       },
+      // Hands the listed statuses' own positions to the new order, like the backend.
+      reorder: async (ids) => {
+        const list = ids.map((id) => find(s.statuses, id, 'status'));
+        if (list.some((x) => x.category !== list[0].category)) fail('Invalid', 'reorder lists one category at a time');
+        if (!ids.length || new Set(ids).size !== ids.length) fail('Invalid', 'reorder needs distinct status ids');
+        const slots = list.map((x) => x.position).sort((a, b) => a - b);
+        list.forEach((x, i) => (x.position = slots[i]));
+        return null;
+      },
       delete: async (id, moveIssuesTo) => {
         find(s.statuses, moveIssuesTo, 'status');
         for (const i of s.issues) {
@@ -727,14 +741,21 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     },
     pins: {
       pin: async (kind, target, title) => {
-        const lower = target.toLowerCase();
-        const valid = kind === 'Url' ? /^(https?|obsidian):\/\//.test(lower) : kind === 'Note' ? lower.startsWith('obsidian://') : target.trim() !== '';
-        if (!valid) fail('Invalid', `pin target ${JSON.stringify(target)} for ${kind.toLowerCase()}`);
+        checkPin(kind, target);
         const have = pins.find((p) => p.kind === kind && p.target === target);
         if (have) return have;
         const p = { id: next(pins), kind, target, title: title?.trim() ? title : null, position: Math.max(-1, ...pins.map((x) => x.position)) + 1 };
         pins.push(p);
         return p;
+      },
+      set: async (kind, targets, pinned) => {
+        targets.forEach((t) => checkPin(kind, t));
+        for (const t of targets) {
+          const have = pins.find((p) => p.kind === kind && p.target === t);
+          if (pinned) have || pins.push({ id: next(pins), kind, target: t, title: null, position: Math.max(-1, ...pins.map((x) => x.position)) + 1 });
+          else if (have) remove(pins, have.id, 'pin');
+        }
+        return null;
       },
       unpin: async (id) => nothing(remove(pins, id, 'pin')),
       reorder: async (ids) => {
@@ -876,12 +897,12 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   };
   const commandOf = (mod: string, fn: string) => `${mod}_${fn.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}`;
   const mutating = (
-    'issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.delete ' +
+    'issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.delete ' +
     'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
     'projects.create projects.update projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete templates.create templates.update templates.delete templates.apply ' +
     'labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
-    'relations.add relations.remove views.save views.delete views.reorder import.apply'
+    'relations.add relations.remove views.save views.delete views.reorder pins.pin pins.unpin pins.reorder pins.set import.apply'
   ).split(' ');
   for (const name of mutating) {
     const [mod, fn] = name.split('.');
