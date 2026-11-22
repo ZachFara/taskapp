@@ -96,3 +96,38 @@ async fn a_bulk_archive_is_one_undo_step() -> R {
     assert!(undo::undo(&db).await.is_err(), "one step only");
     Ok(())
 }
+
+#[tokio::test]
+async fn a_bulk_duplicate_copies_each_issue_in_one_undo_step() -> R {
+    let db = Db::open_in_memory().await?;
+    let label = labels::create(&db, "keep", "blue", None, UI).await?.id;
+    let (a, b) = (seed(&db, "ABC a").await?, seed(&db, "ABC b").await?);
+    labels::add_label(&db, a, label, UI).await?;
+    let copies = history::step("Duplicate", bulk::duplicate(&db, &[a, b], UI)).await?;
+    assert_eq!(copies.len(), 2);
+    assert_eq!(copies[0].title, "ABC a");
+    assert_eq!(copies[0].label_ids, vec![label]);
+    assert_ne!(copies[0].id, a);
+    undo::undo(&db).await?;
+    for c in &copies {
+        assert!(issues::get(&db, c.id).await?.archived_at.is_some());
+    }
+    assert!(undo::undo(&db).await.is_err(), "one step only");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_bulk_duplicate_with_an_unknown_issue_copies_nothing() -> R {
+    let db = Db::open_in_memory().await?;
+    let a = seed(&db, "ABC a").await?;
+    assert!(
+        bulk::duplicate(&db, &[a, taskapp_core::IssueId(999)], UI)
+            .await
+            .is_err()
+    );
+    assert!(
+        issues::get(&db, taskapp_core::IssueId(2)).await.is_err(),
+        "no copy was made"
+    );
+    Ok(())
+}

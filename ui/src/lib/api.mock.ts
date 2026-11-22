@@ -17,6 +17,9 @@ export type MockSeed = {
   cycles?: Cycle[];
   views?: SavedView[];
   pins?: Pin[];
+  milestones?: Milestone[];
+  relations?: Relation[];
+  templates?: IssueTemplate[];
   workspace?: Workspace;
 };
 
@@ -69,15 +72,19 @@ function validValue(d: PropertyDef, v: Value): boolean {
   }
 }
 
+const fieldsOf = (f: Partial<TemplateFields> = {}): TemplateFields => ({
+  description: null, status_id: null, priority: null, project_id: null, label_ids: [], estimate_minutes: null, properties: {}, ...f,
+});
+
 export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeFormat().resolvedOptions().timeZone): MockApi {
   const s = structuredClone(seed);
   let workspace: Workspace = s.workspace ?? { setup_done: false, name: null, key: 'ABC', timezone: tz };
   const labels = s.labels ?? [];
   const cycles = s.cycles ?? [];
   const views = s.views ?? [];
-  const milestones: Milestone[] = [];
+  const milestones: Milestone[] = s.milestones ?? [];
   const comments: Comment[] = [];
-  const relations: Relation[] = [];
+  const relations: Relation[] = s.relations ?? [];
   const pins: Pin[] = s.pins ?? [];
   const blocks: WorkBlock[] = [];
   const changes: Change[] = [];
@@ -88,9 +95,13 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, templates, relations, comments, views, milestones] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
+  // A command that calls other commands (bulk update) is one step: only the outermost call records it.
+  let depth = 0;
   const tracked = async <R>(label: (r: R) => string, run: () => Promise<R>): Promise<R> => {
+    if (depth) return run();
     const [before, rest, mark] = [structuredClone(s.issues), others(), changes.length];
-    const out = await run();
+    depth++;
+    const out = await run().finally(() => depth--);
     const after = structuredClone(s.issues);
     const touchedIssues = JSON.stringify(before) !== JSON.stringify(after);
     if (touchedIssues || rest !== others()) {
@@ -233,7 +244,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     return issue;
   };
   const getIssue = (id: number) => find(s.issues, id, 'issue');
-  const templates: IssueTemplate[] = [];
+  const templates: IssueTemplate[] = s.templates ?? [];
   // Same rule as core: a reference that no longer resolves is dropped and named in `skipped`.
   const liveRefs = (f: Partial<TemplateFields>, skipped: string[]): TemplateFields => {
     const status = s.statuses.some((x) => x.id === f.status_id) ? f.status_id : null;
@@ -269,9 +280,6 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     });
     return { issue, sub_issues, skipped };
   };
-  const fieldsOf = (f: Partial<TemplateFields> = {}): TemplateFields => ({
-    description: null, status_id: null, priority: null, project_id: null, label_ids: [], estimate_minutes: null, properties: {}, ...f,
-  });
   // Same checks as core: names, slug shape, icon and colour, priority range; the body is stored with every field present.
   const templateOf = (id: number, input: TemplateInput): IssueTemplate => {
     if (!input.name.trim()) fail('Invalid', 'template name is empty');
@@ -420,6 +428,34 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return null;
       },
       children: async (id) => s.issues.filter((i) => i.parent_id === id),
+      // Port of bulk::duplicate: every id must exist before any copy is made.
+      duplicate: async (ids) => {
+        const from = ids.map(getIssue);
+        return from.map((i) => create({ ...structuredClone(i), created_at: undefined, completed_at: undefined }));
+      },
+      // Port of bulk.rs: per issue the patch (labels merged from add/remove), then archive, then the relation; any failure undoes all.
+      bulkUpdate: async (ids, b) => {
+        const [before, linked, mark] = [structuredClone(s.issues), [...relations], changes.length];
+        try {
+          for (const id of ids) {
+            const patch = { ...b.patch };
+            const [add, drop] = [b.add_labels ?? [], b.remove_labels ?? []];
+            if (patch.label_ids == null && (add.length || drop.length)) {
+              const keep = getIssue(id).label_ids.filter((l) => !drop.includes(l));
+              patch.label_ids = [...keep, ...add.filter((l) => !keep.includes(l))];
+            }
+            await api.issues.update(id, patch);
+            if (b.archive != null) await (b.archive ? api.issues.archive(id) : api.issues.restore(id));
+            if (b.add_relation) await api.relations.add({ from: id, to: b.add_relation[1], kind: b.add_relation[0] });
+          }
+        } catch (e) {
+          s.issues.splice(0, s.issues.length, ...before);
+          relations.splice(0, relations.length, ...linked);
+          changes.length = mark;
+          throw e;
+        }
+        return null;
+      },
       parseQuickadd: async (input) => parse(input),
       createFromQuickadd: async (input) => {
         const m = /^\s*\/([^\s/]+)(?=\s|$)\s*([\s\S]*)$/.exec(input);
@@ -536,7 +572,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return null;
       },
       progress: async (id) => {
-        const rows = s.issues.filter((i) => i.project_id === id);
+        const rows = s.issues.filter((i) => i.project_id === id && !i.archived_at);
         return [rows.filter((i) => category(i) === 'Completed').length, rows.length];
       },
       listMilestones: async (project) => milestones.filter((m) => m.project_id === project),
@@ -840,7 +876,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   };
   const commandOf = (mod: string, fn: string) => `${mod}_${fn.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}`;
   const mutating = (
-    'issues.create issues.update issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.delete ' +
+    'issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.delete ' +
     'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
     'projects.create projects.update projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete templates.create templates.update templates.delete templates.apply ' +
@@ -870,11 +906,24 @@ const projects: Project[] = [
   project(1, 'website', 'Website relaunch'), project(2, 'mobile', 'Mobile app'), project(3, 'office', 'Office move'),
 ];
 
-const labels: Label[] = (['Bug:red', 'Feature:blue', 'Design:purple'] as const).map((x, i) => {
-  const [name, color] = x.split(':');
-  return { id: i + 1, name, color, color_hex: hexOf(color)!, icon: null };
+const labels: Label[] = (
+  ['Bug:red:flag', 'Feature:blue:bolt', 'Design:purple:star', 'Research:teal:target', 'Docs:green:bookmark', 'Ops:orange:tag'] as const
+).map((x, i) => {
+  const [name, color, icon] = x.split(':');
+  return { id: i + 1, name, color, color_hex: hexOf(color)!, icon: `icon:${icon}` };
 });
-const cycles: Cycle[] = [{ id: 1, number: 1, name: 'Sprint 1', start_date: '2026-12-01', end_date: '2026-12-14', icon: null, color: null }];
+
+// Everything dated is relative to today (UTC), so the workspace always has overdue and this-week work.
+// The devserver seed (crates/devserver/src/seed.rs) builds the same data; the contract tests compare the two.
+const day = (n: number) => addDays(new Date().toISOString().slice(0, 10), n);
+const cycles: Cycle[] = [
+  { id: 1, number: 1, name: 'Sprint 1', start_date: day(-6), end_date: day(7), icon: null, color: null },
+  { id: 2, number: 2, name: 'Sprint 2', start_date: day(8), end_date: day(21), icon: null, color: null },
+];
+const milestones: Milestone[] = [
+  { id: 1, project_id: 1, name: 'Soft launch', target_date: day(21) },
+  { id: 2, project_id: 2, name: 'Store release', target_date: day(30) },
+];
 
 const propertyDefs: PropertyDef[] = [
   { key: 'area', name: 'Area', kind: 'Select', options: [{ value: 'home', color: '#4caf50' }, { value: 'work', color: '#2196f3' }], project_id: null, position: 0 },
@@ -882,33 +931,81 @@ const propertyDefs: PropertyDef[] = [
   { key: 'review_on', name: 'Review on', kind: 'Date', options: [], project_id: null, position: 2 },
 ];
 
-const issues: Issue[] = Array.from({ length: 20 }, (_, k) => {
+type Row = {
+  title: string; status: number; priority: number; project: number | null; start?: number; due?: number; hours?: number;
+  labels?: number[]; parent?: number; cycle?: number; milestone?: number; description?: string; area?: string; effort?: number;
+};
+const rows: Row[] = [
+  { title: 'Redesign homepage hero', status: 3, priority: 3, project: 1, start: -5, due: 2, hours: 16, labels: [3], cycle: 1, milestone: 1, area: 'work', effort: 13, description: 'Replace the stock photo with the new brand illustration and tighten the headline.' },
+  { title: 'Write launch announcement', status: 2, priority: 2, project: 1, start: 0, due: 5, hours: 2, labels: [5], milestone: 1 },
+  { title: 'Fix broken links in footer', status: 4, priority: 1, project: 1, due: -3, hours: 1, labels: [1] },
+  { title: 'Migrate blog to new CMS', status: 3, priority: 4, project: 1, start: -10, due: -2, hours: 40, labels: [6], cycle: 1, area: 'work', effort: 21, description: 'Export posts, redirect the old URLs and check every embedded image.' },
+  { title: 'Set up analytics dashboard', status: 1, priority: 0, project: 1, hours: 4, labels: [2] },
+  { title: 'Audit page speed', status: 2, priority: 2, project: 1, start: 1, due: 4, hours: 3, labels: [4], effort: 8 },
+  { title: 'Mobile onboarding flow', status: 3, priority: 3, project: 2, start: -3, due: 6, hours: 24, labels: [2, 3], cycle: 1, milestone: 2, area: 'work', effort: 34, description: 'Three screens: welcome, permissions and account setup. Skippable at every step.' },
+  { title: 'Welcome screen illustrations', status: 3, priority: 2, project: 2, start: -3, due: 1, hours: 8, labels: [3], parent: 7, cycle: 1 },
+  { title: 'Permission prompts copy', status: 2, priority: 1, project: 2, start: 2, due: 5, hours: 1, labels: [5], parent: 7 },
+  { title: 'Crash on launch for Android 9', status: 3, priority: 4, project: 2, due: -1, hours: 4, labels: [1], cycle: 1 },
+  { title: 'Push notification settings', status: 2, priority: 2, project: 2, start: 3, due: 9, hours: 16, labels: [2], cycle: 2 },
+  { title: 'Offline mode research', status: 1, priority: 1, project: 2, hours: 8, labels: [4], description: 'Compare local-first sync options and write up the trade-offs.' },
+  { title: 'Dark mode icons', status: 4, priority: 2, project: 2, start: -8, due: -4, hours: 4, labels: [3] },
+  { title: 'Update app store listing', status: 2, priority: 2, project: 2, due: 3, hours: 1, labels: [5], parent: 7, cycle: 2 },
+  { title: 'Confirm new office lease', status: 4, priority: 3, project: 3, start: -14, due: -9 },
+  { title: 'Order standing desks', status: 3, priority: 2, project: 3, start: -2, due: 4, hours: 2, labels: [6], cycle: 1, area: 'home' },
+  { title: 'Book movers', status: 2, priority: 3, project: 3, start: 2, due: 11, hours: 1, area: 'home' },
+  { title: 'Plan seating chart', status: 2, priority: 2, project: 3, start: 4, due: 10, hours: 4, labels: [3] },
+  { title: 'Set up network and Wi-Fi', status: 1, priority: 3, project: 3, due: 14, hours: 16, labels: [6], description: 'Two access points per floor, a guest network and a printer VLAN.' },
+  { title: 'Order access points', status: 1, priority: 2, project: 3, hours: 8, labels: [6], parent: 19 },
+  { title: 'Send address change notices', status: 2, priority: 2, project: 3, due: 7, hours: 1, labels: [5] },
+  { title: 'Cancel old storage unit', status: 5, priority: 0, project: 3 },
+  { title: 'Rename Contact page', status: 2, priority: 1, project: null, hours: 0.5 },
+  { title: 'Team retro notes', status: 1, priority: 0, project: null, labels: [4] },
+];
+const issues: Issue[] = rows.map((r, k) => {
   const n = k + 1;
-  const created = `2026-11-${String(n).padStart(2, '0')}T09:00:00Z`;
+  const created = `${day(-30 + n)}T09:00:00Z`;
+  const finished = statuses[r.status - 1].category === 'Completed' || statuses[r.status - 1].category === 'Canceled';
   return {
-    id: n, key: `ABC-${n}`, title: `Fixture task ${n}`, description: '', status_id: (k % 5) + 1, priority: n % 5,
-    project_id: n % 3 === 0 ? (n % 6 === 0 ? 3 : null) : (n % 2) + 1, milestone_id: null, parent_id: null, cycle_id: null, label_ids: [],
-    start_date: n % 4 === 0 ? `2026-12-${String(n).padStart(2, '0')}` : null,
-    due: n % 4 === 0 ? { Date: `2026-12-${String(n + 2).padStart(2, '0')}` } : null,
-    estimate_minutes: n % 2 ? 480 : null,
-    properties: (n % 3 === 1 ? { area: 'home', effort: n } : n % 3 === 2 ? { area: 'work' } : {}) as Issue['properties'],
-    created_at: created, updated_at: created, completed_at: statuses[k % 5].category === 'Completed' || statuses[k % 5].category === 'Canceled' ? created : null, archived_at: null,
+    id: n, key: `ABC-${n}`, title: r.title, description: r.description ?? '', status_id: r.status, priority: r.priority,
+    project_id: r.project, milestone_id: r.milestone ?? null, parent_id: r.parent ?? null, cycle_id: r.cycle ?? null,
+    label_ids: r.labels ?? [], start_date: r.start === undefined ? null : day(r.start),
+    due: r.due === undefined ? null : { Date: day(r.due) }, estimate_minutes: r.hours === undefined ? null : r.hours * 60,
+    properties: { ...(r.area && { area: r.area }), ...(r.effort && { effort: r.effort }) } as Issue['properties'],
+    created_at: created, updated_at: created, completed_at: finished ? created : null, archived_at: null,
   };
 });
+const relations: Relation[] = [
+  { from: 4, to: 6, kind: 'Blocks' }, { from: 16, to: 18, kind: 'Blocks' }, { from: 10, to: 11, kind: 'Related' },
+];
+const templates: IssueTemplate[] = [
+  {
+    id: 1, name: 'Bug', slug: 'bug', icon: 'icon:flag', color: 'red',
+    body: {
+      title_prefix: 'Bug: ', sub_issues: [{ title: 'Reproduce', fields: fieldsOf({ priority: 2 }) }],
+      fields: fieldsOf({ description: 'Steps to reproduce:\n\nExpected:\n\nActual:', priority: 2, label_ids: [1] }),
+    },
+  },
+  {
+    id: 2, name: 'Research idea', slug: 'research', icon: 'icon:target', color: 'teal',
+    body: { title_prefix: 'Research: ', sub_issues: [], fields: fieldsOf({ description: 'Question:\n\nWhy it matters:', label_ids: [4], estimate_minutes: 240 }) },
+  },
+];
 
-// The three views the migration seeds; the filters use its lowercase category names.
-const view = (id: number, name: string, layout: Layout, group_by: FieldRef | null, filter: Filter): SavedView => ({
-  id, name, position: id - 1, icon: null, color: null,
+// The views the migration seeds, with icons and the groupings the screens expect, plus one for the week ahead.
+const view = (id: number, name: string, layout: Layout, group_by: FieldRef | null, filter: Filter, icon: string): SavedView => ({
+  id, name, position: id - 1, icon: `icon:${icon}`, color: null,
   def: { filter, sorts: [], group_by, layout, columns: [], include_archived: false },
 });
 const category = (op: 'In' | 'Neq', value: Value): Filter => ({ Cond: { field: { Fixed: 'StatusCategory' }, op, value } });
 const views: SavedView[] = [
-  view(1, 'Active', 'List', null, category('In', ['unstarted', 'started'])),
-  view(2, 'Board', 'Board', { Fixed: 'Status' }, category('In', ['unstarted', 'started'])),
-  view(3, 'Timeline: all projects', 'Gantt', { Fixed: 'Project' }, category('Neq', 'completed')),
+  view(1, 'Active', 'List', { Fixed: 'Status' }, category('In', ['unstarted', 'started']), 'list'),
+  view(2, 'Board', 'Board', { Fixed: 'Status' }, category('In', ['unstarted', 'started']), 'board'),
+  view(3, 'Timeline: all projects', 'Gantt', { Fixed: 'Project' }, category('Neq', 'completed'), 'timeline'),
+  // shortcut: the 7 days are fixed when the data is made; saved filters have no relative dates yet.
+  view(4, 'This week', 'List', null, { And: [category('In', ['unstarted', 'started']), { Cond: { field: { Fixed: 'DueDate' }, op: 'Lte', value: day(7) } }] }, 'calendar'),
 ];
 
 export const fixtures: MockSeed = {
-  statuses, projects, propertyDefs, issues, labels, cycles, views,
+  statuses, projects, propertyDefs, issues, labels, cycles, views, milestones, relations, templates,
   workspace: { setup_done: true, name: 'Cairn', key: 'ABC', timezone: 'UTC' },
 };
