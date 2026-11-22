@@ -117,6 +117,13 @@ export const cases: Case[] = [
   call('schedule: critical path', 'schedule_critical_path', { view_id: 3 }),
   call('schedule: shift dependents', 'schedule_shift_dependents', { moved: { issue_id: 4, start_date: '2026-12-04', due_date: '2026-12-09' } }),
   call('relations: remove', 'relations_remove', { rel: { from: 4, to: 12, kind: 'Related' } }),
+  call('undo: a relation removal is undoable', 'history_undo'),
+  call('undo: the relation is back', 'relations_for_issue', { id: 4 }),
+  call('undo: redo removes it again', 'history_redo'),
+  call('undo: the relation is gone again', 'relations_for_issue', { id: 4 }),
+  call('undo: create a throwaway label', 'labels_create', { name: 'Temp', color: 'gray', icon: null }),
+  call('undo: undo the label creation', 'history_undo'),
+  call('undo: the label is gone', 'labels_list'),
 
   // Undo and redo
   call('undo: create an issue', 'issues_create', { input: { title: 'Undo me' } }),

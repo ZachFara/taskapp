@@ -81,12 +81,12 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const pins: Pin[] = s.pins ?? [];
   const blocks: WorkBlock[] = [];
   const changes: Change[] = [];
-  // One step per command that changed anything, like the backend. Only issue changes can be undone; a step that
-  // also touched anything else is refused, as there.
-  type Step = { label: string; before: Issue[]; after: Issue[]; covered: boolean; rows: Change[] };
+  // One step per command that changed anything, like the backend; undo and redo cover every entity.
+  type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const others = () => JSON.stringify([s.statuses, s.projects, s.propertyDefs, labels, cycles, templates, relations, comments, views, milestones]);
+  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, templates, relations, comments, views, milestones] as unknown[][];
+  const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   const tracked = async <R>(label: (r: R) => string, run: () => Promise<R>): Promise<R> => {
     const [before, rest, mark] = [structuredClone(s.issues), others(), changes.length];
@@ -94,7 +94,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     const after = structuredClone(s.issues);
     const touchedIssues = JSON.stringify(before) !== JSON.stringify(after);
     if (touchedIssues || rest !== others()) {
-      undoSteps.push({ label: label(out), before, after, covered: rest === others(), rows: changes.slice(mark) });
+      undoSteps.push({ label: label(out), before, after, rows: changes.slice(mark), beforeRest: rest, afterRest: others() });
       redoSteps.length = 0;
     }
     return out;
@@ -102,8 +102,11 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const undoRedo = (undo: boolean) => {
     const from = undo ? undoSteps : redoSteps;
     const st = from.at(-1) ?? fail('Invalid', `nothing to ${undo ? 'undo' : 'redo'}`);
-    if (!st.covered) fail('Invalid', `cannot ${undo ? 'undo' : 'redo'} "${st.label}": its changes are not covered`);
     from.pop();
+    const target = JSON.parse(undo ? st.beforeRest : st.afterRest) as unknown[][];
+    collections().forEach((rows, k) => {
+      if (JSON.stringify(rows) !== JSON.stringify(target[k])) rows.splice(0, rows.length, ...target[k]);
+    });
     const [from_, to] = undo ? [st.after, st.before] : [st.before, st.after];
     for (const was of from_) {
       const target = to.find((x) => x.id === was.id);
