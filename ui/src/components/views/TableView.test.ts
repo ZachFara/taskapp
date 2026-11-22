@@ -288,6 +288,13 @@ describe('TableView', () => {
     expect(cell('ABC-1', 'fixed:Title').querySelector('input')).not.toBeNull();
   });
 
+  it('a_view_without_columns_shows_the_default_set', async () => {
+    seeded(viewOf({ columns: [] }));
+    await open(viewOf({ columns: [] }));
+    const heads = [...target.querySelectorAll('thead th')].map((th) => th.textContent?.trim().split(/\s+/)[0]);
+    expect(heads).toEqual(['Key', 'Priority', 'Title', 'Status', 'Project', 'Labels', 'Due', 'Estimate']);
+  });
+
   it('custom_property_column_renders_by_type', async () => {
     seeded(viewOf({ columns: [...columns, { Property: 'reviewed' }] }));
     await open(viewOf({ columns: [...columns, { Property: 'reviewed' }] }));

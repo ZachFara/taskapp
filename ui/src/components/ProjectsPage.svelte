@@ -6,6 +6,8 @@
   import Dialog from '../ui/Dialog.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import EntityIcon from '../ui/EntityIcon.svelte';
+  import { navigate } from '../app/routes';
+  import { dayText } from './views/dates';
   import PageHeader from '../ui/PageHeader.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
   import TextInput from '../ui/TextInput.svelte';
@@ -48,7 +50,9 @@
   {#if !loaded}
     <Skeleton height="var(--row-h)" />
   {:else if rows.length === 0}
-    <EmptyState title="No projects yet" hint="A project groups issues toward a target date." />
+    <EmptyState title="No projects yet" hint="A project groups issues toward a target date.">
+      {#snippet action()}<Button variant="primary" icon="plus" onclick={() => (creating = true)}>New project</Button>{/snippet}
+    </EmptyState>
   {:else}
     <table class="table">
       <thead>
@@ -56,12 +60,12 @@
       </thead>
       <tbody>
         {#each rows as p (p.id)}
-          <tr data-slug={p.slug}>
+          <tr data-slug={p.slug} onclick={() => navigate(`/project/${p.slug}`)}>
             <td><span class="name"><EntityIcon icon={p.icon} color={p.color} /> {p.name}</span></td>
             <td>
-              <span class="meter" aria-label={`${p.done} of ${p.total} done`}><span class="fill" style:width={`${p.total ? (p.done / p.total) * 100 : 0}%`}></span></span>
+              <span class="prog"><span class="meter" aria-label={`${p.done} of ${p.total} done`}><span class="fill" style:width={`${p.total ? (p.done / p.total) * 100 : 0}%`}></span></span><span class="muted">{p.done} of {p.total}</span></span>
             </td>
-            <td class="muted">{p.target_date ?? '—'}</td>
+            <td class="muted">{p.target_date ? dayText(p.target_date) : '—'}</td>
             <td class="num">{p.total}</td>
           </tr>
         {/each}
@@ -89,6 +93,8 @@
   td { height: var(--row-h); padding: 0 var(--s-4); border-bottom: 1px solid var(--border); }
   tbody tr:hover { background: var(--active); }
   .name { display: inline-flex; align-items: center; gap: var(--s-4); font-weight: 600; }
+  .prog { display: inline-flex; align-items: center; gap: var(--s-4); }
+  tbody tr { cursor: pointer; }
   .muted { color: var(--muted); }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .meter { display: block; width: 160px; height: 6px; border-radius: var(--r-round); background: var(--active); overflow: hidden; }

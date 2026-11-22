@@ -3,7 +3,11 @@
   import { api } from '../../lib/api';
   import type { Issue, IssuePatch, Label, Project, SavedView, StatusCategory } from '../../lib/bindings';
   import { selection } from '../../lib/selection.svelte';
-  import { issues, propertyDefs, statuses } from '../../lib/stores.svelte';
+  import { propertyDefs, statuses } from '../../lib/stores.svelte';
+  import CommandButton from '../CommandButton.svelte';
+  import EmptyState from '../../ui/EmptyState.svelte';
+  import IssueMenu from './IssueMenu.svelte';
+  import { workspaceZone, dayText, dueDay } from './dates';
   import Contour from '../../ui/Contour.svelte';
   import EntityIcon from '../../ui/EntityIcon.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
@@ -87,20 +91,36 @@
     write(hideKey, hideEmpty);
   }
 
+  // The board shows exactly the view's query, the same rows the list shows.
+  let issues = $state<Issue[]>([]);
+  let loaded = $state(false);
+  let tz = $state('UTC');
   let labels: Label[] = $state([]);
   let projects: Project[] = $state([]);
   let error: string | null = $state(null);
   const labelOf = (id: number) => labels.find((l) => l.id === id);
   const projectOf = (i: Issue) => projects.find((p) => p.id === i.project_id);
 
+  async function reload() {
+    issues = await api.views.query($state.snapshot(view.def));
+    loaded = true;
+  }
   onMount(async () => {
     [labels, projects] = await Promise.all([api.labels.list(), api.projects.list()]);
+    tz = await workspaceZone();
+    await reload();
   });
 
   const byColumn = $derived(columns.map((col) => ({ col, cards: issues.filter(col.holds) })));
-  const rows = $derived(hideEmpty ? byColumn.filter((r) => r.cards.length > 0) : byColumn);
+  // A filtered view hides empty columns: the filter is what decides which statuses can appear.
+  const rows = $derived(hideEmpty || view.def.filter ? byColumn.filter((r) => r.cards.length > 0) : byColumn);
   // Reading order over the cards a keyboard or shift-click can reach (collapsed columns are skipped).
   const ordered = $derived(rows.flatMap((r) => (isCollapsed(r.col) ? [] : r.cards.map((i) => i.id))));
+  // Published so j/k and h/l (and the card moves) work through the selection store.
+  $effect(() => {
+    selection.setColumns(rows.map((r) => (isCollapsed(r.col) ? [] : r.cards.map((i) => i.id))));
+    return () => selection.setColumns([]);
+  });
 
   let over = $state<string | null>(null);
 
@@ -126,8 +146,8 @@
 
   const isSelected = (id: number) => selection.focused === id || selection.selected.includes(id);
 
-  const due = (i: Issue) => i.due?.Date ?? i.due?.DateTime?.utc.slice(0, 10) ?? null;
-  const dueLabel = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const due = (i: Issue) => dueDay(i, tz);
+  const dueLabel = dayText;
 
   async function moveTo(col: Column, id: number) {
     const at = issues.findIndex((i) => i.id === id);
@@ -150,12 +170,19 @@
   <p class="error" role="alert">{error}</p>
 {/if}
 
+{#if loaded && issues.length === 0 && view.def.filter}
+  <EmptyState title="No issues on this board" hint="Issues that match this view will show up here.">
+    {#snippet action()}<CommandButton command="issue.create" variant="primary" />{/snippet}
+  </EmptyState>
+{:else}
+
 <div class="bar">
   <span class="count">{issues.length} issues</span>
   <div class="grow"></div>
   <IconButton icon="filter" label="Hide empty columns" pressed={hideEmpty} onclick={toggleHideEmpty} />
 </div>
 
+<IssueMenu>
 <div class="board">
   {#each rows as { col, cards } (col.name)}
     {@const collapsed = isCollapsed(col)}
@@ -191,6 +218,7 @@
                 tabindex={selection.focused === i.id ? 0 : -1}
                 draggable="true"
                 data-issue={i.key}
+                data-id={i.id}
                 aria-selected={isSelected(i.id)}
                 data-focused={selection.focused === i.id ? '' : undefined}
                 onclick={(e) => pick(e, i.id)}
@@ -225,6 +253,8 @@
     </section>
   {/each}
 </div>
+</IssueMenu>
+{/if}
 
 <style>
   .error {

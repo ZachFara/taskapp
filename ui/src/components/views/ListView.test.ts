@@ -70,6 +70,20 @@ describe('ListView', () => {
     expect(rows(flat.target)).toHaveLength(2);
   });
 
+  it('non_status_group_header_has_no_status_glyph_and_a_leading_icon', async () => {
+    const proj = fixtures.projects[0];
+    const { target } = await open({ issues: [issue(1, { project_id: proj.id })], views: viewSeed({ group_by: { Fixed: 'Project' } }) });
+    const band = target.querySelector<HTMLElement>('.band')!;
+    expect(band.textContent).toContain(proj.name);
+    expect(band.querySelector('[data-status-glyph], .status-glyph')).toBeNull();
+    expect(band.querySelectorAll('svg, .entity-icon').length).toBeGreaterThan(1);
+  });
+
+  it('publishes_its_visible_ids_as_one_column_for_j_and_k', async () => {
+    const { target } = await open({ issues: [issue(1), issue(2)] });
+    await vi.waitFor(() => expect(selection.columns).toEqual([rows(target).map((r) => Number(r.dataset.key!.slice(4)))]));
+  });
+
   it('collapse_hides_rows_and_persists_per_view', async () => {
     const issues = [issue(1), issue(2, { status_id: S2.id })];
     const { target } = await open({ issues });

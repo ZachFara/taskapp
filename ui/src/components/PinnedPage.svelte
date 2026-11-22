@@ -7,6 +7,7 @@
   import EmptyState from '../ui/EmptyState.svelte';
   import GroupHeader from '../ui/GroupHeader.svelte';
   import Icon from '../ui/Icon.svelte';
+  import ListRow from '../ui/ListRow.svelte';
   import IconButton from '../ui/IconButton.svelte';
   import PageHeader from '../ui/PageHeader.svelte';
 
@@ -78,7 +79,7 @@
 
 <main class="body">
   {#if loaded && pins.length === 0}
-    <EmptyState title="Nothing pinned yet" hint="Pin an issue, project or view to see it here." />
+    <EmptyState title="Nothing pinned yet" hint="Pin an issue, project or view to see it here. Open one and press the pin." />
   {:else}
     {#each groups as group (group.kind)}
       <section data-kind={group.kind} class="group">
@@ -94,14 +95,14 @@
               ondragover={(e) => e.preventDefault()}
               ondrop={(e) => drop(p.pin.id, e)}
             >
-              <Icon name={glyph[p.pin.kind]} />
-              {#if linkFor(p)}
-                <a href={linkFor(p)} target={p.pin.kind === 'Url' ? '_blank' : undefined} rel="noopener" onclick={(e) => open(e, p)}>{p.label}</a>
-              {:else}
-                <span>{p.label}</span>
+              <ListRow onpick={() => (p.pin.kind === 'Url' ? linkFor(p) && void openExternal(p.route) : navigate(p.route))}>
+                <Icon name={glyph[p.pin.kind]} />
+                <span class="label">{p.label}</span>
+                {#if p.archived}<span class="tag">Archived</span>{/if}
+              </ListRow>
+              {#if p.pin.kind === 'Url' && linkFor(p)}
+                <a class="ext" href={linkFor(p)} target="_blank" rel="noopener" aria-label={`Open ${p.label}`} onclick={(e) => open(e, p)}><Icon name="link" /></a>
               {/if}
-              {#if p.archived}<span class="tag">Archived</span>{/if}
-              <span class="grow"></span>
               <IconButton icon="close" label={`Unpin ${p.label}`} onclick={() => unpin(p.pin.id)} />
             </li>
           {/each}
@@ -115,11 +116,9 @@
   .body { padding: 0 var(--s-7) var(--s-7); display: grid; gap: var(--s-5); }
   .group { display: grid; }
   .rows { list-style: none; margin: 0; padding: 0; }
-  .row { display: flex; align-items: center; gap: var(--s-5); height: var(--row-h); padding: 0 var(--s-4) 0 var(--s-6); border-bottom: 1px solid var(--border); cursor: default; }
-  .row:hover { background: var(--active); }
-  .row a { color: var(--ink); text-decoration: none; font-weight: 500; }
-  .row a:hover { text-decoration: underline; }
+  .row { display: flex; align-items: center; gap: var(--s-3); padding-right: var(--s-4); border-bottom: 1px solid var(--border); }
+  .label { font-weight: 500; }
+  .ext { display: inline-flex; color: var(--muted); }
   .archived { opacity: 0.5; }
   .tag { font-size: var(--fs-xs); color: var(--muted); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 0 var(--s-3); }
-  .grow { flex: 1; }
 </style>

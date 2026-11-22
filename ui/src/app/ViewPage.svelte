@@ -174,7 +174,7 @@
           {#snippet action()}<Button onclick={clearFilters}>Clear filters</Button>{/snippet}
         </EmptyState>
       {:else}
-        <div role="presentation" onclick={pick}><Shown view={live} /></div>
+        <div role="presentation" onclick={pick}><Shown view={live} embedded /></div>
       {/if}
     </main>
   {/key}

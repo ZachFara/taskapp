@@ -7,6 +7,7 @@
   import Dialog from '../ui/Dialog.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import EntityIcon from '../ui/EntityIcon.svelte';
+  import ListRow from '../ui/ListRow.svelte';
   import IconButton from '../ui/IconButton.svelte';
   import PageHeader from '../ui/PageHeader.svelte';
   import Pill from '../ui/Pill.svelte';
@@ -47,16 +48,19 @@
 
 <main class="body">
   {#if loaded && views.length === 0}
-    <EmptyState title="No saved views" hint="A view is a filter, grouping and layout you come back to." />
+    <EmptyState title="No saved views" hint="A view is a filter, grouping and layout you come back to.">
+      {#snippet action()}<Button variant="primary" icon="plus" onclick={create}>New view</Button>{/snippet}
+    </EmptyState>
   {:else}
     <ul class="rows">
       {#each views as v (v.id)}
         <li class="row" data-view-id={v.id}>
-          <EntityIcon icon={v.icon} color={v.color} />
-          <a class="name" href={`/view/${v.id}`} onclick={(e) => (e.preventDefault(), navigate(`/view/${v.id}`))}>{v.name}</a>
-          <Pill>{v.def.layout}</Pill>
-          {#if pinned.has(`/view/${v.id}`)}<Pill>Pinned</Pill>{/if}
-          <span class="grow"></span>
+          <ListRow onpick={() => navigate(`/view/${v.id}`)}>
+            <EntityIcon icon={v.icon ?? 'icon:layers'} color={v.color} />
+            <span class="name">{v.name}</span>
+            <Pill>{v.def.layout}</Pill>
+            {#if pinned.has(`/view/${v.id}`)}<Pill>Pinned</Pill>{/if}
+          </ListRow>
           <IconButton icon="trash" label={`Delete ${v.name}`} onclick={() => ((doomed = v), (confirming = true))} />
         </li>
       {/each}
@@ -74,9 +78,6 @@
 <style>
   .body { padding: 0 var(--s-7) var(--s-7); }
   .rows { list-style: none; margin: 0; padding: 0; }
-  .row { display: flex; align-items: center; gap: var(--s-5); height: var(--row-h); padding: 0 var(--s-4) 0 var(--s-6); border-bottom: 1px solid var(--border); }
-  .row:hover { background: var(--active); }
-  .name { color: var(--ink); font-weight: 600; text-decoration: none; }
-  .name:hover { text-decoration: underline; }
-  .grow { flex: 1; }
+  .row { display: flex; align-items: center; gap: var(--s-3); padding-right: var(--s-4); border-bottom: 1px solid var(--border); }
+  .name { font-weight: 600; margin-right: auto; }
 </style>
