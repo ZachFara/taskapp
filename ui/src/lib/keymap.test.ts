@@ -63,4 +63,11 @@ describe('keymap', () => {
     press(document.body, 'Enter');
     expect(handler).toHaveBeenCalledTimes(1);
   });
+
+  it('the key that fires a shortcut is not also typed into the input it focuses', () => {
+    register('c');
+    const e = new KeyboardEvent('keydown', { key: 'c', bubbles: true, cancelable: true });
+    document.body.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+  });
 });
