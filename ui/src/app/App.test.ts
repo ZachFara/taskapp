@@ -50,7 +50,7 @@ describe('App shell', () => {
   it('click_row_opens_detail_in_panel', async () => {
     await open('/view/1');
     await pickRow();
-    expect(panel()!.querySelector<HTMLInputElement>('[aria-label=Title]')!.value).toBe('Fixture task 1');
+    expect(panel()!.querySelector('[aria-label=Title]')!.textContent).toBe('Fixture task 1');
   });
 
   it('esc_closes_panel_not_page', async () => {

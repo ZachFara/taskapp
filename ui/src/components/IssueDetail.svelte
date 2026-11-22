@@ -188,8 +188,8 @@
     </div>
   </article>
 {:else if missing}
-  <EmptyState title="No such issue" hint={error}>
-    {#snippet action()}<Button variant="primary" onclick={close}>Go back</Button>{/snippet}
+  <EmptyState title="No such issue">
+    {#snippet action()}<p role="alert" class="error">{error}</p><Button variant="primary" onclick={close}>Go back</Button>{/snippet}
   </EmptyState>
 {:else if error}
   <p role="alert" class="error">{error}</p>
