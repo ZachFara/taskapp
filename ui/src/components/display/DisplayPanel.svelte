@@ -11,6 +11,7 @@
   import Select from '../../ui/Select.svelte';
   import Switch from '../../ui/Switch.svelte';
   import TextInput from '../../ui/TextInput.svelte';
+  import { pointsOn, readEstimation } from '../insights/estimation';
   import { BUILT_IN, KIND_ICON, defaultFor, density, sameField, showEmptyGroups, showWeekends, shown, subIssues, type DisplayDef, type SubIssues } from './types';
 
   let { def, onchange }: { def: ViewDef; onchange: (patch: Partial<DisplayDef>) => void } = $props();
@@ -20,12 +21,16 @@
   let query = $state('');
   let dragFrom = $state<string | null>(null);
   let focused = $state<string | null>(null);
-  onMount(async () => (defs = await api.properties.listDefs()));
+  let pointsShown = $state(true);
+  onMount(async () => {
+    defs = await api.properties.listDefs();
+    pointsShown = pointsOn((await readEstimation()).estimation);
+  });
 
   // The board draws its cards from card_fields when set; every other layout from columns.
   const card = $derived(def.layout === 'Board');
   const edit = (list: FieldRef[]): Partial<DisplayDef> => (card ? { card_fields: list } : { columns: list });
-  const universe = $derived<Entry[]>([...BUILT_IN, ...defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name, kind: p.kind }))]);
+  const universe = $derived<Entry[]>([...BUILT_IN.filter((b) => pointsShown || b.field.Fixed !== 'Points'), ...defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name, kind: p.kind }))]);
   const on = $derived(shown(def, defaultFor(def.layout), card));
   const match = (e: Entry) => e.name && e.name.toLowerCase().includes(query.trim().toLowerCase());
   const entryOf = (f: FieldRef) => universe.find((u) => sameField(u.field, f));

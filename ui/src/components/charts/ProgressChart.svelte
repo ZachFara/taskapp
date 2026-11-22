@@ -48,7 +48,8 @@
   const scope = $derived(pts((d) => d.scope));
   const started = $derived(pts((d) => d.started, upto));
   const done = $derived(pts((d) => d.completed, upto));
-  const labels = $derived(xLabels(list.length));
+  // About one label per 64 px of plot, so a narrow panel does not run them together.
+  const labels = $derived(xLabels(list.length, Math.max(2, Math.floor((w - box.left - box.right) / 64))));
 
   const end = $derived(list[upto - 1]);
   const marks = $derived.by(() => {

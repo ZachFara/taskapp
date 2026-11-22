@@ -181,7 +181,7 @@
   .rows { list-style: none; margin: 0; padding: 0; }
   .row { display: flex; align-items: center; gap: var(--s-5); padding-right: var(--s-4); border-bottom: 1px solid var(--border); }
   .title { font-weight: 600; min-width: 120px; }
-  .dates, .progress, .left { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .dates, .progress, .left { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .left { margin-left: auto; color: var(--ink); }
   .meter { width: 120px; height: var(--s-3); border-radius: var(--r-round); background: var(--active); overflow: hidden; }
   .fill { display: block; height: 100%; background: var(--accent); }

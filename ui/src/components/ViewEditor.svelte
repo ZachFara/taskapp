@@ -64,7 +64,7 @@
   };
 
   const allFields = $derived([
-    ...(['Status', 'StatusCategory', 'Priority', 'Project', 'Cycle', 'DueDate', 'Title'] as FixedField[]).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
+    ...(['Status', 'StatusCategory', 'Priority', 'Project', 'Cycle', 'DueDate', 'Points', 'Title'] as FixedField[]).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
     ...data.defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name })),
   ]);
   const fieldItems = $derived(allFields.map((f) => ({ value: fieldKey(f.field), label: f.name })));

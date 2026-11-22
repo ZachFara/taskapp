@@ -20,7 +20,7 @@
   import Popover from '../../ui/Popover.svelte';
   import DisplayPanel from '../display/DisplayPanel.svelte';
   import FieldValue from '../display/FieldValue.svelte';
-  import { emptyCtx, loadCtx, type Ctx, type DisplayDef } from '../display/types';
+  import { emptyCtx, loadCtx, pointsTotal, pointsName, type Ctx, type DisplayDef } from '../display/types';
 
   let { view }: { view: SavedView } = $props();
 
@@ -33,6 +33,7 @@
     StartDate: { label: 'Start', kind: 'Date' },
     DueDate: { label: 'Due', kind: 'Date' },
     Estimate: { label: 'Estimate', kind: 'Number' },
+    Points: { label: 'Points', kind: 'Read' },
     Project: { label: 'Project', kind: 'Project' },
     Label: { label: 'Labels', kind: 'Labels' },
     // Shown through FieldValue and not editable here.
@@ -110,6 +111,7 @@
       case 'Project': return i.project_id;
       case 'Label': return i.label_ids.join(',');
       case 'Estimate': return i.estimate_minutes;
+      case 'Points': return i.points;
       default: return null;
     }
   };
@@ -153,6 +155,7 @@
       const st = statuses.find((s) => s.id === i.status_id);
       return { name: st?.name ?? 'Unknown', category: st?.category ?? 'Backlog', status: true };
     }
+    if (field?.Fixed === 'Points') return { name: pointsName(i.points), category: 'Backlog' as StatusCategory, status: false };
     if (field?.Fixed === 'Priority') return { name: PRIORITY[i.priority] ?? 'Unknown', category: 'Backlog' as StatusCategory, status: false, priority: i.priority };
     if (field?.Property !== undefined) {
       const v = i.properties[field.Property];
@@ -177,6 +180,7 @@
     const field = def.group_by;
     if (field?.Fixed === 'Status') return statuses.find((s) => s.id === i.status_id)?.position ?? Infinity;
     if (field?.Fixed === 'Priority') return i.priority;
+    if (field?.Fixed === 'Points') return i.points ?? Infinity;
     return 0;
   }
   const visibleRows = $derived(groups.flatMap((g) => (collapsed.has(g.name) ? [] : g.rows)));
@@ -433,7 +437,7 @@
           {#if grouped}
             <tr class="band-row">
               <td colspan={cols.length + 1}>
-                <GroupHeader name={g.name || 'None'} count={g.rows.length} category={g.status ? g.category : undefined} tone={g.priority ? (Math.min(4, Math.max(1, g.priority)) as 1 | 2 | 3 | 4) : 1} collapsed={collapsed.has(g.name)} ontoggle={() => toggleGroup(g.name)}>
+                <GroupHeader name={g.name || 'None'} count={g.rows.length} total={pointsTotal(g.rows, cols.map((c) => c.ref), ctx)} category={g.status ? g.category : undefined} tone={g.priority ? (Math.min(4, Math.max(1, g.priority)) as 1 | 2 | 3 | 4) : 1} collapsed={collapsed.has(g.name)} ontoggle={() => toggleGroup(g.name)}>
                   {#snippet leading()}{#if g.priority !== undefined}<PriorityGlyph level={glyphLevel(g.priority)} />{/if}{/snippet}
                 </GroupHeader>
               </td>

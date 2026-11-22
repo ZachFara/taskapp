@@ -36,14 +36,14 @@ export const todayIndex = (days: Day[], today?: string) => {
   return i < 0 ? null : i;
 };
 
-/** Indices of the x labels: 3 to 6 on one step that lands on the last day, else a step that leaves the end bare. */
-export function xLabels(n: number): number[] {
+/** Indices of the x labels: up to `max` (3 to 6 on one step that lands on the last day), else a step that leaves the end bare. */
+export function xLabels(n: number, max = 6): number[] {
   if (n <= 1) return [0];
   const last = n - 1;
   for (let s = 1; s <= last; s++) {
-    if (last % s === 0 && last / s + 1 >= 3 && last / s + 1 <= 6) return Array.from({ length: last / s + 1 }, (_, i) => i * s);
+    if (last % s === 0 && last / s + 1 >= Math.min(3, max) && last / s + 1 <= max) return Array.from({ length: last / s + 1 }, (_, i) => i * s);
   }
-  const s = Math.ceil(last / 4);
+  const s = Math.ceil(last / Math.max(1, max - 2));
   return Array.from({ length: Math.floor(last / s) + 1 }, (_, i) => i * s);
 }
 

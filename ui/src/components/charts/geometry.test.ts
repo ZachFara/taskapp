@@ -64,6 +64,10 @@ describe('xLabels', () => {
     expect(l.at(-1)).not.toBe(13);
   });
   it('handles one day', () => expect(xLabels(1)).toEqual([0]));
+  it('uses fewer labels when the plot is narrow', () => {
+    expect(xLabels(31, 3)).toEqual([0, 15, 30]);
+    expect(xLabels(30, 2)).toEqual([0, 29]);
+  });
 });
 
 describe('summary', () => {
