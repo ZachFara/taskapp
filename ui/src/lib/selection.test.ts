@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createSelection } from './selection.svelte';
+import { listState as reexported } from './listState.svelte';
+import { createSelection, listState, selection } from './selection.svelte';
 
 const ids = [10, 11, 12, 13];
 describe('selection', () => {
@@ -54,5 +55,25 @@ describe('selection columns and peek', () => {
     expect(s.peeked).toBe(2);
     s.togglePeek();
     expect(s.peeked).toBe(null);
+  });
+});
+
+describe('list state and layout', () => {
+  it('the list state lives in the selection module and the old module still serves it', () => {
+    expect(reexported).toBe(listState);
+    listState.ids = [3, 4];
+    listState.editing = 3;
+    expect(reexported.ids).toEqual([3, 4]);
+    listState.ids = [];
+    listState.editing = null;
+  });
+  it('the shown layout is published by the view and read by the key scopes', () => {
+    const s = createSelection();
+    expect(s.layout).toBeUndefined();
+    s.setLayout('board');
+    expect(s.layout).toBe('board');
+    s.setLayout(undefined);
+    expect(s.layout).toBeUndefined();
+    expect(selection.layout).toBeUndefined();
   });
 });

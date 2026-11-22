@@ -67,3 +67,13 @@ export function parseEstimate(text: string): Parsed<number> {
   const minutes = (Number(m[1] ?? 0) * 8 + Number(m[2] ?? 0)) * 60 + Number(m[3] ?? 0);
   return Number.isInteger(minutes) && minutes > 0 && minutes <= 4_294_967_295 ? { value: minutes } : null;
 }
+
+/** Minutes as people write them: `45m`, `2h`, `1h 30m`. */
+export const formatEstimate = (minutes: number) => {
+  const [h, m] = [Math.floor(minutes / 60), minutes % 60];
+  return [h && `${h}h`, m && `${m}m`].filter(Boolean).join(' ') || '0m';
+};
+
+/** `Fri, Nov 27, 2026` for a `YYYY-MM-DD` day. */
+export const formatDay = (d: string) =>
+  new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDate, parseEstimate, todayIn } from './when';
+import { formatDay, formatEstimate, parseDate, parseEstimate, todayIn } from './when';
 
 // 2026-11-22 is a Sunday; noon UTC is the same calendar day in every zone from -11 to +11.
 const now = new Date('2026-11-22T12:00:00Z');
@@ -56,4 +56,11 @@ describe('parseEstimate', () => {
   it.each(['', '0m', '0h', 'abc', '30', '1.5m', 'h', '2h2h', '30m1h', '-1h', '1h 30'])('"%s" is not an estimate', (text) =>
     expect(parseEstimate(text)).toBeNull(),
   );
+});
+
+describe('formatting', () => {
+  it.each<[number, string]>([[30, '30m'], [60, '1h'], [90, '1h 30m'], [480, '8h'], [1500, '25h']])('%i minutes is %s', (m, want) =>
+    expect(formatEstimate(m)).toBe(want),
+  );
+  it('writes a day with its weekday', () => expect(formatDay('2026-11-27')).toBe('Fri, Nov 27, 2026'));
 });

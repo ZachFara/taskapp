@@ -8,7 +8,7 @@ const set = (key: string, v: string | boolean): ReturnType<typeof patchOf> => pa
 defineCommand({
   id: 'issue.property', label: 'Set property', icon: 'filter', group: 'Issue', shortcut: 'a',
   page: (ctx) =>
-    pageOf(ctx, 'Property', choices.defs.flatMap((d): Row[] =>
+    pageOf(ctx, 'Property', () => choices.defs.flatMap((d): Row[] =>
       d.kind === 'Select' ? d.options.map((o): Row => [`${d.name}: ${o.value}`, set(d.key, o.value)])
       : d.kind === 'Checkbox' ? [[`${d.name}: yes`, set(d.key, true)], [`${d.name}: no`, set(d.key, false)]]
       : [])),
