@@ -24,7 +24,9 @@ export function minutes(n: number): string {
   return h && n % 60 ? `${h}h ${n % 60}m` : h ? `${h}h` : `${n}m`;
 }
 
-export const PRIORITIES = ['No priority', 'Low', 'Medium', 'High', 'Urgent'];
+// Backend priority: 0 none, 1 urgent ... 4 low. The glyph counts the other way (4 = urgent).
+export const PRIORITIES = ['No priority', 'Urgent', 'High', 'Medium', 'Low'];
+export const priorityGlyph = (p: number) => (p === 0 ? 0 : 5 - p);
 
 /** Share of sub-issues that are done, as whole percent. */
 export const pct = (done: number, total: number) => (total ? Math.round((done / total) * 100) : 0);

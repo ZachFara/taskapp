@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SectionHead from './SectionHead.svelte';
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
   import Button from '../../ui/Button.svelte';
@@ -51,6 +52,13 @@
     sparklines = (await api.settings.get('sidebar_sparklines')) === true;
   });
 
+  $effect(() => {
+    const run = () => void save();
+    addEventListener('command:settings.save', run);
+    
+    return () => removeEventListener('command:settings.save', run);
+  });
+
   async function save() {
     if (!KEY.test(key)) {
       error = 'Use 2 to 5 uppercase letters, such as ABC.';
@@ -76,16 +84,13 @@
   }
 </script>
 
-<div class="st-head">
-  <h2>General</h2>
-  <p class="st-lede">Name the workspace, choose its issue keys, and set how dates and the theme look.</p>
-</div>
+<SectionHead lede="Name the workspace, choose its issue keys, and set how dates and the theme look." />
 
 <form class="st-card" onsubmit={(e) => { e.preventDefault(); void save(); }}>
   <div class="st-form">
     <div class="st-field">
       <span>Workspace name</span>
-      <TextInput label="Workspace name" bind:value={name} oninput={() => (saved = false)} />
+      <TextInput label="Workspace name" placeholder="Home" bind:value={name} oninput={() => (saved = false)} />
     </div>
     <div class="st-field">
       <span>Workspace key</span>
@@ -95,7 +100,7 @@
     <div class="st-field">
       <span>Time zone</span>
       <Select label="Time zone" items={zoneItems} bind:value={zone} />
-      <span class="st-hint">Calendar alerts land at this time of day.</span>
+      <span class="st-hint">Calendar alerts land at this time of day. A change applies after restart.</span>
     </div>
     <div class="st-field">
       <span>Week starts on</span>

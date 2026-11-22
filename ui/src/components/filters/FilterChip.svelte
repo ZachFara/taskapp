@@ -5,6 +5,7 @@
   import Popover from '../../ui/Popover.svelte';
   import Select from '../../ui/Select.svelte';
   import Switch from '../../ui/Switch.svelte';
+  import Tooltip from '../../ui/Tooltip.svelte';
   import TextInput from '../../ui/TextInput.svelte';
   import type { Lookup } from './lookup';
   import { multi, noValue, opsFor, type Chip } from './model';
@@ -68,12 +69,14 @@
       {/if}
     </div>
   </Popover>
-  <button type="button" class="x" aria-label={`Remove filter ${name}`} onclick={onremove}><Icon name="close" size={12} /></button>
+  <Tooltip label="Remove filter">
+    {#snippet children(p)}<button {...p} type="button" class="x" aria-label={`Remove filter ${name}`} onclick={onremove}><Icon name="close" size={12} /></button>{/snippet}
+  </Tooltip>
 </span>
 
 <style>
   .chip {
-    display: inline-flex; align-items: stretch; height: var(--row-h-compact); border: 1px solid var(--control);
+    display: inline-flex; flex: none; white-space: nowrap; align-items: stretch; height: var(--row-h-compact); border: 1px solid var(--control);
     border-radius: var(--r-ctl); background: var(--card); font-size: var(--fs-sm);
     transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
   }

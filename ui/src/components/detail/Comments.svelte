@@ -16,9 +16,17 @@
     rev;
     api.comments.list(issue.id).then((c) => (comments = c));
   });
+  let sec = $state<HTMLElement>();
+  // The command menu focuses the same control the section's button does.
+  $effect(() => {
+    const go = () => { collapsed = false; queueMicrotask(() => sec?.querySelector<HTMLElement>('textarea')?.focus()); };
+    addEventListener('command:issue.comment.focus', go);
+    return () => removeEventListener('command:issue.comment.focus', go);
+  });
 </script>
 
-<section aria-label="Comments">
+
+<section aria-label="Comments" bind:this={sec}>
   <SectionHeading name="Comments" count={comments.length} {collapsed} ontoggle={() => (collapsed = !collapsed)} />
   {#if !collapsed}
     {#each comments as c (c.id)}

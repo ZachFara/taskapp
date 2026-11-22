@@ -8,7 +8,7 @@
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import TextInput from '../../ui/TextInput.svelte';
-  import { dueFrom, dueParts, humanDate, isDate, isTime, minutes, PRIORITIES } from './format';
+  import { dueFrom, dueParts, humanDate, isDate, isTime, minutes, PRIORITIES, priorityGlyph } from './format';
   import IssuePicker from './IssuePicker.svelte';
   import OptionList from './OptionList.svelte';
   import PointsRow from '../insights/PointsRow.svelte';
@@ -71,10 +71,10 @@
   </PropertyRow>
 
   <PropertyRow id="priority" name="Priority" cmd="issue.detail.priority" bind:openRow>
-    {#snippet value()}<PriorityGlyph level={issue.priority} />{PRIORITIES[issue.priority]}{/snippet}
+    {#snippet value()}<PriorityGlyph level={priorityGlyph(issue.priority)} />{PRIORITIES[issue.priority]}{/snippet}
     {#snippet editor(close)}
       <OptionList label="Priority" value={issue.priority} options={PRIORITIES.map((name, id) => ({ id, name }))} onpick={(id) => { close(); save({ priority: num(id) }); }}>
-        {#snippet lead(o)}<PriorityGlyph level={Number(o.id)} />{/snippet}
+        {#snippet lead(o)}<PriorityGlyph level={priorityGlyph(Number(o.id))} />{/snippet}
       </OptionList>
     {/snippet}
   </PropertyRow>
