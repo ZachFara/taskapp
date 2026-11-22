@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { api } from '../lib/api';
   import type { Issue, IssueTemplate, ParsedQuickAdd } from '../lib/bindings';
   import { navigate } from '../app/routes';
@@ -29,7 +30,9 @@
   const DUE_WORDS = String.raw`(?:today|tomorrow|next week|(?:mon|tue|wed|thu|fri|sat|sun)\w*|\d{4}-\d{2}-\d{2}|in \d+ (?:day|days|week|weeks))`;
 
   let open = $state(true);
-  let text = $state(project_slug ? `#${project_slug} ` : '');
+  // The prefill is the starting text only; the dialog owns the field after it opens.
+  const prefill = untrack(() => (project_slug ? `#${project_slug} ` : ''));
+  let text = $state(prefill);
   let parsed = $state<ParsedQuickAdd | null>(null);
   let error = $state('');
   let templates = $state<IssueTemplate[]>([]);
@@ -103,7 +106,7 @@
     });
     void refreshAll().catch(() => {});
     if (mode === 'keep') {
-      text = project_slug ? `#${project_slug} ` : '';
+      text = prefill;
       parsed = null;
       return;
     }
@@ -136,6 +139,10 @@
   $effect(() => {
     if (!open) onclose();
   });
+  // Focus is set here rather than with `autofocus`, which the a11y rules reject.
+  $effect(() => {
+    field?.focus();
+  });
 </script>
 
 <Dialog bind:open title="New issue">
@@ -145,7 +152,6 @@
       bind:this={field}
       data-quickadd
       class="title"
-      autofocus
       aria-label="Title, with quick-add tokens"
       placeholder="Describe the issue. p2 #project @label ~30m tomorrow"
       bind:value={text}
