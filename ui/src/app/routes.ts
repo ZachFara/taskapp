@@ -8,6 +8,7 @@ import GanttView from '../components/views/GanttView.svelte';
 import ViewPage from './ViewPage.svelte';
 
 export const routes: { pattern: string; component: Component }[] = [
+  { pattern: '/', component: PinnedPage }, // the app window opens on '/'
   { pattern: '/view/:id', component: ViewPage },
   { pattern: '/view/:id/:layout', component: ViewPage },
   { pattern: '/issue/:key', component: IssueDetail },
