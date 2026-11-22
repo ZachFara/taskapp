@@ -44,7 +44,7 @@ describe('App shell', () => {
   it('renders_sidebar_and_page_inside_shell', async () => {
     await open('/view/1');
     expect(q('aside.sidebar')!.textContent).toContain('Active');
-    expect(q('main [role=listbox]')).not.toBeNull();
+    expect(q('main ul.list li[data-key]')).not.toBeNull();
   });
 
   it('click_row_opens_detail_in_panel', async () => {
