@@ -1,4 +1,4 @@
-use crate::{Db, Error, Pin, PinId, PinKind, ResolvedPin, Result, settings};
+use crate::{ChangeSource, Db, Error, Pin, PinId, PinKind, ResolvedPin, Result, rows, settings};
 
 type PinRow = (i64, String, String, Option<String>, i64);
 
@@ -78,7 +78,8 @@ pub async fn pin(db: &Db, kind: PinKind, target: &str, title: Option<String>) ->
     }
     let title = title.filter(|t| !t.trim().is_empty());
     // ON CONFLICT keeps this safe if another writer pins the same target between the two queries.
-    sqlx::query(
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let added = sqlx::query(
         "INSERT INTO pins (kind, target, title, position)
          VALUES (?, ?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM pins))
          ON CONFLICT (kind, target) DO NOTHING",
@@ -86,8 +87,12 @@ pub async fn pin(db: &Db, kind: PinKind, target: &str, title: Option<String>) ->
     .bind(kind_str(kind))
     .bind(target)
     .bind(title)
-    .execute(&db.pool)
+    .execute(&mut *tx)
     .await?;
+    if added.rows_affected() == 1 {
+        rows::created(&mut tx, ChangeSource::Ui, "pins", added.last_insert_rowid()).await?;
+    }
+    tx.commit().await?;
     find(db, kind, target)
         .await?
         .ok_or_else(|| Error::NotFound(format!("pin {target}")))
@@ -97,13 +102,17 @@ pub async fn pin(db: &Db, kind: PinKind, target: &str, title: Option<String>) ->
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn unpin(db: &Db, id: PinId) -> Result<()> {
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let before = rows::by_key(&mut tx, "pins", id.0).await?;
     let done = sqlx::query("DELETE FROM pins WHERE id = ?")
         .bind(id.0)
-        .execute(&db.pool)
+        .execute(&mut *tx)
         .await?;
     if done.rows_affected() == 0 {
         return Err(Error::NotFound(format!("pin {}", id.0)));
     }
+    rows::changed(&mut tx, ChangeSource::Ui, before).await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -124,6 +133,7 @@ pub async fn reorder(db: &Db, ids_in_order: &[PinId]) -> Result<()> {
             "reorder must list every current pin exactly once".into(),
         ));
     }
+    let before = rows::all(&mut tx, "pins").await?;
     for (index, id) in ids_in_order.iter().enumerate() {
         let position = i64::try_from(index).map_err(|e| Error::Invalid(e.to_string()))?;
         sqlx::query("UPDATE pins SET position = ? WHERE id = ?")
@@ -132,6 +142,7 @@ pub async fn reorder(db: &Db, ids_in_order: &[PinId]) -> Result<()> {
             .execute(&mut *tx)
             .await?;
     }
+    rows::changed(&mut tx, ChangeSource::Ui, before).await?;
     tx.commit().await?;
     Ok(())
 }
