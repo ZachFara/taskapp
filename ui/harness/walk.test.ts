@@ -228,4 +228,19 @@ describe('walk', { timeout: 20_000 }, () => {
     const box = await page.getByRole('button', { name: 'New issue' }).first().boundingBox();
     expect(box!.x + box!.width).toBeLessThanOrEqual(1024);
   });
+
+  it('X1 shift+i opens the insights panel with a chart and headline numbers; Measure to issues; close', async () => {
+    await open();
+    await press('Shift+I');
+    const panel = page.getByRole('complementary', { name: 'Insights' });
+    await pw(panel).toBeVisible();
+    await pw(panel.locator('path.scope').first()).toHaveAttribute('d', /^M/);
+    expect(await panel.locator('[data-headline] dd').allTextContents()).toSatisfy((n: string[]) => n.length >= 3 && n.every((t) => t.trim() !== ''));
+    await pw(panel.locator('svg[role=img]').first()).toHaveAttribute('aria-label', /points/);
+    await panel.getByRole('combobox', { name: 'Measure' }).click();
+    await page.getByRole('option', { name: 'Issues' }).click();
+    await pw(panel.locator('svg[role=img]').first()).toHaveAttribute('aria-label', /issues/);
+    await panel.getByRole('button', { name: 'Close insights' }).click();
+    await pw(panel).toBeHidden();
+  });
 });

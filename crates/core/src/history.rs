@@ -108,6 +108,39 @@ pub async fn record(
     Ok(())
 }
 
+/// Appends a change dated `at`, outside any step so it can never be undone. For seeding history that
+/// predates the database; ordinary writes go through [`record`].
+///
+/// # Errors
+/// Fails when the insert fails.
+pub async fn record_past(
+    db: &Db,
+    at: DateTime<Utc>,
+    source: ChangeSource,
+    entity: &str,
+    entity_id: &str,
+    edit: &Edit<'_>,
+) -> Result<()> {
+    let (source, old, new) = (
+        enc(&source)?,
+        edit.old.map(enc).transpose()?,
+        edit.new.map(enc).transpose()?,
+    );
+    sqlx::query(
+        "INSERT INTO changes (at, source, entity, entity_id, field, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(at)
+    .bind(source)
+    .bind(entity)
+    .bind(entity_id)
+    .bind(edit.field)
+    .bind(old)
+    .bind(new)
+    .execute(&db.pool)
+    .await?;
+    Ok(())
+}
+
 /// Changes to one entity, oldest first. An unknown entity has none.
 ///
 /// # Errors

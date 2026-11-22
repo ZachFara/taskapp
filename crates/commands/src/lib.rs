@@ -11,13 +11,14 @@ use serde_json::Value;
 use taskapp_core::{
     Applied, AppliedTemplate, Bar, BulkPatch, Change, ChangeSource, Comment, CommentId, Cycle,
     CycleId, Db, Error, ImportPlan, Issue, IssueId, IssuePatch, IssueStats, IssueTemplate, Label,
-    LabelId, Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId, PinKind, Project,
-    ProjectId, PropertyDef, PropertyKind, Relation, Reschedule, ResolvedPin, Result, SavedView,
-    SelectOption, Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId,
-    TemplateInput, UndoStatus, ViewDef, ViewId, ViewTemplate, ViewTemplateId, WorkBlock,
-    WorkBlockId, WorkspaceStatus, backup, blocks, bulk, comments, cycles, history, import, issues,
-    labels, pins, projects, properties, quickadd, relations, schedule, search, settings, statuses,
-    templates, undo, view_templates, views, workspace,
+    LabelId, Measure, Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId, PinKind,
+    ProgressScope, ProgressSeries, Project, ProjectId, PropertyDef, PropertyKind, Relation,
+    Reschedule, ResolvedPin, Result, SavedView, SelectOption, Status, StatusCategory, StatusId,
+    SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewId,
+    ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks, bulk,
+    comments, cycles, history, import, insights, issues, labels, pins, projects, properties,
+    quickadd, relations, schedule, search, settings, statuses, templates, undo, view_templates,
+    views, workspace,
 };
 
 pub struct AppState {
@@ -271,6 +272,12 @@ macro_rules! with_commands {
                 import::csv::plan(&s.db, &csv, mapping.as_ref()).await
             }
             import_apply(s, plan: ImportPlan) -> Applied { import::apply(&s.db, &plan).await }
+
+            insights_progress(s, scope: ProgressScope, measure: Measure, from: Option<NaiveDate>, to: Option<NaiveDate>)
+                -> ProgressSeries { insights::progress(&s.db, scope, measure, from, to).await }
+            insights_velocity(s, scope: ProgressScope, measure: Measure, periods: u32) -> Vec<VelocityPeriod> {
+                insights::velocity(&s.db, scope, measure, periods).await
+            }
 
             search_search(s, text: String, limit: u32) -> Vec<Issue> { search::search(&s.db, &text, limit).await }
 

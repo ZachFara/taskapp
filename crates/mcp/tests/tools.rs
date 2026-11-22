@@ -57,6 +57,9 @@ const TOOL_NAMES: &[&str] = &[
     "create_view_from_template",
     "reset_view_to_template",
     "delete_view_template",
+    "set_points",
+    "insights_progress",
+    "insights_velocity",
 ];
 
 /// Runs one server session, sending each call only after the previous reply (the server handles
@@ -303,6 +306,46 @@ fn writes_record_agent_source() {
         .clone();
     assert!(log.len() >= 3);
     assert!(log.iter().all(|c| c["source"] == "Agent"), "{log:?}");
+}
+
+#[test]
+fn points_and_progress_tools() {
+    let (_d, db) = tmp();
+    let r = session(
+        &db,
+        &[
+            ("create_project", json!({"slug": "p", "name": "P"})),
+            ("create_issue", json!({"title": "ABC a", "project_id": 1})),
+            ("set_points", json!({"key": "ABC-1", "points": 5})),
+            ("set_points", json!({"key": "ABC-1", "points": 0.25})),
+            (
+                "insights_progress",
+                json!({"scope": {"Project": 1}, "measure": "points", "from": "2026-01-01", "to": "2026-01-01"}),
+            ),
+            (
+                "insights_velocity",
+                json!({"scope": {"Project": 1}, "measure": "count", "periods": 2}),
+            ),
+            ("set_points", json!({"key": "ABC-1", "points": null})),
+        ],
+    );
+    assert_eq!(r[2].as_ref().expect("set")["points"], 5.0);
+    assert!(
+        r[3].as_ref().is_err_and(|e| e.contains("invalid")),
+        "{:?}",
+        r[3]
+    );
+    assert_eq!(
+        r[4].as_ref().expect("progress")["days"]
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(
+        r[5].as_ref().expect("velocity").as_array().map(Vec::len),
+        Some(2)
+    );
+    assert_eq!(r[6].as_ref().expect("cleared")["points"], Value::Null);
 }
 
 #[test]

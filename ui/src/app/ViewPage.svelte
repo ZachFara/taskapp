@@ -5,6 +5,7 @@
   import { api } from '../lib/api';
   import { issues, refreshAll, selectedIssueId } from '../lib/stores.svelte';
   import ViewEditor from '../components/ViewEditor.svelte';
+  import InsightsPanel from '../components/insights/InsightsPanel.svelte';
   import CommandButton from '../components/CommandButton.svelte';
   import BoardView from '../components/views/BoardView.svelte';
   import CalendarView from '../components/views/CalendarView.svelte';
@@ -49,6 +50,7 @@
   let renaming = $state(false);
   let draft = $state('');
   let confirmDelete = $state(false);
+  let insights = $state(false);
   let creating = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -147,6 +149,7 @@
       on('command:view.delete', () => (confirmDelete = true)),
       on('command:view.saveAsTemplate', saveAsTemplate),
       on('command:view.resetToTemplate', resetToTemplate),
+      on('command:insights.toggle', () => (insights = !insights)),
     ];
     return () => {
       offs.forEach((f) => f());
@@ -181,6 +184,7 @@
             <div class="row"><Button variant="primary" type="submit">Rename</Button></div>
           </form>
         </Popover>
+        <IconButton icon="target" label="Insights" shortcut="shift+i" pressed={insights} onclick={() => (insights = !insights)} />
         <IconButton icon="pin" label={pinId === null ? 'Pin view' : 'Unpin view'} pressed={pinId !== null} onclick={togglePin} />
         <Menu>
           {#snippet trigger(props)}<span {...props} class="trig"><IconButton icon="more" label="More" /></span>{/snippet}
@@ -195,6 +199,7 @@
         <CommandButton command="issue.create" variant="primary" />
       {/snippet}
     </PageHeader>
+    <div class="cols">
     <main class="body">
       {#if rows === 0 && filtered}
         <EmptyState title="Nothing matches these filters" hint="Loosen a filter or clear them all to see every issue in this view.">
@@ -204,6 +209,8 @@
         <div role="presentation" onclick={pick}><Shown view={live} embedded /></div>
       {/if}
     </main>
+    {#if insights && view}<InsightsPanel kind="view" id={view.id} title={name} onclose={() => (insights = false)} />{/if}
+    </div>
   {/key}
   <NewViewDialog bind:open={creating} current={live} />
   <Dialog bind:open={confirmDelete} title={`Delete "${name}"?`} description="The saved view goes away. Issues are not touched.">
@@ -216,6 +223,7 @@
 {/if}
 
 <style>
+  .cols { flex: 1; min-height: 0; display: flex; }
   .body { flex: 1; min-height: 0; overflow: auto; border-top: 1px solid var(--border); }
   .trig { display: inline-flex; }
   .row { display: flex; justify-content: flex-end; margin-top: var(--s-4); }

@@ -20,7 +20,7 @@
   import TextInput from '../../ui/TextInput.svelte';
   import { dueDay as dueDayIn, isOverdue } from './dates';
   import FieldValue from '../display/FieldValue.svelte';
-  import { LEADING, LIST_DEFAULT, density, emptyCtx, fieldName, loadCtx, shown, showEmptyGroups, subIssues, type Ctx } from '../display/types';
+  import { LEADING, LIST_DEFAULT, density, emptyCtx, fieldName, loadCtx, pointsName, pointsTotal, shown, showEmptyGroups, subIssues, type Ctx } from '../display/types';
 
   // shortcut: row and band heights default to the token values when the CSS is not loaded (tests), upgrade if rows vary in height
   const BAND = 30;
@@ -34,7 +34,7 @@
   let { view }: { view: SavedView } = $props();
 
   const storeKey = (id: number) => `cairn.list.collapsed.${id}`;
-  type Group = { key: string; kind: 'status' | 'project' | 'cycle' | 'priority' | 'label' | 'none'; ref?: Project | Cycle | Label; name: string; category: StatusCategory; order: number; patch: IssuePatch; rows: Issue[] };
+  type Group = { key: string; kind: 'status' | 'project' | 'cycle' | 'priority' | 'label' | 'points' | 'none'; ref?: Project | Cycle | Label; name: string; category: StatusCategory; order: number; patch: IssuePatch; rows: Issue[] };
   type Item = { head: Group; collapsed: boolean } | { row: Issue; depth: number; kids: number };
 
   let issues = $state.raw<Issue[]>([]);
@@ -58,7 +58,7 @@
   let closedParents = $state<number[]>([]);
   const WIDTH: Record<string, string> = { Label: '150px', Project: '140px', DueDate: '56px', Estimate: '72px', Key: '64px', Priority: 'var(--s-8)', Status: '120px', Cycle: '100px', StartDate: '56px', CreatedAt: '56px', UpdatedAt: '56px' };
   const widthOf = (f: FieldRef) => (f.Property === undefined ? (WIDTH[f.Fixed!] ?? '100px') : ({ Select: '120px', MultiSelect: '150px', Checkbox: '56px', Url: '56px', Number: '72px', Date: '72px' } as Record<string, string>)[ctx.defs.find((d) => d.key === f.Property)?.kind ?? ''] ?? '140px');
-  const rightAligned = (f: FieldRef) => f.Property === undefined ? ['DueDate', 'StartDate', 'Estimate', 'CreatedAt', 'UpdatedAt'].includes(f.Fixed!) : ['Number', 'Date'].includes(ctx.defs.find((d) => d.key === f.Property)?.kind ?? '');
+  const rightAligned = (f: FieldRef) => f.Property === undefined ? ['DueDate', 'StartDate', 'Estimate', 'Points', 'CreatedAt', 'UpdatedAt'].includes(f.Fixed!) : ['Number', 'Date'].includes(ctx.defs.find((d) => d.key === f.Property)?.kind ?? '');
   const columns = $derived(`var(--s-8) var(--s-8) 64px var(--s-8) minmax(0, 1fr) ${fields.map(widthOf).join(' ')}`);
   let menu = $state<{ id: number; x: number; y: number } | null>(null);
   let menuOpen = $state(false);
@@ -120,6 +120,8 @@
         put(i, { key: `c${i.cycle_id}`, ...base, kind: 'cycle', ...named(cycles, i.cycle_id, 'No cycle', (c) => c.name ?? `Cycle ${c.number}`), patch: { cycle_id: i.cycle_id } });
       } else if (groupField === 'Priority') {
         put(i, { key: `r${i.priority}`, ...base, kind: 'priority', name: i.priority === 0 ? PRIORITY_NAMES[0] : PRIORITY_NAMES[glyph(i.priority)], order: i.priority === 0 ? 9 : i.priority, patch: { priority: i.priority } });
+      } else if (groupField === 'Points') {
+        put(i, { key: `pt${i.points}`, ...base, kind: 'points', name: pointsName(i.points), order: i.points ?? Infinity, patch: { points: i.points } });
       } else if (groupField === 'Label') {
         for (const id of i.label_ids.length ? i.label_ids : [null])
           put(i, { key: `l${id}`, ...base, kind: 'label', ref: labels.find((l) => l.id === id), ...named(labels, id, 'No label', (l) => l.name), patch: { label_ids: id === null ? [] : [id] } });
@@ -287,6 +289,7 @@
             <GroupHeader
               name={item.head.name}
               count={item.head.rows.length}
+              total={pointsTotal(item.head.rows, shown(view.def, LIST_DEFAULT), ctx)}
               category={item.head.kind === 'status' ? item.head.category : undefined}
               tone={item.head.kind === 'priority' ? (Math.min(4, Math.max(1, item.head.order)) as 1 | 2 | 3 | 4) : 1}
               collapsed={item.collapsed}

@@ -62,6 +62,7 @@ pub async fn duplicate(db: &Db, ids: &[IssueId], src: ChangeSource) -> Result<Ve
             start_date: i.start_date,
             due: i.due,
             estimate_minutes: i.estimate_minutes,
+            points: i.points,
             properties: Some(i.properties),
             ..NewIssue::default()
         };

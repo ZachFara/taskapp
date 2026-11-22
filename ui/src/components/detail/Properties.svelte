@@ -11,6 +11,7 @@
   import { dueFrom, dueParts, humanDate, isDate, isTime, minutes, PRIORITIES } from './format';
   import IssuePicker from './IssuePicker.svelte';
   import OptionList from './OptionList.svelte';
+  import PointsRow from '../insights/PointsRow.svelte';
   import PropertyRow from './PropertyRow.svelte';
 
   let { issue, save, act, openRow = $bindable(null) }: {
@@ -143,6 +144,8 @@
       </form>
     {/snippet}
   </PropertyRow>
+
+  <PointsRow {issue} {save} bind:openRow />
 
   <PropertyRow id="parent" name="Parent" cmd="issue.detail.parent" bind:openRow>
     {#snippet value()}{#if parent}{parent.key} {parent.title}{:else}{@render none()}{/if}{/snippet}

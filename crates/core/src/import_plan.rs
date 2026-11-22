@@ -39,6 +39,8 @@ pub struct PlanIssue {
     pub start_date: Option<NaiveDate>,
     pub due_date: Option<NaiveDate>,
     pub estimate_minutes: Option<u32>,
+    #[serde(default)]
+    pub points: Option<f64>,
     pub properties: Map<String, Value>,
     pub parent: Option<String>,
     pub cycle: Option<NaiveDate>,
@@ -367,6 +369,7 @@ async fn new_issue(tx: &mut SqliteConnection, i: &PlanIssue) -> Result<NewIssue>
         start_date: i.start_date,
         due: i.due_date.map(Due::Date),
         estimate_minutes: i.estimate_minutes,
+        points: i.points,
         properties: Some(i.properties.clone()),
         ..NewIssue::default()
     })

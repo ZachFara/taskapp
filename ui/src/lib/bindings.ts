@@ -536,6 +536,20 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	insightsProgress: (scope: ProgressScope, measure: Measure, from: string | null, to: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ProgressSeries>("insights_progress", { scope, measure, from, to }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	insightsVelocity: (scope: ProgressScope, measure: Measure, periods: number, options?: InvokeOptions) => __TAURI_INVOKE<VelocityPeriod[]>("insights_velocity", { scope, measure, periods }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	searchSearch: (text: string, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<Issue[]>("search_search", { text, limit }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -792,7 +806,7 @@ export type Filter = ({ And: Filter[] }) & { Cond?: never; Not?: never; Or?: nev
 	value: Value,
 } }) & { And?: never; Not?: never; Or?: never };
 
-export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount";
+export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "Points" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount";
 
 /**
  *  Everything an import would create. The lists of statuses, labels, projects, cycles and property
@@ -828,6 +842,8 @@ export type Issue = {
 	start_date: string | null,
 	due: Due | null,
 	estimate_minutes: number | null,
+	/**  At least 0, one decimal at most (checked on write). */
+	points: number | null,
 	properties: { [key in string]: Value },
 	created_at: string,
 	updated_at: string,
@@ -851,6 +867,7 @@ export type IssuePatch = {
 	start_date?: string | null,
 	due?: Due | null,
 	estimate_minutes?: number | null,
+	points?: number | null,
 	properties?: { [key in string]: Value } | null,
 };
 
@@ -886,6 +903,9 @@ export type LabelId = number;
 
 export type Layout = "List" | "Table" | "Board" | "Gantt" | "Calendar";
 
+/**  What is summed: story points, issue count, or estimated time (minutes). */
+export type Measure = "points" | "count" | "time";
+
 export type Milestone = {
 	id: MilestoneId,
 	project_id: ProjectId,
@@ -909,6 +929,7 @@ export type NewIssue = {
 	start_date?: string | null,
 	due?: Due | null,
 	estimate_minutes?: number | null,
+	points?: number | null,
 	properties?: { [key in string]: Value } | null,
 	created_at?: string | null,
 	completed_at?: string | null,
@@ -924,6 +945,7 @@ export type ParsedQuickAdd = {
 	project_slug: string | null,
 	label_names: string[],
 	estimate_minutes: number | null,
+	points: number | null,
 };
 
 export type Pin = {
@@ -959,6 +981,7 @@ export type PlanIssue = {
 	start_date: string | null,
 	due_date: string | null,
 	estimate_minutes: number | null,
+	points?: number | null,
 	properties: { [key in string]: Value },
 	parent: string | null,
 	cycle: string | null,
@@ -973,6 +996,26 @@ export type PlanRelation = {
 export type PlanStatus = {
 	name: string,
 	category: StatusCategory,
+};
+
+/**  The totals at the end of one local day. */
+export type ProgressDay = {
+	date: string,
+	/**  Every issue that existed and is not canceled. */
+	scope: number | null,
+	/**  Those whose status category is started or completed. */
+	started: number | null,
+	completed: number | null,
+};
+
+/**  What a progress chart is about: the issues of a project or cycle, or those a saved view shows now. */
+export type ProgressScope = ({ Project: ProjectId }) & { Cycle?: never; View?: never } | ({ Cycle: CycleId }) & { Project?: never; View?: never } | ({ View: ViewId }) & { Cycle?: never; Project?: never };
+
+export type ProgressSeries = {
+	days: ProgressDay[],
+	measure: Measure,
+	from: string,
+	to: string,
 };
 
 export type Project = {
@@ -1103,6 +1146,7 @@ export type TemplateFields = {
 	project_id?: ProjectId | null,
 	label_ids?: LabelId[],
 	estimate_minutes?: number | null,
+	points?: number | null,
 	properties?: { [key in string]: Value },
 };
 
@@ -1124,6 +1168,14 @@ export type UndoStatus = {
 };
 
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value };
+
+/**  Completed in one cycle or week. */
+export type VelocityPeriod = {
+	start: string,
+	end: string,
+	label: string,
+	completed: number | null,
+};
 
 /**
  *  `columns` is the ordered list of displayed fields in every layout; empty means the layout's default.

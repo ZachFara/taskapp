@@ -11,6 +11,7 @@
   import Menu from '../ui/Menu.svelte';
   import MenuItem from '../ui/MenuItem.svelte';
   import PriorityGlyph from '../ui/PriorityGlyph.svelte';
+  import { pointsOn, readEstimation, SCALES, type Estimation, type ScaleName } from './insights/estimation';
 
   // `project_slug` and `status_id` prefill from the screen that opened the dialog (a group band, a project page).
   // `oncreated` hands the owner the new issue and an undo for the whole create, so it can show the toast.
@@ -40,6 +41,12 @@
   let highlight = $state(0);
   let field: HTMLInputElement | undefined = $state();
   let seq = 0;
+  let estimation = $state<Estimation>('both');
+  let scale = $state<ScaleName>('fibonacci');
+  void readEstimation().then((r) => ({ estimation, scale } = r));
+  // `points` is not in the generated type until the backend lands, so it is read through a guard.
+  const pointsIn = (p: ParsedQuickAdd | null) => ((p as { points?: number | null } | null)?.points ?? null);
+  const POINTS_TOKEN = /(^|\s)(\d+(?:\.\d)?pt|pt\d+(?:\.\d)?)(?=\s|$)/i;
 
   void api.templates.list().then((t) => (templates = t)).catch(() => {});
   void api.labels.list().then((l) => (labels = l)).catch(() => {});
@@ -62,6 +69,7 @@
       parsed?.project_slug && { key: 'project', label: `#${parsed.project_slug}` },
       ...(parsed?.label_names ?? []).map((l) => ({ key: 'labels', label: `@${l}` })),
       parsed?.estimate_minutes != null && { key: 'estimate', label: `${parsed.estimate_minutes}m` },
+      pointsIn(parsed) != null && pointsOn(estimation) && { key: 'points', label: `${pointsIn(parsed)} pts` },
     ].filter((c): c is { key: string; label: string } => !!c),
   );
 
@@ -97,6 +105,7 @@
         const label_ids = p.label_names.flatMap((n) => found.find((l) => l.name.toLowerCase() === n.toLowerCase())?.id ?? []);
         const fields = {
           title: p.title, due: p.due, start_date: p.start_date, priority: p.priority, estimate_minutes: p.estimate_minutes,
+          ...(pointsIn(p) != null ? { points: pointsIn(p) } : {}),
           project_id: projects.find((x) => x.slug === p.project_slug)?.id ?? null, label_ids: label_ids.length ? label_ids : null, status_id,
         };
         issue = template ? (await api.templates.apply(template.id, fields)).issue : await api.issues.create(fields);
@@ -229,6 +238,11 @@
             <MenuItem label="2 hours" icon="clock" onSelect={() => setToken(/(^|\s)~\w+(?=\s|$)/, '~2h')} />
             <MenuItem label="1 day" icon="clock" onSelect={() => setToken(/(^|\s)~\w+(?=\s|$)/, '~1d')} />
             <MenuItem label="No estimate" onSelect={() => setToken(/(^|\s)~\w+(?=\s|$)/, '')} />
+          {:else if c.key === 'points'}
+            {#each SCALES[scale] as s (s.label)}
+              <MenuItem label={`${s.label} pts`} onSelect={() => setToken(POINTS_TOKEN, `${s.value}pt`)} />
+            {/each}
+            <MenuItem label="No points" onSelect={() => setToken(POINTS_TOKEN, '')} />
           {:else if c.key === 'template'}
             {#each templates as t (t.id)}
               <MenuItem label={t.name} icon="layers" onSelect={() => pickTemplate(t)} />

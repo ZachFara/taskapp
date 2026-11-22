@@ -3,6 +3,7 @@
 import { api } from '../../lib/api';
 import type { Cycle, FieldRef, FixedField, IssueStats, Label, Milestone, Project, PropertyDef, PropertyKind, Status, ViewDef } from '../../lib/bindings';
 import { workspaceZone } from '../views/dates';
+import { pointsOn, readEstimation } from '../insights/estimation';
 
 export type Density = 'comfortable' | 'compact';
 export type SubIssues = 'nest' | 'flat' | 'hide';
@@ -14,10 +15,10 @@ export type DisplayDef = ViewDef & {
   show_weekends?: boolean;
 };
 
-// Every built-in field a view can show. Points is not a backend field yet, so it is not offered.
+// Every built-in field a view can show. Points is hidden by the panel and FieldValue when estimation excludes it.
 export const BUILT_IN: { field: FieldRef; name: string }[] = [
   ['Key', 'Key'], ['Priority', 'Priority'], ['Status', 'Status'], ['Label', 'Labels'], ['Project', 'Project'],
-  ['Milestone', 'Milestone'], ['Cycle', 'Cycle'], ['Parent', 'Parent'], ['StartDate', 'Start'], ['DueDate', 'Due'], ['Estimate', 'Estimate'],
+  ['Milestone', 'Milestone'], ['Cycle', 'Cycle'], ['Parent', 'Parent'], ['StartDate', 'Start'], ['DueDate', 'Due'], ['Estimate', 'Estimate'], ['Points', 'Points'],
   ['SubIssueProgress', 'Sub-issues'], ['RelationCount', 'Relations'], ['CommentCount', 'Comments'], ['CreatedAt', 'Created'], ['UpdatedAt', 'Updated'],
 ].map(([f, name]) => ({ field: { Fixed: f as FixedField }, name }));
 
@@ -42,20 +43,23 @@ export const sameField = (a: FieldRef, b: FieldRef) => a.Property !== undefined 
 export type Ctx = {
   statuses: Status[]; projects: Project[]; cycles: Cycle[]; labels: Label[]; defs: PropertyDef[]; tz: string;
   milestones: Milestone[]; stats: Map<number, IssueStats>;
+  /** Whether the `estimation` setting lets points show. */
+  points: boolean;
 };
-export const emptyCtx: Ctx = { statuses: [], projects: [], cycles: [], labels: [], defs: [], tz: 'UTC', milestones: [], stats: new Map() };
+export const emptyCtx: Ctx = { statuses: [], projects: [], cycles: [], labels: [], defs: [], tz: 'UTC', milestones: [], stats: new Map(), points: true };
 
 const STAT_FIELDS: (FixedField | undefined)[] = ['SubIssueProgress', 'RelationCount', 'CommentCount'];
 const usesStats = (d?: ViewDef) => [...(d?.columns ?? []), ...((d as DisplayDef | undefined)?.card_fields ?? [])].some((f) => STAT_FIELDS.includes(f.Fixed));
 
 /** Everything a field renderer looks up. Counts cost a query, so they load only when the view shows one. */
 export async function loadCtx(def?: ViewDef): Promise<Ctx> {
-  const [statuses, projects, cycles, labels, defs, tz, stats] = await Promise.all([
+  const [statuses, projects, cycles, labels, defs, tz, stats, est] = await Promise.all([
     api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.properties.listDefs(), workspaceZone(),
     usesStats(def) ? api.views.stats(def!) : Promise.resolve([] as IssueStats[]),
+    readEstimation(),
   ]);
   const milestones = (await Promise.all(projects.map((p) => api.projects.listMilestones(p.id)))).flat();
-  return { statuses, projects, cycles, labels, defs, tz, milestones, stats: new Map(stats.map((s) => [s.issue_id, s])) };
+  return { statuses, projects, cycles, labels, defs, tz, milestones, stats: new Map(stats.map((s) => [s.issue_id, s])), points: pointsOn(est.estimation) };
 }
 
 // The backend palette keys with their colours, so a stored hex lands on the nearest key (crates/core/src/palette.rs).
@@ -84,3 +88,11 @@ export const LEADING: FixedField[] = ['Key', 'Priority', 'Status'];
 
 export const fieldName = (f: FieldRef, defs: PropertyDef[]) =>
   f.Property !== undefined ? (defs.find((d) => d.key === f.Property)?.name ?? f.Property) : (BUILT_IN.find((b) => sameField(b.field, f))?.name ?? f.Fixed!);
+
+/** "5 pts" for a group header when the Points field is shown and the rows carry points; else nothing. */
+export const pointsTotal = (rows: { points: number | null }[], fields: FieldRef[], ctx: Ctx) => {
+  const sum = Math.round(rows.reduce((n, r) => n + (r.points ?? 0), 0) * 10) / 10;
+  return ctx.points && sum > 0 && fields.some((f) => f.Fixed === 'Points') ? `${sum} pts` : '';
+};
+/** Group name for a points value: "3 points", or "No points". */
+export const pointsName = (p: number | null) => (p === null ? 'No points' : `${p} points`);

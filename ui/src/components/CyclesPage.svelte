@@ -13,6 +13,11 @@
   import PageHeader from '../ui/PageHeader.svelte';
   import TextInput from '../ui/TextInput.svelte';
   import ListView from './views/ListView.svelte';
+  import BarChart from './charts/BarChart.svelte';
+  import CycleBurnup from './insights/CycleBurnup.svelte';
+  import CycleSpark from './insights/CycleSpark.svelte';
+  import { chartsOn, defaultMeasure, unitOf } from './insights/estimation';
+  import { insightsApi } from './insights/insightsApi';
 
   type Band = 'current' | 'upcoming' | 'past';
   type Row = Cycle & { band: Band; done: number; total: number };
@@ -24,6 +29,9 @@
   let rows = $state<Row[]>([]);
   let statuses = $state<Status[]>([]);
   let loaded = $state(false);
+  let charts = $state(false);
+  let bars = $state<{ label: string; value: number }[]>([]);
+  let unit = $state('issues');
   let opened = $state<number | null>(null);
   let collapsed = $state<Record<Band, boolean>>({ current: false, upcoming: false, past: true });
   let creating = $state(false);
@@ -49,12 +57,23 @@
   async function load() {
     const today = localDay(new Date(), await workspaceZone());
     todayIn = today;
+    // `finished` reads the statuses, so they load before the counts are made.
+    statuses = await api.statuses.list();
     const list = await api.cycles.list();
     const issues = await Promise.all(list.map((c) => api.views.query(cycleView(c).def)));
     rows = list
-      .map((c, i) => ({ ...c, band: bandOf(c, today), done: issues[i].filter(finished).length, total: issues[i].length }))
+      .map((c, i) => ({ ...c, band: bandOf(c, today), done: issues[i].filter(finished).length, total: issues[i].length}))
       .sort((a, b) => a.start_date.localeCompare(b.start_date));
-    statuses = await api.statuses.list();
+    charts = await chartsOn();
+    // Each cycle's own scope, so the bar is the work that belonged to that cycle; the period that starts with it is its entry.
+    const measure = await defaultMeasure();
+    unit = unitOf(measure);
+    bars = charts
+      ? await Promise.all(rows.filter((r) => r.band !== 'upcoming').map(async (r) => ({
+          label: title(r),
+          value: (await insightsApi.velocity({ Cycle: r.id }, measure, rows.length)).find((p) => p.start === r.start_date)?.completed ?? 0,
+        })))
+      : [];
     loaded = true;
   }
 
@@ -100,6 +119,9 @@
       {#snippet action()}<Button variant="primary" icon="plus" onclick={() => (creating = true)}>New cycle</Button>{/snippet}
     </EmptyState>
   {:else}
+    {#if charts && bars.length >= 2 && bars.some((v) => v.value > 0)}
+      <section class="velocity" data-velocity><h3>Completed per cycle</h3><BarChart {bars} {unit} title="Completed per cycle" /></section>
+    {/if}
     {#each bands as group (group.band)}
       {#if group.items.length > 0}
         <section data-group={group.band} class="group">
@@ -113,6 +135,7 @@
                     <span class="title">{title(c)}</span>
                     <span class="dates">{dayText(c.start_date)} to {dayText(c.end_date)}</span>
                     <span class="meter" role="progressbar" aria-label="Progress" aria-valuenow={c.done} aria-valuemax={c.total}><span class="fill" style:width={`${c.total ? (c.done / c.total) * 100 : 0}%`}></span></span>
+                    {#if charts && group.band === 'past'}<CycleSpark cycleId={c.id} name={title(c)} />{/if}
                     <span class="progress">{c.done} of {c.total} done</span>
                     {#if group.band === 'current'}<span class="left">{daysLeft(c)} days left</span>{/if}
                   </ListRow>
@@ -120,6 +143,7 @@
                     <Button onclick={() => (moving = true)}>Move unfinished to next cycle</Button>
                   {/if}
                 </li>
+                {#if charts && group.band === 'current'}<div class="burnup"><CycleBurnup cycleId={c.id} /></div>{/if}
                 {#if opened === c.id}
                   {#key c.id}<div class="issues"><ListView view={cycleView(c)} /></div>{/key}
                 {/if}
@@ -157,9 +181,12 @@
   .rows { list-style: none; margin: 0; padding: 0; }
   .row { display: flex; align-items: center; gap: var(--s-5); padding-right: var(--s-4); border-bottom: 1px solid var(--border); }
   .title { font-weight: 600; min-width: 120px; }
-  .dates, .progress, .left { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .dates, .progress, .left { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .left { margin-left: auto; color: var(--ink); }
   .meter { width: 120px; height: var(--s-3); border-radius: var(--r-round); background: var(--active); overflow: hidden; }
   .fill { display: block; height: 100%; background: var(--accent); }
+  .velocity { max-width: 560px; padding-top: var(--s-5); }
+  h3 { font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: var(--s-3); }
+  .burnup { padding: var(--s-5) var(--s-7) var(--s-7); }
   .issues { border-left: 2px solid var(--accent); }
 </style>

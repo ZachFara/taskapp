@@ -158,3 +158,53 @@ describe('mock view templates', () => {
     expect((await mock.views.list()).some((x) => x.id === v.id)).toBe(false);
   });
 });
+
+describe('mock points and progress', () => {
+  it('seeds about two thirds of the issues with points and a three-week history', async () => {
+    const mock = createMockApi();
+    const rows = await mock.views.query(def(null));
+    expect(rows.filter((i) => i.points != null)).toHaveLength(16);
+    const s = await mock.insights.progress({ Project: 2 }, 'points', null, null);
+    const last = s.days.at(-1)!;
+    expect(s.days.length).toBeGreaterThan(14);
+    expect(s.days[0].scope).toBeGreaterThan(0);
+    expect(last.scope).toBeGreaterThan(last.completed);
+    expect(last.started).toBeGreaterThanOrEqual(last.completed);
+  });
+
+  it('velocity falls back to weeks when there are no cycles', async () => {
+    const mock = createMockApi({ ...fixtures, cycles: [] });
+    const v = await mock.insights.velocity({ View: 1 }, 'count', 3);
+    expect(v).toHaveLength(3);
+    expect(v[0].label).toMatch(/^Week of [A-Z][a-z]{2} \d+$/);
+    expect(new Date(`${v[2].start}T00:00:00Z`).getUTCDay()).toBe(1);
+  });
+
+  it('a points change is undoable and cleared with null', async () => {
+    const mock = createMockApi();
+    await mock.issues.update(2, { points: 3.5 });
+    expect((await mock.issues.get(2)).points).toBe(3.5);
+    await mock.history.undo();
+    expect((await mock.issues.get(2)).points).toBeNull();
+    await expect(mock.issues.update(2, { points: 0.25 })).rejects.toMatchObject({ kind: 'Invalid' });
+  });
+
+  // Sprint 1 holds issues 1, 4, 7, 8, 10 and 16 (5, 8, 13, 3, 5 and 5 points). Issue 10 was done from day -11 to -5, so
+  // it is the previous cycle's work on the first day (day -6) and returns when reopened; issues 4 and 7 were already
+  // revised to 8 and 13 points; issue 16 starts on day -5.
+  it('the seeded current cycle burns up from its first day, not from earlier completions', async () => {
+    const mock = createMockApi();
+    const s = await mock.insights.progress({ Cycle: 1 }, 'points', null, null);
+    const rows = s.days.map((d) => [d.scope, d.started, d.completed]);
+    expect(rows).toHaveLength(14);
+    expect(rows[0]).toEqual([34, 29, 0]);
+    expect(rows.slice(1)).toEqual(Array(13).fill([39, 39, 0]));
+  });
+
+  it('an issue that left the cycle counts until the day it left', async () => {
+    const mock = createMockApi();
+    await mock.issues.update(8, { cycle_id: null }); // 3 points, today
+    const s = await mock.insights.progress({ Cycle: 1 }, 'points', null, null);
+    expect(s.days.map((d) => d.scope)).toEqual([34, ...Array(5).fill(39), ...Array(8).fill(36)]);
+  });
+});

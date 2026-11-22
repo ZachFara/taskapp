@@ -422,3 +422,57 @@ fn view_templates_from_the_command_line() {
         Some(0)
     );
 }
+
+#[test]
+fn points_flags_and_insights() {
+    let (_d, db) = fresh();
+    run_json(&db, &["project", "create", "p", "P"]);
+    let made = run_json(
+        &db,
+        &[
+            "issue",
+            "create",
+            "ABC a",
+            "--project",
+            "1",
+            "--points",
+            "3",
+        ],
+    );
+    assert_eq!(made["points"], 3.0);
+    let set = run_json(&db, &["issue", "update", "ABC-1", "--points", "0.5"]);
+    assert_eq!(set["points"], 0.5);
+    assert!(
+        !run(&db, &["issue", "update", "ABC-1", "--points", "0.25"])
+            .status
+            .success()
+    );
+    let cleared = run_json(&db, &["issue", "update", "ABC-1", "--clear-points"]);
+    assert_eq!(cleared["points"], Value::Null);
+    let p = run_json(
+        &db,
+        &[
+            "insights",
+            "progress",
+            "--project",
+            "1",
+            "--measure",
+            "count",
+            "--from",
+            "2026-01-01",
+            "--to",
+            "2026-01-02",
+        ],
+    );
+    assert_eq!(p["days"].as_array().map(Vec::len), Some(2));
+    let v = run_json(
+        &db,
+        &["insights", "velocity", "--project", "1", "--periods", "3"],
+    );
+    assert_eq!(v.as_array().map(Vec::len), Some(3));
+    assert!(
+        !run(&db, &["insights", "progress", "--measure", "count"])
+            .status
+            .success()
+    );
+}

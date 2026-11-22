@@ -235,6 +235,7 @@ struct IssueRow {
     due_time_utc: Option<DateTime<Utc>>,
     due_tz: Option<String>,
     estimate_minutes: Option<i64>,
+    points: Option<f64>,
     properties: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -244,7 +245,7 @@ struct IssueRow {
 
 const ISSUE_SQL: &str = "SELECT i.number, i.title, i.description, s.name AS status, i.priority,
         p.slug AS project, m.name AS milestone, par.number AS parent, c.number AS cycle,
-        i.start_date, i.due_date, i.due_time_utc, i.due_tz, i.estimate_minutes, i.properties,
+        i.start_date, i.due_date, i.due_time_utc, i.due_tz, i.estimate_minutes, i.points, i.properties,
         i.created_at, i.updated_at, i.completed_at, i.archived_at
     FROM issues i
     JOIN statuses s ON s.id = i.status_id
@@ -354,6 +355,7 @@ fn front_of(
         due_time_utc,
         due_tz,
         estimate_minutes,
+        points,
         properties,
         created_at,
         updated_at,
@@ -375,6 +377,7 @@ fn front_of(
         due_time: due_time_utc,
         due_tz,
         estimate_minutes,
+        points,
         created_at,
         updated_at,
         completed_at,

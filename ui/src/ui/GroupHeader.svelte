@@ -10,13 +10,14 @@
   let {
     name,
     count,
+    total = '',
     category,
     tone = 1,
     leading,
     collapsed = false,
     ontoggle,
     onadd,
-  }: { name: string; count: number; category?: StatusCategory; tone?: 1 | 2 | 3 | 4; leading?: Snippet; collapsed?: boolean; ontoggle?: () => void; onadd?: () => void } = $props();
+  }: { name: string; count: number; total?: string; category?: StatusCategory; tone?: 1 | 2 | 3 | 4; leading?: Snippet; collapsed?: boolean; ontoggle?: () => void; onadd?: () => void } = $props();
   const steps = { Backlog: 1, Unstarted: 2, Started: 3, Completed: 4, Canceled: 1 } as const;
   const step = $derived(category ? steps[category] : tone);
 </script>
@@ -27,6 +28,7 @@
     {#if category}<StatusGlyph {category} />{:else}{@render leading?.()}{/if}
     <span class="name">{name}</span>
     <span class="count">{count}</span>
+    {#if total}<span class="count">{total}</span>{/if}
   </button>
   <button class="add" type="button" aria-label={`Add to ${name}`} onclick={onadd}><Icon name="plus" /></button>
 </div>

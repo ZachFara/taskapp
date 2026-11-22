@@ -12,7 +12,7 @@
   import GroupHeader from '../../ui/GroupHeader.svelte';
   import IconButton from '../../ui/IconButton.svelte';
   import FieldValue from '../display/FieldValue.svelte';
-  import { BOARD_DEFAULT, density, emptyCtx, loadCtx, shown, type Ctx } from '../display/types';
+  import { BOARD_DEFAULT, density, emptyCtx, loadCtx, pointsName, pointsTotal, shown, type Ctx } from '../display/types';
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
 
   let { view }: { view: SavedView } = $props();
@@ -52,6 +52,10 @@
         patch: (i) => ({ properties: { ...i.properties, [def.key]: null } }),
       });
       return cols;
+    }
+    if (groupBy?.Fixed === 'Points') {
+      const values = [...new Set(issues.map((i) => i.points))].sort((a, b) => (a ?? Infinity) - (b ?? Infinity));
+      return values.map((v) => ({ name: pointsName(v), category: 'Unstarted', holds: (i) => i.points === v, patch: () => ({ points: v }) }));
     }
     return [...statuses]
       .sort((a, b) => a.position - b.position)
@@ -199,6 +203,7 @@
       <GroupHeader
         name={col.name}
         count={cards.length}
+        total={pointsTotal(cards, fields, ctx)}
         category={col.category}
         {collapsed}
         ontoggle={() => toggleCollapsed(col)}
