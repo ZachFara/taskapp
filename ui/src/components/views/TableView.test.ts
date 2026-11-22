@@ -250,12 +250,10 @@ describe('TableView', () => {
   it('add_column_updates_view_def', async () => {
     const save = vi.spyOn(mock.views, 'save');
     await open();
-    const add = target.querySelector<HTMLButtonElement>('button[aria-label="Add column"]')!;
-    add.click();
+    target.querySelector<HTMLButtonElement>('button[aria-label="Add field"]')!.click();
     await flush();
-    const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent?.includes('Reviewed'))!;
-    // bits-ui picks an item on pointer up, so drive it the way a pointer does.
-    for (const type of ['pointerdown', 'pointerup', 'click']) option.dispatchEvent(new MouseEvent(type, { bubbles: true }));
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="Show Reviewed"]')).not.toBeNull());
+    document.querySelector<HTMLButtonElement>('[aria-label="Show Reviewed"]')!.click();
     await vi.waitFor(() =>
       expect(save).toHaveBeenCalledWith(
         1,
@@ -273,10 +271,9 @@ describe('TableView', () => {
     expect(selection.columns.flat()).toEqual([1, 2, 3]);
   });
 
-  it('add_column_is_a_plus_at_the_end_of_the_header_row', async () => {
+  it('add_field_is_a_button_at_the_end_of_the_header_row', async () => {
     await open();
-    const add = target.querySelector<HTMLButtonElement>('button[aria-label="Add column"]')!;
-    expect(add.textContent?.trim()).toBe('+');
+    const add = target.querySelector<HTMLButtonElement>('button[aria-label="Add field"]')!;
     expect(add.closest('th')).toBe(target.querySelector('thead th:last-child'));
   });
 

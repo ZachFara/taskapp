@@ -70,7 +70,7 @@
       : [[], [], []];
     const shown = mode === 'issues' ? new Set(issues.map((i) => i.project_id)) : new Set(projects.map((p) => p.id));
     const milestones: Milestone[] = (await Promise.all(projects.filter((p) => shown.has(p.id)).map((p) => api.projects.listMilestones(p.id)))).flat();
-    ctx = await loadCtx();
+    ctx = await loadCtx(view?.def);
     allIssues = issues;
     projectList = projects;
     // Each relation comes back from both of its issues.

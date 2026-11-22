@@ -289,7 +289,7 @@
     options.firstDay = (await getWeekStart()) === 'monday' ? 1 : 0;
     calendar?.setOption('firstDay', options.firstDay);
     try {
-      [statuses, issues, ctx] = await Promise.all([api.statuses.list(), api.views.query(view.def), loadCtx()]);
+      [statuses, issues, ctx] = await Promise.all([api.statuses.list(), api.views.query(view.def), loadCtx(view.def)]);
       loaded = true;
     } catch (e) {
       error = message(e);

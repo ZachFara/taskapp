@@ -1,7 +1,7 @@
 // The display settings W1a adds to ViewDef. Until the generated bindings carry them they are read
 // defensively from here, so every layout asks this file instead of touching `def.density` directly.
 import { api } from '../../lib/api';
-import type { Cycle, FieldRef, FixedField, Label, Project, PropertyDef, Status, ViewDef } from '../../lib/bindings';
+import type { Cycle, FieldRef, FixedField, IssueStats, Label, Milestone, Project, PropertyDef, PropertyKind, Status, ViewDef } from '../../lib/bindings';
 import { workspaceZone } from '../views/dates';
 
 export type Density = 'comfortable' | 'compact';
@@ -14,10 +14,11 @@ export type DisplayDef = ViewDef & {
   show_weekends?: boolean;
 };
 
-// `Key` is shown from the issue itself; the bindings' FixedField has no entry for it yet.
+// Every built-in field a view can show. Points is not a backend field yet, so it is not offered.
 export const BUILT_IN: { field: FieldRef; name: string }[] = [
   ['Key', 'Key'], ['Priority', 'Priority'], ['Status', 'Status'], ['Label', 'Labels'], ['Project', 'Project'],
-  ['Cycle', 'Cycle'], ['StartDate', 'Start'], ['DueDate', 'Due'], ['Estimate', 'Estimate'], ['CreatedAt', 'Created'], ['UpdatedAt', 'Updated'],
+  ['Milestone', 'Milestone'], ['Cycle', 'Cycle'], ['Parent', 'Parent'], ['StartDate', 'Start'], ['DueDate', 'Due'], ['Estimate', 'Estimate'],
+  ['SubIssueProgress', 'Sub-issues'], ['RelationCount', 'Relations'], ['CommentCount', 'Comments'], ['CreatedAt', 'Created'], ['UpdatedAt', 'Updated'],
 ].map(([f, name]) => ({ field: { Fixed: f as FixedField }, name }));
 
 export const LIST_DEFAULT: FieldRef[] = ['Label', 'Project', 'DueDate', 'Estimate'].map((f) => ({ Fixed: f as FixedField }));
@@ -38,14 +39,48 @@ export const shown = (d: ViewDef, fallback: FieldRef[], card = false): FieldRef[
 };
 export const sameField = (a: FieldRef, b: FieldRef) => a.Property !== undefined ? a.Property === b.Property : a.Fixed === b.Fixed;
 
-export type Ctx = { statuses: Status[]; projects: Project[]; cycles: Cycle[]; labels: Label[]; defs: PropertyDef[]; tz: string };
-export const emptyCtx: Ctx = { statuses: [], projects: [], cycles: [], labels: [], defs: [], tz: 'UTC' };
-export async function loadCtx(): Promise<Ctx> {
-  const [statuses, projects, cycles, labels, defs, tz] = await Promise.all([
+export type Ctx = {
+  statuses: Status[]; projects: Project[]; cycles: Cycle[]; labels: Label[]; defs: PropertyDef[]; tz: string;
+  milestones: Milestone[]; stats: Map<number, IssueStats>;
+};
+export const emptyCtx: Ctx = { statuses: [], projects: [], cycles: [], labels: [], defs: [], tz: 'UTC', milestones: [], stats: new Map() };
+
+const STAT_FIELDS: (FixedField | undefined)[] = ['SubIssueProgress', 'RelationCount', 'CommentCount'];
+const usesStats = (d?: ViewDef) => [...(d?.columns ?? []), ...((d as DisplayDef | undefined)?.card_fields ?? [])].some((f) => STAT_FIELDS.includes(f.Fixed));
+
+/** Everything a field renderer looks up. Counts cost a query, so they load only when the view shows one. */
+export async function loadCtx(def?: ViewDef): Promise<Ctx> {
+  const [statuses, projects, cycles, labels, defs, tz, stats] = await Promise.all([
     api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.properties.listDefs(), workspaceZone(),
+    usesStats(def) ? api.views.stats(def!) : Promise.resolve([] as IssueStats[]),
   ]);
-  return { statuses, projects, cycles, labels, defs, tz };
+  const milestones = (await Promise.all(projects.map((p) => api.projects.listMilestones(p.id)))).flat();
+  return { statuses, projects, cycles, labels, defs, tz, milestones, stats: new Map(stats.map((s) => [s.issue_id, s])) };
 }
+
+// The backend palette keys with their colours, so a stored hex lands on the nearest key (crates/core/src/palette.rs).
+const PALETTE: [string, number[]][] = [
+  ['gray', [107, 114, 128]], ['red', [239, 68, 68]], ['orange', [249, 115, 22]], ['amber', [245, 158, 11]], ['yellow', [234, 179, 8]],
+  ['green', [34, 197, 94]], ['teal', [20, 184, 166]], ['cyan', [6, 182, 212]], ['blue', [59, 130, 246]], ['indigo', [99, 102, 241]],
+  ['purple', [168, 85, 247]], ['pink', [236, 72, 153]],
+];
+/** A palette key for an option colour: keys pass through, a #rrggbb maps to the nearest key, anything else is neutral. */
+export function paletteKey(c: string | null | undefined): string | undefined {
+  if (!c) return undefined;
+  if (/^[a-z]+$/.test(c)) return c;
+  const m = /^#([0-9a-f]{6})$/i.exec(c);
+  if (!m) return undefined;
+  const rgb = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16));
+  const dist = (p: number[]) => p.reduce((s, v, i) => s + (v - rgb[i]) ** 2, 0);
+  return PALETTE.reduce((a, b) => (dist(b[1]) < dist(a[1]) ? b : a))[0];
+}
+
+export const KIND_ICON: Record<PropertyKind, string> = {
+  Text: 'list', Number: 'target', Date: 'calendar', Select: 'circle', MultiSelect: 'tag', Checkbox: 'check', Url: 'link', NoteLink: 'bookmark',
+};
+
+// Fields each layout already draws in fixed columns, so toggling them on would show them twice.
+export const LEADING: FixedField[] = ['Key', 'Priority', 'Status'];
 
 export const fieldName = (f: FieldRef, defs: PropertyDef[]) =>
   f.Property !== undefined ? (defs.find((d) => d.key === f.Property)?.name ?? f.Property) : (BUILT_IN.find((b) => sameField(b.field, f))?.name ?? f.Fixed!);

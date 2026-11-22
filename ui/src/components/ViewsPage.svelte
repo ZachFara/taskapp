@@ -44,9 +44,7 @@
     views = list;
     pinned = new Set(pins.map((p) => p.route));
     loaded = true;
-    const t = templates();
-    tpls = t ? await t.list() : null;
-    defaultId = t ? await defaultTemplateId() : null;
+    [tpls, defaultId] = await Promise.all([templates().list(), defaultTemplateId()]);
   }
 
   async function remove() {
@@ -64,18 +62,16 @@
     editLayout = withLayout;
   }
   async function saveTemplate() {
-    const t = templates();
-    if (!editing || !t) return;
+    if (!editing) return;
     const next = draftName.trim();
     if (!next) return;
-    await t.update({ ...editing, name: next, def: { ...editing.def, layout: draftLayout as Layout } });
+    await templates().update({ ...editing, name: next, def: { ...editing.def, layout: draftLayout as Layout } });
     editOpen = false;
     await load();
   }
   async function removeTemplate() {
-    const t = templates();
-    if (!doomedTpl || !t) return;
-    await t.delete(doomedTpl.id);
+    if (!doomedTpl) return;
+    await templates().delete(doomedTpl.id);
     confirmingTpl = false;
     await load();
   }
