@@ -441,12 +441,34 @@ async fn link(
     Ok(())
 }
 
-/// Writes `plan` in one transaction. An issue whose identifier is already in `import_log` is
-/// skipped, so applying a plan twice creates nothing the second time.
+/// Writes `plan` in one transaction and one undoable step labelled "Import N issues". An issue
+/// whose identifier is already in `import_log` is skipped, so applying a plan twice creates nothing
+/// the second time. Undo works for an import that only creates issues; one that also creates
+/// labels, projects, statuses, cycles, property definitions or relations is refused by undo, which
+/// does not cover those.
 ///
 /// # Errors
 /// `Invalid` when an issue fails core validation (nothing is written), `Db` for other failures.
 pub async fn apply(db: &Db, plan: &ImportPlan) -> Result<Applied> {
+    let mut fresh = 0;
+    let mut c = db.pool.acquire().await?;
+    for i in &plan.issues {
+        if find(
+            &mut c,
+            "SELECT issue_id FROM import_log WHERE external_id = ?",
+            &i.external_id,
+        )
+        .await?
+        .is_none()
+        {
+            fresh += 1;
+        }
+    }
+    drop(c);
+    history::step(&format!("Import {fresh} issues"), write(db, plan)).await
+}
+
+async fn write(db: &Db, plan: &ImportPlan) -> Result<Applied> {
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     ensure_refs(&mut tx, plan).await?;
     let (mut ids, mut warnings) = (HashMap::new(), vec![]);
@@ -462,21 +484,9 @@ pub async fn apply(db: &Db, plan: &ImportPlan) -> Result<Applied> {
         ids.insert(i.external_id.clone(), issue.id.0);
     }
     link(&mut tx, plan, &ids, &mut warnings).await?;
-    let created = u32::try_from(ids.len()).map_err(invalid)?;
-    let label = format!("Import {created} issues");
-    let edit = history::Edit {
-        field: &label,
-        old: None,
-        new: None,
-    };
-    history::record(
-        &mut tx,
-        ChangeSource::Migration,
-        "import",
-        &plan.source,
-        &edit,
-    )
-    .await?;
     tx.commit().await?;
-    Ok(Applied { created, warnings })
+    Ok(Applied {
+        created: u32::try_from(ids.len()).map_err(invalid)?,
+        warnings,
+    })
 }

@@ -61,6 +61,8 @@ pub enum ChangeSource {
     RemindersImport,
     Migration,
     System,
+    Undo,
+    Redo,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -439,4 +441,11 @@ pub struct Change {
     pub field: String,
     pub old_value: Option<Value>,
     pub new_value: Option<Value>,
+}
+
+/// What undo and redo would do next: the label of the step, or `None` when the stack is empty.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct UndoStatus {
+    pub undo: Option<String>,
+    pub redo: Option<String>,
 }

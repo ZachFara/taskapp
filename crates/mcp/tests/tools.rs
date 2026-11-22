@@ -42,6 +42,9 @@ const TOOL_NAMES: &[&str] = &[
     "import_csv_plan",
     "import_linear_plan",
     "import_apply",
+    "undo",
+    "redo",
+    "undo_status",
 ];
 
 /// Runs one server session, sending each call only after the previous reply (the server handles
@@ -386,4 +389,44 @@ fn import_plan_writes_nothing_until_apply() {
     assert_eq!(r[1].as_ref().expect("search"), &json!([]));
     assert_eq!(r[2].as_ref().expect("apply")["created"], 1);
     assert_eq!(r[3].as_ref().expect("search")[0]["title"], "Imported");
+}
+
+#[test]
+fn an_agent_edit_and_a_bulk_update_are_each_one_undoable_step() {
+    let (_d, db) = tmp();
+    let r = session(
+        &db,
+        &[
+            ("create_issue", json!({"title":"ABC a"})),
+            ("create_issue", json!({"title":"ABC b"})),
+            (
+                "update_issue",
+                json!({"key":"ZF-1","patch":{"title":"ABC x"}}),
+            ),
+            (
+                "bulk_update",
+                json!({"items":[
+                    {"key":"ZF-1","patch":{"priority":2}},
+                    {"key":"ZF-2","patch":{"priority":2}}]}),
+            ),
+            ("undo", json!({})),
+            ("get_issue", json!({"key":"ZF-2"})),
+            ("undo", json!({})),
+            ("get_issue", json!({"key":"ZF-1"})),
+            ("undo_status", json!({})),
+        ],
+    );
+    assert_eq!(
+        r[5].as_ref().expect("get")["issue"]["priority"],
+        0,
+        "{:?}",
+        r[5]
+    );
+    assert_eq!(
+        r[7].as_ref().expect("get")["issue"]["title"],
+        "ABC a",
+        "{:?}",
+        r[7]
+    );
+    assert_eq!(r[8].as_ref().expect("status")["redo"], "update_issue");
 }

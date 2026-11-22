@@ -16,6 +16,20 @@ describe('mock api', () => {
     expect((await mock.issues.create({ title: 'b' })).key).toBe('ZF-22');
   });
 
+  it('undo and redo move an issue edit back and forth', async () => {
+    const mock = createMockApi();
+    const made = await mock.issues.create({ title: 'a' });
+    await mock.issues.update(made.id, { title: 'b' });
+    expect(await mock.history.undoStatus()).toEqual({ undo: 'issues_update', redo: null });
+    await mock.history.undo();
+    expect((await mock.issues.get(made.id)).title).toBe('a');
+    await mock.history.redo();
+    expect((await mock.issues.get(made.id)).title).toBe('b');
+    await mock.history.undo();
+    await mock.issues.update(made.id, { title: 'c' });
+    await expect(mock.history.redo()).rejects.toMatchObject({ kind: 'Invalid' });
+  });
+
   it('query filters by select property', async () => {
     const rows = await createMockApi().views.query(def({ Cond: { field: { Property: 'area' }, op: 'Eq', value: 'home' } }));
     expect(rows.length).toBeGreaterThan(0);

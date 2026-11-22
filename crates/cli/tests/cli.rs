@@ -69,6 +69,18 @@ fn issue_update_by_key() {
 }
 
 #[test]
+fn undo_and_redo_revert_a_cli_edit() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Write report"]);
+    run(&db, &["issue", "update", "ZF-1", "--priority", "2"]);
+    let s = run_json(&db, &["undo"]);
+    assert_eq!(s["redo"], "issue update ZF-1 --priority 2");
+    assert_eq!(run_json(&db, &["issue", "get", "ZF-1"])["priority"], 0);
+    run_json(&db, &["redo"]);
+    assert_eq!(run_json(&db, &["issue", "get", "ZF-1"])["priority"], 2);
+}
+
+#[test]
 fn unknown_key_exits_nonzero_with_message() {
     let (_d, db) = fresh();
     let out = run(&db, &["issue", "get", "ZF-999"]);

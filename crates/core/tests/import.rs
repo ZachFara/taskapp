@@ -169,12 +169,14 @@ async fn apply_equals_plan_and_labels_one_history_step() -> R {
     assert_eq!(c[1], 2);
     assert_eq!(c[2], 2);
     assert_eq!(c[7], 3);
-    let step: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM changes WHERE entity = 'import' AND field = 'Import 3 issues'",
-    )
-    .fetch_one(&db.pool)
-    .await?;
-    assert_eq!(step, 1);
+    let steps: Vec<Option<String>> = sqlx::query_scalar("SELECT DISTINCT step_label FROM changes")
+        .fetch_all(&db.pool)
+        .await?;
+    assert_eq!(
+        steps,
+        [Some("Import 3 issues".to_owned())],
+        "one step for the whole import"
+    );
     let titles: Vec<String> = sqlx::query_scalar("SELECT title FROM issues ORDER BY number")
         .fetch_all(&db.pool)
         .await?;
@@ -295,4 +297,31 @@ async fn token_never_in_debug_or_errors() {
     assert!(!err.contains("SECRET123"));
     let client = linear::CurlLinear::new(token);
     assert!(!format!("{client:?}").contains("SECRET123"));
+}
+
+#[tokio::test]
+async fn issues_only_import_undoes_as_one_step_and_new_refs_make_undo_refuse() -> R {
+    let db = Db::open_in_memory().await?;
+    let plain = csv::plan(&db, "Title\nA\nB\n", None).await?;
+    apply(&db, &plain).await?;
+    taskapp_core::undo::undo(&db).await?;
+    let live: i64 = sqlx::query_scalar("SELECT count(*) FROM issues WHERE archived_at IS NULL")
+        .fetch_one(&db.pool)
+        .await?;
+    assert_eq!(live, 0);
+    let rich = csv::plan(&db, "Title,Tags\nC,x\n", None).await?;
+    let rich = ImportPlan {
+        labels: vec!["x".into()],
+        ..rich
+    };
+    apply(&db, &rich).await?;
+    let err = taskapp_core::undo::undo(&db)
+        .await
+        .err()
+        .map(|e| e.to_string());
+    assert!(
+        err.as_ref().is_some_and(|e| e.contains("not covered")),
+        "{err:?}"
+    );
+    Ok(())
 }
