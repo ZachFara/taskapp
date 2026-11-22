@@ -57,6 +57,29 @@ enum Cmd {
     Redo,
     #[command(subcommand)]
     Backup(BackupCmd),
+    #[command(subcommand)]
+    Import(ImportCmd),
+}
+
+/// Both sources print the plan and write nothing unless `--apply` is given.
+#[derive(Subcommand)]
+enum ImportCmd {
+    /// Import issues from a CSV file with a header row.
+    Csv {
+        file: PathBuf,
+        /// Column to field, repeatable: title, description, status, priority, project, labels,
+        /// `start_date`, `due_date`, `estimate` (minutes) or `property:<name>`. Guessed from headers when absent.
+        #[arg(long = "map", value_name = "COLUMN=FIELD")]
+        map: Vec<String>,
+        /// Write the plan instead of only showing it.
+        #[arg(long)]
+        apply: bool,
+    },
+    /// Import issues from Linear, with the token in `LINEAR_API_KEY`.
+    Linear {
+        #[arg(long)]
+        apply: bool,
+    },
 }
 
 #[derive(Subcommand)]

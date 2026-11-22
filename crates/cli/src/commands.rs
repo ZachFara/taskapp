@@ -9,13 +9,13 @@ use serde_json::{Map, Value, json};
 use taskapp_core::{
     ChangeSource, CycleId, Db, Due, Error, IssueId, IssuePatch, LabelId, NewIssue, PinId, PinKind,
     ProjectId, PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, StatusId,
-    ViewDef, ViewId, backup, comments, cycles, history, issues, labels, pins, projects, properties,
-    quickadd, relations, search, undo, views,
+    ViewDef, ViewId, backup, comments, cycles, history, import, issues, labels, pins, projects,
+    properties, quickadd, relations, search, undo, views,
 };
 
 use crate::{
-    Cmd, CommentCmd, CycleCmd, IssueCmd, LabelCmd, PinCmd, ProjectCmd, PropertyCmd, RelationCmd,
-    ViewCmd,
+    Cmd, CommentCmd, CycleCmd, ImportCmd, IssueCmd, LabelCmd, PinCmd, ProjectCmd, PropertyCmd,
+    RelationCmd, ViewCmd,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
@@ -37,18 +37,10 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Project(cmd) => project(db, cmd).await,
         Cmd::Cycle(cmd) => cycle(db, cmd).await,
         Cmd::Label(cmd) => label(db, cmd).await,
-        Cmd::Comment(CommentCmd::Add {
-            key,
-            body,
-            created_at,
-            migration,
-        }) => {
-            let id = issue_id(db, &key).await?;
-            let at = created_at.as_deref().map(timestamp).transpose()?;
-            val(comments::add_comment(db, id, &body, at, source(migration)).await?)
-        }
+        Cmd::Comment(cmd) => comment(db, cmd).await,
         Cmd::Relation(cmd) => relation(db, cmd).await,
         Cmd::Pin(cmd) => pin(db, cmd).await,
+        Cmd::Import(cmd) => import(db, cmd).await,
         Cmd::Backup(_) => Err(Error::Invalid(
             "backup runs before the database opens".into(),
         )),
@@ -382,4 +374,42 @@ fn select_options(values: &[String]) -> Vec<SelectOption> {
             color: "gray".to_string(),
         })
         .collect()
+}
+
+async fn import(db: &Db, cmd: ImportCmd) -> Result<Value> {
+    let (plan, apply) = match cmd {
+        ImportCmd::Csv { file, map, apply } => {
+            let mut mapping = std::collections::BTreeMap::new();
+            for pair in &map {
+                let (col, field) = pair.split_once('=').ok_or_else(|| {
+                    Error::Invalid(format!("--map {pair}: expected COLUMN=FIELD"))
+                })?;
+                mapping.insert(col.to_owned(), field.to_owned());
+            }
+            let text = std::fs::read_to_string(file)?;
+            let mapping = (!mapping.is_empty()).then_some(mapping);
+            (import::csv::plan(db, &text, mapping.as_ref()).await?, apply)
+        }
+        ImportCmd::Linear { apply } => {
+            let api = import::linear::CurlLinear::new(import::linear::Token::from_env()?);
+            (import::linear::plan(db, &api).await?, apply)
+        }
+    };
+    if apply {
+        let done = import::apply(db, &plan).await?;
+        return Ok(json!({ "plan": plan, "applied": done }));
+    }
+    val(plan)
+}
+
+async fn comment(db: &Db, cmd: CommentCmd) -> Result<Value> {
+    let CommentCmd::Add {
+        key,
+        body,
+        created_at,
+        migration,
+    } = cmd;
+    let id = issue_id(db, &key).await?;
+    let at = created_at.as_deref().map(timestamp).transpose()?;
+    val(comments::add_comment(db, id, &body, at, source(migration)).await?)
 }

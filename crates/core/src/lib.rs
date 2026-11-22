@@ -10,6 +10,7 @@ pub mod blocks;
 pub mod comments;
 pub mod cycles;
 pub mod history;
+pub mod import;
 pub mod issues;
 pub mod labels;
 pub mod pins;
@@ -26,4 +27,5 @@ pub mod views;
 
 pub use db::Db;
 pub use error::{Error, Result};
+pub use import::{Applied, ImportPlan};
 pub use model::*;

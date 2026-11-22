@@ -9,13 +9,13 @@ use std::{future::Future, path::PathBuf};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::Value;
 use taskapp_core::{
-    Bar, Change, ChangeSource, Comment, CommentId, Cycle, CycleId, Db, Error, Issue, IssueId,
-    IssuePatch, Label, LabelId, Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId,
-    PinKind, Project, ProjectId, PropertyDef, PropertyKind, Relation, Reschedule, ResolvedPin,
-    Result, SavedView, SelectOption, Status, StatusCategory, StatusId, SyncState, SyncStatus,
-    UndoStatus, ViewDef, ViewId, WorkBlock, WorkBlockId, backup, blocks, comments, cycles, history,
-    issues, labels, pins, projects, properties, quickadd, relations, schedule, search, settings,
-    statuses, undo, views,
+    Applied, Bar, Change, ChangeSource, Comment, CommentId, Cycle, CycleId, Db, Error, ImportPlan,
+    Issue, IssueId, IssuePatch, Label, LabelId, Milestone, MilestoneId, NewIssue, ParsedQuickAdd,
+    Pin, PinId, PinKind, Project, ProjectId, PropertyDef, PropertyKind, Relation, Reschedule,
+    ResolvedPin, Result, SavedView, SelectOption, Status, StatusCategory, StatusId, SyncState,
+    SyncStatus, UndoStatus, ViewDef, ViewId, WorkBlock, WorkBlockId, backup, blocks, comments,
+    cycles, history, import, issues, labels, pins, projects, properties, quickadd, relations,
+    schedule, search, settings, statuses, undo, views,
 };
 
 pub struct AppState {
@@ -223,6 +223,12 @@ macro_rules! with_commands {
             }
             views_delete(s, id: ViewId) -> () { views::delete(&s.db, id).await }
             views_reorder(s, ids: Vec<ViewId>) -> () { views::reorder(&s.db, &ids).await }
+
+            import_csv_plan(s, csv: String, mapping: Option<Vec<(String, String)>>) -> ImportPlan {
+                let mapping = mapping.map(|m| m.into_iter().collect());
+                import::csv::plan(&s.db, &csv, mapping.as_ref()).await
+            }
+            import_apply(s, plan: ImportPlan) -> Applied { import::apply(&s.db, &plan).await }
 
             search_search(s, text: String, limit: u32) -> Vec<Issue> { search::search(&s.db, &text, limit).await }
 
