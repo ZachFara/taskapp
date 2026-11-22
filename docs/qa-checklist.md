@@ -24,7 +24,7 @@ Database: `taskapp-devserver seed --db <temp>`. Real-mode harness: `pnpm -C ui s
 | /view/3 | pass | ui/harness-out/view-3.png |
 | /view/1/Table | pass | ui/harness-out/view-1-Table.png |
 | /view/1/Calendar | pass | ui/harness-out/view-1-Calendar.png |
-| /issue/ZF-1 | pass | ui/harness-out/issue-ZF-1.png |
+| /issue/ABC-1 | pass | ui/harness-out/issue-ABC-1.png |
 | /settings/properties | pass | ui/harness-out/settings-properties.png |
 
 Defect found and fixed: every `views_query` failed with `unknown variant "Select"` against a real database, so

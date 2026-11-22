@@ -321,7 +321,7 @@ mod tests {
     use super::*;
     use crate::Due;
 
-    const TZ: &str = "America/New_York";
+    const TZ: &str = "Europe/Berlin";
 
     fn date(y: i32, m: u32, d: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, d).expect("valid date")
@@ -334,11 +334,11 @@ mod tests {
 
     #[test]
     fn full_example() {
-        let q = parse_today("renew lease by fri p1 #ohio-move");
+        let q = parse_today("renew lease by fri p1 #office-move");
         assert_eq!(q.title, "renew lease");
         assert_eq!(q.due, Some(Due::Date(date(2026, 11, 27))));
         assert_eq!(q.priority, Some(1));
-        assert_eq!(q.project_slug.as_deref(), Some("ohio-move"));
+        assert_eq!(q.project_slug.as_deref(), Some("office-move"));
     }
 
     #[test]
@@ -352,7 +352,7 @@ mod tests {
     fn time_makes_datetime() {
         let q = parse_today("call bank tomorrow at 3pm");
         let utc = Utc
-            .with_ymd_and_hms(2026, 11, 21, 20, 0, 0)
+            .with_ymd_and_hms(2026, 11, 21, 14, 0, 0)
             .single()
             .expect("valid utc");
         assert_eq!(

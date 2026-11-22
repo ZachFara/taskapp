@@ -19,7 +19,7 @@ use tools::Server;
 impl ServerHandler for Server {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
-            "Reads and writes the local task database. Never touches Linear or any other service.",
+            "Cairn: reads and writes the local task database. Never touches Linear or any other service.",
         )
     }
 

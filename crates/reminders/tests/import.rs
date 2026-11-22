@@ -9,7 +9,7 @@ use tempfile::TempDir;
 
 type R = Result<(), Box<dyn std::error::Error>>;
 
-const TZ: &str = "America/New_York";
+const TZ: &str = "Europe/Berlin";
 
 fn today() -> NaiveDate {
     NaiveDate::from_ymd_opt(2026, 11, 21).expect("valid date")
@@ -115,7 +115,7 @@ async fn reminder_due_overrides_parsed_due() -> R {
         "fetch",
         r#"[{"external_id":"a","title":"Pay rent tomorrow","notes":null,"due":{"date":"2026-12-01"}},
             {"external_id":"b","title":"Dentist","notes":null,
-             "due":{"datetime":"2026-12-02T15:00:00Z","tz":"America/New_York"}}]"#,
+             "due":{"datetime":"2026-12-02T15:00:00Z","tz":"Europe/Berlin"}}]"#,
         0,
     );
     fake.say("delete", r#"{"deleted":["a","b"],"missing":[]}"#, 0);
@@ -136,7 +136,7 @@ async fn reminder_due_overrides_parsed_due() -> R {
         b.due,
         Some(Due::DateTime {
             utc,
-            tz: "America/New_York".into()
+            tz: "Europe/Berlin".into()
         })
     );
     Ok(())

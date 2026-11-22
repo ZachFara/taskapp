@@ -4,7 +4,7 @@ use chrono::NaiveDate;
 use serde_json::{Map, json};
 use taskapp_core::{
     ChangeSource::Ui, Db, Due, NewIssue, ProjectId, PropertyDef, PropertyKind, Result,
-    SelectOption, StatusId, cycles, issues, labels, palette::Look, projects, properties, settings,
+    SelectOption, StatusId, cycles, issues, labels, palette::Look, projects, properties, workspace,
 };
 
 fn def(
@@ -43,7 +43,7 @@ pub async fn run(db: &Db) -> Result<()> {
 }
 
 async fn reference_data(db: &Db) -> Result<()> {
-    settings::set(db, "issue_prefix", &"ABC").await?;
+    workspace::setup(db, "Cairn", "ABC", Some("UTC")).await?;
     for (slug, name) in [
         ("website", "Website relaunch"),
         ("mobile", "Mobile app"),

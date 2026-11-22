@@ -3,9 +3,6 @@ export type Case = {
   name: string;
   cmd: string;
   args?: Record<string, unknown>;
-  /** TODO(P3): the backend command is not on this branch yet. The mock must return `expectMock`; the real side must
-   * still answer NotFound. When P3 lands, delete `pending` and `expectMock` and the case compares both sides. */
-  pending?: { by: string; expectMock: unknown };
 };
 
 const cond = (field: unknown, op: string, value: unknown = null) => ({ Cond: { field, op, value } });
@@ -192,9 +189,18 @@ export const cases: Case[] = [
   call('settings: unknown key is null', 'settings_get', { key: 'nothing' }),
 
   // Workspace: last, because setup changes the issue key for everything after it
-  { name: 'workspace_status of a set-up workspace', cmd: 'workspace_status', pending: { by: 'P3', expectMock: { setup_done: true, name: 'Cairn', key: 'ABC', timezone: 'UTC' } } },
-  {
-    name: 'workspace_setup renames and rekeys', cmd: 'workspace_setup', args: { name: 'Studio', key: 'STU', timezone: 'Europe/Berlin' },
-    pending: { by: 'P3', expectMock: { setup_done: true, name: 'Studio', key: 'STU', timezone: 'Europe/Berlin' } },
-  },
+  call('workspace: status of the seeded workspace', 'workspace_status'),
+  call('workspace: empty name is Invalid', 'workspace_setup', { name: '  ', key: 'STU', timezone: null }),
+  call('workspace: lowercase key is Invalid', 'workspace_setup', { name: 'Studio', key: 'stu', timezone: null }),
+  call('workspace: one-letter key is Invalid', 'workspace_setup', { name: 'Studio', key: 'S', timezone: null }),
+  call('workspace: six-letter key is Invalid', 'workspace_setup', { name: 'Studio', key: 'STUDIO', timezone: null }),
+  call('workspace: unknown zone is Invalid', 'workspace_setup', { name: 'Studio', key: 'STU', timezone: 'Mars/Base' }),
+  call('workspace: nothing was written by the failures', 'workspace_status'),
+  call('workspace: setup renames, rekeys and sets the zone', 'workspace_setup', { name: ' Studio ', key: 'STU', timezone: 'Europe/Berlin' }),
+  call('workspace: issues show the new key', 'issues_get', { id: 1 }),
+  call('workspace: the old key still resolves', 'issues_get_by_key', { key: 'ABC-1' }),
+  call('workspace: any well-formed prefix resolves by number', 'issues_get_by_key', { key: 'ZZZ-2' }),
+  call('workspace: a malformed key is NotFound', 'issues_get_by_key', { key: 'abc-2' }),
+  call('workspace: omitting the zone keeps the stored one', 'workspace_setup', { name: 'Studio', key: 'WRK', timezone: null }),
+  call('workspace: pins resolve under the new prefix', 'pins_list_resolved'),
 ];

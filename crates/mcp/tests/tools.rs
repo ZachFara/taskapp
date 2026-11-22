@@ -50,6 +50,8 @@ const TOOL_NAMES: &[&str] = &[
     "undo",
     "redo",
     "undo_status",
+    "workspace_status",
+    "workspace_setup",
 ];
 
 /// Runs one server session, sending each call only after the previous reply (the server handles
@@ -169,7 +171,7 @@ fn create_issue_with_migration_timestamps() {
                 json!({"title":"old","created_at":"2020-01-02T03:04:05Z",
             "completed_at":"2020-02-03T00:00:00Z","properties":{"linear_id":"LIN-9"},"migration":true}),
             ),
-            ("get_history", json!({"key":"ZF-1"})),
+            ("get_history", json!({"key":"ABC-1"})),
         ],
     );
     let issue = r[1].as_ref().expect("create");
@@ -184,7 +186,7 @@ fn bulk_update_over_10_snapshots_first() {
     let (_d, db) = tmp();
     let mut calls = make_issues(11);
     let items: Vec<Value> = (1..=11)
-        .map(|i| json!({"key":format!("ZF-{i}"),"patch":{"priority":2}}))
+        .map(|i| json!({"key":format!("ABC-{i}"),"patch":{"priority":2}}))
         .collect();
     calls.push(("bulk_update", json!({"items": items})));
     let r = session(&db, &calls);
@@ -198,7 +200,7 @@ fn bulk_update_of_10_takes_no_snapshot() {
     let (_d, db) = tmp();
     let mut calls = make_issues(10);
     let items: Vec<Value> = (1..=10)
-        .map(|i| json!({"key":format!("ZF-{i}"),"patch":{"priority":2}}))
+        .map(|i| json!({"key":format!("ABC-{i}"),"patch":{"priority":2}}))
         .collect();
     calls.push(("bulk_update", json!({"items": items})));
     session(&db, &calls);
@@ -210,11 +212,11 @@ fn bulk_update_with_unknown_key_applies_nothing_but_snapshots() {
     let (_d, db) = tmp();
     let mut calls = make_issues(11);
     let mut items: Vec<Value> = (1..=10)
-        .map(|i| json!({"key":format!("ZF-{i}"),"patch":{"priority":2}}))
+        .map(|i| json!({"key":format!("ABC-{i}"),"patch":{"priority":2}}))
         .collect();
-    items.push(json!({"key":"ZF-999","patch":{"priority":2}}));
+    items.push(json!({"key":"ABC-999","patch":{"priority":2}}));
     calls.push(("bulk_update", json!({"items": items})));
-    calls.push(("get_issue", json!({"key":"ZF-1"})));
+    calls.push(("get_issue", json!({"key":"ABC-1"})));
     let r = session(&db, &calls);
     assert!(r[11].is_err());
     assert_eq!(r[12].as_ref().expect("get")["issue"]["priority"], 0);
@@ -284,8 +286,8 @@ fn writes_record_agent_source() {
         &db,
         &[
             ("create_issue", json!({"title":"a"})),
-            ("update_issue", json!({"key":"ZF-1","patch":{"title":"b"}})),
-            ("get_history", json!({"key":"ZF-1"})),
+            ("update_issue", json!({"key":"ABC-1","patch":{"title":"b"}})),
+            ("get_history", json!({"key":"ABC-1"})),
         ],
     );
     let log = r[2]
@@ -305,7 +307,7 @@ fn errors_are_tool_errors_not_crashes() {
         &db,
         &[
             ("get_issue", json!({})),
-            ("get_issue", json!({"key":"ZF-404"})),
+            ("get_issue", json!({"key":"ABC-404"})),
             ("create_issue", json!({"title":""})),
             ("no_such_tool", json!({})),
             ("create_issue", json!({"title":"still alive"})),
@@ -343,10 +345,10 @@ fn bulk_update_failing_item_leaves_earlier_items_unchanged() {
     let mut calls = make_issues(7);
     // Priority 9 passes argument parsing and is rejected by core on the 7th item.
     let items: Vec<Value> = (1..=7)
-        .map(|i| json!({"key":format!("ZF-{i}"),"patch":{"priority": if i == 7 { 9 } else { 2 }}}))
+        .map(|i| json!({"key":format!("ABC-{i}"),"patch":{"priority": if i == 7 { 9 } else { 2 }}}))
         .collect();
     calls.push(("bulk_update", json!({"items": items})));
-    calls.push(("get_issue", json!({"key":"ZF-1"})));
+    calls.push(("get_issue", json!({"key":"ABC-1"})));
     let r = session(&db, &calls);
     assert!(r[7].is_err());
     assert_eq!(r[8].as_ref().expect("get")["issue"]["priority"], 0);
@@ -406,18 +408,18 @@ fn an_agent_edit_and_a_bulk_update_are_each_one_undoable_step() {
             ("create_issue", json!({"title":"ABC b"})),
             (
                 "update_issue",
-                json!({"key":"ZF-1","patch":{"title":"ABC x"}}),
+                json!({"key":"ABC-1","patch":{"title":"ABC x"}}),
             ),
             (
                 "bulk_update",
                 json!({"items":[
-                    {"key":"ZF-1","patch":{"priority":2}},
-                    {"key":"ZF-2","patch":{"priority":2}}]}),
+                    {"key":"ABC-1","patch":{"priority":2}},
+                    {"key":"ABC-2","patch":{"priority":2}}]}),
             ),
             ("undo", json!({})),
-            ("get_issue", json!({"key":"ZF-2"})),
+            ("get_issue", json!({"key":"ABC-2"})),
             ("undo", json!({})),
-            ("get_issue", json!({"key":"ZF-1"})),
+            ("get_issue", json!({"key":"ABC-1"})),
             ("undo_status", json!({})),
         ],
     );
@@ -434,4 +436,20 @@ fn an_agent_edit_and_a_bulk_update_are_each_one_undoable_step() {
         r[7]
     );
     assert_eq!(r[8].as_ref().expect("status")["redo"], "update_issue");
+}
+
+#[test]
+fn workspace_setup_then_status() {
+    let (_d, db) = tmp();
+    let r = session(
+        &db,
+        &[
+            ("workspace_status", json!({})),
+            ("workspace_setup", json!({"name":"Cairn","key":"XY"})),
+            ("workspace_status", json!({})),
+        ],
+    );
+    assert_eq!(r[0].as_ref().expect("status")["setup_done"], false);
+    assert_eq!(r[1].as_ref().expect("setup")["key"], "XY");
+    assert_eq!(r[2].as_ref().expect("status")["name"], "Cairn");
 }

@@ -15,16 +15,13 @@ describe.skipIf(!haveDevserver)('mock matches the real backend', () => {
     [mock, real] = [await runMock(cases), await runReal(cases)];
   }, 120_000);
 
-  it('has at least 40 comparable cases', () => {
-    expect(cases.filter((c) => !c.pending).length).toBeGreaterThanOrEqual(40);
+  it('has at least 40 cases', () => {
+    expect(cases.length).toBeGreaterThanOrEqual(40);
   });
 
   cases.forEach((c, i) =>
     it(c.name, () => {
-      if (!c.pending) return expect(kind(mock[i])).toEqual(kind(real[i]));
-      // TODO(P3): drop `pending` once the backend has the command; until then this fails loudly the day it appears.
-      expect(mock[i], `mock result for ${c.cmd}`).toEqual({ ok: c.pending.expectMock });
-      expect('error' in real[i] && real[i].error.kind, `${c.cmd} exists on the real side now: remove pending from this case (${c.pending.by})`).toBe('NotFound');
+      expect(kind(mock[i])).toEqual(kind(real[i]));
     }),
   );
 });

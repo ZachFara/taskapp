@@ -20,10 +20,10 @@ export type MockSeed = {
   workspace?: Workspace;
 };
 
-export type Workspace = { setup_done: boolean; name: string; key: string; timezone: string };
+export type Workspace = { setup_done: boolean; name: string | null; key: string; timezone: string };
 /** The workspace commands are built on the backend in parallel and are not in the generated bindings yet. */
 export type MockApi = Api & {
-  workspace: { status: () => Promise<Workspace>; setup: (name: string, key: string, timezone?: string | null) => Promise<Workspace> };
+  workspace: { status: () => Promise<Workspace>; setup: (name: string, key: string, timezone: string | null) => Promise<Workspace> };
 };
 
 const nullableIssueFields = [
@@ -71,7 +71,7 @@ function validValue(d: PropertyDef, v: Value): boolean {
 
 export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeFormat().resolvedOptions().timeZone): MockApi {
   const s = structuredClone(seed);
-  let workspace: Workspace = s.workspace ?? { setup_done: false, name: '', key: '', timezone: tz };
+  let workspace: Workspace = s.workspace ?? { setup_done: false, name: null, key: 'ABC', timezone: tz };
   const labels = s.labels ?? [];
   const cycles = s.cycles ?? [];
   const views = s.views ?? [];
@@ -398,7 +398,11 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return i;
       },
       get: async (id) => getIssue(id),
-      getByKey: async (key) => s.issues.find((i) => i.key === key) ?? fail('NotFound', `issue ${key}`),
+      // The prefix is display-only: the number alone identifies the issue.
+      getByKey: async (key) => {
+        const m = /^([A-Z]{2,5})-(\d+)$/.exec(key);
+        return s.issues.find((i) => i.id === Number(m?.[2])) ?? fail('NotFound', `issue ${key}`);
+      },
       archive: async (id) => {
         const i = getIssue(id);
         if (i.archived_at === null) {
@@ -746,9 +750,20 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     },
     workspace: {
       status: async () => ({ ...workspace }),
+      // Same order of checks as core: name, key, zone. The key is a display prefix, so every issue key follows it.
       setup: async (name, key, timezone) => {
-        workspace = { setup_done: true, name, key, timezone: timezone ?? workspace.timezone };
+        if (!name.trim()) fail('Invalid', 'workspace name must not be empty');
+        if (!/^[A-Z]{2,5}$/.test(key)) fail('Invalid', `issue key \`${key}\` must be 2 to 5 letters A-Z`);
+        if (timezone != null) {
+          try {
+            new Intl.DateTimeFormat('en', { timeZone: timezone });
+          } catch {
+            fail('Invalid', `unknown time zone ${timezone}`);
+          }
+        }
+        workspace = { setup_done: true, name: name.trim(), key, timezone: timezone ?? workspace.timezone };
         settings.set('issue_prefix', key);
+        for (const i of s.issues) i.key = `${key}-${i.id}`;
         return { ...workspace };
       },
     },

@@ -10,7 +10,7 @@ use taskapp_core::{
     ChangeSource, Db, Issue, IssuePatch, NewIssue, Project, PropertyDef, PropertyKind, Relation,
     RelationKind, SelectOption, StatusCategory, TemplateInput, ViewDef, backup, comments, cycles,
     history, import, issues, labels, pins, projects, properties, relations, search, statuses,
-    templates, undo, views,
+    templates, undo, views, workspace,
 };
 
 type Res<T> = Result<T, String>;
@@ -181,6 +181,16 @@ const TOOLS: &[Row] = &[
         "Labels of the steps undo and redo would act on, or null.",
         &[],
     ),
+    (
+        "workspace_status",
+        "Setup state: setup_done, name, key (issue prefix), timezone. No args.",
+        &[],
+    ),
+    (
+        "workspace_setup",
+        "First-run setup. Args: name, key (2 to 5 capital letters), timezone (IANA, optional).",
+        &["name", "key"],
+    ),
 ];
 
 pub fn definitions() -> Vec<Tool> {
@@ -268,6 +278,7 @@ impl Server {
             "import_csv_plan" | "import_linear_plan" | "import_apply" => {
                 self.import_tool(name, args).await
             }
+            "workspace_status" | "workspace_setup" => self.workspace_tool(name, args).await,
             _ => self.org_tool(name, args).await,
         }
     }
@@ -512,6 +523,21 @@ impl Server {
                     .await
                     .map_err(|e| ce(&e))?)
             }
+        }
+    }
+
+    async fn workspace_tool(&self, name: &str, a: &Value) -> Res<Value> {
+        let db = &self.db;
+        match name {
+            "workspace_status" => ok(&workspace::status(db).await.map_err(|e| ce(&e))?),
+            _ => ok(&workspace::setup(
+                db,
+                &arg::<String>(a, "name")?,
+                &arg::<String>(a, "key")?,
+                opt::<String>(a, "timezone")?.as_deref(),
+            )
+            .await
+            .map_err(|e| ce(&e))?),
         }
     }
 

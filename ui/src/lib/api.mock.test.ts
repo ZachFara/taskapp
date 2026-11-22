@@ -115,8 +115,8 @@ describe('http transport', () => {
 describe('mock workspace and quick add', () => {
   it('setup_on_a_fresh_mock_sets_the_prefix_and_reports_done', async () => {
     const mock = createMockApi({ ...fixtures, workspace: undefined }, 'UTC');
-    expect(await mock.workspace.status()).toMatchObject({ setup_done: false });
-    await mock.workspace.setup('Studio', 'STU', 'Europe/Berlin');
+    expect(await mock.workspace.status()).toMatchObject({ setup_done: false, name: null });
+    await mock.workspace.setup("Studio", "STU", "Europe/Berlin");
     expect(await mock.workspace.status()).toEqual({ setup_done: true, name: 'Studio', key: 'STU', timezone: 'Europe/Berlin' });
     expect((await mock.issues.create({ title: 'x' })).key).toBe('STU-21');
   });

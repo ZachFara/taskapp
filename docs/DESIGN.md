@@ -1,28 +1,12 @@
----
-links:
-  - '[[Personal Coding Projects]]'
-date: 2026-11-21
-time: '02:35'
-title: Personal Task App Design
-status: In Progress
-references: https://claude.ai/artifact/3w6Z9ZYxhzvMtj2oiTnKME
-tags:
-  - Personal_Coding_Projects
----
-> [!note] AI Generated
-> Written by Claude (Opus 5.5) in chat on 2026-11-21, from a design session with me. Related: [[Personal Task App Implementation Plan]], [[Personal Task App Design.pdf|PDF version]], [[Personal Task Manager Project Architect Agent]].
+# Cairn design
 
-# Purpose
+Name: Cairn. Status: pre-release. Crate, binary and data-directory names stay `taskapp-*` for now.
 
-The design for my personal, self-hosted Linear replacement: what it does, why, and which choices were mine versus Claude's. The build plan that implements it is [[Personal Task App Implementation Plan]].
-
----
-
-Status: approved by Zach, revised 2026-11-21. Date: 2026-11-20. Name: not yet chosen.
+This document is the product spec. It supersedes the personal-use wording in `docs/plans/plan-1.md` where they differ; `plan-1.md` and `docs/review/` are kept as history.
 
 # TLDR
 
-A personal, single-user task manager that copies most of Linear's features, adds user-defined custom properties at its core, and adds a Gantt chart. It runs as a fast Mac desktop app (Rust + Tauri, Svelte UI) on a local SQLite database that Zach owns. It can optionally export its data to a private GitHub repo as text files for history and backup. On the phone, tasks are captured through an Apple Reminders list that the app imports. Notifications go through a Google Calendar calendar that the app writes events to, so Google's servers send them even when the Mac is off. Agents can read and reshape the data through an MCP server, and while they build it they can see and check the running app through a development harness. Views work like Linear's project views: filtered lists, boards, tables, multi-project timelines, and a calendar view. A Pinned page collects everything Zach pins.
+Cairn is a single-user task manager that copies most of Linear's features, adds user-defined custom properties at its core, and adds a Gantt chart. It runs as a fast Mac desktop app (Rust + Tauri, Svelte UI) on a local SQLite database that its owner controls. It can optionally export its data to a private GitHub repo as text files for history and backup. On the phone, tasks are captured through an Apple Reminders list that the app imports. Notifications go through a Google Calendar calendar that the app writes events to, so Google's servers send them even when the Mac is off. Agents can read and reshape the data through an MCP server, and while they build it they can see and check the running app through a development harness. Views work like Linear's project views: filtered lists, boards, tables, multi-project timelines, and a calendar view. A Pinned page collects everything the owner pins.
 
 ---
 
@@ -43,6 +27,7 @@ A personal, single-user task manager that copies most of Linear's features, adds
    8. Backups
    9. Pinned items
    10. Development harness
+   11. First-run setup
 6. Build order
 7. Who decided what
 8. Left to the builder
@@ -51,9 +36,9 @@ A personal, single-user task manager that copies most of Linear's features, adds
 
 # 1. Why
 
-Zach uses Linear and likes most of what it does. He also uses Obsidian, where the main appeal is that the data is his and the structure is whatever he wants, and where his agents routinely rearrange things for him. He wants one tool with both: Linear's structure and speed, and Obsidian's ownership and flexibility.
+Many people use Linear and like most of what it does. They also use Obsidian, where the main appeal is that the data is theirs and the structure is whatever they want, and where agents routinely rearrange things. The goal is one tool with both: Linear's structure and speed, and Obsidian's ownership and flexibility.
 
-The first thing he wants to do in it that Linear doesn't allow well is define his own custom properties on tasks. He also wants a real Gantt chart and reliable reminders on his Apple devices.
+The first thing users want that Linear doesn't allow well is their own custom properties on tasks. They also want a real Gantt chart and reliable reminders on Apple devices.
 
 ---
 
@@ -63,12 +48,12 @@ Goals:
 - Most of Linear's features for one person (section 5.2).
 - Custom properties as a first-class concept: any number of user-defined fields, usable in filters, sorts, grouping, and views.
 - An issue-level Gantt chart with dependencies.
-- Data owned by Zach: a local database, with optional export to a private GitHub repo.
+- Data owned by the user: a local database, with optional export to a private GitHub repo.
 - Capture from the phone with no custom phone app.
 - Notifications that reach the phone even when the Mac is asleep or off.
 - Agents can read and change the data, including restructuring properties, safely.
 - Minimal and fast.
-- A Pinned page for anything Zach wants close at hand.
+- A Pinned page for anything the user wants close at hand.
 - A development harness from the start, so the agents building the app can see and check what they build.
 
 Non-goals:
@@ -87,11 +72,11 @@ Anti-goals (it fails if this happens, even if it technically works):
 
 # 3. Constraints
 
-- Single user, running on one Mac only: Zach's personal Mac. No multi-device sync, and this one app instance is the only writer to the Reminders list and the Google calendar.
+- Single user, running on one Mac only. No multi-device sync, and this one app instance is the only writer to the Reminders list and the Google calendar.
 - Phone is an iPhone, with an Apple Watch possible.
-- Data size is small, similar to an Obsidian vault.
+- Data size is small, similar to a notes folder.
 - Built mostly by coding agents (Claude Code), so the stack should catch mistakes early.
-- Zach likes Rust's strictness.
+- Rust's strictness is wanted in the data and logic layers.
 
 ---
 
@@ -104,22 +89,22 @@ Base:
 
 Stack:
 - Rust backend with a TypeScript (Svelte) UI. Chosen. Rust's compiler catches agent mistakes in the data and logic layer, and the UI can use mature JS libraries for Gantt, command palette, and drag-and-drop.
-- All Rust (Leptos). One language, but the UI pieces Zach wants would need wrapping or writing from scratch. Rejected.
-- All TypeScript. Fastest to start but loses the strictness Zach wants. Rejected.
+- All Rust (Leptos). One language, but the UI pieces would need wrapping or writing from scratch. Rejected.
+- All TypeScript. Fastest to start but loses the strictness wanted. Rejected.
 
 Storage:
 - Postgres on a server. Strong for agent SQL access but requires running a server. Rejected for now.
-- Text files as the source of truth with SQLite as a rebuildable index, synced through git. Good for merging, but Zach wants the database to be primary. Rejected.
+- Text files as the source of truth with SQLite as a rebuildable index, synced through git. Good for merging, but the database is meant to be primary. Rejected.
 - Local SQLite database as the source of truth, with optional export to GitHub. Chosen.
 
 Phone capture:
-- An iOS Shortcut writing files into the GitHub repo. Zach didn't like it. Rejected.
+- An iOS Shortcut writing files into the GitHub repo. Rejected.
 - An Apple Reminders list imported by the Mac app. Chosen.
 - Alternatives kept in reserve: an iCloud Drive inbox folder, or Google Tasks.
 
 Notifications:
 - ntfy push from a server, or a scheduled GitHub Action. Both need infrastructure or lag.
-- Events on a Google Calendar calendar. Chosen (Zach's idea). Google sends the notifications.
+- Events on a Google Calendar calendar. Chosen. Google sends the notifications.
 
 ---
 
@@ -130,7 +115,7 @@ Notifications:
 SQLite, accessed from Rust with compile-time-checked queries (for example SQLx).
 
 Issues have a small set of fixed columns, because the app treats these specially:
-- ID with a project-style key (for example `ZF-123`), title, description (markdown)
+- ID with a project-style key (for example `ABC-123`), title, description (markdown)
 - status, priority
 - project, parent issue (sub-issues), cycle
 - start date, due date (date or date-time), estimate
@@ -140,7 +125,7 @@ Everything else lives in a `properties` JSON column. A separate property definit
 
 Rule: a field becomes a fixed column only when the app needs to treat it specially (dates for the Gantt and notifications, status for boards). Everything else stays a property.
 
-Projects have an optional description and an optional link to an Obsidian note. Most of the time Zach will just link the note, so the project page shows the link prominently and the description stays out of the way when empty.
+Projects have an optional description and an optional link to an Obsidian note. Most of the time the link is enough, so the project page shows the link prominently and the description stays out of the way when empty.
 
 Other tables: projects, milestones, cycles, labels, relations (blocks / blocked by / related / duplicate), saved views, pins, an import log, and a change history table recording every change to issues and properties (old value, new value, source: UI, agent, Reminders import).
 
@@ -153,7 +138,7 @@ Included:
 - Relations: blocks, blocked by, related, duplicate
 - Saved views with filters, sorting, grouping, and display options, working like Linear's project views, scoped to one project, several, or all
 - Command palette and keyboard-first navigation for every common action
-- Quick-add with natural-language parsing (`renew lease by fri p1 #ohio-move`)
+- Quick-add with natural-language parsing (`renew lease by fri p1 #office-move`)
 - Search
 - Markdown descriptions and comments
 - Archive and restore
@@ -165,11 +150,11 @@ Excluded: teams, permissions, triage, SLAs, notifications inbox for other users,
 
 Layouts for any saved view: list, board (kanban), table (spreadsheet-like editing of properties), timeline (Gantt), and calendar. Any property can be a filter, sort, group, or column.
 
-Calendar view (the events view): day, week, and month layouts (month is Claude's call) showing work blocks, timed due dates, and date-only due dates as all-day items. In day and week, issues are dragged onto time slots to create work blocks. In the first version it shows only the app's own events, so it needs write access to one calendar only. Showing Zach's other Google calendars on the grid is a later feature, because it needs broader read access.
+Calendar view (the events view): day, week, and month layouts (month is a builder's call) showing work blocks, timed due dates, and date-only due dates as all-day items. In day and week, issues are dragged onto time slots to create work blocks. In the first version it shows only the app's own events, so it needs write access to one calendar only. Showing the user's other Google calendars on the grid is a later feature, because it needs broader read access.
 
 Gantt:
 - Bars from start date to due date; tasks with only an estimate and one date are drawn using the estimate.
-- Estimates are durations (hours or days), not Linear-style points (Claude's call: for one person, points add a conversion step with no benefit).
+- Estimates are durations (hours or days), not Linear-style points (for one person, points add a conversion step with no benefit).
 - Tasks with an estimate but no dates appear in an "unscheduled" lane at the side, and can be dragged onto the timeline.
 - Dependency arrows from blocking relations.
 - Drag to reschedule, with dependent tasks shifting.
@@ -182,8 +167,8 @@ Multi-project timelines: a timeline view over any filter that spans projects gro
 
 ## 5.4 Phone capture through Apple Reminders
 
-- In settings, Zach picks which Apple Reminders list is the inbox (default suggestion: "Inbox").
-- On the phone, he adds reminders to that list in any normal way: Siri, widget, Watch, share sheet, the Reminders app.
+- In settings, the user picks which Apple Reminders list is the inbox (default suggestion: "Inbox").
+- On the phone, reminders are added to that list in any normal way: Siri, widget, Watch, share sheet, the Reminders app.
 - The Mac app reads that list through Apple's Reminders framework (EventKit), using a small Swift helper or Rust bindings, since Tauri can't call it directly.
 - Each reminder becomes an issue: the title is parsed with the quick-add parser, the notes become the description, and a Reminders due date becomes the due date.
 - After a successful import, the reminder is deleted from the list.
@@ -191,7 +176,7 @@ Multi-project timelines: a timeline view over any filter that spans projects gro
 
 ## 5.5 Notifications through Google Calendar
 
-- In settings, Zach connects his personal Google account (Claude's call: a work account's admin can block unapproved apps) and picks which calendar the app writes to (a dedicated calendar is recommended).
+- In settings, the user connects their own Google account (a work account's admin can block unapproved apps) and picks which calendar the app writes to (a dedicated calendar is recommended).
 - Sync is one-way. The app owns these events and stores the issue ID on each one, so it can update or delete them.
 - Issue with a due date and time: a 15-minute event at that time with a popup notification.
 - Issues with a due date and no time: one all-day digest event per day ("Due today: 3 tasks") listing each task, with a notification at 8:00 that day. Used even when only one task is due.
@@ -200,12 +185,12 @@ Multi-project timelines: a timeline view over any filter that spans projects gro
 - Completing, deleting, or rescheduling an issue updates or removes its events, and digests rebuild when their tasks change.
 - Event text includes the task title and key details, so the notification is useful on its own. Links point to the desktop app, which only helps on the Mac.
 - Events are only created or updated while the app runs.
-- Google sign-in uses Zach's own Google Cloud OAuth client, published as an unverified production app rather than left in "Testing" mode, because Testing-mode sign-ins expire after 7 days and would silently stop the sync. This means a one-time "unverified app" warning when connecting.
-- Zach should use the Google Calendar app on his phone for these notifications, since Apple's Calendar app doesn't reliably honor Google's event notifications.
+- Google sign-in uses the user's own Google Cloud OAuth client, published as an unverified production app rather than left in "Testing" mode, because Testing-mode sign-ins expire after 7 days and would silently stop the sync. This means a one-time "unverified app" warning when connecting.
+- Use the Google Calendar app on the phone for these notifications, since Apple's Calendar app doesn't reliably honor Google's event notifications.
 
 ## 5.6 Optional GitHub export
 
-- Off by default. When turned on, Zach sets a private repo.
+- Off by default. When turned on, the user sets a private repo.
 - The app exports one text file per issue (markdown with frontmatter, including properties), plus files for projects, property definitions, and saved views, and commits on a schedule and after bulk changes.
 - This gives readable history, diffs of agent edits, and an offsite copy.
 - The app can rebuild a database from an export, as a restore path.
@@ -220,7 +205,7 @@ Later agent features (not in the first version): agents as assignees with sessio
 
 Command-line interface: the app also ships a CLI with the same operations as the MCP server, for scripts and for agents that prefer shell commands.
 
-Linear migration: there is no built-in Linear importer. Zach will have an agent move his Linear data, reading through Linear's MCP and writing through this app's MCP server or CLI. So the MCP server and CLI must be able to create every kind of record: projects, milestones, cycles, labels, statuses, property definitions, issues with sub-issues, relations, and comments, and must accept original created and completed timestamps. The original Linear ID is kept as a property on each issue. The migration only reads from Linear and never changes anything there.
+Linear migration: there is no built-in Linear importer. An agent moves the user's Linear data, reading through Linear's MCP and writing through this app's MCP server or CLI. So the MCP server and CLI must be able to create every kind of record: projects, milestones, cycles, labels, statuses, property definitions, issues with sub-issues, relations, and comments, and must accept original created and completed timestamps. The original Linear ID is kept as a property on each issue. The migration only reads from Linear and never changes anything there.
 
 ## 5.8 Backups
 
@@ -231,8 +216,8 @@ Linear migration: there is no built-in Linear importer. Zach will have an agent 
 
 ## 5.9 Pinned items
 
-- Zach can pin issues, projects, saved views, cycles, Obsidian notes, and web links.
-- Pins appear on a Pinned page and in a Pinned section at the top of the sidebar, in an order he can rearrange.
+- The user can pin issues, projects, saved views, cycles, Obsidian notes, and web links.
+- Pins appear on a Pinned page and in a Pinned section at the top of the sidebar, in an order the user can rearrange.
 - A pin to something that was deleted disappears on its own. A pin to an archived issue stays and shows it as archived.
 
 ## 5.10 Development harness
@@ -243,6 +228,16 @@ Built first, so every agent working on the app can see what it is building:
 - A screenshot script loads any screen, optionally types keys or clicks, and saves a screenshot, the page's text structure (for agents that read text better than images), and any console errors. Agents run it after each UI change.
 - A seed command fills a separate development database with realistic sample data. The harness never touches the real database.
 
+## 5.11 First-run setup
+
+On first launch the app asks for four things, stored as settings:
+- `workspace_name`: a display name, for example "Cairn".
+- `issue_prefix`: the key shown before issue numbers, 2 to 5 capital letters A-Z, default `ABC`.
+- `timezone`: an IANA zone, default the system zone. Tests always pass an explicit zone.
+- `setup_done`: true once the choices are saved.
+
+The prefix is display-only: issue numbers do not change when it changes. Backend commands are `workspace_status` and `workspace_setup`, exposed through the app, the MCP server, and `taskapp setup`. The UI for this step is a separate task.
+
 ---
 
 # 6. Build order
@@ -250,7 +245,7 @@ Built first, so every agent working on the app can see what it is building:
 0. Development harness, alongside the project skeleton.
 1. Core: issues, fixed fields, custom properties and definitions, projects, list and table views, quick-add, command palette, change history, backups.
 2. Linear baseline: statuses, labels, relations, sub-issues, cycles, milestones, board view, saved views, search.
-3. MCP server and CLI, complete enough for the Linear migration (moved early so Zach can switch over and use the app while the rest is built).
+3. MCP server and CLI, complete enough for the Linear migration (moved early so the user can switch over and use the app while the rest is built).
 4. Timelines and the calendar view.
 5. Apple Reminders import.
 6. Google Calendar sync.
@@ -261,7 +256,7 @@ Built first, so every agent working on the app can see what it is building:
 
 # 7. Who decided what
 
-Decided by Zach:
+Decided by the owner:
 - Single user to start, no teams.
 - Most of Linear's features, plus a Gantt chart.
 - Custom properties are the first priority.
@@ -271,14 +266,15 @@ Decided by Zach:
 - Phone capture with something lightweight, not a phone app; Apple Reminders, with a configurable list.
 - Notifications through Google Calendar: short events for timed due dates, an all-day event for date-only due dates, one all-day event listing multiple tasks, work blocks as events, a configurable calendar, one-way sync.
 - Agents should be able to rearrange the data.
-- One Mac only, his personal Mac.
+- One Mac only.
 - Linear data moves over through an agent using Linear's MCP and this app's MCP server or CLI, not a built-in importer.
 - A development harness early, so agents can see the app while building it.
 - Views with filters like Linear's project views, multi-project timelines, list and kanban views, custom statuses, and an events (calendar) view.
 - A place for all pinned items.
 - Project descriptions are optional; usually a project just links to an Obsidian document.
+- Product name Cairn, a generic product with no personal names, projects or fixed time zone.
 
-Calls made by Claude, open to change:
+Calls made while drafting, open to change:
 - Svelte for the UI, inside Tauri.
 - SQLite rather than Postgres.
 - Fixed columns versus properties split (5.1).
@@ -292,6 +288,7 @@ Calls made by Claude, open to change:
 - The harness design: browser with fake data or a local dev server, a screenshot script that also dumps page text and console errors, and a separate seeded dev database.
 - Estimates as durations, with an unscheduled lane in the Gantt.
 - A personal Google account, with the OAuth app published rather than in Testing mode.
+- First-run setup fields and the default prefix `ABC` (5.11).
 
 ---
 
