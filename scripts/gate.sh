@@ -7,6 +7,7 @@ cd "$(dirname "$0")/.."
 export SQLX_OFFLINE=${SQLX_OFFLINE:-true}
 step() { printf '== %s\n' "$1"; }
 step layout; scripts/check-layout.sh
+step tokens; scripts/check-tokens.sh
 if [[ ${GATE_ALL:-0} == 1 ]] || git diff --cached --name-only | grep -qE '\.rs$|Cargo\.(toml|lock)$|clippy\.toml$'; then
   step boundaries; scripts/check-boundaries.sh
   step fmt; cargo fmt --all --check
