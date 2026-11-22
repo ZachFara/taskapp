@@ -37,7 +37,7 @@ const wire = new Map<string, [string, string[]]>(
   ),
 );
 
-export function httpApi(base = 'http://127.0.0.1:7878'): Api {
+export function httpApi(base: string = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:7878'): Api {
   return build(async (key, args) => {
     const [cmd, names] = wire.get(key)!;
     const body = Object.fromEntries(names.map((n, i) => [snake(n), args[i] ?? null]));

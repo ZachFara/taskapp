@@ -3,7 +3,7 @@ import type { Bar, Issue, Project } from './bindings';
 import { buildRows, dragDates, localDay, rollup, saturdays, shiftLocalDays, tickLabel, unscheduled, zoomBy } from './gantt';
 import { fixtures } from './api.mock';
 
-const issue = (id: number, o: Partial<Issue> = {}): Issue => ({ ...fixtures.issues[0], id, key: `ZF-${id}`, title: `t${id}`, parent_id: null, project_id: 1, start_date: null, due: null, estimate_minutes: null, ...o });
+const issue = (id: number, o: Partial<Issue> = {}): Issue => ({ ...fixtures.issues[0], id, key: `ABC-${id}`, title: `t${id}`, parent_id: null, project_id: 1, start_date: null, due: null, estimate_minutes: null, ...o });
 const bar = (issue_id: number, start: string, end: string): Bar => ({ issue_id, start, end, from_estimate: false });
 const base = { mode: 'issues' as const, projects: fixtures.projects as Project[], milestones: [], critical: [] };
 
@@ -25,7 +25,7 @@ describe('gantt rows', () => {
     const issues = [issue(1), issue(2, { project_id: 2 })];
     const bars = [bar(1, '2026-12-01', '2026-12-02'), bar(2, '2026-12-05', '2026-12-06')];
     const grouped = buildRows({ ...base, issues, bars });
-    expect(grouped.filter((r) => r.kind === 'group')).toMatchObject([{ label: 'Home', start: '2026-12-01' }, { label: 'Work', end: '2026-12-06' }]);
+    expect(grouped.filter((r) => r.kind === 'group')).toMatchObject([{ label: 'Website relaunch', start: '2026-12-01' }, { label: 'Mobile app', end: '2026-12-06' }]);
     expect(buildRows({ ...base, issues: [issues[0]], bars: [bars[0]] }).some((r) => r.kind === 'group')).toBe(false);
   });
 

@@ -44,31 +44,31 @@ afterEach(() => {
 
 describe('IssueDetail', () => {
   it('edits_title_and_saves', async () => {
-    await open('ZF-1');
+    await open('ABC-1');
     await type('[aria-label=Title]', 'Renamed');
-    expect((await get('ZF-1')).title).toBe('Renamed');
+    expect((await get('ABC-1')).title).toBe('Renamed');
   });
 
   it('due_time_toggle_creates_datetime', async () => {
-    await open('ZF-1');
+    await open('ABC-1');
     const due = field('Due');
     due.value = '2026-12-05';
     due.dispatchEvent(new Event('change', { bubbles: true }));
     await settle();
-    expect((await get('ZF-1')).due).toEqual({ Date: '2026-12-05' });
+    expect((await get('ABC-1')).due).toEqual({ Date: '2026-12-05' });
     await check('[aria-label="Due time"]', true);
-    expect((await get('ZF-1')).due?.DateTime?.utc).toBe(new Date('2026-12-05T09:00').toISOString());
+    expect((await get('ABC-1')).due?.DateTime?.utc).toBe(new Date('2026-12-05T09:00').toISOString());
   });
 
   it('clearing_due_sends_null', async () => {
-    await open('ZF-4'); // fixture with a due date
+    await open('ABC-4'); // fixture with a due date
     const spy = vi.spyOn(api.issues, 'update');
     const due = field('Due');
     due.value = '';
     due.dispatchEvent(new Event('change', { bubbles: true }));
     await settle();
     expect(spy).toHaveBeenCalledWith(4, { due: null });
-    expect((await get('ZF-4')).due).toBeNull();
+    expect((await get('ABC-4')).due).toBeNull();
   });
 
   it('properties_filtered_by_project_scope', async () => {
@@ -76,31 +76,31 @@ describe('IssueDetail', () => {
     seed.propertyDefs.push({ key: 'home_only', name: 'Home only', kind: 'Text', options: [], project_id: 1, position: 9 });
     api = createMockApi(seed);
     setApi(api);
-    // ZF-2 is in project 1 (home), ZF-1 in project 2 (work).
-    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ZF-2' } } });
+    // ABC-2 is in project 1 (home), ABC-1 in project 2 (work).
+    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ABC-2' } } });
     await settle();
     expect(q('[aria-label=Properties]').textContent).toContain('Home only');
     unmount(app);
     document.body.innerHTML = '';
-    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ZF-1' } } });
+    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ABC-1' } } });
     await settle();
     expect(q('[aria-label=Properties]').textContent).not.toContain('Home only');
     expect(q('[aria-label=Properties]').textContent).toContain('Area');
   });
 
   it('add_blocking_relation', async () => {
-    await open('ZF-1');
+    await open('ABC-1');
     await type('[aria-label="Find issue"]', 'Fixture task 2', 'input');
-    await click(button('ZF-2 '));
+    await click(button('ABC-2 '));
     expect(await api.relations.forIssue(1)).toEqual([{ from: 1, to: 2, kind: 'Blocks' }]);
-    expect(q('[aria-label=Relations]').textContent).toContain('blocks ZF-2');
+    expect(q('[aria-label=Relations]').textContent).toContain('blocks ABC-2');
   });
 
   it('cycle_error_shown', async () => {
     const seed = { ...structuredClone(fixtures), cycles: [{ id: 1, number: 1, name: 'C1', start_date: '2026-12-01', end_date: '2026-12-14' }] };
     api = createMockApi(seed);
     setApi({ ...api, issues: { ...api.issues, update: async () => { throw { kind: 'Conflict', message: 'cycle in parent chain' }; } } });
-    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ZF-1' } } });
+    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ABC-1' } } });
     await settle();
     const cycle = field('Cycle');
     cycle.value = '1';
@@ -110,7 +110,7 @@ describe('IssueDetail', () => {
   });
 
   it('comment_posts', async () => {
-    await open('ZF-1');
+    await open('ABC-1');
     await type('[aria-label="New comment"]', 'hello **there**', 'input');
     await click(button('Comment')!);
     expect(q('[aria-label=Comments]').innerHTML).toContain('<strong>there</strong>');
@@ -118,7 +118,7 @@ describe('IssueDetail', () => {
   });
 
   it('history_tab_lists_changes', async () => {
-    await open('ZF-1');
+    await open('ABC-1');
     await type('[aria-label=Title]', 'Changed');
     await click(button('History'));
     expect(q('[aria-label=History]').textContent).toContain('title');
@@ -130,7 +130,7 @@ describe('IssueDetail', () => {
     seed.issues[0].description = '<script>window.pwned = 1</script> <img src=x onerror="window.pwned=1">';
     api = createMockApi(seed);
     setApi(api);
-    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ZF-1' } } });
+    app = mount(IssueDetail, { target: document.body, props: { params: { key: 'ABC-1' } } });
     await settle();
     const box = q('[aria-label=Description]');
     expect(box.querySelector('script, [onerror]')).toBeNull();
@@ -138,12 +138,12 @@ describe('IssueDetail', () => {
   });
 
   it('sub_issue_cannot_be_the_issue_itself', async () => {
-    await open('ZF-1');
-    await type('[aria-label="Add sub-issue"]', 'Fixture task 1', 'input');
+    await open('ABC-1');
+    await type('[aria-label="Add sub-issue"]', 'Fixture', 'input');
     const labels = [...document.querySelectorAll('[aria-label=Sub-issues] .results button')].map((b) => b.textContent);
-    expect(labels.some((t) => t!.startsWith('ZF-1 '))).toBe(false);
-    expect(labels.some((t) => t!.startsWith('ZF-10 '))).toBe(true);
-    await click(button('ZF-10 '));
-    expect((await get('ZF-10')).parent_id).toBe(1);
+    expect(labels.some((t) => t!.startsWith('ABC-1 '))).toBe(false);
+    expect(labels.some((t) => t!.startsWith('ABC-2 '))).toBe(true);
+    await click(button('ABC-2 '));
+    expect((await get('ABC-2')).parent_id).toBe(1);
   });
 });

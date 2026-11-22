@@ -1,4 +1,7 @@
 import type { Api } from './api';
+import { hexOf, iconOk, keyFor } from './api.mock.palette';
+import { planCsv, projectSlug } from './api.mock.import';
+import { parseQuickadd } from './api.mock.quickadd';
 import type {
   AppliedTemplate, Applied, Bar, Change, Comment, Cycle, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
   NewIssue, Pin, Project, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
@@ -13,52 +16,124 @@ export type MockSeed = {
   labels?: Label[];
   cycles?: Cycle[];
   views?: SavedView[];
+  pins?: Pin[];
+  workspace?: Workspace;
+};
+
+export type Workspace = { setup_done: boolean; name: string | null; key: string; timezone: string };
+/** The workspace commands are built on the backend in parallel and are not in the generated bindings yet. */
+export type MockApi = Api & {
+  workspace: { status: () => Promise<Workspace>; setup: (name: string, key: string, timezone: string | null) => Promise<Workspace> };
 };
 
 const nullableIssueFields = [
   'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'start_date', 'due', 'estimate_minutes',
 ] as const;
+// The backend's error text is `<kind>: <detail>`; the UI shows it as is.
 const fail = (kind: string, message: string): never => {
-  throw { kind, message };
+  throw { kind, message: `${{ NotFound: 'not found', Db: 'database error' }[kind] ?? kind.toLowerCase()}: ${message}` };
 };
 const addDays = (date: string, n: number) => {
   const d = new Date(`${date}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 };
-// shortcut: a timed due date counts as its UTC day, upgrade when views filter by local day
-const dueDay = (i: Issue) => i.due?.Date ?? i.due?.DateTime?.utc.slice(0, 10) ?? null;
+// A timed due date counts as its day in its own zone, like the backend's due_date column.
+const dueDay = (i: Issue) => {
+  if (i.due?.Date) return i.due.Date;
+  if (!i.due?.DateTime) return null;
+  const { utc, tz } = i.due.DateTime;
+  try {
+    return new Date(utc).toLocaleDateString('sv', { timeZone: tz });
+  } catch {
+    return utc.slice(0, 10);
+  }
+};
 const nothing = (_?: unknown) => null;
 const dayDiff = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
 
-export function createMockApi(seed: MockSeed = fixtures): Api {
+const isDate = (v: unknown) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v;
+const isUrl = (v: unknown) => typeof v === 'string' && /^https?:\/\/\S+$/i.test(v);
+/** Same rule as the backend: a value must fit its definition's kind. */
+function validValue(d: PropertyDef, v: Value): boolean {
+  const has = (x: Value) => typeof x === 'string' && d.options.some((o) => o.value === x);
+  switch (d.kind) {
+    case 'Text': return typeof v === 'string';
+    case 'Number': return typeof v === 'number';
+    case 'Date': return isDate(v);
+    case 'Select': return has(v);
+    case 'MultiSelect': return Array.isArray(v) && v.every(has) && new Set(v).size === v.length;
+    case 'Checkbox': return typeof v === 'boolean';
+    case 'Url': return isUrl(v);
+    case 'NoteLink': return typeof v === 'string' && (v.startsWith('obsidian://') || /\.md$/i.test(v));
+  }
+}
+
+export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeFormat().resolvedOptions().timeZone): MockApi {
   const s = structuredClone(seed);
+  let workspace: Workspace = s.workspace ?? { setup_done: false, name: null, key: 'ABC', timezone: tz };
   const labels = s.labels ?? [];
   const cycles = s.cycles ?? [];
   const views = s.views ?? [];
   const milestones: Milestone[] = [];
   const comments: Comment[] = [];
   const relations: Relation[] = [];
-  const pins: Pin[] = [];
+  const pins: Pin[] = s.pins ?? [];
   const blocks: WorkBlock[] = [];
   const changes: Change[] = [];
-  // Undo for issues only: each write keeps the issues as they were before it.
-  type Step = { label: string; issues: Issue[] };
+  // One step per command that changed anything, like the backend; undo and redo cover every entity.
+  type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const step = <T>(label: string, run: () => T): T => {
-    undoSteps.push({ label, issues: structuredClone(s.issues) });
-    redoSteps.length = 0;
-    return run();
+  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, templates, relations, comments, views, milestones] as unknown[][];
+  const others = () => JSON.stringify(collections());
+  const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
+  const tracked = async <R>(label: (r: R) => string, run: () => Promise<R>): Promise<R> => {
+    const [before, rest, mark] = [structuredClone(s.issues), others(), changes.length];
+    const out = await run();
+    const after = structuredClone(s.issues);
+    const touchedIssues = JSON.stringify(before) !== JSON.stringify(after);
+    if (touchedIssues || rest !== others()) {
+      undoSteps.push({ label: label(out), before, after, rows: changes.slice(mark), beforeRest: rest, afterRest: others() });
+      redoSteps.length = 0;
+    }
+    return out;
   };
-  const swap = (from: Step[], to: Step[], what: string) => {
-    const prev = from.pop() ?? fail('Invalid', `nothing to ${what}`);
-    to.push({ label: prev.label, issues: structuredClone(s.issues) });
-    s.issues.splice(0, s.issues.length, ...prev.issues);
-    return { undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null };
+  const undoRedo = (undo: boolean) => {
+    const from = undo ? undoSteps : redoSteps;
+    const st = from.at(-1) ?? fail('Invalid', `nothing to ${undo ? 'undo' : 'redo'}`);
+    from.pop();
+    const target = JSON.parse(undo ? st.beforeRest : st.afterRest) as unknown[][];
+    collections().forEach((rows, k) => {
+      if (JSON.stringify(rows) !== JSON.stringify(target[k])) rows.splice(0, rows.length, ...target[k]);
+    });
+    const [from_, to] = undo ? [st.after, st.before] : [st.before, st.after];
+    for (const was of from_) {
+      const target = to.find((x) => x.id === was.id);
+      const at = s.issues.findIndex((x) => x.id === was.id);
+      // A created issue is undone by archiving it and redone by restoring it.
+      const next = target ? structuredClone(target) : { ...was, archived_at: undo ? now() : null };
+      if (target && JSON.stringify(target) === JSON.stringify(was)) continue;
+      next.updated_at = now();
+      if (at >= 0) s.issues[at] = next;
+    }
+    // Undo replays the step's rows newest first with old and new swapped; a create row pair becomes an archive.
+    const src = undo ? 'Undo' : 'Redo';
+    for (const r of undo ? [...st.rows].reverse() : st.rows) {
+      const id = Number(r.entity_id);
+      if (r.field === 'title' && r.old_value === null) continue;
+      if (r.field === 'key') rec(id, 'archived_at', undo ? null : now(), undo ? now() : null, src);
+      else if (r.field.startsWith('properties.')) rec(id, 'properties', getIssue(id).properties, getIssue(id).properties, src);
+      else rec(id, r.field, undo ? r.new_value : r.old_value, undo ? r.old_value : r.new_value, src);
+    }
+    (undo ? redoSteps : undoSteps).push(st);
+    return status();
   };
-  const settings = new Map<string, Value>([['issue_prefix', 'ZF']]);
+  const settings = new Map<string, Value>([['issue_prefix', workspace.key]]);
   const now = () => new Date().toISOString();
+  // Issue history only, in the order the backend records it; other entities' history is not shown by any screen.
+  const rec = (issue: number, field: string, old: Value, value: Value, source: Change['source'] = 'Ui') =>
+    void changes.push({ id: next(changes), at: now(), source, entity: 'issue', entity_id: String(issue), field, old_value: old, new_value: value });
   const next = (rows: { id: number }[]) => Math.max(0, ...rows.map((r) => r.id)) + 1;
   const find = <T extends { id: number }>(rows: T[], id: number, what: string) =>
     rows.find((r) => r.id === id) ?? fail('NotFound', `${what} ${id}`);
@@ -69,11 +144,11 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
   function fieldValue(i: Issue, f: FieldRef): Value {
     const prop = f.Property;
     if (prop !== undefined) {
-      if (!s.propertyDefs.some((d) => d.key === prop)) fail('Invalid', `unknown property ${prop}`);
+      if (!s.propertyDefs.some((d) => d.key === prop)) fail('Invalid', 'unknown property');
       return i.properties[prop] ?? null;
     }
     const by: Record<FixedField, Value> = {
-      Title: i.title, Status: i.status_id, StatusCategory: category(i) ?? null, Priority: i.priority,
+      Title: i.title, Status: i.status_id, StatusCategory: category(i)?.toLowerCase() ?? null, Priority: i.priority,
       Project: i.project_id, Milestone: i.milestone_id, Cycle: i.cycle_id, Label: i.label_ids,
       Parent: i.parent_id, StartDate: i.start_date, DueDate: dueDay(i), Estimate: i.estimate_minutes,
       CreatedAt: i.created_at, UpdatedAt: i.updated_at, CompletedAt: i.completed_at,
@@ -127,21 +202,34 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
   };
 
   const viewIssues = (id: number) => query(find(views, id, 'view').def);
+  const checkIssue = (i: Issue, props: Record<string, Value>) => {
+    if (!i.title.trim()) fail('Invalid', 'title is empty');
+    if (i.priority > 4) fail('Invalid', `priority ${i.priority} is not 0 to 4`);
+    if (!s.statuses.some((x) => x.id === i.status_id)) fail('Invalid', `status ${i.status_id} does not exist`);
+    for (const [k, v] of Object.entries(props)) {
+      const d = s.propertyDefs.find((x) => x.key === k);
+      if (d && !validValue(d, v)) fail('Invalid', `${JSON.stringify(v)} is not a valid ${d.kind} for ${k}`);
+    }
+  };
+  const done = (i: Issue) => ['Completed', 'Canceled'].includes(category(i) ?? '');
   const create = (input: Parameters<Api['issues']['create']>[0]): Issue => {
-    if (!input.title?.trim()) fail('Invalid', 'title is empty');
     const number = Math.max(0, ...s.issues.map((i) => i.id)) + 1;
     const at = now();
     const issue: Issue = {
-      id: number, key: `${settings.get('issue_prefix')}-${number}`, title: input.title!.trim(),
+      id: number, key: `${settings.get('issue_prefix')}-${number}`, title: (input.title ?? '').trim(),
       description: input.description ?? '',
       status_id: input.status_id ?? [...s.statuses].sort((a, b) => a.position - b.position)[0].id,
       priority: input.priority ?? 0, project_id: input.project_id ?? null, milestone_id: input.milestone_id ?? null,
-      parent_id: input.parent_id ?? null, cycle_id: input.cycle_id ?? null, label_ids: input.label_ids ?? [],
+      parent_id: input.parent_id ?? null, cycle_id: input.cycle_id ?? null, label_ids: [...new Set(input.label_ids ?? [])].sort((a, b) => a - b),
       start_date: input.start_date ?? null, due: input.due ?? null, estimate_minutes: input.estimate_minutes ?? null,
       properties: input.properties ?? {}, created_at: input.created_at ?? at, updated_at: at,
       completed_at: input.completed_at ?? null, archived_at: null,
     };
+    checkIssue(issue, issue.properties);
+    issue.completed_at ??= done(issue) ? at : null;
     s.issues.push(issue);
+    rec(issue.id, 'title', null, issue.title);
+    rec(issue.id, 'key', null, issue.key);
     return issue;
   };
   const getIssue = (id: number) => find(s.issues, id, 'issue');
@@ -181,34 +269,90 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
     });
     return { issue, sub_issues, skipped };
   };
-  const templateOf = (id: number, input: TemplateInput): IssueTemplate => ({
-    id, name: input.name, slug: input.slug, icon: input.icon ?? null, color: input.color ?? null, body: input.body,
+  const fieldsOf = (f: Partial<TemplateFields> = {}): TemplateFields => ({
+    description: null, status_id: null, priority: null, project_id: null, label_ids: [], estimate_minutes: null, properties: {}, ...f,
   });
-  const parse = (input: string) => {
-    const priority = /(?:^|\s)!([0-4])(?=\s|$)/.exec(input);
-    const project = /(?:^|\s)#([\w-]+)/.exec(input);
-    return {
-      title: input.replace(/(?:^|\s)[!#][\w-]+/g, '').trim(), due: null, start_date: null,
-      priority: priority ? Number(priority[1]) : null, project_slug: project?.[1] ?? null,
-      label_names: [], estimate_minutes: null,
+  // Same checks as core: names, slug shape, icon and colour, priority range; the body is stored with every field present.
+  const templateOf = (id: number, input: TemplateInput): IssueTemplate => {
+    if (!input.name.trim()) fail('Invalid', 'template name is empty');
+    if (!/^[a-z0-9-]+$/.test(input.slug)) fail('Invalid', `slug ${input.slug} must be lowercase letters, digits or dashes`);
+    checkIcon(input.icon);
+    const body = {
+      title_prefix: input.body.title_prefix ?? '', fields: fieldsOf(input.body.fields),
+      sub_issues: (input.body.sub_issues ?? []).map((x) => ({ title: x.title ?? '', fields: fieldsOf(x.fields) })),
     };
+    if ([body.fields, ...body.sub_issues.map((x) => x.fields)].some((f) => (f.priority ?? 0) > 4)) fail('Invalid', 'template priority is not 0 to 4');
+    return { id, name: input.name, slug: input.slug, icon: input.icon ?? null, color: colorKey(input.color), body };
   };
-  const shift = (moved: Reschedule, seen = new Set<number>()): Reschedule[] => {
-    const out: Reschedule[] = [];
-    for (const r of relations.filter((r) => r.kind === 'Blocks' && r.from === moved.issue_id)) {
-      const dep = getIssue(r.to);
-      if (seen.has(dep.id) || !dep.start_date || dep.start_date > moved.due_date) continue;
-      seen.add(dep.id);
-      const by = dayDiff(dep.start_date, addDays(moved.due_date, 1));
-      const next = { issue_id: dep.id, start_date: addDays(dep.start_date, by), due_date: addDays(dueDay(dep) ?? dep.start_date, by) };
-      out.push(next, ...shift(next, seen));
+  const today = () => new Date().toLocaleDateString('sv', { timeZone: tz });
+  const parse = (input: string) => parseQuickadd(input, today(), tz);
+  // Ports of schedule.rs: a bar is start..due, or one end derived from the estimate (1 day = 480 minutes, at least 1).
+  const barFor = (i: Issue): Bar | null => {
+    const due = dueDay(i);
+    const span = (m: number) => Math.max(1, Math.ceil(m / 480)) - 1;
+    if (i.start_date && due) return { issue_id: i.id, start: i.start_date, end: due, from_estimate: false };
+    if (due && i.estimate_minutes != null) return { issue_id: i.id, start: addDays(due, -span(i.estimate_minutes)), end: due, from_estimate: true };
+    if (i.start_date && i.estimate_minutes != null) return { issue_id: i.id, start: i.start_date, end: addDays(i.start_date, span(i.estimate_minutes)), from_estimate: true };
+    return null;
+  };
+  const blockedBy = () => {
+    const m = new Map<number, number[]>();
+    for (const r of relations) if (r.kind === 'Blocks') m.set(r.from, [...(m.get(r.from) ?? []), r.to]);
+    return m;
+  };
+  const shiftDependents = (moved: Reschedule): Reschedule[] => {
+    const next = blockedBy();
+    const bars = new Map(s.issues.flatMap((i) => { const b = barFor(i); return b ? [[i.id, b] as const] : []; }));
+    const dates = new Map<number, [string, string]>([[moved.issue_id, [moved.start_date, moved.due_date]]]);
+    const queue = [moved.issue_id];
+    let budget = s.issues.length ** 2 + 1;
+    for (let id = queue.shift(); id !== undefined && --budget > 0; id = queue.shift()) {
+      const blockerDue = dates.get(id)![1];
+      for (const dep of next.get(id) ?? []) {
+        const bar = bars.get(dep);
+        if (!bar) continue;
+        const [start, end] = dates.get(dep) ?? [bar.start, bar.end];
+        if (start > blockerDue) continue;
+        const delta = dayDiff(start, blockerDue) + 1;
+        dates.set(dep, [addDays(start, delta), addDays(end, delta)]);
+        queue.push(dep);
+      }
     }
-    return out;
+    return [...dates].filter(([id]) => id !== moved.issue_id).sort(([a], [b]) => a - b)
+      .map(([issue_id, [start_date, due_date]]) => ({ issue_id, start_date, due_date }));
+  };
+  const criticalPath = (rows: Issue[]): number[] => {
+    const next = blockedBy();
+    const bars = new Map(rows.flatMap((i) => { const b = barFor(i); return b ? [[i.id, b] as const] : []; }));
+    const memo = new Map<number, [number, number[]]>();
+    const longest = (id: number, onPath: number[]): [number, number[]] => {
+      const hit = memo.get(id);
+      if (hit) return hit;
+      onPath.push(id);
+      let best: [number, number[]] = [0, []];
+      for (const n of next.get(id) ?? []) {
+        if (!bars.has(n) || onPath.includes(n)) continue;
+        const cand = longest(n, onPath);
+        if (cand[0] > best[0] || (cand[0] === best[0] && (cand[1][0] ?? -Infinity) < (best[1][0] ?? -Infinity))) best = cand;
+      }
+      onPath.pop();
+      const b = bars.get(id)!;
+      const res: [number, number[]] = [best[0] + dayDiff(b.start, b.end) + 1, [id, ...best[1]]];
+      memo.set(id, res);
+      return res;
+    };
+    let best: [number, number[]] = [0, []];
+    for (const id of [...bars.keys()].sort((a, b) => a - b)) {
+      const cand = longest(id, []);
+      if (cand[0] > best[0]) best = cand;
+    }
+    return best[1];
   };
   const upsert = <T extends { id: number }>(rows: T[], row: T, what: string) =>
     Object.assign(find(rows, row.id, what), row);
   const def = (key: string) => s.propertyDefs.find((d) => d.key === key) ?? fail('NotFound', `property ${key}`);
   const backups: string[] = [];
+  const imported = new Map<string, number>();
   const ok = async () => null;
   // Sets position to each row's index in `order`; like the real commands, the order must list every row once.
   const reposition = <T extends { position: number }, K>(rows: T[], order: K[], keyOf: (r: T) => K, what: string) => {
@@ -216,32 +360,84 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
       fail('Invalid', `reorder must list every ${what} exactly once`);
     for (const r of rows) r.position = order.indexOf(keyOf(r));
   };
+  // Same checks as core's palette: an icon is `icon:<id>` or `emoji:<emoji>`, a colour a palette key or a hex near one.
+  const checkIcon = (icon?: string | null) => icon == null || iconOk(icon) || fail('Invalid', `icon ${icon} must be icon:<id> or emoji:<emoji>`);
+  const colorKey = (color?: string | null) => (color == null ? null : (keyFor(color) ?? fail('Invalid', `color ${color} is not a palette key`)));
   const off = { reminders: 'Off', gcal: 'Off', export: 'Off', backup: 'Off' } as const;
 
-  return {
+  const api: MockApi = {
     issues: {
-      create: async (input) => step('issues_create', () => create(input)),
-      update: async (id, patch) => step('issues_update', () => {
+      create: async (input) => create(input),
+      update: async (id, patch) => {
         const i = getIssue(id);
+        const old = structuredClone(i);
         for (const [k, v] of Object.entries(patch) as [keyof Issue & string, never][]) {
-          if (v === undefined || (v === null && !(nullableIssueFields as readonly string[]).includes(k))) continue;
-          changes.push({ id: next(changes), at: now(), source: 'Ui', entity: 'issue', entity_id: String(id), field: k, old_value: i[k as keyof Issue] as Value, new_value: v });
-          (i as Record<string, unknown>)[k] = v;
+          if (v === undefined || k === 'properties') continue;
+          if (v === null && !(nullableIssueFields as readonly string[]).includes(k)) continue;
+          (i as Record<string, unknown>)[k] = k === 'label_ids' ? [...new Set(v as number[])].sort((a, b) => a - b) : v;
         }
+        for (const [k, v] of Object.entries(patch.properties ?? {})) {
+          if (v === null) delete i.properties[k];
+          else i.properties[k] = v;
+        }
+        const changed = (Object.keys(i) as (keyof Issue)[]).filter((k) => JSON.stringify(i[k]) !== JSON.stringify(old[k]));
+        if (!changed.length) return old;
+        try {
+          checkIssue(i, Object.fromEntries(Object.entries(i.properties).filter(([k, v]) => JSON.stringify(old.properties[k]) !== JSON.stringify(v))));
+          for (let p = i.parent_id, hops = 0; p !== null && hops < 10_000; hops++, p = getIssue(p).parent_id) {
+            if (p === i.id) fail('Invalid', 'parent would create a cycle');
+          }
+        } catch (e) {
+          Object.assign(i, old);
+          throw e;
+        }
+        const order = ['title', 'description', 'status_id', 'priority', 'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'label_ids', 'start_date', 'due', 'estimate_minutes', 'properties'] as const;
+        for (const k of order) if (changed.includes(k)) rec(id, k, old[k] as Value, i[k] as Value);
         i.updated_at = now();
-        i.completed_at = category(i) === 'Completed' ? (i.completed_at ?? i.updated_at) : null;
+        if (i.status_id !== old.status_id) i.completed_at = done(i) ? (done({ ...old }) ? old.completed_at : i.updated_at) : null;
         return i;
-      }),
+      },
       get: async (id) => getIssue(id),
-      getByKey: async (key) => s.issues.find((i) => i.key === key) ?? fail('NotFound', `issue ${key}`),
-      archive: async (id) => step('issues_archive', () => nothing((getIssue(id).archived_at = now()))),
-      restore: async (id) => step('issues_restore', () => nothing((getIssue(id).archived_at = null))),
+      // The prefix is display-only: the number alone identifies the issue.
+      getByKey: async (key) => {
+        const m = /^([A-Z]{2,5})-(\d+)$/.exec(key);
+        return s.issues.find((i) => i.id === Number(m?.[2])) ?? fail('NotFound', `issue ${key}`);
+      },
+      archive: async (id) => {
+        const i = getIssue(id);
+        if (i.archived_at === null) {
+          i.archived_at = now();
+          rec(id, 'archived_at', null, i.archived_at);
+        }
+        return null;
+      },
+      restore: async (id) => {
+        const i = getIssue(id);
+        if (i.archived_at !== null) {
+          rec(id, 'archived_at', i.archived_at, null);
+          i.archived_at = null;
+        }
+        return null;
+      },
       children: async (id) => s.issues.filter((i) => i.parent_id === id),
       parseQuickadd: async (input) => parse(input),
       createFromQuickadd: async (input) => {
         const m = /^\s*\/([^\s/]+)(?=\s|$)\s*([\s\S]*)$/.exec(input);
+        // Unknown project or label: its token goes back into the title, nothing is created.
         const p = parse(m ? m[2] : input);
-        const overrides = { title: p.title, priority: p.priority, project_id: s.projects.find((x) => x.slug === p.project_slug)?.id };
+        const project = p.project_slug === null ? undefined : s.projects.find((x) => x.slug === p.project_slug);
+        const ids: number[] = [];
+        let title = p.title;
+        if (p.project_slug !== null && !project) title += ` #${p.project_slug}`;
+        for (const name of p.label_names) {
+          const l = labels.find((x) => x.name.toLowerCase() === name.toLowerCase());
+          if (l) ids.push(l.id);
+          else title += ` @${name}`;
+        }
+        const overrides: NewIssue = {
+          title, priority: p.priority, project_id: project?.id, label_ids: ids.length ? ids : undefined,
+          start_date: p.start_date, due: p.due, estimate_minutes: p.estimate_minutes,
+        };
         if (!m) return create(overrides);
         const t = templates.find((x) => x.slug === m[1]) ?? fail('Invalid', `no template /${m[1]} (known: ${templates.map((x) => `/${x.slug}`).join(', ') || 'none'})`);
         return applyTemplate(t, overrides).issue;
@@ -250,17 +446,25 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
     statuses: {
       list: async () => [...s.statuses].sort((a, b) => a.position - b.position),
       create: async (name, category, color, icon) => {
-        const st = { id: next(s.statuses), name, category, color, color_hex: color, icon: icon ?? null, position: s.statuses.length };
+        checkIcon(icon);
+        const key = colorKey(color)!;
+        const st = { id: next(s.statuses), name, category, color: key, color_hex: hexOf(key)!, icon: icon ?? null, position: s.statuses.length };
         s.statuses.push(st);
         return st;
       },
       update: async (id, name, color, position, icon) => {
         const st = find(s.statuses, id, 'status');
-        return Object.assign(st, { name: name ?? st.name, color: color ?? st.color, position: position ?? st.position, icon: icon ?? st.icon });
+        checkIcon(icon);
+        const key = colorKey(color) ?? st.color;
+        return Object.assign(st, { name: name ?? st.name, color: key, color_hex: hexOf(key)!, position: position ?? st.position, icon: icon ?? st.icon });
       },
       delete: async (id, moveIssuesTo) => {
         find(s.statuses, moveIssuesTo, 'status');
-        s.issues.forEach((i) => i.status_id === id && (i.status_id = moveIssuesTo));
+        for (const i of s.issues) {
+          if (i.status_id !== id) continue;
+          rec(i.id, 'status_id', id, moveIssuesTo, 'System');
+          i.status_id = moveIssuesTo;
+        }
         return nothing(remove(s.statuses, id, 'status'));
       },
     },
@@ -299,23 +503,33 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
         return null;
       },
       setValue: async (issue, key, value) => {
-        def(key);
+        const d = def(key);
         const i = getIssue(issue);
-        if (value === null) delete i.properties[key];
-        else i.properties[key] = value;
-        i.updated_at = now();
+        if (d.project_id !== null && d.project_id !== i.project_id) fail('Invalid', `${key} is scoped to another project than ${i.key}`);
+        if (value !== null && !validValue(d, value)) fail('Invalid', `${JSON.stringify(value)} is not a valid ${d.kind} for ${key}`);
+        const old = i.properties[key] ?? null;
+        if (JSON.stringify(old) !== JSON.stringify(value)) {
+          if (value === null) delete i.properties[key];
+          else i.properties[key] = value;
+          i.updated_at = now();
+          rec(issue, `properties.${key}`, old, value);
+        }
         return i;
       },
     },
     projects: {
       list: async () => s.projects,
       create: async (slug, name, icon, color) => {
-        if (s.projects.some((p) => p.slug === slug)) fail('Conflict', `project ${slug} exists`);
-        const p = { id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: icon ?? null, color: color ?? null };
+        if (s.projects.some((p) => p.slug === slug)) fail('Db', 'error returned from database: (code: 2067) UNIQUE constraint failed: projects.slug');
+        checkIcon(icon);
+        const p = { id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: icon ?? null, color: colorKey(color) };
         s.projects.push(p);
         return p;
       },
-      update: async (p) => upsert(s.projects, p, 'project'),
+      update: async (p) => {
+        checkIcon(p.icon);
+        return upsert(s.projects, { ...p, color: colorKey(p.color) }, 'project');
+      },
       delete: async (id) => {
         remove(s.projects, id, 'project');
         s.issues.forEach((i) => i.project_id === id && (i.project_id = null));
@@ -337,12 +551,18 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
     cycles: {
       list: async () => cycles,
       create: async (name, startDate, endDate, icon, color) => {
-        const c = { id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name, start_date: startDate, end_date: endDate, icon: icon ?? null, color: color ?? null };
+        if (endDate < startDate) fail('Invalid', `cycle ends ${endDate} before it starts ${startDate}`);
+        checkIcon(icon);
+        const c = { id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name, start_date: startDate, end_date: endDate, icon: icon ?? null, color: colorKey(color) };
         cycles.push(c);
         return c;
       },
       update: async (c) => upsert(cycles, c, 'cycle'),
-      delete: async (id) => nothing(remove(cycles, id, 'cycle')),
+      delete: async (id) => {
+        remove(cycles, id, 'cycle');
+        s.issues.forEach((i) => i.cycle_id === id && (i.cycle_id = null));
+        return null;
+      },
     },
     templates: {
       list: async () => [...templates],
@@ -361,13 +581,21 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
     labels: {
       list: async () => labels,
       create: async (name, color, icon) => {
-        if (labels.some((l) => l.name === name)) fail('Conflict', `label ${name} exists`);
-        const l = { id: next(labels), name, color, color_hex: color, icon: icon ?? null };
+        if (labels.some((l) => l.name === name)) fail('Db', 'error returned from database: (code: 2067) UNIQUE constraint failed: labels.name');
+        checkIcon(icon);
+        const key = colorKey(color)!;
+        const l = { id: next(labels), name, color: key, color_hex: hexOf(key)!, icon: icon ?? null };
         labels.push(l);
         return l;
       },
-      update: async (l) => upsert(labels, l, 'label'),
+      update: async (l) => {
+        checkIcon(l.icon);
+        const key = colorKey(l.color)!;
+        return upsert(labels, { ...l, color: key, color_hex: hexOf(key)! }, 'label');
+      },
       delete: async (id) => {
+        find(labels, id, 'label');
+        for (const i of s.issues) if (i.label_ids.includes(id)) rec(i.id, 'label', id, null);
         remove(labels, id, 'label');
         s.issues.forEach((i) => (i.label_ids = i.label_ids.filter((x) => x !== id)));
         return null;
@@ -375,11 +603,15 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
       addLabel: async (issue, label) => {
         find(labels, label, 'label');
         const i = getIssue(issue);
-        if (!i.label_ids.includes(label)) i.label_ids.push(label);
+        if (!i.label_ids.includes(label)) {
+          i.label_ids = [...i.label_ids, label].sort((a, b) => a - b);
+          rec(issue, 'label', null, label);
+        }
         return null;
       },
       removeLabel: async (issue, label) => {
         const i = getIssue(issue);
+        if (i.label_ids.includes(label)) rec(issue, 'label', label, null);
         i.label_ids = i.label_ids.filter((x) => x !== label);
         return null;
       },
@@ -397,9 +629,17 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
     },
     relations: {
       add: async (rel) => {
-        getIssue(rel.from);
-        getIssue(rel.to);
-        if (!relations.some((r) => r.from === rel.from && r.to === rel.to && r.kind === rel.kind)) relations.push(rel);
+        if (rel.from === rel.to) fail('Invalid', 'an issue cannot relate to itself');
+        if (!s.issues.some((i) => i.id === rel.from) || !s.issues.some((i) => i.id === rel.to)) fail('NotFound', `issue ${rel.from} or ${rel.to}`);
+        const same = (r: Relation) => r.from === rel.from && r.to === rel.to && r.kind === rel.kind;
+        if (relations.some(same)) return null;
+        if (rel.kind === 'Blocks') {
+          // Adding from -> to must not let `to` reach `from` through blocking edges.
+          const seen = new Set<number>();
+          const reach = (id: number): boolean => id === rel.from || (!seen.has(id) && seen.add(id) && relations.some((r) => r.kind === 'Blocks' && r.from === id && reach(r.to)));
+          if (reach(rel.to)) fail('Conflict', 'would create a dependency cycle');
+        }
+        relations.push(rel);
         return null;
       },
       remove: async (rel) => {
@@ -410,41 +650,23 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
       forIssue: async (id) => relations.filter((r) => r.from === id || r.to === id),
     },
     schedule: {
-      bars: async (viewId) =>
-        viewIssues(viewId).flatMap((i): Bar[] => {
-          const due = dueDay(i);
-          if (i.start_date && due) return [{ issue_id: i.id, start: i.start_date, end: due, from_estimate: false }];
-          if (i.start_date && i.estimate_minutes) {
-            // 1 day = 480 minutes
-            return [{ issue_id: i.id, start: i.start_date, end: addDays(i.start_date, Math.ceil(i.estimate_minutes / 480)), from_estimate: true }];
-          }
-          return [];
-        }),
-      criticalPath: async (viewId) => {
-        const ids = new Set(viewIssues(viewId).map((i) => i.id));
-        const longest = (id: number): number[] => {
-          const tails = relations.filter((r) => r.kind === 'Blocks' && r.from === id && ids.has(r.to)).map((r) => longest(r.to));
-          return [id, ...tails.reduce((a, b) => (b.length > a.length ? b : a), [])];
-        };
-        return [...ids].map(longest).reduce((a, b) => (b.length > a.length ? b : a), []);
-      },
-      shiftDependents: async (moved) => {
-        const moves = shift(moved);
-        for (const m of moves) Object.assign(getIssue(m.issue_id), { start_date: m.start_date, due: { Date: m.due_date } });
-        return moves;
-      },
+      bars: async (viewId) => viewIssues(viewId).flatMap((i) => barFor(i) ?? []),
+      criticalPath: async (viewId) => criticalPath(viewIssues(viewId)),
+      shiftDependents: async (moved) => shiftDependents(moved),
     },
     views: {
       query: async (d) => query(d),
       list: async () => views,
       save: async (id, name, d, icon, color) => {
+        checkIcon(icon);
+        const key = colorKey(color);
         if (id === null) {
-          const v = { id: next(views), name, def: d, position: views.length, icon: icon ?? null, color: color ?? null };
+          const v = { id: next(views), name, def: d, position: views.length, icon: icon ?? null, color: key };
           views.push(v);
           return v;
         }
         const v = find(views, id, 'view');
-        return Object.assign(v, { name, def: d, icon: icon ?? v.icon, color: color ?? v.color });
+        return Object.assign(v, { name, def: d, icon: icon ?? v.icon, color: key ?? v.color });
       },
       delete: async (id) => nothing(remove(views, id, 'view')),
       reorder: async (ids) => {
@@ -454,29 +676,61 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
       },
     },
     search: {
+      // shortcut: results come in id order; the backend ranks by bm25. Upgrade when a screen depends on relevance order.
       search: async (text, limit) => {
-        const t = text.toLowerCase();
-        return s.issues.filter((i) => `${i.title} ${i.description}`.toLowerCase().includes(t)).slice(0, limit);
+        const words = (t: string) => t.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+        const phrases = text.split(/\s+/).filter(Boolean).map(words).filter((p) => p.length);
+        const has = (hay: string[], p: string[]) => hay.some((_, i) => p.every((w, k) => hay[i + k] === w));
+        return phrases.length
+          ? s.issues.filter((i) => {
+              const hay = words([i.title, i.description, ...comments.filter((c) => c.issue_id === i.id).map((c) => c.body)].join(' '));
+              return !i.archived_at && phrases.every((p) => has(hay, p));
+            }).slice(0, limit)
+          : [];
       },
     },
     pins: {
       pin: async (kind, target, title) => {
+        const lower = target.toLowerCase();
+        const valid = kind === 'Url' ? /^(https?|obsidian):\/\//.test(lower) : kind === 'Note' ? lower.startsWith('obsidian://') : target.trim() !== '';
+        if (!valid) fail('Invalid', `pin target ${JSON.stringify(target)} for ${kind.toLowerCase()}`);
         const have = pins.find((p) => p.kind === kind && p.target === target);
         if (have) return have;
-        const p = { id: next(pins), kind, target, title, position: pins.length };
+        const p = { id: next(pins), kind, target, title: title?.trim() ? title : null, position: Math.max(-1, ...pins.map((x) => x.position)) + 1 };
         pins.push(p);
         return p;
       },
       unpin: async (id) => nothing(remove(pins, id, 'pin')),
       reorder: async (ids) => {
+        if (ids.length !== pins.length || pins.some((p) => ids.filter((x) => x === p.id).length !== 1)) fail('Invalid', 'reorder must list every current pin exactly once');
         ids.forEach((id, position) => (find(pins, id, 'pin').position = position));
         return null;
       },
-      listResolved: async () =>
-        [...pins].sort((a, b) => a.position - b.position).map((pin) => {
-          const route = { Issue: `/issue/${pin.target}`, Project: `/project/${pin.target}`, View: `/view/${pin.target}`, Cycle: '/cycles', Note: pin.target, Url: pin.target }[pin.kind];
-          return { pin, label: pin.title ?? pin.target, archived: false, route };
-        }),
+      // Like the backend, a pin whose target is gone is dropped.
+      listResolved: async () => {
+        const prefix = settings.get('issue_prefix');
+        const resolved = [...pins].sort((a, b) => a.position - b.position || a.id - b.id).flatMap((pin) => {
+          const t = pin.target;
+          let hit: [string, boolean, string] | null = null;
+          if (pin.kind === 'Issue') {
+            const n = Number(/-(\d+)$/.exec(t)?.[1]);
+            const i = s.issues.find((x) => x.id === n);
+            hit = i ? [i.title, i.archived_at !== null, `/issue/${prefix}-${n}`] : null;
+          } else if (pin.kind === 'Project') {
+            const p = s.projects.find((x) => x.slug === t);
+            hit = p ? [p.name, p.archived_at !== null, `/project/${t}`] : null;
+          } else if (pin.kind === 'View') {
+            const v = views.find((x) => String(x.id) === t);
+            hit = v ? [v.name, false, `/view/${v.id}`] : null;
+          } else if (pin.kind === 'Cycle') {
+            const c = cycles.find((x) => String(x.number) === t);
+            hit = c ? [c.name ?? `Cycle ${c.number}`, false, `/cycles#${c.number}`] : null;
+          } else hit = [t, false, t];
+          return hit ? [{ pin, label: pin.title ?? hit[0], archived: hit[1], route: hit[2] }] : [];
+        });
+        for (const p of [...pins]) if (!resolved.some((r) => r.pin.id === p.id)) remove(pins, p.id, 'pin');
+        return resolved;
+      },
     },
     blocks: {
       create: async (issue, start, end) => {
@@ -490,9 +744,28 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
     },
     history: {
       listFor: async (entity, entityId) => changes.filter((c) => c.entity === entity && c.entity_id === entityId),
-      undo: async () => swap(undoSteps, redoSteps, 'undo'),
-      redo: async () => swap(redoSteps, undoSteps, 'redo'),
-      undoStatus: async () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null }),
+      undo: async () => undoRedo(true),
+      redo: async () => undoRedo(false),
+      undoStatus: async () => status(),
+    },
+    workspace: {
+      status: async () => ({ ...workspace }),
+      // Same order of checks as core: name, key, zone. The key is a display prefix, so every issue key follows it.
+      setup: async (name, key, timezone) => {
+        if (!name.trim()) fail('Invalid', 'workspace name must not be empty');
+        if (!/^[A-Z]{2,5}$/.test(key)) fail('Invalid', `issue key \`${key}\` must be 2 to 5 letters A-Z`);
+        if (timezone != null) {
+          try {
+            new Intl.DateTimeFormat('en', { timeZone: timezone });
+          } catch {
+            fail('Invalid', `unknown time zone ${timezone}`);
+          }
+        }
+        workspace = { setup_done: true, name: name.trim(), key, timezone: timezone ?? workspace.timezone };
+        settings.set('issue_prefix', key);
+        for (const i of s.issues) i.key = `${key}-${i.id}`;
+        return { ...workspace };
+      },
     },
     settings: {
       get: async (key) => settings.get(key) ?? null,
@@ -506,23 +779,58 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
       },
       list: async (dir) => backups.filter((p) => p.startsWith(`${dir}/`)),
     },
-    // shortcut: titles only, split on commas without quote handling; the real command maps every field.
     import: {
-      csvPlan: async (csv, mapping) => {
-        const [head, ...rows] = csv.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => l.split(','));
-        const col = mapping?.find(([, f]) => f === 'title')?.[0] ?? head.find((h) => /^(title|name|summary)$/i.test(h));
-        if (col === undefined) return fail('Invalid', 'no column is mapped to title');
-        const at = head.indexOf(col);
-        const issues = rows.filter((r) => r[at]?.trim()).map((r) => ({
-          external_id: `csv:${r.join('\u001f')}`, title: r[at].trim(), description: '', status: null, priority: 0,
-          project: null, labels: [], start_date: null, due_date: null, estimate_minutes: null, properties: {},
-          parent: null, cycle: null,
-        }));
-        return { source: 'csv', issues, unmapped: head.filter((h) => h !== col) };
-      },
+      csvPlan: async (csv, mapping) =>
+        planCsv(csv, mapping, {
+          statuses: s.statuses.map((x) => x.name), labels: labels.map((x) => x.name), projects: s.projects.map((x) => x.name),
+          propertyKeys: s.propertyDefs.map((d) => d.key), cycleStarts: cycles.map((c) => c.start_date), imported: new Set(imported.keys()),
+        }),
       apply: async (plan) => {
-        const made = (plan.issues ?? []).map((i) => create({ title: i.title }));
-        return { created: made.length, warnings: [] };
+        const byName = <T extends { name: string }>(rows: T[], name: string) => rows.find((r) => r.name.toLowerCase() === name.toLowerCase());
+        for (const st of plan.statuses ?? []) {
+          if (!byName(s.statuses, st.name)) s.statuses.push({ id: next(s.statuses), name: st.name, category: st.category, position: s.statuses.length, color: '#95a2b3', color_hex: hexOf('gray')!, icon: null });
+        }
+        for (const l of plan.labels ?? []) if (!byName(labels, l)) labels.push({ id: next(labels), name: l, color: '#95a2b3', color_hex: hexOf('gray')!, icon: null });
+        for (const name of plan.projects ?? []) {
+          if (byName(s.projects, name)) continue;
+          const base = projectSlug(name);
+          let slug = base;
+          for (let n = 2; s.projects.some((p) => p.slug === slug); n++) slug = `${base}-${n}`;
+          s.projects.push({ id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null });
+        }
+        for (const c of plan.cycles ?? []) {
+          if (!cycles.some((x) => x.start_date === c.start_date)) cycles.push({ id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name: c.name, start_date: c.start_date, end_date: c.end_date, icon: null, color: null });
+        }
+        for (const d of plan.property_defs ?? []) if (!s.propertyDefs.some((x) => x.key === d.key)) s.propertyDefs.push({ ...d, position: Math.max(-1, ...s.propertyDefs.map((x) => x.position)) + 1 });
+        const ids = new Map<string, number>();
+        const warnings: string[] = [];
+        const known = (ext: string) => ids.get(ext) ?? imported.get(ext);
+        for (const i of plan.issues ?? []) {
+          if (known(i.external_id) !== undefined) {
+            warnings.push(`${i.external_id} was already imported`);
+            continue;
+          }
+          const made = create({
+            title: i.title, description: i.description, priority: i.priority, start_date: i.start_date, due: i.due_date ? { Date: i.due_date } : null,
+            estimate_minutes: i.estimate_minutes, properties: i.properties,
+            status_id: i.status ? byName(s.statuses, i.status)?.id : undefined, project_id: i.project ? byName(s.projects, i.project)?.id : undefined,
+            cycle_id: i.cycle ? cycles.find((c) => c.start_date === i.cycle)?.id : undefined,
+            label_ids: i.labels.flatMap((l) => byName(labels, l)?.id ?? []),
+          });
+          imported.set(i.external_id, made.id);
+          ids.set(i.external_id, made.id);
+        }
+        for (const i of (plan.issues ?? []).filter((x) => ids.has(x.external_id) && x.parent)) {
+          const parent = known(i.parent!);
+          if (parent === undefined) warnings.push(`${i.external_id}: parent ${i.parent} was not imported`);
+          else getIssue(ids.get(i.external_id)!).parent_id = parent;
+        }
+        for (const r of plan.relations ?? []) {
+          const [from, to] = [known(r.from), known(r.to)];
+          if (from === undefined || to === undefined) warnings.push(`relation ${r.from} -> ${r.to} skipped: an issue was not imported`);
+          else if (!relations.some((x) => x.from === from && x.to === to && x.kind === r.kind)) relations.push({ from, to, kind: r.kind });
+        }
+        return { created: ids.size, warnings };
       },
     },
     export: { now: ok },
@@ -530,16 +838,43 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
     gcal: { connect: ok, listCalendars: async () => [['primary', 'Primary']] },
     reminders: { listLists: async () => [['1', 'Reminders']] },
   };
+  const commandOf = (mod: string, fn: string) => `${mod}_${fn.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}`;
+  const mutating = (
+    'issues.create issues.update issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.delete ' +
+    'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
+    'projects.create projects.update projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
+    'cycles.create cycles.update cycles.delete templates.create templates.update templates.delete templates.apply ' +
+    'labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
+    'relations.add relations.remove views.save views.delete views.reorder import.apply'
+  ).split(' ');
+  for (const name of mutating) {
+    const [mod, fn] = name.split('.');
+    const group = (api as unknown as Record<string, Record<string, (...a: unknown[]) => Promise<unknown>>>)[mod];
+    const run = group[fn];
+    group[fn] = (...args) =>
+      tracked((r) => (name === 'import.apply' ? `Import ${(r as Applied).created} issues` : commandOf(mod, fn)), () => run(...args));
+  }
+  return api;
 }
 
 const statuses: Status[] = (
-  [['Backlog', 'Backlog'], ['Todo', 'Unstarted'], ['In Progress', 'Started'], ['Done', 'Completed'], ['Canceled', 'Canceled']] as const
-).map(([name, category], position) => ({ id: position + 1, name, category, position, color: 'gray', color_hex: '#6b7280', icon: null }));
+  [
+    ['Backlog', 'Backlog', 'gray'], ['Todo', 'Unstarted', 'purple'], ['In Progress', 'Started', 'yellow'],
+    ['Done', 'Completed', 'indigo'], ['Canceled', 'Canceled', 'gray'],
+  ] as const
+).map(([name, category, color], position) => ({ id: position + 1, name, category, position, color, color_hex: hexOf(color)!, icon: null }));
 
+const project = (id: number, slug: string, name: string): Project =>
+  ({ id, slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null });
 const projects: Project[] = [
-  { id: 1, slug: 'home', name: 'Home', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null },
-  { id: 2, slug: 'work', name: 'Work', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null },
+  project(1, 'website', 'Website relaunch'), project(2, 'mobile', 'Mobile app'), project(3, 'office', 'Office move'),
 ];
+
+const labels: Label[] = (['Bug:red', 'Feature:blue', 'Design:purple'] as const).map((x, i) => {
+  const [name, color] = x.split(':');
+  return { id: i + 1, name, color, color_hex: hexOf(color)!, icon: null };
+});
+const cycles: Cycle[] = [{ id: 1, number: 1, name: 'Sprint 1', start_date: '2026-12-01', end_date: '2026-12-14', icon: null, color: null }];
 
 const propertyDefs: PropertyDef[] = [
   { key: 'area', name: 'Area', kind: 'Select', options: [{ value: 'home', color: '#4caf50' }, { value: 'work', color: '#2196f3' }], project_id: null, position: 0 },
@@ -551,25 +886,29 @@ const issues: Issue[] = Array.from({ length: 20 }, (_, k) => {
   const n = k + 1;
   const created = `2026-11-${String(n).padStart(2, '0')}T09:00:00Z`;
   return {
-    id: n, key: `ZF-${n}`, title: `Fixture task ${n}`, description: '', status_id: (k % 5) + 1, priority: n % 5,
-    project_id: n % 3 === 0 ? null : (n % 2) + 1, milestone_id: null, parent_id: null, cycle_id: null, label_ids: [],
+    id: n, key: `ABC-${n}`, title: `Fixture task ${n}`, description: '', status_id: (k % 5) + 1, priority: n % 5,
+    project_id: n % 3 === 0 ? (n % 6 === 0 ? 3 : null) : (n % 2) + 1, milestone_id: null, parent_id: null, cycle_id: null, label_ids: [],
     start_date: n % 4 === 0 ? `2026-12-${String(n).padStart(2, '0')}` : null,
     due: n % 4 === 0 ? { Date: `2026-12-${String(n + 2).padStart(2, '0')}` } : null,
     estimate_minutes: n % 2 ? 480 : null,
     properties: (n % 3 === 1 ? { area: 'home', effort: n } : n % 3 === 2 ? { area: 'work' } : {}) as Issue['properties'],
-    created_at: created, updated_at: created, completed_at: null, archived_at: null,
+    created_at: created, updated_at: created, completed_at: statuses[k % 5].category === 'Completed' || statuses[k % 5].category === 'Canceled' ? created : null, archived_at: null,
   };
 });
 
-// Same three views the migration seeds. shortcut: no status filter, the mock query has no StatusCategory support.
-const view = (id: number, name: string, layout: Layout, group_by: FieldRef | null = null): SavedView => ({
+// The three views the migration seeds; the filters use its lowercase category names.
+const view = (id: number, name: string, layout: Layout, group_by: FieldRef | null, filter: Filter): SavedView => ({
   id, name, position: id - 1, icon: null, color: null,
-  def: { filter: null, sorts: [], group_by, layout, columns: [], include_archived: false },
+  def: { filter, sorts: [], group_by, layout, columns: [], include_archived: false },
 });
+const category = (op: 'In' | 'Neq', value: Value): Filter => ({ Cond: { field: { Fixed: 'StatusCategory' }, op, value } });
 const views: SavedView[] = [
-  view(1, 'Active', 'List'),
-  view(2, 'Board', 'Board', { Fixed: 'Status' }),
-  view(3, 'Timeline: all projects', 'Gantt', { Fixed: 'Project' }),
+  view(1, 'Active', 'List', null, category('In', ['unstarted', 'started'])),
+  view(2, 'Board', 'Board', { Fixed: 'Status' }, category('In', ['unstarted', 'started'])),
+  view(3, 'Timeline: all projects', 'Gantt', { Fixed: 'Project' }, category('Neq', 'completed')),
 ];
 
-export const fixtures: MockSeed = { statuses, projects, propertyDefs, issues, views };
+export const fixtures: MockSeed = {
+  statuses, projects, propertyDefs, issues, labels, cycles, views,
+  workspace: { setup_done: true, name: 'Cairn', key: 'ABC', timezone: 'UTC' },
+};
