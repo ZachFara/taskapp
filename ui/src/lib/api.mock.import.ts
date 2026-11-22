@@ -14,7 +14,7 @@ export type Known = {
   imported: Set<string>;
 };
 
-const FIELDS = ['title', 'description', 'status', 'priority', 'project', 'labels', 'start_date', 'due_date', 'estimate'];
+const FIELDS = ['title', 'description', 'status', 'priority', 'project', 'labels', 'start_date', 'due_date', 'estimate', 'points'];
 const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s;
 
 /** RFC 4180: quoted fields, `""` escapes, newlines inside quotes. Blank lines are dropped. */
@@ -49,7 +49,7 @@ function guessMapping(headers: string[]): [string, string][] {
     title: 'title', name: 'title', summary: 'title', description: 'description', body: 'description', details: 'description',
     notes: 'description', status: 'status', state: 'status', priority: 'priority', project: 'project', labels: 'labels',
     label: 'labels', tags: 'labels', start: 'start_date', 'start date': 'start_date', due: 'due_date', 'due date': 'due_date',
-    deadline: 'due_date', estimate: 'estimate', points: 'estimate',
+    deadline: 'due_date', estimate: 'estimate', points: 'points',
   };
   return headers.flatMap((h): [string, string][] => {
     const f = by[h.trim().toLowerCase().replace(/[_-]/g, ' ')];
@@ -103,7 +103,7 @@ export function planCsv(text: string, mappingIn: [string, string][] | null, know
     const f = mapping.get(h)?.trim();
     if (f === undefined) return;
     if (!FIELDS.includes(f) && !(f.startsWith('property:') && f.slice(9).trim())) {
-      fail(`unknown field \`${f}\`; use title, description, status, priority, project, labels, start_date, due_date, estimate or property:<name>`);
+      fail(`unknown field \`${f}\`; use title, description, status, priority, project, labels, start_date, due_date, estimate, points or property:<name>`);
     }
     cols.push([idx, f]);
   });
@@ -126,7 +126,7 @@ export function planCsv(text: string, mappingIn: [string, string][] | null, know
     try {
       const i: PlanIssue = {
         external_id: `csv:${cells.join('\u001f')}`, title: '', description: '', status: null, priority: 0, project: null,
-        labels: [], start_date: null, due_date: null, estimate_minutes: null, properties: {}, parent: null, cycle: null,
+        labels: [], start_date: null, due_date: null, estimate_minutes: null, points: null, properties: {}, parent: null, cycle: null,
       };
       for (const [idx, f] of cols) {
         const cell = (cells[idx] ?? '').trim();
@@ -146,6 +146,10 @@ export function planCsv(text: string, mappingIn: [string, string][] | null, know
         } else if (f === 'estimate') {
           if (!/^\d+$/.test(cell)) throw `\`${cell}\` is not a whole number of minutes`;
           i.estimate_minutes = Number(cell);
+        } else if (f === 'points') {
+          const p = /^\+?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(cell) ? Number(cell) : NaN;
+          if (!Number.isFinite(p) || Math.abs(p * 10 - Math.round(p * 10)) > 1e-6) throw `\`${cell}\` is not points (0 or more, one decimal)`;
+          i.points = p;
         } else {
           const d = defs.get(f.slice(9).trim())!;
           const v: Value = d.kind === 'Number' ? (num(cell) ? Number(cell) : fail(`\`${cell}\` is not a number for ${d.name}`)) : cell;

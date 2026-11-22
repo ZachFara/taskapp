@@ -2,9 +2,10 @@ import type { Api } from './api';
 import { hexOf, iconOk, keyFor } from './api.mock.palette';
 import { planCsv, projectSlug } from './api.mock.import';
 import { parseQuickadd } from './api.mock.quickadd';
+import * as insights from './api.mock.insights';
 import { seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
-  AppliedTemplate, Applied, Bar, Change, Comment, Cycle, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
+  AppliedTemplate, Applied, Bar, Change, Measure, ProgressScope, Comment, Cycle, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
   NewIssue, Pin, Project, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
   TemplateInput, Value, ViewDef, ViewTemplate, WorkBlock,
 } from './bindings';
@@ -23,6 +24,8 @@ export type MockSeed = {
   templates?: IssueTemplate[];
   viewTemplates?: ViewTemplate[];
   workspace?: Workspace;
+  /** Changes that predate the mock, for progress charts (the real seed writes the same rows). */
+  history?: Change[];
 };
 
 export type Workspace = { setup_done: boolean; name: string | null; key: string; timezone: string };
@@ -32,7 +35,7 @@ export type MockApi = Api & {
 };
 
 const nullableIssueFields = [
-  'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'start_date', 'due', 'estimate_minutes',
+  'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'start_date', 'due', 'estimate_minutes', 'points',
 ] as const;
 // The backend's error text is `<kind>: <detail>`; the UI shows it as is.
 const fail = (kind: string, message: string): never => {
@@ -55,6 +58,8 @@ const dueDay = (i: Issue) => {
   }
 };
 const nothing = (_?: unknown) => null;
+/** Same rule as core: 0 or more, at most one decimal. */
+const validPoints = (p: number) => Number.isFinite(p) && p >= 0 && Math.abs(p * 10 - Math.round(p * 10)) <= 1e-6;
 const dayDiff = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
 
 const isDate = (v: unknown) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v;
@@ -75,7 +80,7 @@ function validValue(d: PropertyDef, v: Value): boolean {
 }
 
 const fieldsOf = (f: Partial<TemplateFields> = {}): TemplateFields => ({
-  description: null, status_id: null, priority: null, project_id: null, label_ids: [], estimate_minutes: null, properties: {}, ...f,
+  description: null, status_id: null, priority: null, project_id: null, label_ids: [], estimate_minutes: null, points: null, properties: {}, ...f,
 });
 
 export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeFormat().resolvedOptions().timeZone): MockApi {
@@ -90,7 +95,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const relations: Relation[] = s.relations ?? [];
   const pins: Pin[] = s.pins ?? [];
   const blocks: WorkBlock[] = [];
-  const changes: Change[] = [];
+  const changes: Change[] = [...(s.history ?? [])];
   // One step per command that changed anything, like the backend; undo and redo cover every entity.
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
@@ -143,7 +148,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     (undo ? redoSteps : undoSteps).push(st);
     return status();
   };
-  const settings = new Map<string, Value>([['issue_prefix', workspace.key]]);
+  const settings = new Map<string, Value>([['issue_prefix', workspace.key], ['estimation', 'both'], ['point_scale', 'fibonacci']]);
+  const choices: Record<string, string[]> = { estimation: ['none', 'points', 'time', 'both'], point_scale: ['fibonacci', 'linear', 'powers', 'tshirt'] };
   const now = () => new Date().toISOString();
   // Issue history only, in the order the backend records it; other entities' history is not shown by any screen.
   const rec = (issue: number, field: string, old: Value, value: Value, source: Change['source'] = 'Ui') =>
@@ -169,7 +175,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     const by: Record<FixedField, Value> = {
       Title: i.title, Status: i.status_id, StatusCategory: category(i)?.toLowerCase() ?? null, Priority: i.priority,
       Project: i.project_id, Milestone: i.milestone_id, Cycle: i.cycle_id, Label: i.label_ids,
-      Parent: i.parent_id, StartDate: i.start_date, DueDate: dueDay(i), Estimate: i.estimate_minutes,
+      Parent: i.parent_id, StartDate: i.start_date, DueDate: dueDay(i), Estimate: i.estimate_minutes, Points: i.points,
       CreatedAt: i.created_at, UpdatedAt: i.updated_at, CompletedAt: i.completed_at,
       Archived: i.archived_at !== null, Key: i.id,
       SubIssueProgress: s.issues.filter((c) => c.parent_id === i.id && !c.archived_at).length,
@@ -227,6 +233,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const checkIssue = (i: Issue, props: Record<string, Value>) => {
     if (!i.title.trim()) fail('Invalid', 'title is empty');
     if (i.priority > 4) fail('Invalid', `priority ${i.priority} is not 0 to 4`);
+    if (i.points != null && !validPoints(i.points)) fail('Invalid', `points ${i.points} must be 0 or more with at most one decimal`);
     if (!s.statuses.some((x) => x.id === i.status_id)) fail('Invalid', `status ${i.status_id} does not exist`);
     for (const [k, v] of Object.entries(props)) {
       const d = s.propertyDefs.find((x) => x.key === k);
@@ -243,7 +250,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       status_id: input.status_id ?? [...s.statuses].sort((a, b) => a.position - b.position)[0].id,
       priority: input.priority ?? 0, project_id: input.project_id ?? null, milestone_id: input.milestone_id ?? null,
       parent_id: input.parent_id ?? null, cycle_id: input.cycle_id ?? null, label_ids: [...new Set(input.label_ids ?? [])].sort((a, b) => a - b),
-      start_date: input.start_date ?? null, due: input.due ?? null, estimate_minutes: input.estimate_minutes ?? null,
+      start_date: input.start_date ?? null, due: input.due ?? null, estimate_minutes: input.estimate_minutes ?? null, points: input.points ?? null,
       properties: input.properties ?? {}, created_at: input.created_at ?? at, updated_at: at,
       completed_at: input.completed_at ?? null, archived_at: null,
     };
@@ -278,14 +285,14 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     const issue = create({
       title, description: o.description ?? f.description, status_id: o.status_id ?? f.status_id,
       priority: o.priority ?? f.priority, project_id: o.project_id ?? f.project_id,
-      label_ids: o.label_ids ?? f.label_ids, estimate_minutes: o.estimate_minutes ?? f.estimate_minutes,
+      label_ids: o.label_ids ?? f.label_ids, estimate_minutes: o.estimate_minutes ?? f.estimate_minutes, points: o.points ?? f.points,
       properties: { ...f.properties, ...o.properties }, start_date: o.start_date, due: o.due,
     });
     const sub_issues = (t.body.sub_issues ?? []).map((sub) => {
       const sf = liveRefs(sub.fields ?? {}, skipped);
       return create({
         title: sub.title, description: sf.description, status_id: sf.status_id, priority: sf.priority,
-        project_id: sf.project_id, label_ids: sf.label_ids, estimate_minutes: sf.estimate_minutes,
+        project_id: sf.project_id, label_ids: sf.label_ids, estimate_minutes: sf.estimate_minutes, points: sf.points,
         properties: sf.properties, parent_id: issue.id,
       });
     });
@@ -313,6 +320,30 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     if (due && i.estimate_minutes != null) return { issue_id: i.id, start: addDays(due, -span(i.estimate_minutes)), end: due, from_estimate: true };
     if (i.start_date && i.estimate_minutes != null) return { issue_id: i.id, start: i.start_date, end: addDays(i.start_date, span(i.estimate_minutes)), from_estimate: true };
     return null;
+  };
+  const zoneToday = () => new Date().toLocaleDateString('sv', { timeZone: workspace.timezone });
+  // The issues in scope now, their timelines and the scope's default day range (like core's progress_on).
+  const scoped = (scope: ProgressScope, measure: Measure) => {
+    const now = zoneToday();
+    let rows: Issue[];
+    let own: [string, string] | null = null;
+    let project: Project | undefined;
+    if ('Project' in scope) {
+      project = find(s.projects, scope.Project, 'project');
+      rows = s.issues.filter((i) => i.project_id === scope.Project && !i.archived_at);
+    } else if ('Cycle' in scope) {
+      const c = find(cycles, scope.Cycle, 'cycle');
+      own = [c.start_date, c.end_date];
+      rows = s.issues.filter((i) => i.cycle_id === scope.Cycle && !i.archived_at);
+    } else {
+      rows = viewIssues(scope.View);
+      own = [addDays(now, -29), now];
+    }
+    const tls = insights.timelines(s.issues.filter((i) => rows.includes(i)), changes, s.statuses, measure, workspace.timezone);
+    const [first, last] = insights.activity(tls, now);
+    const from = project ? (project.start_date ?? first) : own![0];
+    const range: [string, string] = project ? [from, (project.target_date ?? last) > from ? (project.target_date ?? last) : from] : own!;
+    return { tls, range };
   };
   const blockedBy = () => {
     const m = new Map<number, number[]>();
@@ -410,7 +441,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           Object.assign(i, old);
           throw e;
         }
-        const order = ['title', 'description', 'status_id', 'priority', 'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'label_ids', 'start_date', 'due', 'estimate_minutes', 'properties'] as const;
+        const order = ['title', 'description', 'status_id', 'priority', 'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'label_ids', 'start_date', 'due', 'estimate_minutes', 'points', 'properties'] as const;
         for (const k of order) if (changed.includes(k)) rec(id, k, old[k] as Value, i[k] as Value);
         i.updated_at = now();
         if (i.status_id !== old.status_id) i.completed_at = done(i) ? (done({ ...old }) ? old.completed_at : i.updated_at) : null;
@@ -483,7 +514,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         }
         const overrides: NewIssue = {
           title, priority: p.priority, project_id: project?.id, label_ids: ids.length ? ids : undefined,
-          start_date: p.start_date, due: p.due, estimate_minutes: p.estimate_minutes,
+          start_date: p.start_date, due: p.due, estimate_minutes: p.estimate_minutes, points: p.points,
         };
         if (!m) return create(overrides);
         const t = templates.find((x) => x.slug === m[1]) ?? fail('Invalid', `no template /${m[1]} (known: ${templates.map((x) => `/${x.slug}`).join(', ') || 'none'})`);
@@ -778,6 +809,23 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return null;
       },
     },
+    insights: {
+      progress: async (scope, measure, from, to) => {
+        const { tls, range } = scoped(scope, measure);
+        const [f, t] = [from ?? range[0], to ?? range[1]];
+        if (t < f || (Date.parse(t) - Date.parse(f)) / 86_400_000 >= insights.MAX_DAYS) fail('Invalid', `range ${f} to ${t} must be 1 to ${insights.MAX_DAYS} days`);
+        return insights.series(tls, measure, f, t);
+      },
+      velocity: async (scope, measure, periods) => {
+        const { tls } = scoped(scope, measure);
+        const now = zoneToday();
+        const started = [...cycles].sort((a, b) => a.number - b.number).filter((c) => c.start_date <= now);
+        const spans = cycles.length
+          ? started.slice(Math.max(0, started.length - periods)).map((c) => ({ start: c.start_date, end: c.end_date, label: c.name ?? `Cycle ${c.number}` }))
+          : insights.weekSpans(now, periods);
+        return insights.velocity(tls, spans);
+      },
+    },
     search: {
       // shortcut: results come in id order; the backend ranks by bm25. Upgrade when a screen depends on relevance order.
       search: async (text, limit) => {
@@ -882,7 +930,11 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     },
     settings: {
       get: async (key) => settings.get(key) ?? null,
-      set: async (key, value) => nothing(settings.set(key, value)),
+      set: async (key, value) => {
+        const allowed = choices[key];
+        if (allowed && !(typeof value === 'string' && allowed.includes(value))) fail('Invalid', `setting ${key} must be one of ${allowed.join(', ')}`);
+        return nothing(settings.set(key, value));
+      },
     },
     backup: {
       snapshot: async (dir, reason) => {
@@ -925,7 +977,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           }
           const made = create({
             title: i.title, description: i.description, priority: i.priority, start_date: i.start_date, due: i.due_date ? { Date: i.due_date } : null,
-            estimate_minutes: i.estimate_minutes, properties: i.properties,
+            estimate_minutes: i.estimate_minutes, points: i.points, properties: i.properties,
             status_id: i.status ? byName(s.statuses, i.status)?.id : undefined, project_id: i.project ? byName(s.projects, i.project)?.id : undefined,
             cycle_id: i.cycle ? cycles.find((c) => c.start_date === i.cycle)?.id : undefined,
             label_ids: i.labels.flatMap((l) => byName(labels, l)?.id ?? []),
@@ -1039,6 +1091,21 @@ const rows: Row[] = [
   { title: 'Rename Contact page', status: 2, priority: 1, project: null, hours: 0.5 },
   { title: 'Team retro notes', status: 1, priority: 0, project: null, labels: [4] },
 ];
+// Story points by issue number; the issues not listed have none (crates/devserver/src/seed.rs lists the same).
+const POINTS: Record<number, number> = { 1: 5, 3: 3, 4: 8, 5: 2, 7: 13, 8: 3, 10: 5, 11: 8, 13: 5, 14: 1, 15: 2, 16: 5, 17: 3, 19: 8, 20: 3, 23: 1 };
+// Status moves of the last three weeks, [issue, days ago, from, to]; every issue starts in Todo (2) and the last
+// move ends in its status now. Point revisions are [issue, days ago, from, to] too. Same rows as the real seed.
+const MOVES: [number, number, number, number][] = [
+  [3, 22, 2, 3], [3, 17, 3, 4], [4, 20, 2, 3], [10, 18, 2, 3], [10, 11, 3, 4], [10, 5, 4, 3], [13, 15, 2, 3], [13, 9, 3, 4],
+  [15, 14, 2, 3], [15, 12, 3, 4], [1, 12, 2, 3], [7, 9, 2, 3], [8, 8, 2, 3], [16, 5, 2, 3], [22, 4, 2, 5],
+];
+const REVISIONS: [number, number, number, number][] = [[4, 12, 5, 8], [7, 7, 8, 13]];
+const history: Change[] = [
+  ...MOVES.map(([n, ago, from, to]) => [n, ago, 'status_id', from, to] as const),
+  ...REVISIONS.map(([n, ago, from, to]) => [n, ago, 'points', from, to] as const),
+].map(([n, ago, field, old_value, new_value], id) => ({
+  id: id + 1, at: `${day(-ago)}T12:00:00Z`, source: 'Ui', entity: 'issue', entity_id: String(n), field, old_value, new_value,
+}));
 const issues: Issue[] = rows.map((r, k) => {
   const n = k + 1;
   const created = `${day(-30 + n)}T09:00:00Z`;
@@ -1048,6 +1115,7 @@ const issues: Issue[] = rows.map((r, k) => {
     project_id: r.project, milestone_id: r.milestone ?? null, parent_id: r.parent ?? null, cycle_id: r.cycle ?? null,
     label_ids: r.labels ?? [], start_date: r.start === undefined ? null : day(r.start),
     due: r.due === undefined ? null : { Date: day(r.due) }, estimate_minutes: r.hours === undefined ? null : r.hours * 60,
+    points: POINTS[n] ?? null,
     properties: { ...(r.area && { area: r.area }), ...(r.effort && { effort: r.effort }) } as Issue['properties'],
     created_at: created, updated_at: created, completed_at: finished ? created : null, archived_at: null,
   };
@@ -1086,5 +1154,5 @@ const views: SavedView[] = [
 export const fixtures: MockSeed = {
   statuses, projects, propertyDefs, issues, labels, cycles, views, milestones, relations, templates,
   viewTemplates: seedViewTemplates(propertyDefs.map((d) => d.key), day(7)),
-  workspace: { setup_done: true, name: 'Cairn', key: 'ABC', timezone: 'UTC' },
+  workspace: { setup_done: true, name: 'Cairn', key: 'ABC', timezone: 'UTC' }, history,
 };
