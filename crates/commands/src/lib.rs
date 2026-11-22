@@ -121,7 +121,7 @@ macro_rules! with_commands {
             issues_restore(s, id: IssueId) -> () { issues::restore(&s.db, id, ChangeSource::Ui).await }
             issues_children(s, id: IssueId) -> Vec<Issue> { issues::children(&s.db, id).await }
             issues_parse_quickadd(s, input: String) -> ParsedQuickAdd {
-                Ok(quickadd::parse(&input, today(s)?, &s.tz))
+                quickadd::parse_for(&s.db, &input, today(s)?, &s.tz).await
             }
             issues_create_from_quickadd(s, input: String) -> Issue {
                 quickadd::create_from(&s.db, &input, today(s)?, &s.tz, ChangeSource::Ui).await
