@@ -53,6 +53,11 @@ defineCommand({
   id: 'test.free', label: 'Zebra set due', icon: 'calendar', group: 'Issue', noShortcutReason: 'test',
   page: () => ({ title: 'Due date', items: [], parse: (t: string) => (t === 'fri' ? { label: 'Due Friday', run: () => picked('fri') } : null) }),
 } as never);
+let release: (() => void) | undefined;
+defineCommand({
+  id: 'test.slow', label: 'Zebra slow page', icon: 'tag', group: 'Issue', noShortcutReason: 'test',
+  page: () => new Promise((done) => { release = () => done({ title: 'Slow', items: [{ id: 'k', label: 'Kappa', checked: true, run: () => {} }] }); }),
+} as never);
 
 beforeEach(async () => {
   setApi(createMockApi());
@@ -151,6 +156,17 @@ describe('CommandPalette', () => {
     press('Enter');
     await settle();
     expect(document.querySelectorAll('[role=option][aria-checked=true]').length).toBe(2);
+  });
+
+  it('async_page_shows_a_skeleton_then_its_items_with_a_boolean_check', async () => {
+    await type('zebra slow');
+    press('Enter');
+    await settle();
+    expect(document.querySelector('.skel [aria-busy], .skel')).not.toBeNull();
+    release!();
+    await settle();
+    expect(document.querySelector('.skel')).toBeNull();
+    expect(document.querySelector('[role=option][aria-checked=true]')?.textContent).toContain('Kappa');
   });
 
   it('free_input_page_previews_the_parsed_value', async () => {

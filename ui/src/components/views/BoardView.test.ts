@@ -58,6 +58,10 @@ async function render(s: MockSeed, view: SavedView = boardView()) {
   document.body.append(target);
   const app = mount(BoardView, { target, props: { view } });
   flushSync();
+  // The board runs the view's own query, so its columns appear once that resolves.
+  await vi.waitFor(() => expect(target.querySelector('.board, [role=alert]')).not.toBeNull());
+  await new Promise((r) => setTimeout(r, 5));
+  flushSync();
   cleanups.push(() => {
     unmount(app);
     target.remove();
@@ -94,6 +98,16 @@ const columnNames = (root: Element) =>
   [...root.querySelectorAll('[data-column]')].map((c) => c.getAttribute('data-column'));
 
 describe('BoardView', () => {
+  it('shows_only_the_filtered_issues_and_hides_excluded_columns', async () => {
+    const view: SavedView = {
+      ...boardView(),
+      def: { ...board(), filter: { Cond: { field: { Fixed: 'StatusCategory' }, op: 'In', value: ['unstarted', 'started'] } } },
+    };
+    const root = await render(seed(), view);
+    expect(columnNames(root)).toEqual(['Todo', 'Doing']);
+    expect(cardKeys(root)).toEqual(['BRD-1', 'BRD-2']);
+  });
+
   it('columns_follow_status_positions', async () => {
     const shuffled = [statuses[2], statuses[0], statuses[1]];
     const root = await render(seed({ statuses: shuffled, issues: [] }));

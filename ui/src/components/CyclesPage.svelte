@@ -6,6 +6,10 @@
   import Dialog from '../ui/Dialog.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import GroupHeader from '../ui/GroupHeader.svelte';
+  import ListRow from '../ui/ListRow.svelte';
+  import EntityIcon from '../ui/EntityIcon.svelte';
+  import { localDay } from '../lib/gantt';
+  import { dayText } from './views/dates';
   import PageHeader from '../ui/PageHeader.svelte';
   import TextInput from '../ui/TextInput.svelte';
   import ListView from './views/ListView.svelte';
@@ -28,8 +32,8 @@
   let start = $state('');
   let end = $state('');
 
-  // Local calendar day as YYYY-MM-DD; dates in the store are day strings, so they compare as text.
-  const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // Today in the workspace zone, as a day string; dates in the store are day strings, so they compare as text.
+  let todayIn = $state(localDay(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone));
   const bandOf = (c: Cycle, today: string): Band => (c.start_date > today ? 'upcoming' : c.end_date < today ? 'past' : 'current');
   const title = (c: Cycle) => c.name ?? `Cycle ${c.number}`;
   const cycleView = (c: Cycle): SavedView => ({
@@ -43,7 +47,8 @@
   const finished = (i: Issue) => ['Completed', 'Canceled'].includes(statuses.find((s) => s.id === i.status_id)?.category ?? '');
 
   async function load() {
-    const today = isoDay(new Date());
+    const today = localDay(new Date(), (await api.workspace.status()).timezone);
+    todayIn = today;
     const list = await api.cycles.list();
     const issues = await Promise.all(list.map((c) => api.views.query(cycleView(c).def)));
     rows = list
@@ -56,12 +61,12 @@
   const bands = $derived((['current', 'upcoming', 'past'] as Band[]).map((b) => ({ band: b, items: rows.filter((r) => r.band === b) })));
   const current = $derived(rows.find((r) => r.band === 'current'));
   const next = $derived(rows.find((r) => r.band === 'upcoming'));
-  const daysLeft = (c: Cycle) => Math.max(0, Math.ceil((Date.parse(c.end_date) - Date.parse(isoDay(new Date()))) / DAY));
+  const daysLeft = (c: Cycle) => Math.max(0, Math.ceil((Date.parse(c.end_date) - Date.parse(todayIn)) / DAY));
 
-  // shortcut: one update per issue, since the backend has no bulk update yet; upgrade to issues_bulk_update(ids, patch) when it lands.
   async function moveUnfinished(from: Cycle, to: Cycle) {
     const issues = await api.views.query(cycleView(from).def);
-    for (const i of issues.filter((x) => !finished(x))) await api.issues.update(i.id, { cycle_id: to.id });
+    // One bulk write, so it is one undo step.
+    await api.issues.bulkUpdate(issues.filter((x) => !finished(x)).map((x) => x.id), { patch: { cycle_id: to.id } });
     await load();
   }
 
@@ -91,7 +96,9 @@
 
 <main class="body">
   {#if loaded && rows.length === 0}
-    <EmptyState title="No cycles yet" hint="A cycle is a dated slice of work. Start one to see what is due this week." />
+    <EmptyState title="No cycles yet" hint="A cycle is a dated slice of work. Start one to see what is due this week.">
+      {#snippet action()}<Button variant="primary" icon="plus" onclick={() => (creating = true)}>New cycle</Button>{/snippet}
+    </EmptyState>
   {:else}
     {#each bands as group (group.band)}
       {#if group.items.length > 0}
@@ -100,13 +107,15 @@
           {#if !collapsed[group.band]}
             <ul class="rows">
               {#each group.items as c (c.id)}
-                <li class="row" data-cycle={c.id} class:open={opened === c.id}>
-                  <button class="pick" type="button" aria-expanded={opened === c.id} onclick={() => (opened = opened === c.id ? null : c.id)}>
+                <li class="row" data-cycle={c.id}>
+                  <ListRow selected={opened === c.id} onpick={() => (opened = opened === c.id ? null : c.id)}>
+                    <EntityIcon icon={c.icon ?? 'icon:cycle'} color={c.color} size={16} />
                     <span class="title">{title(c)}</span>
-                    <span class="dates">{c.start_date} to {c.end_date}</span>
+                    <span class="dates">{dayText(c.start_date)} to {dayText(c.end_date)}</span>
+                    <span class="meter" role="progressbar" aria-label="Progress" aria-valuenow={c.done} aria-valuemax={c.total}><span class="fill" style:width={`${c.total ? (c.done / c.total) * 100 : 0}%`}></span></span>
                     <span class="progress">{c.done} of {c.total} done</span>
                     {#if group.band === 'current'}<span class="left">{daysLeft(c)} days left</span>{/if}
-                  </button>
+                  </ListRow>
                   {#if group.band === 'current' && next}
                     <Button onclick={() => (moving = true)}>Move unfinished to next cycle</Button>
                   {/if}
@@ -146,11 +155,11 @@
   .body { padding: 0 var(--s-7) var(--s-7); display: grid; gap: var(--s-5); }
   .group { display: grid; }
   .rows { list-style: none; margin: 0; padding: 0; }
-  .row { display: flex; align-items: center; gap: var(--s-5); min-height: var(--row-h); padding-right: var(--s-4); border-bottom: 1px solid var(--border); }
-  .pick { flex: 1; display: flex; align-items: center; gap: var(--s-6); min-height: var(--row-h); padding: 0 var(--s-6); border: 0; background: transparent; color: inherit; text-align: left; }
-  .pick:hover { background: var(--active); }
-  .title { font-weight: 600; }
+  .row { display: flex; align-items: center; gap: var(--s-5); padding-right: var(--s-4); border-bottom: 1px solid var(--border); }
+  .title { font-weight: 600; min-width: 120px; }
   .dates, .progress, .left { color: var(--muted); font-variant-numeric: tabular-nums; }
   .left { margin-left: auto; color: var(--ink); }
+  .meter { width: 120px; height: var(--s-3); border-radius: var(--r-round); background: var(--active); overflow: hidden; }
+  .fill { display: block; height: 100%; background: var(--accent); }
   .issues { border-left: 2px solid var(--accent); }
 </style>

@@ -11,17 +11,21 @@
   import EntityIcon from '../ui/EntityIcon.svelte';
   import Icon from '../ui/Icon.svelte';
   import Kbd from '../ui/Kbd.svelte';
+  import Skeleton from '../ui/Skeleton.svelte';
   import StatusGlyph from '../ui/StatusGlyph.svelte';
 
   let { onclose, oncreate }: { onclose: () => void; oncreate: () => void } = $props();
 
   // A page may also be multi-pick (stays open, items show a check) or free-input (`parse` turns the typed text into
   // one preview row); the registry type does not carry these yet, so they are read here as optional extras.
-  type PageItem = CommandPage['items'][number] & { checked?: () => boolean };
-  type Page = Omit<CommandPage, 'items'> & {
+  // `checked` is a boolean in the registry type; a function is tolerated too. A page may arrive as a Promise or
+  // carry `load()` (items then come from its result), and a parse result may carry its own `run`.
+  type PageItem = Omit<CommandPage['items'][number], 'checked'> & { checked?: boolean | (() => boolean) };
+  type Page = Omit<CommandPage, 'items' | 'parse'> & {
     items: PageItem[];
     multi?: boolean;
-    parse?: (text: string) => { label: string; run: () => void | Promise<void> } | null;
+    parse?: (text: string) => { label: string; value?: unknown; run?: () => void | Promise<void> } | null;
+    load?: () => PageItem[] | void | Promise<PageItem[] | void>;
   };
   type Row = {
     id: string;
@@ -39,7 +43,7 @@
 
   let query = $state('');
   let active = $state(0);
-  let stack = $state<{ title: string; cmd: Command; page: Page }[]>([]);
+  let stack = $state<{ title: string; cmd: Command; page: Page; loading?: boolean }[]>([]);
   let found = $state<Issue[]>([]);
   let cycles = $state<Cycle[]>([]);
   let labels = $state<Label[]>([]);
@@ -73,6 +77,20 @@
   const nav = (path: string) => () => navigate(path);
   const SETTINGS = ['general', 'statuses', 'properties', 'projects', 'cycles', 'labels', 'reminders', 'calendar', 'export', 'backups'];
 
+  // Sync pages show at once; an async page or one with `load()` shows a skeleton row until its items are in.
+  async function openPage(c: Command) {
+    const made = c.page!(ctx()) as Page | Promise<Page>;
+    const sync = !('then' in made);
+    const first = sync ? (made as Page) : null;
+    const entry = { title: first?.title ?? c.label, cmd: c, page: first ?? ({ title: c.label, items: [] } as Page), loading: !sync || !!first?.load };
+    stack.push(entry);
+    const at = stack.length - 1;
+    const page = sync ? (made as Page) : await (made as Promise<Page>);
+    const items = page.load ? await page.load() : undefined;
+    if (stack[at]?.cmd.id !== c.id) return;
+    stack[at] = { title: page.title, cmd: c, page: Array.isArray(items) ? { ...page, items } : page, loading: false };
+  }
+
   const commandRows = (): Row[] =>
     listCommands(ctx()).map((c) => ({
       id: `cmd:${c.id}`,
@@ -84,11 +102,9 @@
       more: !!c.page,
       run: () => {
         if (c.page) {
-          const page = c.page(ctx()) as Page;
-          stack.push({ title: page.title, cmd: c, page });
           query = '';
           active = 0;
-          return;
+          return void openPage(c);
         }
         // The create screen is mounted by the shell, which hands us this callback.
         if (c.id === 'issue.create') return oncreate();
@@ -121,16 +137,16 @@
     if (top) {
       rows = top.page.items.map((it) => ({
         id: `page:${it.id}`, label: it.label, keywords: it.keywords, group: top.title, icon: it.icon,
-        checked: it.checked ? it.checked() : undefined,
+        checked: typeof it.checked === 'function' ? it.checked() : it.checked,
         run: async () => {
           await it.run();
           if (top.page.multi) {
-            stack[stack.length - 1] = { ...top, page: top.cmd.page!(ctx()) as Page };
+            stack[stack.length - 1] = { ...top, page: (await Promise.resolve(top.cmd.page!(ctx()))) as Page };
             await tick();
           } else onclose();
         },
       }));
-      if (parsed) rows = [{ id: 'parsed', label: parsed.label, group: 'Preview', icon: 'check', run: async () => { await parsed.run(); onclose(); } }, ...rows];
+      if (parsed) rows = [{ id: 'parsed', label: parsed.label, group: 'Preview', icon: 'check', run: async () => { await parsed.run?.(); onclose(); } }, ...rows];
     } else rows = [...commandRows(), ...targetRows];
     const q = query.trim();
     const ranked = parsed || !q ? rows : rank(q, rows.map((r) => ({ ...r, keywords: [r.label, ...(r.keywords ?? [])] })), recent) as Row[];
@@ -272,7 +288,9 @@
             {/each}
           </div>
         {:else}
-          <p class="empty">No matches</p>
+          {#if stack.at(-1)?.loading}
+            <div class="skel" aria-busy="true"><Skeleton height="var(--row-h)" /></div>
+          {:else}<p class="empty">No matches</p>{/if}
         {/each}
       </div>
       <div class="foot">
@@ -309,6 +327,7 @@
   .sp { flex: 1; }
   .tick { color: var(--accent); }
   .more { color: var(--muted); }
+  .skel { padding: var(--s-2) var(--s-6); }
   .empty { margin: 0; padding: var(--s-8) var(--s-6); text-align: center; color: var(--muted); }
   .foot { display: flex; align-items: center; gap: var(--s-7); padding: var(--s-3) var(--s-6); border-top: 1px solid var(--border); background: var(--raised); color: var(--muted); font-size: var(--fs-xs); }
   .foot span { display: inline-flex; align-items: center; gap: var(--s-2); }
