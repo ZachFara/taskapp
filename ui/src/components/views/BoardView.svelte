@@ -118,6 +118,7 @@
   const ordered = $derived(rows.flatMap((r) => (isCollapsed(r.col) ? [] : r.cards.map((i) => i.id))));
   // Published so j/k and h/l (and the card moves) work through the selection store.
   $effect(() => {
+    selection.setLayout('board');
     selection.setColumns(rows.map((r) => (isCollapsed(r.col) ? [] : r.cards.map((i) => i.id))));
     return () => selection.setColumns([]);
   });

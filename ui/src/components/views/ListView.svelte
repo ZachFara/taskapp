@@ -137,6 +137,7 @@
   $effect(() => {
     const ids = visibleRows.map((r) => r.id);
     listState.ids = ids;
+    selection.setLayout('list');
     selection.setColumns([ids]);
     return () => {
       listState.ids = [];

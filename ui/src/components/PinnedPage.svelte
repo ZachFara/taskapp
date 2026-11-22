@@ -4,6 +4,7 @@
   import { openExternal } from '../lib/openExternal';
   import type { PinKind, ResolvedPin } from '../lib/bindings';
   import { navigate } from '../app/routes';
+  import Button from '../ui/Button.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import GroupHeader from '../ui/GroupHeader.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -72,14 +73,29 @@
     else navigate(p.route);
   }
 
-  onMount(load);
+  // The root opens the first pinned view, else the first saved view; /pinned itself stays put.
+  async function home() {
+    if (location.pathname !== '/') return;
+    const first = (await api.views.list())[0];
+    const to = pins.find((p) => p.pin.kind === 'View')?.route ?? (first ? `/view/${first.id}` : null);
+    if (!to) return;
+    history.replaceState(null, '', to);
+    dispatchEvent(new PopStateEvent('popstate'));
+  }
+
+  onMount(async () => {
+    await load();
+    await home();
+  });
 </script>
 
 <PageHeader title="Pinned" icon="icon:pin" />
 
 <main class="body">
   {#if loaded && pins.length === 0}
-    <EmptyState title="Nothing pinned yet" hint="Pin an issue, project or view to see it here. Open one and press the pin." />
+    <EmptyState title="Nothing pinned yet" hint="Pin an issue, project or view to see it here. Open one and press the pin.">
+      {#snippet action()}<Button onclick={() => navigate('/views')}>Open a view</Button>{/snippet}
+    </EmptyState>
   {:else}
     {#each groups as group (group.kind)}
       <section data-kind={group.kind} class="group">

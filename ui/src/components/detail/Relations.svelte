@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api } from '../../lib/api';
   import type { Issue, Relation, RelationKind } from '../../lib/bindings';
-  import GroupHeader from '../../ui/GroupHeader.svelte';
+  import SectionHeading from './SectionHeading.svelte';
   import IconButton from '../../ui/IconButton.svelte';
   import Select from '../../ui/Select.svelte';
   import IssuePicker from './IssuePicker.svelte';
@@ -32,7 +32,7 @@
 </script>
 
 <section aria-label="Relations">
-  <GroupHeader name="Relations" count={rows.length} category="Backlog" {collapsed} ontoggle={() => (collapsed = !collapsed)} />
+  <SectionHeading name="Relations" count={rows.length} {collapsed} ontoggle={() => (collapsed = !collapsed)} />
   {#if !collapsed}
     {#if !rows.length}<p class="none">No relations</p>{/if}
     <ul>
