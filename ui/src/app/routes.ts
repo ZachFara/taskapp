@@ -6,6 +6,7 @@ import ProjectPage from '../components/ProjectPage.svelte';
 import Settings from '../components/settings/Settings.svelte';
 import GanttView from '../components/views/GanttView.svelte';
 import ViewPage from './ViewPage.svelte';
+import DesignGallery from './DesignGallery.svelte';
 
 export const routes: { pattern: string; component: Component }[] = [
   { pattern: '/', component: PinnedPage }, // the app window opens on '/'
@@ -17,6 +18,7 @@ export const routes: { pattern: string; component: Component }[] = [
   { pattern: '/pinned', component: PinnedPage },
   { pattern: '/cycles', component: CyclesPage },
   { pattern: '/settings/:section', component: Settings },
+  { pattern: '/design', component: DesignGallery },
 ];
 
 /** The first route whose pattern fits `path`, with its `:name` segments as params. */
