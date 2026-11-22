@@ -8,7 +8,7 @@
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import TextInput from '../../ui/TextInput.svelte';
-  import { dueFrom, dueParts, isDate, isTime, minutes, PRIORITIES } from './format';
+  import { dueFrom, dueParts, humanDate, isDate, isTime, minutes, PRIORITIES } from './format';
   import IssuePicker from './IssuePicker.svelte';
   import OptionList from './OptionList.svelte';
   import PropertyRow from './PropertyRow.svelte';
@@ -52,11 +52,9 @@
   const due = $derived(dueParts(issue.due));
   const num = (v: string | number | null) => (v === null ? null : Number(v));
 
-  let timeDraft = $state('');
   let draft = $state('');
   const setProp = (key: string, value: Value) => act(api.properties.setValue(issue.id, key, value));
   const toggleLabel = (id: number, on: boolean) => act(on ? api.labels.addLabel(issue.id, id) : api.labels.removeLabel(issue.id, id));
-  const dateText = (d: string | null) => d ?? 'None';
 </script>
 
 {#snippet none()}<span class="none">None</span>{/snippet}
@@ -117,22 +115,20 @@
   </PropertyRow>
 
   <PropertyRow id="start" name="Start" cmd="issue.detail.start" bind:openRow>
-    {#snippet value()}{dateText(issue.start_date)}{/snippet}
+    {#snippet value()}{humanDate(issue.start_date)}{/snippet}
     {#snippet editor()}
       <TextInput type="date" label="Start date" value={issue.start_date ?? ''} oninput={(e) => { const v = (e.currentTarget as HTMLInputElement).value; if (isDate(v)) save({ start_date: v || null }); }} />
     {/snippet}
   </PropertyRow>
 
   <PropertyRow id="due" name="Due" cmd="issue.detail.due" bind:openRow>
-    {#snippet value()}{due.date ? `${due.date}${due.timed ? ` ${due.time}` : ''}` : 'None'}{/snippet}
+    {#snippet value()}{due.date ? `${humanDate(due.date)}${due.timed ? ` ${due.time}` : ''}` : 'None'}{/snippet}
     {#snippet editor()}
       <div class="stack">
         <TextInput type="date" label="Due date" value={due.date} oninput={(e) => { const v = (e.currentTarget as HTMLInputElement).value; if (isDate(v)) save({ due: dueFrom(v, due.timed ? due.time : null) }); }} />
         <span class="inline"><Checkbox label="Due time" bind:checked={() => due.timed, (on) => on !== due.timed && save({ due: dueFrom(due.date, on ? due.time : null) })} disabled={!due.date} /> Time of day</span>
         {#if due.timed}
-          <form onsubmit={(e) => { e.preventDefault(); if (isTime(timeDraft)) save({ due: dueFrom(due.date, timeDraft) }); }}>
-            <TextInput label="Due time of day" placeholder="HH:MM" value={timeDraft || due.time} oninput={(e) => (timeDraft = (e.currentTarget as HTMLInputElement).value)} />
-          </form>
+          <TextInput type="time" label="Due time of day" value={due.time} onchange={(v) => isTime(v) && save({ due: dueFrom(due.date, v) })} />
         {/if}
       </div>
     {/snippet}

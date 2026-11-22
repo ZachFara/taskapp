@@ -3,7 +3,8 @@
   import type { Issue } from '../../lib/bindings';
   import TextInput from '../../ui/TextInput.svelte';
 
-  let { selfId, label, pick }: { selfId: number; label: string; pick: (i: Issue) => void } = $props();
+  // With `create`, Enter makes a new issue from the typed text; the matches below still attach an existing one.
+  let { selfId, label, pick, create, placeholder = label }: { selfId: number; label: string; pick: (i: Issue) => void; create?: (title: string) => void; placeholder?: string } = $props();
   let results = $state<Issue[]>([]);
   let text = $state('');
 
@@ -14,7 +15,9 @@
 </script>
 
 <div class="picker">
-  <TextInput {label} placeholder={label} type="search" bind:value={text} oninput={() => find(text)} />
+  <form onsubmit={(e) => { e.preventDefault(); const t = text.trim(); if (create && t) { text = ''; results = []; create(t); } }}>
+    <TextInput {label} {placeholder} type={create ? 'text' : 'search'} bind:value={text} oninput={() => find(text)} />
+  </form>
   {#if results.length}
     <ul class="results">
       {#each results as r (r.id)}
