@@ -503,3 +503,103 @@ async fn comments_heading_in_description_roundtrips() -> R {
     }
     Ok(())
 }
+
+/// Every table the export promises to carry, as text rows without database ids (view templates keep theirs:
+/// views point at them). Import log rows name their issue by number.
+async fn dump(
+    db: &Db,
+) -> Result<BTreeMap<String, Vec<serde_json::Value>>, Box<dyn std::error::Error>> {
+    let mut out = BTreeMap::new();
+    for t in [
+        "statuses",
+        "labels",
+        "projects",
+        "milestones",
+        "cycles",
+        "views",
+        "issue_templates",
+        "view_templates",
+        "property_defs",
+        "pins",
+        "import_log",
+    ] {
+        let cols: Vec<String> = sqlx::query_scalar(
+            "SELECT name FROM pragma_table_info(?1) WHERE (name != 'id' OR ?1 = 'view_templates')
+               AND (name NOT LIKE '%!_id' ESCAPE '!' OR name = 'template_id') ORDER BY cid",
+        )
+        .bind(t)
+        .fetch_all(&db.pool)
+        .await?;
+        let mut fields: Vec<String> = cols.iter().map(|c| format!("'{c}', \"{c}\"")).collect();
+        if t == "import_log" {
+            fields.push("'issue', (SELECT number FROM issues WHERE id = issue_id)".into());
+        }
+        let sql = format!(
+            "SELECT json_object({}) AS r FROM {t} ORDER BY r",
+            fields.join(", ")
+        );
+        let mut rows = vec![];
+        for r in sqlx::query_scalar::<_, String>(&sql)
+            .fetch_all(&db.pool)
+            .await?
+        {
+            let mut row: serde_json::Value = serde_json::from_str(&r)?;
+            // JSON columns compare as values: the rebuild writes keys in sorted order.
+            for c in ["body", "definition", "options"] {
+                if let Some(text) = row[c].as_str() {
+                    row[c] = serde_json::from_str(text)?;
+                }
+            }
+            rows.push(row);
+        }
+        out.insert(t.to_string(), rows);
+    }
+    Ok(out)
+}
+
+#[tokio::test]
+async fn rebuild_restores_every_column_the_database_holds() -> R {
+    let db = seeded().await?;
+    for sql in [
+        "UPDATE statuses SET icon = 'icon:flag' WHERE name = 'Done'",
+        "UPDATE labels SET icon = 'icon:bug', color = 'red' WHERE name = 'bug'",
+        "UPDATE projects SET icon = 'emoji:🚀', color = 'teal'",
+        "UPDATE cycles SET icon = 'icon:repeat', color = 'blue'",
+        "INSERT INTO view_templates (id, name, definition, position, icon, color)
+           VALUES (7, 'Board', '{\"filter\":null,\"sorts\":[],\"group_by\":null,\"layout\":\"Board\",\"columns\":[],\"include_archived\":false}', 0, 'icon:kanban', 'indigo')",
+        "UPDATE views SET icon = 'icon:star', color = 'yellow', template_id = 7 WHERE id = (SELECT min(id) FROM views)",
+        "INSERT INTO issue_templates (name, slug, icon, color, body)
+           VALUES ('Bug report', 'bug-report', 'icon:bug', 'red', '{\"title_prefix\":\"Bug: \",\"fields\":{\"priority\":2},\"sub_issues\":[]}')",
+        "INSERT INTO import_log (external_id, source, issue_id, imported_at)
+           VALUES ('row-1', 'csv', (SELECT id FROM issues WHERE number = 1), '2026-01-02T03:04:05Z')",
+    ] {
+        sqlx::query(sql).execute(&db.pool).await?;
+    }
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    let (want, got) = (dump(&db).await?, dump(&rebuilt).await?);
+    for (table, rows) in &want {
+        assert_eq!(&got[table], rows, "table {table}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_hand_edited_slug_or_prefix_still_cannot_become_a_file_name() -> R {
+    for (sql, what) in [
+        ("UPDATE projects SET slug = '../up'", "slug"),
+        (
+            "UPDATE settings SET value = '\"../x\"' WHERE key = 'issue_prefix'",
+            "prefix",
+        ),
+    ] {
+        let db = seeded().await?;
+        sqlx::query(sql).execute(&db.pool).await?;
+        let dir = tempfile::tempdir()?;
+        let result = write::write_snapshot(&db, dir.path()).await;
+        assert!(result.is_err(), "a hand-edited {what} was written");
+        assert_eq!(fs::read_dir(dir.path())?.count(), 0, "nothing is written");
+    }
+    Ok(())
+}

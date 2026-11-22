@@ -169,3 +169,20 @@ pub async fn list_for(db: &Db, entity: &str, entity_id: &str) -> Result<Vec<Chan
         })
         .collect()
 }
+
+/// Renames the current step once its outcome is known (a created issue's key, an import's count).
+/// Does nothing outside a step or before the step recorded a change.
+///
+/// # Errors
+/// Fails when the update fails.
+pub async fn relabel(db: &Db, label: &str) -> Result<()> {
+    let Ok(Some(id)) = STEP.try_with(|s| s.id.get()) else {
+        return Ok(());
+    };
+    sqlx::query("UPDATE changes SET step_label = ? WHERE step = ?")
+        .bind(label)
+        .bind(id)
+        .execute(&db.pool)
+        .await?;
+    Ok(())
+}

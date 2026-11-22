@@ -80,6 +80,23 @@ async fn a_failing_item_applies_nothing() -> R {
 }
 
 #[tokio::test]
+async fn an_item_that_cannot_be_updated_rolls_back_the_earlier_ones() -> R {
+    let db = Db::open_in_memory().await?;
+    let a = seed(&db, "ABC a").await?;
+    let patch = BulkPatch {
+        patch: IssuePatch {
+            priority: Some(2),
+            ..IssuePatch::default()
+        },
+        ..BulkPatch::default()
+    };
+    let e = bulk::update(&db, &[a, taskapp_core::IssueId(9999)], patch, UI).await;
+    assert!(matches!(e, Err(Error::NotFound(_))), "{e:?}");
+    assert_eq!(issues::get(&db, a).await?.priority, 0);
+    Ok(())
+}
+
+#[tokio::test]
 async fn a_bulk_archive_is_one_undo_step() -> R {
     let db = Db::open_in_memory().await?;
     let (a, b) = (seed(&db, "ABC a").await?, seed(&db, "ABC b").await?);

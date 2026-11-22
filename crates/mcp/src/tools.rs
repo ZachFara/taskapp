@@ -37,7 +37,7 @@ const TOOLS: &[Row] = &[
     ),
     (
         "create_issue",
-        "Create an issue. Args mirror NewIssue (title, status_id, priority, due, properties incl. linear_id, created_at, completed_at for migrated history); migration: true records the Migration source. Never reads or writes Linear.",
+        "Create an issue. Args mirror NewIssue (title, status_id, priority, due as {\"Date\":\"2026-01-10\"}, properties incl. linear_id, created_at, completed_at for migrated history); migration: true records the Migration source. Does not touch Linear.",
         &["title"],
     ),
     (
@@ -140,7 +140,7 @@ const TOOLS: &[Row] = &[
     ),
     (
         "import_linear_plan",
-        "Dry run of a Linear import using $LINEAR_API_KEY of this server; writes nothing. Returns the plan; pass it to import_apply.",
+        "Dry run of a Linear import using $LINEAR_API_KEY of this server; the only tool that uses the network, writes nothing. Returns the plan; pass it to import_apply.",
         &[],
     ),
     (
@@ -259,6 +259,15 @@ fn arg<T: DeserializeOwned>(a: &Value, k: &str) -> Res<T> {
         .map_err(|e| format!("invalid argument `{k}`: {e}"))
 }
 
+/// The call's own arguments minus the ones that are not fields of `T`, so `T` can refuse any other name.
+fn without<T: DeserializeOwned>(a: &Value, skip: &[&str]) -> Res<T> {
+    let mut a = a.clone();
+    if let Some(o) = a.as_object_mut() {
+        o.retain(|k, _| !skip.contains(&k.as_str()));
+    }
+    serde_json::from_value(a).map_err(|e| format!("invalid arguments: {e}"))
+}
+
 fn opt<T: DeserializeOwned>(a: &Value, k: &str) -> Res<Option<T>> {
     match a.get(k) {
         None | Some(Value::Null) => Ok(None),
@@ -371,7 +380,7 @@ impl Server {
             "query_view" => self.query_view(a).await,
             "get_issue" => self.get_issue(a).await,
             "create_issue" => {
-                let new: NewIssue = serde_json::from_value(a.clone()).map_err(|e| e.to_string())?;
+                let new: NewIssue = without(a, &["migration"])?;
                 ok(&issues::create(db, new, s).await.map_err(|e| ce(&e))?)
             }
             "update_issue" => {
@@ -431,6 +440,9 @@ impl Server {
         let issue = self.issue_by_key(a, "key").await?;
         let at: Option<DateTime<Utc>> = opt(a, "created_at")?;
         let body = arg::<String>(a, "body")?;
+        if body.trim().is_empty() {
+            return Err("invalid: comment body is empty".into());
+        }
         let made = comments::add_comment(&self.db, issue.id, &body, at, src(a)).await;
         ok(&made.map_err(|e| ce(&e))?)
     }
@@ -595,13 +607,11 @@ impl Server {
         match name {
             "list_templates" => ok(&templates::list(db).await.map_err(|e| ce(&e))?),
             "create_template" => {
-                let input: TemplateInput =
-                    serde_json::from_value(a.clone()).map_err(|e| e.to_string())?;
+                let input: TemplateInput = without(a, &["migration"])?;
                 ok(&templates::create(db, input, s).await.map_err(|e| ce(&e))?)
             }
             "update_template" => {
-                let input: TemplateInput =
-                    serde_json::from_value(a.clone()).map_err(|e| e.to_string())?;
+                let input: TemplateInput = without(a, &["migration", "id"])?;
                 ok(&templates::update(db, arg(a, "id")?, input, s)
                     .await
                     .map_err(|e| ce(&e))?)

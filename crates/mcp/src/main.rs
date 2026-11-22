@@ -1,4 +1,4 @@
-//! MCP server over stdio. Reads and writes the task database only; it never talks to Linear or any sync target.
+//! MCP server over stdio. Reads and writes the task database; the only tool that reaches the network is `import_linear_plan`.
 
 mod tools;
 
@@ -19,7 +19,7 @@ use tools::Server;
 impl ServerHandler for Server {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
-            "Cairn: reads and writes the local task database. Never touches Linear or any other service.",
+            "Cairn: reads and writes the local task database. The only tool that reaches the network is import_linear_plan, which reads Linear with this server's LINEAR_API_KEY; every other tool is local.",
         )
     }
 
@@ -66,6 +66,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dir = path
         .parent()
         .map_or_else(PathBuf::new, |p| p.join("backups"));
-    Server::new(db, dir).serve(stdio()).await?.waiting().await?;
+    Box::pin(Server::new(db, dir).serve(stdio()))
+        .await?
+        .waiting()
+        .await?;
     Ok(())
 }

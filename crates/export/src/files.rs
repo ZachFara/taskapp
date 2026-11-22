@@ -37,12 +37,16 @@ pub struct StatusRow {
     pub category: String,
     pub position: i64,
     pub color: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
 pub struct LabelRow {
     pub name: String,
     pub color: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
@@ -51,6 +55,10 @@ pub struct CycleRow {
     pub name: Option<String>,
     pub start_date: NaiveDate,
     pub end_date: NaiveDate,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
@@ -78,6 +86,10 @@ pub struct ProjectFile {
     pub target_date: Option<NaiveDate>,
     pub archived_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
     #[sqlx(skip)]
     #[serde(default)]
     pub milestones: Vec<MilestoneRow>,
@@ -100,6 +112,47 @@ pub struct ViewFile {
     pub name: String,
     pub position: i64,
     pub definition: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template_id: Option<i64>,
+}
+
+/// One entry of `view_templates.yaml`. The id is kept because views point at it.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct ViewTemplateFile {
+    pub id: i64,
+    pub name: String,
+    pub position: i64,
+    pub definition: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+}
+
+/// One entry of `issue_templates.yaml`; `body` is the JSON the database stores.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct IssueTemplateFile {
+    pub name: String,
+    pub slug: String,
+    pub body: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+}
+
+/// One entry of `import_log.yaml`: what was imported, so a re-import after a rebuild skips it.
+/// The issue is named by number, never by database id.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct ImportLogRow {
+    pub external_id: String,
+    pub source: String,
+    pub issue: i64,
+    pub imported_at: String,
 }
 
 /// Frontmatter of `issues/<KEY>.md`. Every reference is by name or key, never by database id.
