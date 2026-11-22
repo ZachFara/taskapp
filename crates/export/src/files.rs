@@ -268,7 +268,7 @@ fn heading(s: &str) -> Option<Heading<'_>> {
         .then(|| (created, updated, &s[line_end + 1..]))
 }
 
-/// The timestamp-free issue key for a number, e.g. `ZF-12`.
+/// The timestamp-free issue key for a number, e.g. `ABC-12`.
 #[must_use]
 pub fn key(prefix: &str, number: i64) -> String {
     format!("{prefix}-{number}")

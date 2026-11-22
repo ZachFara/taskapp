@@ -235,22 +235,25 @@ async fn reminders_watch_forwards_change_lines() -> R {
 
 #[test]
 fn deeplink_parses_key() {
-    assert_eq!(parse_key("taskapp://issue/ZF-12").as_deref(), Some("ZF-12"));
     assert_eq!(
-        parse_key("taskapp://issue/ZF-12/").as_deref(),
-        Some("ZF-12")
+        parse_key("taskapp://issue/ABC-12").as_deref(),
+        Some("ABC-12")
+    );
+    assert_eq!(
+        parse_key("taskapp://issue/ABC-12/").as_deref(),
+        Some("ABC-12")
     );
     for bad in [
         "taskapp://issue/",
-        "taskapp://issue/zf-1",
-        "taskapp://issue/ZF-",
-        "taskapp://issue/ZF-1x",
-        "taskapp://issue/ZF-1/../x",
-        "taskapp://issue/ZF-1?x=1",
+        "taskapp://issue/abc-1",
+        "taskapp://issue/ABC-",
+        "taskapp://issue/ABC-1x",
+        "taskapp://issue/ABC-1/../x",
+        "taskapp://issue/ABC-1?x=1",
         "taskapp://issue/-1",
-        "taskapp://issue/ZF-99999999999",
-        "taskapp://project/ZF-1",
-        "https://issue/ZF-1",
+        "taskapp://issue/ABC-99999999999",
+        "taskapp://project/ABC-1",
+        "https://issue/ABC-1",
     ] {
         assert_eq!(parse_key(bad), None, "{bad}");
     }

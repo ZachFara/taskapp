@@ -27,9 +27,11 @@ pub mod statuses;
 pub mod templates;
 pub mod undo;
 pub mod views;
+pub mod workspace;
 
 pub use db::Db;
 pub use error::{Error, Result};
 pub use import::{Applied, ImportPlan};
 pub use model::*;
 pub use templates::{AppliedTemplate, IssueTemplate, TemplateInput};
+pub use workspace::WorkspaceStatus;

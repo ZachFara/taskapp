@@ -72,7 +72,7 @@ async fn seed_issues(db: &Db) -> Result<(IssueId, IssueId), Box<dyn std::error::
                     .with_ymd_and_hms(2026, 1, 12, 14, 0, 0)
                     .single()
                     .ok_or("bad time")?,
-                tz: "America/New_York".into(),
+                tz: "Europe/Berlin".into(),
             }),
             ..NewIssue::default()
         },
@@ -118,7 +118,7 @@ async fn seed_rest(db: &Db, docs: IssueId, ship: IssueId) -> R {
         SRC,
     )
     .await?;
-    properties::set_value(db, docs, "owner", Some(json!("zach")), SRC).await?;
+    properties::set_value(db, docs, "owner", Some(json!("sam")), SRC).await?;
     let done = statuses_named(db, "Done").await?;
     issues::update(
         db,
@@ -253,12 +253,12 @@ async fn removed_issue_file_deleted() -> R {
     let db = seeded().await?;
     let dir = tempfile::tempdir()?;
     write::write_snapshot(&db, dir.path()).await?;
-    assert!(dir.path().join("issues/ZF-2.md").exists());
+    assert!(dir.path().join("issues/ABC-2.md").exists());
     sqlx::query("DELETE FROM issues WHERE number = 2")
         .execute(&db.pool)
         .await?;
     let stats = write::write_snapshot(&db, dir.path()).await?;
-    assert!(!dir.path().join("issues/ZF-2.md").exists());
+    assert!(!dir.path().join("issues/ABC-2.md").exists());
     assert_eq!(stats.files_removed, 1);
     Ok(())
 }
@@ -328,7 +328,7 @@ async fn title_cannot_escape_issues_dir() -> R {
                 .into_owned()
         })
         .collect();
-    assert_eq!(names, ["ZF-1.md"]);
+    assert_eq!(names, ["ABC-1.md"]);
     let outside: Vec<String> = fs::read_dir(base.path())?
         .map(|e| {
             e.expect("test io")

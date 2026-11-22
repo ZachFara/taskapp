@@ -100,7 +100,7 @@ async fn validate_each_kind() {
         (Url, json!("https://x.io/p"), json!("ftp://x.io")),
         (Url, json!("HTTP://x.io"), json!("https://")),
         (NoteLink, json!("notes/a.md"), json!("notes/a.txt")),
-        (NoteLink, json!("obsidian://open?vault=v"), json!(3)),
+        (NoteLink, json!("obsidian://open?file=a"), json!(3)),
     ];
     for (kind, good, bad) in cases {
         let mut d = def("k", kind);
@@ -133,7 +133,7 @@ async fn set_value_records_history() -> R {
     let i = issue(&db, None, json!({})).await;
     let got = properties::set_value(&db, i, "area", Some(json!("ops")), Ui).await?;
     assert_eq!(got.properties["area"], json!("ops"));
-    assert_eq!(got.key, "ZF-1");
+    assert_eq!(got.key, "ABC-1");
     properties::set_value(&db, i, "area", None, Ui).await?;
     let h = history::list_for(&db, "issue", &i.0.to_string()).await?;
     assert_eq!(h.len(), 2);
@@ -205,7 +205,7 @@ async fn change_kind_refuses_and_lists_keys() -> R {
     let Err(Error::Conflict(m)) = e else {
         panic!("expected Conflict, got {e:?}")
     };
-    assert!(m.contains("ZF-2") && !m.contains("ZF-1"), "{m}");
+    assert!(m.contains("ABC-2") && !m.contains("ABC-1"), "{m}");
     assert_eq!(all_props(&db).await, before);
     let after: Vec<String> = sqlx::query_scalar("SELECT updated_at FROM issues")
         .fetch_all(&db.pool)
@@ -230,7 +230,7 @@ async fn change_kind_lists_at_most_20_keys() -> R {
     else {
         panic!("expected Conflict")
     };
-    assert_eq!(m.matches("ZF-").count(), 20, "{m}");
+    assert_eq!(m.matches("ABC-").count(), 20, "{m}");
     assert!(m.contains("5 more"));
     Ok(())
 }
@@ -479,7 +479,7 @@ async fn set_scope_refuses_while_values_sit_on_other_projects() -> R {
     let Err(Error::Conflict(m)) = e else {
         panic!("expected Conflict, got {e:?}")
     };
-    assert!(m.contains("ZF-2") && !m.contains("ZF-1"), "{m}");
+    assert!(m.contains("ABC-2") && !m.contains("ABC-1"), "{m}");
     assert_eq!(properties::list_defs(&db).await?[0].project_id, None);
     let e = properties::set_scope(&db, "nope", None, Ui).await;
     assert!(matches!(e, Err(Error::NotFound(_))));

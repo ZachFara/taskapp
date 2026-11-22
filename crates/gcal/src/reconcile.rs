@@ -211,7 +211,7 @@ async fn desired(db: &Db) -> Result<Vec<DesiredEvent>> {
         .unwrap_or_else(|| "UTC".into());
     let prefix: String = settings::get(db, "issue_prefix")
         .await?
-        .unwrap_or_else(|| "ZF".into());
+        .unwrap_or_else(|| "ABC".into());
     Ok(planner::desired(
         &issues,
         &statuses::list(db).await?,
