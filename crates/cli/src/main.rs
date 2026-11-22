@@ -7,7 +7,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
-use taskapp_core::{Db, Error, Result, backup};
+use taskapp_core::{Db, Error, Result, backup, history};
 
 #[derive(Parser)]
 #[command(name = "taskapp", about = "Manage taskapp issues from the terminal")]
@@ -51,6 +51,10 @@ enum Cmd {
     Pin(PinCmd),
     /// Change history of an issue.
     History { key: String },
+    /// Undo the newest step, whatever made it (UI, agent or CLI).
+    Undo,
+    /// Redo the step most recently undone.
+    Redo,
     #[command(subcommand)]
     Backup(BackupCmd),
 }
@@ -309,7 +313,18 @@ async fn run(cli: Cli) -> Result<()> {
     std::fs::create_dir_all(&dir)?;
     let db = Db::open(&path).await?;
     // Same folder the MCP server and the app list and prune.
-    let value = commands::run(&db, &dir.join("backups"), cli.cmd).await?;
+    // One invocation is one undoable step, labelled with the command line minus the global flags.
+    let mut args = std::env::args().skip(1);
+    let mut words = Vec::new();
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--db" => drop(args.next()),
+            "--json" => {}
+            _ => words.push(a),
+        }
+    }
+    let label = words.join(" ");
+    let value = history::step(&label, commands::run(&db, &dir.join("backups"), cli.cmd)).await?;
     print_value(&value, cli.json);
     Ok(())
 }

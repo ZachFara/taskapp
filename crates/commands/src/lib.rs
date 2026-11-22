@@ -13,9 +13,9 @@ use taskapp_core::{
     IssuePatch, Label, LabelId, Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId,
     PinKind, Project, ProjectId, PropertyDef, PropertyKind, Relation, Reschedule, ResolvedPin,
     Result, SavedView, SelectOption, Status, StatusCategory, StatusId, SyncState, SyncStatus,
-    ViewDef, ViewId, WorkBlock, WorkBlockId, backup, blocks, comments, cycles, history, issues,
-    labels, pins, projects, properties, quickadd, relations, schedule, search, settings, statuses,
-    views,
+    UndoStatus, ViewDef, ViewId, WorkBlock, WorkBlockId, backup, blocks, comments, cycles, history,
+    issues, labels, pins, projects, properties, quickadd, relations, schedule, search, settings,
+    statuses, undo, views,
 };
 
 pub struct AppState {
@@ -70,7 +70,10 @@ macro_rules! define {
     ($($name:ident($s:ident $(, $a:ident : $t:ty)*) -> $r:ty $body:block)*) => {
         $(
             #[doc = "Forwards to core with `ChangeSource::Ui`.\n\n# Errors\nFails as the core function it forwards to does."]
-            pub async fn $name($s: &AppState $(, $a: $t)*) -> Result<$r> $body)*
+            pub async fn $name($s: &AppState $(, $a: $t)*) -> Result<$r> {
+                // One command call is one undoable step.
+                history::step(stringify!($name), async move $body).await
+            })*
 
         const TABLE: &[(&str, Handler)] = &[$((stringify!($name), |st, args| Box::pin(async move {
             #[derive(serde::Deserialize)]
@@ -244,6 +247,9 @@ macro_rules! with_commands {
             history_list_for(s, entity: String, entity_id: String) -> Vec<Change> {
                 history::list_for(&s.db, &entity, &entity_id).await
             }
+            history_undo(s) -> UndoStatus { undo::undo(&s.db).await }
+            history_redo(s) -> UndoStatus { undo::redo(&s.db).await }
+            history_undo_status(s) -> UndoStatus { undo::undo_status(&s.db).await }
             settings_get(s, key: String) -> Option<Value> { settings::get(&s.db, &key).await }
             settings_set(s, key: String, value: Value) -> () { settings::set(&s.db, &key, &value).await }
             backup_snapshot(s, dir: String, reason: String) -> String {

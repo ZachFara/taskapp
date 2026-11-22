@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO changes (at, source, entity, entity_id, field, old_value, new_value, step, step_label)\n         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "fe3fa4b40b65858105a37a075d4830ea000fea86591efff536d5d30a019bcb66"
+}
