@@ -28,10 +28,10 @@ const HOUR = 60 * 60_000;
 // The last events array the view handed the calendar.
 const lastEvents = () => stub().setOption.mock.calls.filter(([k]: [string]) => k === 'events').at(-1)?.[1] ?? [];
 
-// Fixtures plus one issue with a timed due in New York on the US DST start day (2026-03-08).
+// Fixtures plus one issue with a timed due in a US Eastern zone on the US DST start day (2026-03-08).
 const withTimedDue = (): typeof fixtures => {
   const base = fixtures.issues[0];
-  const timed: Issue = { ...base, id: 900, key: 'ABC-900', due: { DateTime: { utc: '2026-03-08T13:30:00Z', tz: 'America/New_York' } } };
+  const timed: Issue = { ...base, id: 900, key: 'ABC-900', due: { DateTime: { utc: '2026-03-08T13:30:00Z', tz: 'US/Eastern' } } };
   return { ...fixtures, issues: [...fixtures.issues, timed] };
 };
 

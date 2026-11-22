@@ -125,21 +125,21 @@ describe('GanttView', () => {
   });
 
   it('drag_keeps_datetime_due_time_and_zone', async () => {
-    const due = { DateTime: { utc: '2026-12-03T15:00:00Z', tz: 'America/New_York' } };
+    const due = { DateTime: { utc: '2026-12-03T15:00:00Z', tz: 'US/Eastern' } };
     await show([issue(1, { start_date: '2026-12-01', due })]);
     const update = vi.spyOn(api.issues, 'update');
     dragBy(bar('issue-1'), 28);
     await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-    expect(update).toHaveBeenCalledWith(1, { start_date: '2026-12-03', due: { DateTime: { utc: '2026-12-05T15:00:00Z', tz: 'America/New_York' } } });
+    expect(update).toHaveBeenCalledWith(1, { start_date: '2026-12-03', due: { DateTime: { utc: '2026-12-05T15:00:00Z', tz: 'US/Eastern' } } });
   });
 
   it('drag_across_dst_keeps_local_wall_clock', async () => {
-    const due = { DateTime: { utc: '2026-03-06T14:00:00Z', tz: 'America/New_York' } };
+    const due = { DateTime: { utc: '2026-03-06T14:00:00Z', tz: 'US/Eastern' } };
     await show([issue(1, { start_date: '2026-03-06', due })]);
     const update = vi.spyOn(api.issues, 'update');
     dragBy(bar('issue-1'), 42);
     await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-    expect(update.mock.calls[0][1]).toEqual({ start_date: '2026-03-09', due: { DateTime: { utc: '2026-03-09T13:00:00Z', tz: 'America/New_York' } } });
+    expect(update.mock.calls[0][1]).toEqual({ start_date: '2026-03-09', due: { DateTime: { utc: '2026-03-09T13:00:00Z', tz: 'US/Eastern' } } });
   });
 
   it('drag_estimate_only_bar_does_not_invent_due', async () => {
