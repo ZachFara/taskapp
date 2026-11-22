@@ -24,9 +24,11 @@ const open = async () => {
 const search = () => document.querySelector<HTMLInputElement>('input[type=search], input')!;
 const rowFor = (label: string) => [...document.querySelectorAll('li')].find((li) => li.textContent?.includes(label));
 
-afterEach(() => {
+// bits-ui drops its escape layer in an effect teardown, so let that flush before the next test.
+afterEach(async () => {
   if (app) unmount(app);
   app = null;
+  await settle();
   document.body.innerHTML = '';
 });
 
