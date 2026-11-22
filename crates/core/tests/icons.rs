@@ -2,7 +2,7 @@ use chrono::NaiveDate;
 use taskapp_core::palette::Look;
 use taskapp_core::{
     ChangeSource::Ui, Db, Layout, StatusCategory, ViewDef, cycles, history, labels, palette,
-    projects, statuses, views,
+    projects, statuses, undo, views,
 };
 
 fn day(d: u32) -> NaiveDate {
@@ -205,5 +205,24 @@ async fn legacy_hex_colors_map_to_nearest_key() -> Result<(), Box<dyn std::error
         .into_iter()
         .find(|s| s.name == "Done");
     assert_eq!(done.map(|s| s.color), Some("indigo".to_owned()));
+    Ok(())
+}
+
+#[tokio::test]
+async fn undo_refuses_an_icon_or_color_change_with_a_clear_error()
+-> Result<(), Box<dyn std::error::Error>> {
+    let db = Db::open_in_memory().await?;
+    let p = projects::create(&db, "abc-undo", "ABC undo", None, None, Ui).await?;
+    let mut edited = p.clone();
+    edited.color = Some("pink".into());
+    history::step("Recolor", async { projects::update(&db, edited, Ui).await }).await?;
+    let Err(err) = undo::undo(&db).await else {
+        panic!("undo must refuse a project color change");
+    };
+    assert!(
+        err.to_string().contains("not covered"),
+        "unclear refusal: {err}"
+    );
+    assert_eq!(projects::list(&db).await?[0].color.as_deref(), Some("pink"));
     Ok(())
 }
