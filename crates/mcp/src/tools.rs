@@ -10,7 +10,7 @@ use taskapp_core::{
     ChangeSource, Db, Issue, IssuePatch, NewIssue, Project, PropertyDef, PropertyKind, Relation,
     RelationKind, SelectOption, StatusCategory, TemplateInput, ViewDef, backup, comments, cycles,
     history, issues, labels, pins, projects, properties, relations, search, statuses, templates,
-    views,
+    undo, views,
 };
 
 type Res<T> = Result<T, String>;
@@ -155,6 +155,17 @@ const TOOLS: &[Row] = &[
         "Create an issue and its sub-issues from a template. Args: id, overrides (NewIssue fields; they win over the template). Returns skipped references.",
         &["id"],
     ),
+    (
+        "undo",
+        "Undo the newest step (one tool call, however many issues it touched). Refuses when something changed since.",
+        &[],
+    ),
+    ("redo", "Redo the step most recently undone.", &[]),
+    (
+        "undo_status",
+        "Labels of the steps undo and redo would act on, or null.",
+        &[],
+    ),
 ];
 
 pub fn definitions() -> Vec<Tool> {
@@ -214,19 +225,28 @@ impl Server {
         if let Some(missing) = required.iter().find(|k| args.get(**k).is_none()) {
             return Err(format!("missing required argument `{missing}`"));
         }
+        // One tool call is one undoable step.
+        let routed = history::step(name, async { Ok(self.route(name, &args).await) }).await;
+        routed.unwrap_or_else(|e| Err(ce(&e)))
+    }
+
+    async fn route(&self, name: &str, args: &Value) -> Res<Value> {
         match name {
+            "undo" => ok(&undo::undo(&self.db).await.map_err(|e| ce(&e))?),
+            "redo" => ok(&undo::redo(&self.db).await.map_err(|e| ce(&e))?),
+            "undo_status" => ok(&undo::undo_status(&self.db).await.map_err(|e| ce(&e))?),
             "search_issues" | "query_view" | "get_issue" | "create_issue" | "update_issue"
             | "archive_issue" | "add_comment" | "add_relation" | "remove_relation"
-            | "bulk_update" | "get_history" => self.issue_tool(name, &args).await,
+            | "bulk_update" | "get_history" => self.issue_tool(name, args).await,
             "list_templates" | "create_template" | "update_template" | "delete_template"
-            | "apply_template" => self.template_tool(name, &args).await,
+            | "apply_template" => self.template_tool(name, args).await,
             "list_properties"
             | "create_property"
             | "rename_property"
             | "change_property_kind"
             | "delete_property"
-            | "set_property" => self.property_tool(name, &args).await,
-            _ => self.org_tool(name, &args).await,
+            | "set_property" => self.property_tool(name, args).await,
+            _ => self.org_tool(name, args).await,
         }
     }
 

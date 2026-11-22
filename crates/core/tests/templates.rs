@@ -1,8 +1,9 @@
 use chrono::NaiveDate;
 use taskapp_core::{
-    ChangeSource, Db, Error, LabelId, NewIssue, ProjectId, StatusId, history, labels, projects,
-    quickadd,
+    ChangeSource, Db, Error, LabelId, NewIssue, ProjectId, StatusId, history, issues, labels,
+    projects, quickadd,
     templates::{self, SubIssue, TemplateBody, TemplateFields, TemplateInput},
+    undo,
 };
 
 type R = Result<(), Box<dyn std::error::Error>>;
@@ -209,5 +210,54 @@ async fn unknown_slug_is_invalid_and_lists_known_slugs() -> R {
         return Err(format!("expected Invalid, got {err:?}").into());
     };
     assert!(msg.contains("bug"), "message lists known slugs: {msg}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn slug_with_a_slash_is_plain_title_text() -> R {
+    let db = Db::open_in_memory().await?;
+    templates::create(&db, bug(TemplateBody::default()), SRC).await?;
+
+    let issue = quickadd::create_from(&db, "/usr/bin is full", today(), "UTC", SRC).await?;
+
+    assert_eq!(issue.title, "/usr/bin is full");
+    Ok(())
+}
+
+#[tokio::test]
+async fn one_undo_archives_the_template_issue_and_its_sub_issues() -> R {
+    let db = Db::open_in_memory().await?;
+    let t = templates::create(
+        &db,
+        bug(body("", TemplateFields::default(), &["Repro", "Fix"])),
+        SRC,
+    )
+    .await?;
+    let applied = templates::apply(
+        &db,
+        t.id,
+        NewIssue {
+            title: "Login fails".into(),
+            ..NewIssue::default()
+        },
+        SRC,
+    )
+    .await?;
+
+    undo::undo(&db).await?;
+
+    assert!(
+        issues::get(&db, applied.issue.id)
+            .await?
+            .archived_at
+            .is_some()
+    );
+    for s in &applied.sub_issues {
+        assert!(
+            issues::get(&db, s.id).await?.archived_at.is_some(),
+            "sub-issue {}",
+            s.key
+        );
+    }
     Ok(())
 }

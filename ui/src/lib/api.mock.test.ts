@@ -16,6 +16,20 @@ describe('mock api', () => {
     expect((await mock.issues.create({ title: 'b' })).key).toBe('ZF-22');
   });
 
+  it('undo and redo move an issue edit back and forth', async () => {
+    const mock = createMockApi();
+    const made = await mock.issues.create({ title: 'a' });
+    await mock.issues.update(made.id, { title: 'b' });
+    expect(await mock.history.undoStatus()).toEqual({ undo: 'issues_update', redo: null });
+    await mock.history.undo();
+    expect((await mock.issues.get(made.id)).title).toBe('a');
+    await mock.history.redo();
+    expect((await mock.issues.get(made.id)).title).toBe('b');
+    await mock.history.undo();
+    await mock.issues.update(made.id, { title: 'c' });
+    await expect(mock.history.redo()).rejects.toMatchObject({ kind: 'Invalid' });
+  });
+
   it('query filters by select property', async () => {
     const rows = await createMockApi().views.query(def({ Cond: { field: { Property: 'area' }, op: 'Eq', value: 'home' } }));
     expect(rows.length).toBeGreaterThan(0);
@@ -52,6 +66,12 @@ describe('mock templates', () => {
     expect(issue.title).toBe('Bug: Fix login');
     expect(issue.priority).toBe(1);
     expect((await mock.issues.children(issue.id)).map((i) => i.title)).toEqual(['Repro']);
+  });
+
+  it('text with a slash after the first word is a plain title', async () => {
+    const mock = createMockApi();
+    await mock.templates.create({ name: 'Bug', slug: 'bug', icon: null, color: null, body: { title_prefix: '', fields: fields(), sub_issues: [] } });
+    expect((await mock.issues.createFromQuickadd('/usr/bin is full')).title).toBe('/usr/bin is full');
   });
 
   it('unknown /slug rejects Invalid and names the known slugs', async () => {

@@ -10,7 +10,7 @@ use taskapp_core::{
     ChangeSource, CycleId, Db, Due, Error, IssueId, IssuePatch, LabelId, NewIssue, PinId, PinKind,
     ProjectId, PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, StatusId,
     TemplateId, ViewDef, ViewId, backup, comments, cycles, history, issues, labels, pins, projects,
-    properties, quickadd, relations, search, templates, views,
+    properties, quickadd, relations, search, templates, undo, views,
 };
 
 use crate::{
@@ -21,6 +21,14 @@ use crate::{
 const SRC: ChangeSource = ChangeSource::Cli;
 
 pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
+    match cmd {
+        Cmd::Undo => val(undo::undo(db).await?),
+        Cmd::Redo => val(undo::redo(db).await?),
+        cmd => run_group(db, dir, cmd).await,
+    }
+}
+
+async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
     match cmd {
         Cmd::Add { text, tz } => add(db, &text, tz.as_deref()).await,
         Cmd::Issue(cmd) => issue(db, cmd).await,
@@ -41,6 +49,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Backup(_) => Err(Error::Invalid(
             "backup runs before the database opens".into(),
         )),
+        Cmd::Undo | Cmd::Redo => unreachable_undo(),
         Cmd::History { key } => {
             let id = issue_id(db, &key).await?;
             val(history::list_for(db, "issue", &id.0.to_string()).await?)
@@ -58,6 +67,11 @@ async fn comment_add(
     let id = issue_id(db, key).await?;
     let at = created_at.map(timestamp).transpose()?;
     val(comments::add_comment(db, id, body, at, source(migration)).await?)
+}
+
+/// Undo and redo are answered in [`run`] before the group commands.
+fn unreachable_undo() -> Result<Value> {
+    Err(Error::Invalid("undo is handled by run".into()))
 }
 
 async fn add(db: &Db, text: &str, tz: Option<&str>) -> Result<Value> {

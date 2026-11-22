@@ -501,6 +501,27 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	historyUndo: (options?: InvokeOptions) => __TAURI_INVOKE<UndoStatus>("history_undo", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	historyRedo: (options?: InvokeOptions) => __TAURI_INVOKE<UndoStatus>("history_redo", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	historyUndoStatus: (options?: InvokeOptions) => __TAURI_INVOKE<UndoStatus>("history_undo_status", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	settingsGet: (key: string, options?: InvokeOptions) => __TAURI_INVOKE<Value | null>("settings_get", { key }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -597,7 +618,7 @@ export type Change = {
 	new_value: Value | null,
 };
 
-export type ChangeSource = "Ui" | "Agent" | "Cli" | "RemindersImport" | "Migration" | "System";
+export type ChangeSource = "Ui" | "Agent" | "Cli" | "RemindersImport" | "Migration" | "System" | "Undo" | "Redo";
 
 export type Comment = {
 	id: CommentId,
@@ -876,6 +897,12 @@ export type TemplateInput = {
 	icon: string | null,
 	color: string | null,
 	body: TemplateBody,
+};
+
+/**  What undo and redo would do next: the label of the step, or `None` when the stack is empty. */
+export type UndoStatus = {
+	undo: string | null,
+	redo: string | null,
 };
 
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value };

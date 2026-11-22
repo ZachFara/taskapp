@@ -44,6 +44,9 @@ const TOOL_NAMES: &[&str] = &[
     "update_template",
     "delete_template",
     "apply_template",
+    "undo",
+    "redo",
+    "undo_status",
 ];
 
 /// Runs one server session, sending each call only after the previous reply (the server handles
@@ -364,4 +367,44 @@ fn failed_snapshot_aborts_delete_property() {
     );
     assert!(r[1].is_err(), "{:?}", r[1]);
     assert!(r[2].as_ref().expect("list").to_string().contains("\"p\""));
+}
+
+#[test]
+fn an_agent_edit_and_a_bulk_update_are_each_one_undoable_step() {
+    let (_d, db) = tmp();
+    let r = session(
+        &db,
+        &[
+            ("create_issue", json!({"title":"ABC a"})),
+            ("create_issue", json!({"title":"ABC b"})),
+            (
+                "update_issue",
+                json!({"key":"ZF-1","patch":{"title":"ABC x"}}),
+            ),
+            (
+                "bulk_update",
+                json!({"items":[
+                    {"key":"ZF-1","patch":{"priority":2}},
+                    {"key":"ZF-2","patch":{"priority":2}}]}),
+            ),
+            ("undo", json!({})),
+            ("get_issue", json!({"key":"ZF-2"})),
+            ("undo", json!({})),
+            ("get_issue", json!({"key":"ZF-1"})),
+            ("undo_status", json!({})),
+        ],
+    );
+    assert_eq!(
+        r[5].as_ref().expect("get")["issue"]["priority"],
+        0,
+        "{:?}",
+        r[5]
+    );
+    assert_eq!(
+        r[7].as_ref().expect("get")["issue"]["title"],
+        "ABC a",
+        "{:?}",
+        r[7]
+    );
+    assert_eq!(r[8].as_ref().expect("status")["redo"], "update_issue");
 }

@@ -102,7 +102,8 @@ pub(crate) fn split_slug(input: &str) -> Option<(&str, &str)> {
     let body = input.trim_start().strip_prefix('/')?;
     let end = body.find(char::is_whitespace).unwrap_or(body.len());
     let slug = &body[..end];
-    (!slug.is_empty()).then(|| (slug, body[end..].trim_start()))
+    // A slash makes it a path or a sentence, not a slug: /usr/bin is plain title text.
+    (!slug.is_empty() && !slug.contains('/')).then(|| (slug, body[end..].trim_start()))
 }
 
 /// # Errors
@@ -331,7 +332,22 @@ pub async fn apply(
     src: ChangeSource,
 ) -> Result<Applied> {
     let template = get(db, id).await?;
-    let body = template.body;
+    let label = format!("Create from template {}", template.name);
+    // Boxed: the transaction's state is large, and callers' futures must stay under clippy's limit.
+    history::step(
+        &label,
+        Box::pin(apply_in(db, template.body, overrides, src)),
+    )
+    .await
+}
+
+/// The transaction behind [`apply`]; its changes join the caller's undo step.
+async fn apply_in(
+    db: &Db,
+    body: TemplateBody,
+    overrides: NewIssue,
+    src: ChangeSource,
+) -> Result<Applied> {
     let mut skipped = Vec::new();
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let fields = live_refs(&mut tx, body.fields, &mut skipped).await?;

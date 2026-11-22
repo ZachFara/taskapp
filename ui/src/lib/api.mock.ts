@@ -42,6 +42,21 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
   const pins: Pin[] = [];
   const blocks: WorkBlock[] = [];
   const changes: Change[] = [];
+  // Undo for issues only: each write keeps the issues as they were before it.
+  type Step = { label: string; issues: Issue[] };
+  const undoSteps: Step[] = [];
+  const redoSteps: Step[] = [];
+  const step = <T>(label: string, run: () => T): T => {
+    undoSteps.push({ label, issues: structuredClone(s.issues) });
+    redoSteps.length = 0;
+    return run();
+  };
+  const swap = (from: Step[], to: Step[], what: string) => {
+    const prev = from.pop() ?? fail('Invalid', `nothing to ${what}`);
+    to.push({ label: prev.label, issues: structuredClone(s.issues) });
+    s.issues.splice(0, s.issues.length, ...prev.issues);
+    return { undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null };
+  };
   const settings = new Map<string, Value>([['issue_prefix', 'ZF']]);
   const now = () => new Date().toISOString();
   const next = (rows: { id: number }[]) => Math.max(0, ...rows.map((r) => r.id)) + 1;
@@ -205,8 +220,8 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
 
   return {
     issues: {
-      create: async (input) => create(input),
-      update: async (id, patch) => {
+      create: async (input) => step('issues_create', () => create(input)),
+      update: async (id, patch) => step('issues_update', () => {
         const i = getIssue(id);
         for (const [k, v] of Object.entries(patch) as [keyof Issue & string, never][]) {
           if (v === undefined || (v === null && !(nullableIssueFields as readonly string[]).includes(k))) continue;
@@ -216,15 +231,15 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
         i.updated_at = now();
         i.completed_at = category(i) === 'Completed' ? (i.completed_at ?? i.updated_at) : null;
         return i;
-      },
+      }),
       get: async (id) => getIssue(id),
       getByKey: async (key) => s.issues.find((i) => i.key === key) ?? fail('NotFound', `issue ${key}`),
-      archive: async (id) => nothing((getIssue(id).archived_at = now())),
-      restore: async (id) => nothing((getIssue(id).archived_at = null)),
+      archive: async (id) => step('issues_archive', () => nothing((getIssue(id).archived_at = now()))),
+      restore: async (id) => step('issues_restore', () => nothing((getIssue(id).archived_at = null))),
       children: async (id) => s.issues.filter((i) => i.parent_id === id),
       parseQuickadd: async (input) => parse(input),
       createFromQuickadd: async (input) => {
-        const m = /^\s*\/(\S+)\s*([\s\S]*)$/.exec(input);
+        const m = /^\s*\/([^\s/]+)(?=\s|$)\s*([\s\S]*)$/.exec(input);
         const p = parse(m ? m[2] : input);
         const overrides = { title: p.title, priority: p.priority, project_id: s.projects.find((x) => x.slug === p.project_slug)?.id };
         if (!m) return create(overrides);
@@ -472,7 +487,12 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
       delete: async (id) => nothing(remove(blocks, id, 'block')),
       between: async (from, to) => blocks.filter((b) => b.start_utc < to && b.end_utc > from),
     },
-    history: { listFor: async (entity, entityId) => changes.filter((c) => c.entity === entity && c.entity_id === entityId) },
+    history: {
+      listFor: async (entity, entityId) => changes.filter((c) => c.entity === entity && c.entity_id === entityId),
+      undo: async () => swap(undoSteps, redoSteps, 'undo'),
+      redo: async () => swap(redoSteps, undoSteps, 'redo'),
+      undoStatus: async () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null }),
+    },
     settings: {
       get: async (key) => settings.get(key) ?? null,
       set: async (key, value) => nothing(settings.set(key, value)),
