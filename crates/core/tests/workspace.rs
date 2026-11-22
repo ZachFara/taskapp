@@ -93,3 +93,32 @@ async fn changing_the_key_keeps_issue_numbers() -> R {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn prefix_migration_only_moves_an_empty_default_database() -> R {
+    let migration = include_str!("../migrations/0007_generic_prefix.sql");
+    let db = Db::open_in_memory().await?;
+    taskapp_core::settings::set(&db, "issue_prefix", &"ZF").await?;
+    sqlx::raw_sql(migration).execute(&db.pool).await?;
+    assert_eq!(workspace::status(&db).await?.key, "ABC");
+
+    taskapp_core::settings::set(&db, "issue_prefix", &"ZF").await?;
+    issues::create(
+        &db,
+        NewIssue {
+            title: "old".into(),
+            ..Default::default()
+        },
+        ChangeSource::Ui,
+    )
+    .await?;
+    sqlx::raw_sql(migration).execute(&db.pool).await?;
+    assert_eq!(workspace::status(&db).await?.key, "ZF");
+    assert!(
+        issues::get(&db, taskapp_core::IssueId(1))
+            .await?
+            .key
+            .starts_with("ZF-")
+    );
+    Ok(())
+}

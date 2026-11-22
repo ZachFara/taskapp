@@ -511,15 +511,14 @@ pub async fn get(db: &Db, id: IssueId) -> Result<Issue> {
 
 /// # Errors
 ///
-/// `NotFound` when the key is malformed, has another prefix, or names no issue.
+/// `NotFound` when the key is malformed or names no issue. The prefix is display-only: the number
+/// alone identifies the issue, so keys from before a prefix change still resolve.
 pub async fn get_by_key(db: &Db, key: &str) -> Result<Issue> {
     let mut conn = db.pool.acquire().await?;
     let not_found = || Error::NotFound(format!("issue {key}"));
     let (p, n) = key.rsplit_once('-').ok_or_else(not_found)?;
     let number: i64 = n.parse().map_err(|_| not_found())?;
-    if p != prefix(&mut conn).await? {
-        return Err(not_found());
-    }
+    crate::workspace::validate_key(p).map_err(|_| not_found())?;
     let id = sqlx::query_scalar!(
         r#"SELECT id AS "id!: i64" FROM issues WHERE number = ?"#,
         number

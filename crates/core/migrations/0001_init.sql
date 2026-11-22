@@ -62,7 +62,7 @@ INSERT INTO statuses (name, category, position, color) VALUES
   ('In Progress', 'started', 2, '#f2c94c'), ('Done', 'completed', 3, '#5e6ad2'),
   ('Canceled', 'canceled', 4, '#95a2b3');
 INSERT INTO settings (key, value) VALUES
-  ('issue_prefix', '"ABC"'), ('gcal_enabled', 'false'), ('export_enabled', 'false');
+  ('issue_prefix', '"ZF"'), ('gcal_enabled', 'false'), ('export_enabled', 'false');
 INSERT INTO views (name, definition, position) VALUES
   ('Active', '{"filter":{"Cond":{"field":{"Fixed":"StatusCategory"},"op":"In","value":["unstarted","started"]}},"sorts":[],"group_by":null,"layout":"List","columns":[],"include_archived":false}', 0),
   ('Board', '{"filter":{"Cond":{"field":{"Fixed":"StatusCategory"},"op":"In","value":["unstarted","started"]}},"sorts":[],"group_by":{"Fixed":"Status"},"layout":"Board","columns":[],"include_archived":false}', 1),

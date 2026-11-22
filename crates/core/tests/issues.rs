@@ -372,3 +372,17 @@ async fn parent_cycles_are_rejected() -> R {
     assert!(matches!(bad, Err(Error::Invalid(_))), "{bad:?}");
     Ok(())
 }
+
+#[tokio::test]
+async fn key_resolves_by_number_under_any_prefix() -> R {
+    let db = Db::open_in_memory().await?;
+    let a = issues::create(&db, new("a"), ChangeSource::Ui).await?;
+    assert_eq!(issues::get_by_key(&db, "XY-1").await?.id, a.id);
+    taskapp_core::settings::set(&db, "issue_prefix", &"XY").await?;
+    assert_eq!(issues::get_by_key(&db, "ABC-1").await?.id, a.id);
+    assert!(matches!(
+        issues::get_by_key(&db, "ab-1").await,
+        Err(Error::NotFound(_))
+    ));
+    Ok(())
+}

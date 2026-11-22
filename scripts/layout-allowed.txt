@@ -40,3 +40,4 @@
 /ui/src/**/*.ts
 /ui/src/**/*.svelte
 /ui/harness/*.ts
+/README.md
