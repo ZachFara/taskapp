@@ -63,7 +63,7 @@
   }
 </script>
 
-<div class="app" data-on-frame>
+<div class="app cairn-root" data-on-frame>
   <div class="brand">
     <span class="mark"><Icon name="cairn" size={24} /></span>
     <span class="wordmark">Cairn</span>
@@ -81,7 +81,6 @@
       <span data-kbd-inherit><Kbd keys="⌘K" /></span>
     </button>
     <div class="tools">
-      <CommandButton command="issue.create" variant="primary" />
       <CommandButton command="help.shortcuts" iconOnly />
       <CommandButton command="theme.cycle" iconOnly />
     </div>
