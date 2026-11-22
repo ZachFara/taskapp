@@ -1,4 +1,4 @@
-import type { FieldRef, ViewDef, ViewTemplate } from './bindings';
+import type { FieldRef, Filter, ViewDef, ViewTemplate } from './bindings';
 
 /** The display settings a stored view may lack; the backend fills them in the same way. */
 export const withDisplay = (d: Partial<ViewDef> & Pick<ViewDef, 'layout'>): ViewDef => ({
@@ -26,4 +26,24 @@ export function seedViewTemplates(keys: string[], weekCutoff: string): ViewTempl
     })],
   ];
   return defs.map(([name, icon, def], i) => ({ id: i + 1, name, icon: `icon:${icon}`, color: null, def, position: i }));
+}
+
+const dropFilter = (f: Filter, gone: (key: string) => boolean): Filter | null => {
+  if (f.Cond) return f.Cond.field.Property !== undefined && gone(f.Cond.field.Property) ? null : f;
+  const list = (f.And ?? f.Or ?? []).map((x) => dropFilter(x, gone)).filter((x): x is Filter => x !== null);
+  if (f.Not) { const inner = dropFilter(f.Not, gone); return inner && { Not: inner }; }
+  return list.length ? (f.And ? { And: list } : { Or: list }) : null;
+};
+
+/** The definition without any reference to the properties `gone` names (core: `views::scrub`). */
+export function scrubDef(d: ViewDef, gone: (key: string) => boolean): ViewDef {
+  const hit = (f: FieldRef) => f.Property !== undefined && gone(f.Property);
+  return {
+    ...d,
+    filter: d.filter ? dropFilter(d.filter, gone) : null,
+    sorts: d.sorts.filter((x) => !hit(x.field)),
+    columns: d.columns.filter((c) => !hit(c)),
+    card_fields: (d.card_fields ?? []).filter((c) => !hit(c)),
+    group_by: d.group_by && hit(d.group_by) ? null : d.group_by,
+  };
 }
