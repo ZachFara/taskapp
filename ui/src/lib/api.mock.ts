@@ -563,7 +563,7 @@ const issues: Issue[] = Array.from({ length: 20 }, (_, k) => {
 
 // Same three views the migration seeds. shortcut: no status filter, the mock query has no StatusCategory support.
 const view = (id: number, name: string, layout: Layout, group_by: FieldRef | null = null): SavedView => ({
-  id, name, position: id - 1,
+  id, name, position: id - 1, icon: null, color: null,
   def: { filter: null, sorts: [], group_by, layout, columns: [], include_archived: false },
 });
 const views: SavedView[] = [

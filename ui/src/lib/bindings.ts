@@ -319,7 +319,7 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	templatesApply: (id: TemplateId, overrides: NewIssue, options?: InvokeOptions) => __TAURI_INVOKE<Applied>("templates_apply", { id, overrides }, options),
+	templatesApply: (id: TemplateId, overrides: NewIssue, options?: InvokeOptions) => __TAURI_INVOKE<AppliedTemplate>("templates_apply", { id, overrides }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -606,6 +606,16 @@ export const commands = {
 export type Applied = {
 	created: number,
 	warnings: string[],
+};
+
+/**
+ *  The issue and sub-issues a template created. `skipped` names references the template
+ *  no longer resolves (a deleted label, project or status); those fields were left unset.
+ */
+export type AppliedTemplate = {
+	issue: Issue,
+	sub_issues: Issue[],
+	skipped: string[],
 };
 
 export type Bar = {

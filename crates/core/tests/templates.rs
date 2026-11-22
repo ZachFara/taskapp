@@ -26,7 +26,7 @@ fn bug(body: TemplateBody) -> TemplateInput {
     TemplateInput {
         name: "Bug".into(),
         slug: "bug".into(),
-        icon: Some("bug".into()),
+        icon: Some("icon:bug".into()),
         color: None,
         body,
     }
@@ -76,7 +76,7 @@ async fn crud_round_trip_records_history() -> R {
 #[tokio::test]
 async fn apply_creates_sub_issues_with_template_fields() -> R {
     let db = Db::open_in_memory().await?;
-    let label = labels::create(&db, "ABC-urgent", "red", SRC).await?;
+    let label = labels::create(&db, "ABC-urgent", "red", None, SRC).await?;
     let fields = TemplateFields {
         priority: Some(2),
         label_ids: vec![label.id],
@@ -119,8 +119,8 @@ async fn apply_creates_sub_issues_with_template_fields() -> R {
 #[tokio::test]
 async fn overrides_win_over_template() -> R {
     let db = Db::open_in_memory().await?;
-    let label = labels::create(&db, "ABC-label", "blue", SRC).await?;
-    let project = projects::create(&db, "abc", "ABC", SRC).await?;
+    let label = labels::create(&db, "ABC-label", "blue", None, SRC).await?;
+    let project = projects::create(&db, "abc", "ABC", None, None, SRC).await?;
     let fields = TemplateFields {
         priority: Some(2),
         label_ids: vec![label.id],
@@ -259,5 +259,35 @@ async fn one_undo_archives_the_template_issue_and_its_sub_issues() -> R {
             s.key
         );
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn icon_and_color_are_checked_against_the_palette() -> R {
+    let db = Db::open_in_memory().await?;
+    let with = |icon: Option<&str>, color: Option<&str>| TemplateInput {
+        icon: icon.map(str::to_owned),
+        color: color.map(str::to_owned),
+        ..bug(TemplateBody::default())
+    };
+
+    let bad_icon = templates::create(&db, with(Some("not an icon"), None), SRC).await;
+    assert!(
+        matches!(bad_icon, Err(Error::Invalid(_))),
+        "icon: {bad_icon:?}"
+    );
+    let bad_color = templates::create(&db, with(None, Some("chartreuse")), SRC).await;
+    assert!(
+        matches!(bad_color, Err(Error::Invalid(_))),
+        "color: {bad_color:?}"
+    );
+
+    let t = templates::create(&db, with(Some("icon:bug"), Some("#ef4444")), SRC).await?;
+    assert_eq!(t.icon.as_deref(), Some("icon:bug"));
+    assert_eq!(
+        t.color.as_deref(),
+        Some("red"),
+        "a hex color is stored as its palette key"
+    );
     Ok(())
 }

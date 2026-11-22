@@ -7,7 +7,7 @@ use sqlx::SqliteConnection;
 use crate::{
     ChangeSource, Db, Error, Issue, LabelId, NewIssue, ProjectId, Result, StatusId, TemplateId,
     history::{self, Edit},
-    issues,
+    issues, palette,
 };
 
 /// The fields a template prefills. Each is a default; an override on the issue wins.
@@ -72,7 +72,7 @@ fn bad<E: std::fmt::Display>(e: E) -> Error {
     Error::Invalid(e.to_string())
 }
 
-fn validate(input: &TemplateInput) -> Result<()> {
+fn validate(input: &mut TemplateInput) -> Result<()> {
     if input.name.trim().is_empty() {
         return Err(Error::Invalid("template name is empty".into()));
     }
@@ -86,6 +86,12 @@ fn validate(input: &TemplateInput) -> Result<()> {
             "slug {} must be lowercase letters, digits or dashes",
             input.slug
         )));
+    }
+    if let Some(icon) = &input.icon {
+        palette::check_icon(icon)?;
+    }
+    if let Some(color) = input.color.take() {
+        input.color = Some(palette::key_for(&color)?.to_owned());
     }
     let fields =
         std::iter::once(&input.body.fields).chain(input.body.sub_issues.iter().map(|s| &s.fields));
@@ -164,8 +170,8 @@ pub async fn by_slug(db: &Db, slug: &str) -> Result<IssueTemplate> {
 /// # Errors
 ///
 /// `Invalid` for an empty name or slug, or a priority above 4; `Db` on other failures.
-pub async fn create(db: &Db, input: TemplateInput, src: ChangeSource) -> Result<IssueTemplate> {
-    validate(&input)?;
+pub async fn create(db: &Db, mut input: TemplateInput, src: ChangeSource) -> Result<IssueTemplate> {
+    validate(&mut input)?;
     let body = serde_json::to_string(&input.body).map_err(bad)?;
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let id = sqlx::query!(
@@ -198,10 +204,10 @@ pub async fn create(db: &Db, input: TemplateInput, src: ChangeSource) -> Result<
 pub async fn update(
     db: &Db,
     id: TemplateId,
-    input: TemplateInput,
+    mut input: TemplateInput,
     src: ChangeSource,
 ) -> Result<IssueTemplate> {
-    validate(&input)?;
+    validate(&mut input)?;
     let old = get(db, id).await?;
     let new_body = serde_json::to_value(&input.body).map_err(bad)?;
     let body_text = new_body.to_string();
