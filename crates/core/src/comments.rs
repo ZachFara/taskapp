@@ -4,7 +4,7 @@ use serde_json::json;
 use crate::{
     ChangeSource, Comment, CommentId, Db, Error, IssueId, Result,
     history::{self, Edit},
-    search,
+    rows, search,
 };
 
 /// # Errors
@@ -56,6 +56,7 @@ pub async fn add_comment(
     .execute(&mut *tx)
     .await?
     .last_insert_rowid();
+    rows::created(&mut tx, src, "comments", id).await?;
     let new = json!(body);
     let edit = Edit {
         field: "body",
@@ -86,6 +87,7 @@ pub async fn update(db: &Db, id: CommentId, body: &str, src: ChangeSource) -> Re
     .fetch_optional(&mut *tx)
     .await?
     .ok_or_else(|| Error::NotFound(format!("comment {}", id.0)))?;
+    let before = rows::by_key(&mut tx, "comments", id.0).await?;
     if old.body != body {
         let (before, after) = (json!(old.body), json!(body));
         let edit = Edit {
@@ -104,6 +106,7 @@ pub async fn update(db: &Db, id: CommentId, body: &str, src: ChangeSource) -> Re
     )
     .execute(&mut *tx)
     .await?;
+    rows::changed(&mut tx, src, before).await?;
     search::reindex_in(&mut tx, IssueId(old.issue_id)).await?;
     tx.commit().await?;
     Ok(Comment {
@@ -126,9 +129,11 @@ pub async fn delete(db: &Db, id: CommentId, src: ChangeSource) -> Result<()> {
             .fetch_optional(&mut *tx)
             .await?
             .ok_or_else(|| Error::NotFound(format!("comment {}", id.0)))?;
+    let before = rows::by_key(&mut tx, "comments", id.0).await?;
     sqlx::query!("DELETE FROM comments WHERE id = ?", id.0)
         .execute(&mut *tx)
         .await?;
+    rows::changed(&mut tx, src, before).await?;
     let old = json!(body);
     let edit = Edit {
         field: "body",

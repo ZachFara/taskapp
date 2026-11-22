@@ -37,12 +37,20 @@ pub async fn step<T>(label: &str, f: impl Future<Output = Result<T>>) -> Result<
 }
 
 /// The step the current change joins, allocated on the first change. A new step ends the redo stack.
+/// The cached id is trusted only while a change with it exists: an earlier transaction that rolled back
+/// left nothing behind, so then the step starts over and clears the redo stack again.
 async fn current_step(tx: &mut SqliteConnection) -> Result<Option<(i64, String)>> {
     let Ok((label, id)) = STEP.try_with(|s| (s.label.clone(), s.id.get())) else {
         return Ok(None);
     };
     if let Some(id) = id {
-        return Ok(Some((id, label)));
+        let live: Option<i64> = sqlx::query_scalar("SELECT 1 FROM changes WHERE step = ? LIMIT 1")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?;
+        if live.is_some() {
+            return Ok(Some((id, label)));
+        }
     }
     let id: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(step), 0) + 1 FROM changes")
         .fetch_one(&mut *tx)
