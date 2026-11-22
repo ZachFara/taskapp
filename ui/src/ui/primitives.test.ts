@@ -1,5 +1,5 @@
 import { flushSync, mount, unmount } from 'svelte';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Button from './Button.svelte';
 import Checkbox from './Checkbox.svelte';
 import EmptyState from './EmptyState.svelte';
@@ -17,6 +17,9 @@ import TextInput from './TextInput.svelte';
 import Toast from './Toast.svelte';
 import { ICON_IDS } from './icons';
 import { createRawSnippet } from 'svelte';
+
+// Glyph assertions below are the Mac ones whatever machine runs them.
+beforeEach(() => void vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel'));
 
 let app: ReturnType<typeof mount> | undefined;
 afterEach(() => {

@@ -62,9 +62,9 @@ export const dateParse = (ctx: Ctx, field: 'due' | 'start_date'): CommandPage['p
   return { label: clear ? `Clear the ${what}` : `Set the ${what} to ${formatDay(r.value!)}`, run: () => apply(ctx, patchOf(patch)) };
 };
 
-/** Typed text on the estimate page: `30m`, `1h30m`, `1.5h`, `1d` (8 hours), or `none`. */
+/** Typed text on the estimate page: `30m`, `1h30m`, `1.5h`, `1d` (8 hours), a bare number (hours), or `none`. */
 export const estimateParse = (ctx: Ctx): CommandPage['parse'] => (text) => {
-  const r = parseEstimate(text);
+  const r = parseEstimate(/^\d+(\.\d+)?$/.test(text.trim()) ? `${text.trim()}h` : text);
   if (!r) return null;
   const label = r.value === null ? 'Clear the estimate' : `Set the estimate to ${formatEstimate(r.value)}`;
   return { label, run: () => apply(ctx, patchOf({ estimate_minutes: r.value })) };
