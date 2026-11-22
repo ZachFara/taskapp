@@ -50,7 +50,7 @@ describe('App shell', () => {
   it('click_row_opens_detail_in_panel', async () => {
     await open('/view/1');
     await pickRow();
-    expect(panel()!.querySelector<HTMLInputElement>('[aria-label=Title]')!.value).toBe('Fixture task 1');
+    expect(panel()!.querySelector('[aria-label=Title]')!.textContent).toBe('Fixture task 1');
   });
 
   it('esc_closes_panel_not_page', async () => {
@@ -89,17 +89,16 @@ describe('App shell', () => {
     expect(panel()!.querySelector('[role=alert]')!.textContent).toContain('issue #99999');
   });
 
-  it('edit_view_opens_editor_and_save_refreshes', async () => {
+  it('rename_view_saves_and_refreshes_the_sidebar', async () => {
     await open('/view/1');
-    [...document.querySelectorAll('button')].find((b) => b.textContent === 'Edit view')!.click();
+    q<HTMLButtonElement>('button[aria-label="Rename view"]')!.click();
     await settle();
-    const name = q<HTMLInputElement>('[aria-label=Name]')!;
+    const name = q<HTMLInputElement>('[aria-label="View name"]')!;
     name.value = 'Renamed';
     name.dispatchEvent(new Event('input', { bubbles: true }));
-    [...document.querySelectorAll('button')].find((b) => b.textContent === 'Save')!.click();
+    name.form!.requestSubmit();
     await settle();
     expect(q('aside.sidebar')!.textContent).toContain('Renamed');
-    expect(q('[aria-label=Name]')).toBeNull();
   });
 
   it('palette_opens_from_any_page', async () => {

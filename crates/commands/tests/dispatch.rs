@@ -111,3 +111,35 @@ async fn an_ui_edit_is_one_undoable_step() -> R {
     assert_eq!(again["title"], "ABC two");
     Ok(())
 }
+
+#[tokio::test]
+async fn a_bulk_edit_through_dispatch_is_one_undoable_step() -> R {
+    let st = state().await;
+    let mut ids = Vec::new();
+    for t in ["ABC a", "ABC b", "ABC c"] {
+        ids.push(
+            dispatch(&st, "issues_create", json!({"input": {"title": t}})).await?["id"].clone(),
+        );
+    }
+    dispatch(&st, "history_undo", json!({})).await?; // drop the last create so only the bulk step is under test
+    ids.pop();
+    let list = json!(ids);
+    dispatch(
+        &st,
+        "issues_bulk_update",
+        json!({"ids": list, "patch": {"patch": {"priority": 2}}}),
+    )
+    .await?;
+    assert_eq!(
+        dispatch(&st, "history_undo_status", json!({})).await?["undo"],
+        "issues_bulk_update"
+    );
+    dispatch(&st, "history_undo", json!({})).await?;
+    for id in &ids {
+        assert_eq!(
+            dispatch(&st, "issues_get", json!({"id": id})).await?["priority"],
+            0
+        );
+    }
+    Ok(())
+}

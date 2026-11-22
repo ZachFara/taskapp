@@ -1,0 +1,25 @@
+/* Shared look of the entity lists: a survey sheet of ruled rows, never cards. */
+.es { display: grid; gap: var(--s-7); align-content: start; }
+.es-head { display: grid; gap: var(--s-2); padding-bottom: var(--s-6); border-bottom: 2px solid var(--ink); }
+.es-head h2 { font-size: var(--fs-display); font-weight: 800; letter-spacing: -0.03em; line-height: var(--lh-tight); }
+.es-head p { color: var(--muted); max-width: 56ch; }
+.es-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+.es-row {
+  display: flex; align-items: center; gap: var(--s-5);
+  min-height: var(--row-h); padding: var(--s-2) var(--s-4);
+  border-bottom: 1px solid var(--border);
+  transition: background var(--dur-1) var(--ease);
+}
+.es-row:hover, .es-row:focus-within { background: var(--active); }
+.es-row[data-over] { box-shadow: inset 0 2px 0 var(--accent); }
+.es-name { flex: 1; min-width: 0; }
+.es-name .field { border-color: transparent; background: transparent; font-weight: 600; }
+.es-meta { color: var(--muted); font-size: var(--fs-sm); white-space: nowrap; }
+.es-tools { display: flex; gap: var(--s-1); opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.es-row:hover .es-tools, .es-row:focus-within .es-tools { opacity: 1; }
+.es-add { display: flex; align-items: center; gap: var(--s-5); padding: var(--s-4); border: 1px dashed var(--control); border-radius: var(--r-ctl); }
+.es-add .es-name .field { border-color: var(--control); background: var(--sheet); font-weight: 500; }
+.es-err { color: var(--signal); font-weight: 600; }
+.es-pick { display: grid; gap: var(--s-2); margin-top: var(--s-4); }
+.es-pick button { text-align: left; height: var(--row-h); padding: 0 var(--s-5); border: 1px solid var(--control); border-radius: var(--r-ctl); background: transparent; }
+.es-pick button[aria-pressed='true'] { background: var(--selection); border-color: var(--ink); font-weight: 600; }
