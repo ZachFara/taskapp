@@ -15,3 +15,10 @@ it('Set points is offered only when estimation is points or both', async () => {
     expect(offered(), value).toBe(want);
   }
 });
+
+it('an api without settings leaves Set points on and nothing throws', async () => {
+  setApi({ ...createMockApi(), settings: {} } as never);
+  window.dispatchEvent(new Event('history:wrote'));
+  await settle();
+  expect(offered()).toBe(true);
+});

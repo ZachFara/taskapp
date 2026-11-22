@@ -6,6 +6,9 @@ import { createMockApi } from '../lib/api.mock';
 import Shell from './Shell.svelte';
 import { readFileSync } from 'node:fs';
 
+// Glyph assertions below are the Mac ones whatever machine runs them.
+beforeEach(() => void vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel'));
+
 // Run from ui/ (pnpm -C ui test), so the path is relative to the package root.
 const baseCss = readFileSync('src/styles/base.css', 'utf8');
 

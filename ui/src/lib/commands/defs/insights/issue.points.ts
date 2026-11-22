@@ -7,7 +7,14 @@ const set = (ctx: Parameters<typeof apply>[0], points: number | null) => apply(c
 
 // `when` is synchronous, so the setting is cached and re-read after every write (a settings change is one).
 let estimation: Estimation = 'both';
-const refresh = () => void readEstimation().then((r) => (estimation = r.estimation));
+// A test api without settings, or a failing read, counts as the default (both): `when` must never throw.
+const refresh = () => {
+  try {
+    void readEstimation().then((r) => (estimation = r.estimation), () => {});
+  } catch {
+    /* no settings api */
+  }
+};
 refresh();
 addEventListener('history:wrote', refresh);
 

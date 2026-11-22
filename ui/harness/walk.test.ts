@@ -256,7 +256,7 @@ describe('walk', { timeout: 20_000 }, () => {
     await scroll.evaluate((e) => e.scrollTo(0, e.scrollHeight));
     await pw(dialog.getByRole('searchbox', { name: 'Filter shortcuts' })).toBeInViewport();
     const text = (await dialog.textContent())!;
-    expect(text).toContain('⌘');
+    expect(text).toMatch(/⌘|Ctrl\+/); // the browser's own platform decides
     expect(text).not.toMatch(/mod\+|arrowdown|escape/);
   });
 

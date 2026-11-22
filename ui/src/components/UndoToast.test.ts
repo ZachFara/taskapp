@@ -7,6 +7,9 @@ import UndoToast from './UndoToast.svelte';
 import { ICONS } from '../ui/icons';
 import { dismiss, stepLabel } from './undoState.svelte';
 
+// Glyph assertions below are the Mac ones whatever machine runs them.
+beforeEach(() => void vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel'));
+
 // Microtasks only: fake timers would stall a setTimeout-based wait.
 const settle = async () => {
   for (let i = 0; i < 20; i++) await Promise.resolve();

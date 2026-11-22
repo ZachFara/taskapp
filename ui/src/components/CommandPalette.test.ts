@@ -7,6 +7,9 @@ import { selection } from '../lib/selection.svelte';
 import { refreshAll } from '../lib/stores.svelte';
 import CommandPalette from './CommandPalette.svelte';
 
+// Glyph assertions below are the Mac ones whatever machine runs them.
+beforeEach(() => void vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel'));
+
 let app: ReturnType<typeof mount> | null = null;
 const settle = async () => {
   for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
