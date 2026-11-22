@@ -89,3 +89,25 @@ async fn backup_snapshot_then_list_finds_it() -> R {
     std::fs::remove_dir_all(&dir)?;
     Ok(())
 }
+
+#[tokio::test]
+async fn an_ui_edit_is_one_undoable_step() -> R {
+    let st = state().await;
+    let made = dispatch(&st, "issues_create", json!({"input": {"title": "ABC one"}})).await?;
+    let id = made["id"].clone();
+    dispatch(
+        &st,
+        "issues_update",
+        json!({"id": id, "patch": {"title": "ABC two"}}),
+    )
+    .await?;
+    let status = dispatch(&st, "history_undo_status", json!({})).await?;
+    assert_eq!(status["undo"], "issues_update");
+    dispatch(&st, "history_undo", json!({})).await?;
+    let back = dispatch(&st, "issues_get", json!({"id": id})).await?;
+    assert_eq!(back["title"], "ABC one");
+    dispatch(&st, "history_redo", json!({})).await?;
+    let again = dispatch(&st, "issues_get", json!({"id": id})).await?;
+    assert_eq!(again["title"], "ABC two");
+    Ok(())
+}

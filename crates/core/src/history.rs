@@ -1,3 +1,5 @@
+use std::{cell::Cell, future::Future};
+
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sqlx::SqliteConnection;
@@ -10,6 +12,46 @@ fn enc<T: serde::Serialize>(v: &T) -> Result<String> {
 
 fn dec<T: serde::de::DeserializeOwned>(s: &str) -> Result<T> {
     serde_json::from_str(s).map_err(|e| Error::Invalid(e.to_string()))
+}
+
+struct Step {
+    label: String,
+    id: Cell<Option<i64>>,
+}
+
+tokio::task_local! { static STEP: Step; }
+
+/// Runs `f` so that every change it records belongs to one undoable step. Inside another step it joins that one.
+///
+/// # Errors
+/// Whatever `f` returns.
+pub async fn step<T>(label: &str, f: impl Future<Output = Result<T>>) -> Result<T> {
+    if STEP.try_with(|_| ()).is_ok() {
+        return f.await;
+    }
+    let s = Step {
+        label: label.to_owned(),
+        id: Cell::new(None),
+    };
+    STEP.scope(s, f).await
+}
+
+/// The step the current change joins, allocated on the first change. A new step ends the redo stack.
+async fn current_step(tx: &mut SqliteConnection) -> Result<Option<(i64, String)>> {
+    let Ok((label, id)) = STEP.try_with(|s| (s.label.clone(), s.id.get())) else {
+        return Ok(None);
+    };
+    if let Some(id) = id {
+        return Ok(Some((id, label)));
+    }
+    let id: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(step), 0) + 1 FROM changes")
+        .fetch_one(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE changes SET undone = 2 WHERE undone = 1")
+        .execute(&mut *tx)
+        .await?;
+    STEP.with(|s| s.id.set(Some(id)));
+    Ok(Some((id, label)))
 }
 
 /// One field's before and after values.
@@ -31,18 +73,27 @@ pub async fn record(
     edit: &Edit<'_>,
 ) -> Result<()> {
     let at = Utc::now();
+    // Undo and redo are recorded but are never steps themselves, so they cannot loop.
+    let (step, label) = match source {
+        ChangeSource::Undo | ChangeSource::Redo => None,
+        _ => current_step(tx).await?,
+    }
+    .unzip();
     let source = enc(&source)?;
     let old = edit.old.map(enc).transpose()?;
     let new = edit.new.map(enc).transpose()?;
     sqlx::query!(
-        "INSERT INTO changes (at, source, entity, entity_id, field, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO changes (at, source, entity, entity_id, field, old_value, new_value, step, step_label)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         at,
         source,
         entity,
         entity_id,
         edit.field,
         old,
-        new
+        new,
+        step,
+        label
     )
     .execute(tx)
     .await?;
