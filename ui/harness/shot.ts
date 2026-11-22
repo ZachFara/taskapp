@@ -71,13 +71,15 @@ async function ensureServers(mode: 'mock' | 'real') {
     const env: Record<string, string> = { VITE_API_MODE: mode === 'mock' ? 'mock' : 'http' };
     if (mode === 'real') env.VITE_API_URL = await startDevserver(base);
     const p = launch('pnpm', ['exec', 'vite', '--host', 'localhost', '--port', String(vite), '--strictPort'], uiDir, env);
-    const bound = await new Promise<boolean>((ok) => {
-      p.once('exit', () => ok(false));
-      p.stdout!.on('data', (d: Buffer) => /Local:.*localhost/.test(String(d)) && ok(true));
-    });
-    if (bound) {
-      await waitFor(base);
-      return base;
+    // Ready when vite prints its URL; if the line is never seen (a different log format), a server that answers
+    // while our process is still alive after a few seconds counts too (a lost port makes vite exit by then).
+    let seen = false;
+    p.stdout!.on('data', (d: Buffer) => void (seen ||= /localhost:\d+/.test(String(d))));
+    const t0 = Date.now();
+    while (p.exitCode === null && p.signalCode === null) {
+      if (seen || (Date.now() - t0 > 8000 && (await up(base)))) return base;
+      if (Date.now() - t0 > 120_000) throw new Error(`vite not ready on ${base}`);
+      await new Promise((r) => setTimeout(r, 200));
     }
     if (attempt === 5) throw new Error(`vite did not start on a free port in ${attempt} tries`);
   }
