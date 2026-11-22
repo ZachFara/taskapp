@@ -38,9 +38,9 @@ afterAll(async () => {
   if (vite?.pid) try { process.kill(-vite.pid); } catch { /* already gone */ }
 });
 
-async function open(path = '/view/1') {
+async function open(path = '/view/1', viewport = { width: 1440, height: 900 }) {
   await page?.close();
-  page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  page = await browser.newPage({ viewport });
   page.setDefaultTimeout(5_000);
   await page.goto(base + path);
   await page.locator('[data-key], aside.sidebar').first().waitFor();
@@ -178,5 +178,54 @@ describe('walk', { timeout: 20_000 }, () => {
     await open();
     await press('5', 'j');
     expect(await rows().evaluateAll((l) => l.findIndex((x) => x.getAttribute('aria-current') === 'true'))).toBe(4);
+  });
+
+  it('W1 a custom property switched on in Display shows in the list, board and table', async () => {
+    await open();
+    await page.getByRole('button', { name: 'Display' }).click();
+    const panel = page.getByRole('group', { name: 'Display options' });
+    await pw(panel.getByRole('switch', { name: 'Show Area' })).toBeVisible();
+    await panel.getByRole('switch', { name: 'Show Area' }).click();
+    await pw(page.locator('li[data-key="ABC-1"] [data-field="P:area"]')).toContainText('work');
+    await press('Escape');
+    await page.waitForTimeout(600); // the debounced save
+    await page.getByRole('tab', { name: 'Board' }).click();
+    await pw(page.locator('[data-issue="ABC-1"]')).toContainText('work');
+    await page.getByRole('tab', { name: 'Table' }).click();
+    await pw(page.locator('tr[data-key="ABC-1"]')).toContainText('work');
+  });
+
+  it('W2 the Views page lists the seeded templates; New view from one; Save as template; Reset', async () => {
+    await open('/views');
+    for (const n of ['Status board', 'Planning table', 'This week']) await pw(page.getByText(n, { exact: true }).first()).toBeVisible();
+    await page.getByRole('button', { name: 'New view' }).click();
+    const dialog = page.getByRole('dialog', { name: 'New view' });
+    await dialog.getByRole('button', { name: /Status board/ }).click();
+    await dialog.getByRole('button', { name: 'Create view' }).click();
+    await page.waitForURL(/\/view\/\d+$/);
+    await pw(page.getByRole('tab', { name: 'Board' })).toHaveAttribute('aria-selected', 'true');
+    // Away from the template and back.
+    await page.getByRole('tab', { name: 'List' }).click();
+    await page.waitForTimeout(600);
+    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitem', { name: 'Reset to template' }).click();
+    await pw(page.getByRole('tab', { name: 'Board' })).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitem', { name: 'New view...' }).click();
+    await pw(page.getByRole('dialog', { name: 'New view' }).getByRole('button', { name: /Copy of current view/ })).toBeVisible();
+    await press('Escape');
+    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitem', { name: 'Save as template' }).click();
+    // In-app navigation: a reload would reset the mock.
+    await page.evaluate(() => { history.pushState(null, '', '/views'); dispatchEvent(new PopStateEvent('popstate')); });
+    await pw(page.getByRole('main').getByText('Status board', { exact: true })).toHaveCount(3); // the new view and two templates
+  });
+
+  it('W8 at 1024 wide the layout tabs are icons and New issue is not clipped', async () => {
+    await open('/view/1', { width: 1024, height: 768 });
+    await pw(page.locator('.cx-tab-label').first()).toBeHidden();
+    await pw(page.getByRole('tab', { name: 'Board' })).toBeVisible();
+    const box = await page.getByRole('button', { name: 'New issue' }).first().boundingBox();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(1024);
   });
 });

@@ -23,6 +23,7 @@
   import Tabs from '../ui/Tabs.svelte';
   import TextInput from '../ui/TextInput.svelte';
   import { navigate } from './routes';
+  import NewViewDialog from '../components/display/NewViewDialog.svelte';
   import { templates } from '../components/display/templatesApi';
 
   // `layout` in the URL overrides the saved one until the user picks a tab, so the harness can shoot any layout.
@@ -48,6 +49,7 @@
   let renaming = $state(false);
   let draft = $state('');
   let confirmDelete = $state(false);
+  let creating = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   async function load() {
@@ -107,17 +109,15 @@
   }
   // Templates are read from the stored view, so the pending debounced save goes first.
   async function saveAsTemplate() {
-    const t = templates();
-    if (!view || !def || !t) return;
+    if (!view || !def) return;
     clearTimeout(timer);
     await api.views.save(view.id, name, def, view.icon, view.color);
-    await t.saveAsTemplate(view.id, null);
+    await templates().saveAsTemplate(view.id, null);
   }
   async function resetToTemplate() {
-    const t = templates();
-    if (!view || !t) return;
+    if (!view) return;
     clearTimeout(timer);
-    await t.resetToTemplate(view.id);
+    await templates().resetToTemplate(view.id);
     await load();
     await refreshAll();
   }
@@ -185,8 +185,9 @@
         <Menu>
           {#snippet trigger(props)}<span {...props} class="trig"><IconButton icon="more" label="More" /></span>{/snippet}
           <MenuItem label="Save as new view" icon="copy" onSelect={saveAsNew} />
-          {#if templates()}<MenuItem label="Save as template" icon="bookmark" onSelect={saveAsTemplate} />{/if}
-          {#if templates() && (view as SavedView & { template_id?: number | null } | null)?.template_id != null}
+          <MenuItem label="New view..." icon="plus" onSelect={() => (creating = true)} />
+          <MenuItem label="Save as template" icon="bookmark" onSelect={saveAsTemplate} />
+          {#if view?.template_id != null}
             <MenuItem label="Reset to template" icon="undo" onSelect={resetToTemplate} />
           {/if}
           <MenuItem label="Delete view" icon="trash" danger onSelect={() => (confirmDelete = true)} />
@@ -204,6 +205,7 @@
       {/if}
     </main>
   {/key}
+  <NewViewDialog bind:open={creating} current={live} />
   <Dialog bind:open={confirmDelete} title={`Delete "${name}"?`} description="The saved view goes away. Issues are not touched.">
     {#snippet actions()}<Button variant="danger" onclick={remove}>Delete</Button>{/snippet}
   </Dialog>

@@ -4,6 +4,7 @@ import { setApi } from '../lib/api';
 import { createMockApi } from '../lib/api.mock';
 import { attachKeys, type Ctx } from '../lib/commands';
 import UndoToast from './UndoToast.svelte';
+import { stepLabel } from './undoState.svelte';
 
 // Microtasks only: fake timers would stall a setTimeout-based wait.
 const settle = async () => {
@@ -68,11 +69,26 @@ describe('undo keys', () => {
 });
 
 describe('UndoToast', () => {
+  it('names a raw command step in plain words', async () => {
+    vi.spyOn(api.history, 'undoStatus').mockResolvedValue({ undo: 'issues_bulk_update', redo: null });
+    window.dispatchEvent(new Event('history:wrote'));
+    await settle();
+    expect(toast()?.textContent).toContain('Updated issues');
+    expect(toast()?.textContent).not.toContain('issues_bulk_update');
+  });
+
+  it('sentence-cases a raw command with no entry in the table', async () => {
+    vi.spyOn(api.history, 'undoStatus').mockResolvedValue({ undo: 'widgets_frobnicate_all', redo: null });
+    window.dispatchEvent(new Event('history:wrote'));
+    await settle();
+    expect(toast()?.textContent).toContain('Widgets frobnicate all');
+  });
+
   it('shows the step label with an Undo action after a write', async () => {
     await write();
     const { undo } = await api.history.undoStatus();
     expect(undo).toBeTruthy();
-    expect(toast()?.textContent).toContain(undo!);
+    expect(toast()?.textContent).toContain(stepLabel(undo!));
     expect(toast()?.textContent).toContain('Undo (cmd+Z)');
   });
 

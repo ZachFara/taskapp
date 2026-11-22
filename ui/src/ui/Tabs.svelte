@@ -13,8 +13,8 @@
 <Tabs.Root bind:value>
   <Tabs.List class="cx-tabs" aria-label={label}>
     {#each tabs as t (t.id)}
-      <Tabs.Trigger class="cx-tab" value={t.id}>
-        {#if t.icon}<Icon name={t.icon} />{/if}{t.label}
+      <Tabs.Trigger class="cx-tab" value={t.id} title={t.label} aria-label={t.label}>
+        {#if t.icon}<Icon name={t.icon} />{/if}<span class="cx-tab-label">{t.label}</span>
       </Tabs.Trigger>
     {/each}
   </Tabs.List>
@@ -37,4 +37,8 @@
   }
   :global(.cx-tab:hover) { color: var(--ink); }
   :global(.cx-tab[data-state='active']) { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
+  /* Tabs with an icon drop their text on narrow windows; the title and aria-label keep the name. */
+  @media (max-width: 1200px) {
+    :global(.cx-tab-label:not(:only-child)) { display: none; }
+  }
 </style>

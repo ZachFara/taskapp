@@ -144,8 +144,13 @@
 </script>
 
 {#snippet crumb()}
-  <span class="crumb">{project?.name ?? 'No project'} <span class="sep" aria-hidden="true">/</span>
-    <button type="button" class="key" aria-label="Copy issue key" onclick={copyKey}>{copied ? 'Copied' : issue!.key}</button></span>
+  {#if mode === 'panel'}
+    <span class="crumb" title={project?.name ?? 'No project'}>
+      <button type="button" class="key" aria-label="Copy issue key" onclick={copyKey}>{copied ? 'Copied' : issue!.key}</button></span>
+  {:else}
+    <span class="crumb">{project?.name ?? 'No project'} <span class="sep" aria-hidden="true">/</span>
+      <button type="button" class="key" aria-label="Copy issue key" onclick={copyKey}>{copied ? 'Copied' : issue!.key}</button></span>
+  {/if}
 {/snippet}
 
 {#if issue}

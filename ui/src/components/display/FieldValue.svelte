@@ -7,7 +7,8 @@
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import { dayText, dueDay } from '../views/dates';
-  import type { Ctx } from './types';
+  import { issues } from '../../lib/stores.svelte';
+  import { paletteKey, type Ctx } from './types';
 
   // `named` prefixes bare custom values (a number or date has no meaning without its field) where there is no column header.
   let { field, issue, ctx, named = false }: { field: FieldRef; issue: Issue; ctx: Ctx; named?: boolean } = $props();
@@ -16,11 +17,10 @@
   const estimate = (m: number | null) => (m === null ? '' : m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`);
   const def = $derived(field.Property !== undefined ? ctx.defs.find((d) => d.key === field.Property) : undefined);
   const raw = $derived<Value>(field.Property !== undefined ? (issue.properties[field.Property] ?? null) : null);
-  // Only palette keys tint a pill; anything else (a stored hex) stays neutral.
-  const optColor = (v: Value) => {
-    const c = def?.options.find((o) => o.value === v)?.color;
-    return c && /^[a-z]+$/.test(c) ? c : undefined;
-  };
+  const optColor = (v: Value) => paletteKey(def?.options.find((o) => o.value === v)?.color);
+  const stat = $derived(ctx.stats.get(issue.id));
+  const milestone = $derived(ctx.milestones.find((m) => m.id === issue.milestone_id));
+  const parent = $derived(issue.parent_id === null ? undefined : issues.find((i) => i.id === issue.parent_id));
   const status = $derived(ctx.statuses.find((s) => s.id === issue.status_id));
   const project = $derived(ctx.projects.find((p) => p.id === issue.project_id));
   const cycle = $derived(ctx.cycles.find((c) => c.id === issue.cycle_id));
@@ -48,6 +48,8 @@
   {:else}
     <span class="text">{#if named}<span class="muted lbl">{def?.name}</span>{/if}{String(raw)}</span>
   {/if}
+{:else if field.Fixed === 'Title'}
+  <span class="text">{issue.title}</span>
 {:else if field.Fixed === 'Key'}
   <span class="text muted">{issue.key}</span>
 {:else if field.Fixed === 'Priority'}
@@ -63,6 +65,16 @@
   {#if project}<span class="with"><EntityIcon icon={project.icon ?? 'icon:project'} color={project.color} size={14} /><span class="text">{project.name}</span></span>{/if}
 {:else if field.Fixed === 'Cycle'}
   {#if cycle}<span class="text muted">{cycle.name ?? `Cycle ${cycle.number}`}</span>{/if}
+{:else if field.Fixed === 'Milestone'}
+  {#if milestone}<span class="text muted">{milestone.name}</span>{/if}
+{:else if field.Fixed === 'Parent'}
+  {#if parent}<span class="text muted">{parent.key}</span>{/if}
+{:else if field.Fixed === 'SubIssueProgress'}
+  {#if stat && stat.sub_total > 0}<span class="num muted">{stat.sub_done}/{stat.sub_total}</span>{/if}
+{:else if field.Fixed === 'RelationCount'}
+  <span class="num muted">{stat?.relations ?? 0}</span>
+{:else if field.Fixed === 'CommentCount'}
+  <span class="num muted">{stat?.comments ?? 0}</span>
 {:else if field.Fixed === 'DueDate'}
   {#if due}<span class="num">{dayText(due)}</span>{/if}
 {:else if field.Fixed === 'StartDate'}

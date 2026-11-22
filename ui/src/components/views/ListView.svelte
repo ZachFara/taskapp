@@ -7,6 +7,7 @@
   import Checkbox from '../../ui/Checkbox.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
   import EntityIcon from '../../ui/EntityIcon.svelte';
+  import Icon from '../../ui/Icon.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
   import CommandButton from '../CommandButton.svelte';
   import IssueMenu from './IssueMenu.svelte';
@@ -19,7 +20,7 @@
   import TextInput from '../../ui/TextInput.svelte';
   import { dueDay as dueDayIn, isOverdue } from './dates';
   import FieldValue from '../display/FieldValue.svelte';
-  import { LIST_DEFAULT, density, emptyCtx, fieldName, loadCtx, shown, subIssues, type Ctx } from '../display/types';
+  import { LEADING, LIST_DEFAULT, density, emptyCtx, fieldName, loadCtx, shown, showEmptyGroups, subIssues, type Ctx } from '../display/types';
 
   // shortcut: row and band heights default to the token values when the CSS is not loaded (tests), upgrade if rows vary in height
   const BAND = 30;
@@ -34,7 +35,7 @@
 
   const storeKey = (id: number) => `cairn.list.collapsed.${id}`;
   type Group = { key: string; kind: 'status' | 'project' | 'cycle' | 'priority' | 'label' | 'none'; ref?: Project | Cycle | Label; name: string; category: StatusCategory; order: number; patch: IssuePatch; rows: Issue[] };
-  type Item = { head: Group; collapsed: boolean } | { row: Issue };
+  type Item = { head: Group; collapsed: boolean } | { row: Issue; depth: number; kids: number };
 
   let issues = $state.raw<Issue[]>([]);
   let statuses = $state.raw<Status[]>([]);
@@ -52,8 +53,10 @@
   const compact = $derived(density(view.def) === 'compact');
   // shortcut: compact height follows the --row-h-compact token value (28), upgrade if the token changes
   const ROW = $derived(compact ? 28 : 32);
-  const fields = $derived(shown(view.def, LIST_DEFAULT));
-  const WIDTH: Record<string, string> = { Label: '150px', Project: '140px', DueDate: '56px', Estimate: '56px', Key: '64px', Priority: 'var(--s-8)', Status: '120px', Cycle: '100px', StartDate: '56px', CreatedAt: '56px', UpdatedAt: '56px' };
+  // Key, priority and status have their own leading columns, so they are not repeated.
+  const fields = $derived(shown(view.def, LIST_DEFAULT).filter((f) => !LEADING.includes(f.Fixed!)));
+  let closedParents = $state<number[]>([]);
+  const WIDTH: Record<string, string> = { Label: '150px', Project: '140px', DueDate: '56px', Estimate: '72px', Key: '64px', Priority: 'var(--s-8)', Status: '120px', Cycle: '100px', StartDate: '56px', CreatedAt: '56px', UpdatedAt: '56px' };
   const widthOf = (f: FieldRef) => (f.Property === undefined ? (WIDTH[f.Fixed!] ?? '100px') : ({ Select: '120px', MultiSelect: '150px', Checkbox: '56px', Url: '56px', Number: '72px', Date: '72px' } as Record<string, string>)[ctx.defs.find((d) => d.key === f.Property)?.kind ?? ''] ?? '140px');
   const rightAligned = (f: FieldRef) => f.Property === undefined ? ['DueDate', 'StartDate', 'Estimate', 'CreatedAt', 'UpdatedAt'].includes(f.Fixed!) : ['Number', 'Date'].includes(ctx.defs.find((d) => d.key === f.Property)?.kind ?? '');
   const columns = $derived(`var(--s-8) var(--s-8) 64px var(--s-8) minmax(0, 1fr) ${fields.map(widthOf).join(' ')}`);
@@ -79,7 +82,7 @@
 
   async function load() {
     const [st, pr, cy, lb, rows, c] = await Promise.all([
-      api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.views.query(view.def), loadCtx(),
+      api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.views.query(view.def), loadCtx(view.def),
     ]);
     ctx = c;
     statuses = st;
@@ -124,15 +127,38 @@
         put(i, { key: 'all', ...base, name: '', order: 0 });
       }
     }
+    if (showEmptyGroups(view.def)) {
+      const empty = (g: Omit<Group, 'rows'>) => by.has(g.key) || by.set(g.key, { ...g, rows: [] });
+      const base = { category: 'Unstarted' as StatusCategory, patch: {} };
+      if (groupField === 'Status') for (const s of statuses) empty({ key: `s${s.id}`, kind: 'status', name: s.name, category: s.category, order: s.position, patch: { status_id: s.id } });
+      if (groupField === 'Project') for (const p of projects) empty({ key: `p${p.id}`, ...base, kind: 'project', ref: p, name: p.name, order: projects.indexOf(p), patch: { project_id: p.id } });
+      if (groupField === 'Cycle') for (const c of cycles) empty({ key: `c${c.id}`, ...base, kind: 'cycle', name: c.name ?? `Cycle ${c.number}`, order: cycles.indexOf(c), patch: { cycle_id: c.id } });
+    }
     return [...by.values()].sort((a, b) => a.order - b.order);
   });
+
+  // Nested: a child follows its parent when both are in the group; a collapsed parent hides its children.
+  function ordered(rows: Issue[]): Item[] {
+    if (subIssues(view.def) !== 'nest') return rows.map((row) => ({ row, depth: 0, kids: 0 }));
+    const ids = new Set(rows.map((r) => r.id));
+    const kidsOf = (id: number) => rows.filter((r) => r.parent_id === id);
+    const out: Item[] = [];
+    const walk = (row: Issue, depth: number) => {
+      const kids = kidsOf(row.id);
+      out.push({ row, depth, kids: kids.length });
+      if (!closedParents.includes(row.id)) kids.forEach((k) => walk(k, depth + 1));
+    };
+    rows.filter((r) => r.parent_id === null || !ids.has(r.parent_id)).forEach((r) => walk(r, 0));
+    return out;
+  }
+  const toggleParent = (id: number) => (closedParents = closedParents.includes(id) ? closedParents.filter((x) => x !== id) : [...closedParents, id]);
 
   const items = $derived.by<Item[]>(() => {
     const out: Item[] = [];
     for (const g of groups) {
       const closed = collapsed.includes(g.key);
       if (g.key !== 'all') out.push({ head: g, collapsed: closed });
-      if (!closed) for (const row of g.rows) out.push({ row });
+      if (!closed) out.push(...ordered(g.rows));
     }
     return out;
   });
@@ -278,6 +304,7 @@
             class="row"
             data-key={i.key}
             data-id={i.id}
+            data-depth={item.depth ? item.depth : undefined}
             data-selected={chosen ? '' : undefined}
             aria-current={selection.focused === i.id ? 'true' : undefined}
             style:top="{top}px"
@@ -308,7 +335,11 @@
             >
               <StatusGlyph category={st?.category ?? 'Backlog'} label={st?.name ?? 'Unknown'} />
             </button>
-            <span class="title">
+            <span class="title" style:padding-left={item.depth ? `calc(${item.depth} * var(--s-6))` : undefined}>
+              {#if item.kids}
+                {@const open = !closedParents.includes(i.id)}
+                <button type="button" class="disc" data-open={open ? '' : undefined} aria-label={open ? 'Collapse sub-issues' : 'Expand sub-issues'} onclick={(e) => (e.stopPropagation(), toggleParent(i.id))}><Icon name="chevron-right" size={14} /></button>
+              {/if}
               {#if listState.editing === i.id}
                 <form onsubmit={(e) => (e.preventDefault(), save(i.id))} onfocusout={() => listState.editing === i.id && save(i.id)}>
                   <span use:focusInput><TextInput bind:value={draft} label={`Title of ${i.key}`} /></span>
@@ -368,8 +399,10 @@
   .key { color: var(--muted); font-weight: 500; }
   .status { border: 0; background: transparent; padding: 0; display: grid; place-items: center; border-radius: var(--r-ctl); }
   .status:hover { background: var(--active); }
-  .title { min-width: 0; font-weight: 500; }
-  .text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .title { min-width: 0; font-weight: 500; display: flex; align-items: center; gap: var(--s-2); }
+  .disc { display: grid; place-items: center; border: 0; background: transparent; padding: 0; color: var(--muted); border-radius: var(--r-ctl); transition: transform var(--dur-1) var(--ease); }
+  .disc[data-open] { transform: rotate(90deg); }
+  .text { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cell { min-width: 0; display: flex; align-items: center; color: var(--muted); overflow: hidden; }
   .cell[data-right] { justify-content: flex-end; }
   .cell[data-overdue] { color: var(--signal); font-weight: 700; }

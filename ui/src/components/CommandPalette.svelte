@@ -82,7 +82,6 @@
   void Promise.all([api.cycles.list(), api.labels.list()]).then(([c, l]) => { cycles = c; labels = l; }).catch(() => {});
 
   const nav = (path: string) => () => navigate(path);
-  const SETTINGS = ['general', 'statuses', 'properties', 'projects', 'cycles', 'labels', 'reminders', 'calendar', 'export', 'backups'];
 
   // Sync pages show at once; an async page or one with `load()` shows a skeleton row until its items are in.
   async function openPage(c: Command) {
@@ -135,7 +134,6 @@
     ...projects.map((p) => ({ id: `project:${p.id}`, label: p.name, group: 'Projects', icon: 'project', run: nav(`/project/${p.slug}`) })),
     ...cycles.map((c) => ({ id: `cycle:${c.id}`, label: c.name ?? `Cycle ${c.number}`, group: 'Cycles', icon: 'cycle', run: nav('/cycles') })),
     ...labels.map((l) => ({ id: `label:${l.id}`, label: l.name, group: 'Labels', entity: { icon: l.icon ?? 'icon:tag', color: l.color }, run: nav('/settings/labels') })),
-    ...SETTINGS.map((s) => ({ id: `settings:${s}`, label: `Settings: ${s[0].toUpperCase()}${s.slice(1)}`, group: 'Settings', icon: 'settings', run: nav(`/settings/${s}`) })),
   ]);
 
   const parsed = $derived.by(() => {
