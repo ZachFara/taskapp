@@ -1,15 +1,15 @@
 //! Undo and redo of whole steps (everything one command call changed), in the database only.
 //! Sync targets are not told: the next sync sees the reverted values like any other edit.
 //!
-//! Covered: issue fields, creation (undone by archiving), archive and restore, labels on an issue and
-//! custom property values. Anything else (labels, comments, projects, milestones, cycles, property
-//! definitions, relations) makes the step refuse with an error, so a step is applied whole or not at all.
+//! Covered: issue fields, creation (undone by archiving), archive and restore, labels on an issue, custom
+//! property values, and every row of the tables in `rows.rs` (restored whole, same id). An entity this module
+//! does not know makes the step refuse with an error, so a step is applied whole or not at all.
 
 use serde_json::{Map, Value, json};
 use sqlx::{Row, SqliteConnection};
 
 use crate::{
-    ChangeSource, Db, Error, Issue, IssueId, IssuePatch, LabelId, Result, UndoStatus, issues,
+    ChangeSource, Db, Error, Issue, IssueId, IssuePatch, LabelId, Result, UndoStatus, issues, rows,
 };
 
 const ISSUE_FIELDS: &[&str] = &[
@@ -137,10 +137,26 @@ async fn run(db: &Db, undo: bool) -> Result<UndoStatus> {
     undo_status(db).await
 }
 
+/// Entities whose old descriptive rows ("created", "deleted", "name") sit beside the row snapshots that undo uses.
+const DESCRIPTIVE: &[&str] = &[
+    "label",
+    "comment",
+    "project",
+    "milestone",
+    "cycle",
+    "property_def",
+    "status",
+    "view",
+    "template",
+];
+
 fn covered(c: &Row_) -> bool {
-    c.entity == "issue"
-        && c.entity_id.parse::<i64>().is_ok()
-        && (ISSUE_FIELDS.contains(&c.field.as_str()) || c.field.starts_with("properties."))
+    c.entity.starts_with(rows::ENTITY_PREFIX)
+        || DESCRIPTIVE.contains(&c.entity.as_str())
+        || (c.entity == "issue" && c.field == "relation")
+        || (c.entity == "issue"
+            && c.entity_id.parse::<i64>().is_ok()
+            && (ISSUE_FIELDS.contains(&c.field.as_str()) || c.field.starts_with("properties.")))
 }
 
 fn conflict(key: &str, field: &str) -> Error {
@@ -155,6 +171,13 @@ async fn apply(
     expect: &Value,
     undo: bool,
 ) -> Result<()> {
+    if let Some(table) = c.entity.strip_prefix(rows::ENTITY_PREFIX) {
+        return rows::apply(tx, src, table, &c.entity_id, target, expect).await;
+    }
+    // Descriptive rows and relation edits are reversed through their row snapshots.
+    if c.entity != "issue" || c.field == "relation" {
+        return Ok(());
+    }
     let id = IssueId(
         c.entity_id
             .parse()

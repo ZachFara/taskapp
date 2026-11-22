@@ -7,7 +7,7 @@ use sqlx::SqliteConnection;
 
 use crate::{
     ChangeSource, Db, Due, Error, NewIssue, PropertyDef, RelationKind, Result, StatusCategory,
-    StatusId, history, issues, relations, statuses::category_str,
+    StatusId, history, issues, relations, rows, statuses::category_str,
 };
 
 const COLOR: &str = "#95a2b3";
@@ -243,7 +243,15 @@ async fn created(
         old: None,
         new: Some(&new),
     };
-    history::record(tx, ChangeSource::Migration, entity, &id.to_string(), &edit).await
+    history::record(tx, ChangeSource::Migration, entity, &id.to_string(), &edit).await?;
+    let table = match entity {
+        "label" => "labels",
+        "cycle" => "cycles",
+        "project" => "projects",
+        "property_def" => "property_defs",
+        _ => return Ok(()),
+    };
+    rows::created(tx, ChangeSource::Migration, table, id).await
 }
 
 async fn ensure_refs(tx: &mut SqliteConnection, plan: &ImportPlan) -> Result<()> {
