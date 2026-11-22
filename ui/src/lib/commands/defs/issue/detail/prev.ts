@@ -6,6 +6,7 @@ defineCommand({
   label: 'Previous issue',
   icon: 'arrow-up',
   group: 'Issue',
+  scope: 'detail',
   shortcut: '[',
   when: (c) => c.route.startsWith('/issue/') || c.openIssueId !== null,
   run: () => dispatchEvent(new CustomEvent('command:issue.detail.prev')),

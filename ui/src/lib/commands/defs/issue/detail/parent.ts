@@ -6,6 +6,7 @@ defineCommand({
   label: 'Set parent issue',
   icon: 'sub-issue',
   group: 'Issue',
+  scope: 'detail',
   noShortcutReason: 'rare edit, reached from the properties list or the command menu',
   when: (c) => c.route.startsWith('/issue/') || c.openIssueId !== null,
   run: () => dispatchEvent(new CustomEvent('command:issue.detail.edit', { detail: 'parent' })),

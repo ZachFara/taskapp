@@ -6,6 +6,7 @@ defineCommand({
   label: 'Timeline: zoom out',
   icon: 'layers',
   group: 'Timeline',
+  scope: 'timeline',
   shortcut: '-',
   when: () => !!document.querySelector('[data-timeline]'),
   run: () => dispatchEvent(new CustomEvent('command:timeline.zoom-out')),

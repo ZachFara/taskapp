@@ -6,6 +6,7 @@ defineCommand({
   label: 'Change project',
   icon: 'project',
   group: 'Issue',
+  scope: 'detail',
   shortcut: 'shift+p',
   when: (c) => c.route.startsWith('/issue/') || c.openIssueId !== null,
   run: () => dispatchEvent(new CustomEvent('command:issue.detail.edit', { detail: 'project' })),

@@ -18,20 +18,32 @@
 import.meta.glob('./defs/**/*.ts', { eager: true });
 export * from './registry';
 import { createKeys } from './keys';
-import { listCommands, type Command, type Ctx } from './registry';
+import { inScope, keysOf, listCommands, rankOf, type Command, type Ctx } from './registry';
+
+/** A key on a command that only has a page opens the command menu at that page. */
+const open = (c: Command, ctx: Ctx, count: number) =>
+  c.run ? c.run(ctx, count) : dispatchEvent(new CustomEvent('command:palette.open', { detail: { page: c.id } }));
 
 /** Binds every command's shortcut; call once at the app root with a getter for the live context. */
 export function attachKeys(ctx: () => Ctx) {
   return createKeys(() =>
     listCommands(ctx(), { all: true }).flatMap((c: Command) =>
-      [c.shortcut ?? []].flat().map((seq) => ({
+      keysOf(c).map((seq) => ({
         seq,
         global: c.global,
+        rank: () => rankOf(c, ctx()),
+        // Out of scope or `when` failing: the key falls through to whatever the next scope binds.
+        active: () => {
+          try {
+            return inScope(c, ctx()) && (!c.when || c.when(ctx()));
+          } catch {
+            return false; // a `when` that throws must not take every other key down
+          }
+        },
         run: (count: number) => {
           // An open dialog owns the plain keys; only `global` combos such as mod+k reach through it.
           if (!c.global && document.querySelector('[role=dialog]')) return;
-          const x = ctx();
-          if (!c.when || c.when(x)) void c.run?.(x, count);
+          void open(c, ctx(), count);
         },
       })),
     ),

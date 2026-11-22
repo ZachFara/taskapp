@@ -6,6 +6,7 @@ defineCommand({
   label: 'Change labels',
   icon: 'tag',
   group: 'Issue',
+  scope: 'detail',
   shortcut: 'l',
   when: (c) => c.route.startsWith('/issue/') || c.openIssueId !== null,
   run: () => dispatchEvent(new CustomEvent('command:issue.detail.edit', { detail: 'labels' })),

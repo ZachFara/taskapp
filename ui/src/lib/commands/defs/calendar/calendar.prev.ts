@@ -6,6 +6,7 @@ defineCommand({
   label: 'Previous week or month',
   icon: 'chevron-left',
   group: 'Calendar',
+  scope: 'calendar',
   shortcut: '[',
   when: (ctx) => ctx.route.startsWith('/view/'),
   run: () => dispatchEvent(new CustomEvent('command:calendar.prev')),

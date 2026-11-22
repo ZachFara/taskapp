@@ -6,6 +6,7 @@ defineCommand({
   label: 'Month view',
   icon: 'calendar',
   group: 'Calendar',
+  scope: 'calendar',
   shortcut: 'm',
   when: (ctx) => ctx.route.startsWith('/view/'),
   run: () => dispatchEvent(new CustomEvent('command:calendar.month')),

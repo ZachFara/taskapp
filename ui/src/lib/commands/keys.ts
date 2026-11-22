@@ -1,4 +1,5 @@
-export type Binding = { seq: string; global?: boolean; run: (count: number) => void };
+/** `active` is asked on every key press; of the active bindings with the same keys the highest `rank` fires. */
+export type Binding = { seq: string; global?: boolean; rank?: () => number; active?: () => boolean; run: (count: number) => void };
 
 const TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
 const MODIFIERS = ['Shift', 'Control', 'Alt', 'Meta'];
@@ -47,12 +48,16 @@ export function createKeys(bindings: () => Binding[]) {
     if (t === 'enter' && target?.closest('button, a, [role=button], [role=menuitem]')) return;
     if (t === 'escape' && (buf.length || count)) return reset();
     const all = bindings().map((b) => ({ b, seq: parseSeq(b.seq) }));
-    const usable = typing ? all.filter((x) => x.seq.length === 1 && (x.seq[0] === 'escape' || (x.b.global && x.seq[0].startsWith('mod+')))) : all;
+    const live = all.filter((x) => x.b.active?.() !== false);
+    const usable = typing ? live.filter((x) => x.seq.length === 1 && (x.seq[0] === 'escape' || (x.b.global && x.seq[0].startsWith('mod+')))) : live;
     // A failed sequence retries the key on its own, so `g x` then `c` still works.
     for (const prefix of buf.length && !typing ? [buf, []] : [[]]) {
       const next = [...prefix, t];
       const starts = (s: string[]) => next.every((k, i) => s[i] === k);
-      const hits = usable.filter((x) => x.seq.length === next.length && starts(x.seq));
+      const found = usable.filter((x) => x.seq.length === next.length && starts(x.seq));
+      const rank = (x: (typeof found)[number]) => x.b.rank?.() ?? 0;
+      const top = Math.max(...found.map(rank));
+      const hits = found.filter((x) => rank(x) === top);
       if (hits.length) {
         e.preventDefault();
         const n = Number(count) || 1;
