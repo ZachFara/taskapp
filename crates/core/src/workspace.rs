@@ -78,6 +78,10 @@ pub async fn setup(
         Some(tz) => tz.to_owned(),
         None => status(db).await?.timezone,
     };
+    let keys: Vec<String> = sqlx::query_scalar("SELECT key FROM property_defs ORDER BY position")
+        .fetch_all(&db.pool)
+        .await?;
+    crate::view_templates::seed(db, &keys).await?;
     settings::set(db, "workspace_name", &name).await?;
     settings::set(db, "issue_prefix", &key).await?;
     settings::set(db, "timezone", &zone).await?;

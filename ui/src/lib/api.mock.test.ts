@@ -138,3 +138,23 @@ describe('mock workspace and quick add', () => {
     expect(new Date(parsed.due!.DateTime!.utc).getUTCHours()).toBe(0);
   });
 });
+
+describe('mock view templates', () => {
+  it('first-run setup seeds three templates once, the planning table listing every property', async () => {
+    const mock = createMockApi({ ...fixtures, workspace: undefined, viewTemplates: [] }, 'UTC');
+    await mock.workspace.setup('Studio', 'STU', null);
+    await mock.workspace.setup('Studio', 'STD', null);
+    const t = await mock.view.templatesList();
+    expect(t.map((x) => x.name)).toEqual(['Status board', 'Planning table', 'This week']);
+    expect(t[1].def.columns).toContainEqual({ Property: 'effort' });
+  });
+
+  it('create from a template copies its definition, and undo removes the view', async () => {
+    const mock = createMockApi();
+    const [board] = await mock.view.templatesList();
+    const v = await mock.views.createFromTemplate(board.id, null);
+    expect(v).toMatchObject({ name: 'Status board', template_id: board.id, def: board.def });
+    await mock.history.undo();
+    expect((await mock.views.list()).some((x) => x.id === v.id)).toBe(false);
+  });
+});

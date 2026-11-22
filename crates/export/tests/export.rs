@@ -141,6 +141,7 @@ async fn seed_rest(db: &Db, docs: IssueId, ship: IssueId) -> R {
             layout: Layout::Board,
             columns: vec![],
             include_archived: false,
+            ..ViewDef::default()
         },
         taskapp_core::palette::Look::default(),
         SRC,

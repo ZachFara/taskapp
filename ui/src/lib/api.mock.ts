@@ -2,10 +2,11 @@ import type { Api } from './api';
 import { hexOf, iconOk, keyFor } from './api.mock.palette';
 import { planCsv, projectSlug } from './api.mock.import';
 import { parseQuickadd } from './api.mock.quickadd';
+import { seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
   AppliedTemplate, Applied, Bar, Change, Comment, Cycle, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
   NewIssue, Pin, Project, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
-  TemplateInput, Value, ViewDef, WorkBlock,
+  TemplateInput, Value, ViewDef, ViewTemplate, WorkBlock,
 } from './bindings';
 
 export type MockSeed = {
@@ -20,6 +21,7 @@ export type MockSeed = {
   milestones?: Milestone[];
   relations?: Relation[];
   templates?: IssueTemplate[];
+  viewTemplates?: ViewTemplate[];
   workspace?: Workspace;
 };
 
@@ -82,6 +84,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const labels = s.labels ?? [];
   const cycles = s.cycles ?? [];
   const views = s.views ?? [];
+  const viewTemplates: ViewTemplate[] = s.viewTemplates ?? [];
   const milestones: Milestone[] = s.milestones ?? [];
   const comments: Comment[] = [];
   const relations: Relation[] = s.relations ?? [];
@@ -92,7 +95,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, templates, relations, comments, views, milestones, pins] as unknown[][];
+  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, templates, relations, comments, views, milestones, pins, viewTemplates] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -168,7 +171,10 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       Project: i.project_id, Milestone: i.milestone_id, Cycle: i.cycle_id, Label: i.label_ids,
       Parent: i.parent_id, StartDate: i.start_date, DueDate: dueDay(i), Estimate: i.estimate_minutes,
       CreatedAt: i.created_at, UpdatedAt: i.updated_at, CompletedAt: i.completed_at,
-      Archived: i.archived_at !== null,
+      Archived: i.archived_at !== null, Key: i.id,
+      SubIssueProgress: s.issues.filter((c) => c.parent_id === i.id && !c.archived_at).length,
+      RelationCount: relations.filter((r) => r.from === i.id || r.to === i.id).length,
+      CommentCount: comments.filter((c) => c.issue_id === i.id).length,
     };
     return by[f.Fixed!];
   }
@@ -707,21 +713,68 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     views: {
       query: async (d) => query(d),
       list: async () => views,
+      stats: async (d) =>
+        query(d).map((i) => {
+          const kids = s.issues.filter((c) => c.parent_id === i.id && !c.archived_at);
+          return {
+            issue_id: i.id, sub_total: kids.length, sub_done: kids.filter((c) => category(c) === 'Completed').length,
+            relations: relations.filter((r) => r.from === i.id || r.to === i.id).length,
+            comments: comments.filter((c) => c.issue_id === i.id).length,
+          };
+        }),
       save: async (id, name, d, icon, color) => {
         checkIcon(icon);
         const key = colorKey(color);
         if (id === null) {
-          const v = { id: next(views), name, def: d, position: views.length, icon: icon ?? null, color: key };
+          const v = { id: next(views), name, def: withDisplay(d), position: views.length, icon: icon ?? null, color: key, template_id: null };
           views.push(v);
           return v;
         }
         const v = find(views, id, 'view');
-        return Object.assign(v, { name, def: d, icon: icon ?? v.icon, color: key ?? v.color });
+        return Object.assign(v, { name, def: withDisplay(d), icon: icon ?? v.icon, color: key ?? v.color });
+      },
+      createFromTemplate: async (templateId, name) => {
+        const t = find(viewTemplates, templateId, 'view template');
+        const v = { id: next(views), name: name ?? t.name, def: withDisplay(t.def), position: views.length, icon: t.icon, color: t.color, template_id: t.id };
+        views.push(v);
+        return v;
+      },
+      saveAsTemplate: async (viewId, name) => {
+        const v = find(views, viewId, 'view');
+        const t = { id: next(viewTemplates), name: name ?? v.name, icon: v.icon, color: v.color, def: withDisplay(v.def), position: viewTemplates.length };
+        viewTemplates.push(t);
+        return t;
+      },
+      resetToTemplate: async (viewId) => {
+        const v = find(views, viewId, 'view');
+        if (v.template_id === null) fail('Invalid', 'this view was not made from a template');
+        v.def = withDisplay(find(viewTemplates, v.template_id!, 'view template').def);
+        return v;
       },
       delete: async (id) => nothing(remove(views, id, 'view')),
       reorder: async (ids) => {
         reposition(views, ids, (v) => v.id, 'view');
         views.sort((a, b) => a.position - b.position);
+        return null;
+      },
+    },
+    view: {
+      templatesList: async () => viewTemplates,
+      templatesCreate: async (name, d, icon, color) => {
+        checkIcon(icon);
+        const t = { id: next(viewTemplates), name, icon: icon ?? null, color: colorKey(color), def: withDisplay(d), position: viewTemplates.length };
+        viewTemplates.push(t);
+        return t;
+      },
+      templatesUpdate: async (t) => {
+        checkIcon(t.icon);
+        const row = find(viewTemplates, t.id, 'view template');
+        return Object.assign(row, { name: t.name, icon: t.icon, color: colorKey(t.color), def: withDisplay(t.def) });
+      },
+      templatesDelete: async (id) => {
+        remove(viewTemplates, id, 'view template');
+        for (const v of views) if (v.template_id === id) v.template_id = null;
+        if (settings.get('default_view_template') === id) settings.delete('default_view_template');
         return null;
       },
     },
@@ -818,6 +871,9 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
             fail('Invalid', `unknown time zone ${timezone}`);
           }
         }
+        if (!workspace.setup_done && !viewTemplates.length) {
+          viewTemplates.push(...seedViewTemplates(s.propertyDefs.map((d) => d.key), day(7)));
+        }
         workspace = { setup_done: true, name: name.trim(), key, timezone: timezone ?? workspace.timezone };
         settings.set('issue_prefix', key);
         for (const i of s.issues) i.key = `${key}-${i.id}`;
@@ -902,7 +958,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     'projects.create projects.update projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete templates.create templates.update templates.delete templates.apply ' +
     'labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
-    'relations.add relations.remove views.save views.delete views.reorder pins.pin pins.unpin pins.reorder pins.set import.apply'
+    'relations.add relations.remove views.save views.delete views.reorder views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
+    'view.templatesCreate view.templatesUpdate view.templatesDelete pins.pin pins.unpin pins.reorder pins.set import.apply'
   ).split(' ');
   for (const name of mutating) {
     const [mod, fn] = name.split('.');
@@ -1015,7 +1072,7 @@ const templates: IssueTemplate[] = [
 // The views the migration seeds, with icons and the groupings the screens expect, plus one for the week ahead.
 const view = (id: number, name: string, layout: Layout, group_by: FieldRef | null, filter: Filter, icon: string): SavedView => ({
   id, name, position: id - 1, icon: `icon:${icon}`, color: null,
-  def: { filter, sorts: [], group_by, layout, columns: [], include_archived: false },
+  def: withDisplay({ filter, group_by, layout }), template_id: null,
 });
 const category = (op: 'In' | 'Neq', value: Value): Filter => ({ Cond: { field: { Fixed: 'StatusCategory' }, op, value } });
 const views: SavedView[] = [
@@ -1028,5 +1085,6 @@ const views: SavedView[] = [
 
 export const fixtures: MockSeed = {
   statuses, projects, propertyDefs, issues, labels, cycles, views, milestones, relations, templates,
+  viewTemplates: seedViewTemplates(propertyDefs.map((d) => d.key), day(7)),
   workspace: { setup_done: true, name: 'Cairn', key: 'ABC', timezone: 'UTC' },
 };

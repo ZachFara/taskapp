@@ -2,8 +2,8 @@ use serde_json::{Value, json};
 use sqlx::{Row, SqliteConnection, query::Query, sqlite::SqliteArguments, sqlite::SqliteRow};
 
 use crate::{
-    ChangeSource, Db, Error, FieldRef, Filter, FixedField, Issue, Op, PropertyDef, PropertyKind,
-    Result, SavedView, Sort, ViewDef, ViewId,
+    ChangeSource, Db, Error, FieldRef, Filter, FixedField, Issue, IssueId, IssueStats, Op,
+    PropertyDef, PropertyKind, Result, SavedView, Sort, ViewDef, ViewId, ViewTemplateId,
     history::{self, Edit},
     issues,
     palette::{self, Look},
@@ -237,6 +237,19 @@ fn fixed_col(x: FixedField) -> Result<Col> {
         FixedField::UpdatedAt => ("issues.updated_at", false),
         FixedField::CompletedAt => ("issues.completed_at", false),
         FixedField::Archived => ("issues.archived_at", false),
+        FixedField::Key => ("issues.number", false),
+        FixedField::SubIssueProgress => (
+            "(SELECT COUNT(*) FROM issues c WHERE c.parent_id = issues.id AND c.archived_at IS NULL)",
+            false,
+        ),
+        FixedField::RelationCount => (
+            "(SELECT COUNT(*) FROM relations r WHERE r.from_id = issues.id OR r.to_id = issues.id)",
+            false,
+        ),
+        FixedField::CommentCount => (
+            "(SELECT COUNT(*) FROM comments c WHERE c.issue_id = issues.id)",
+            false,
+        ),
         FixedField::Label => return Err(Error::Invalid("cannot sort by label".into())),
     };
     Ok(Col::fixed(sql, text))
@@ -343,6 +356,43 @@ pub async fn query(db: &Db, def: &ViewDef) -> Result<Vec<Issue>> {
     issues::issues_from_rows(&mut *db.pool.acquire().await?, &rows).await
 }
 
+/// Sub-issue, relation and comment counts for the issues `def` shows, in the same order as [`query`].
+///
+/// # Errors
+///
+/// As [`query`].
+pub async fn stats(db: &Db, def: &ViewDef) -> Result<Vec<IssueStats>> {
+    let (sql, binds) = compile(def, &property_defs(db).await?)?;
+    let sql = sql.replacen(
+        &format!("SELECT {} FROM", issues::ISSUE_COLS),
+        "SELECT issues.id,
+           (SELECT COUNT(*) FROM issues c WHERE c.parent_id = issues.id AND c.archived_at IS NULL),
+           (SELECT COUNT(*) FROM issues c JOIN statuses st ON st.id = c.status_id
+              WHERE c.parent_id = issues.id AND c.archived_at IS NULL AND st.category = 'completed'),
+           (SELECT COUNT(*) FROM relations r WHERE r.from_id = issues.id OR r.to_id = issues.id),
+           (SELECT COUNT(*) FROM comments c WHERE c.issue_id = issues.id)
+         FROM",
+        1,
+    );
+    let mut q = sqlx::query(&sql);
+    for b in &binds {
+        q = bind_value(q, b);
+    }
+    q.fetch_all(&db.pool)
+        .await?
+        .iter()
+        .map(|r| {
+            Ok(IssueStats {
+                issue_id: IssueId(r.try_get(0)?),
+                sub_total: r.try_get(1)?,
+                sub_done: r.try_get(2)?,
+                relations: r.try_get(3)?,
+                comments: r.try_get(4)?,
+            })
+        })
+        .collect()
+}
+
 fn view_from_row(r: &SqliteRow) -> Result<SavedView> {
     let def: String = r.try_get("definition")?;
     Ok(SavedView {
@@ -352,6 +402,9 @@ fn view_from_row(r: &SqliteRow) -> Result<SavedView> {
         position: r.try_get("position")?,
         icon: r.try_get("icon")?,
         color: r.try_get("color")?,
+        template_id: r
+            .try_get::<Option<i64>, _>("template_id")?
+            .map(ViewTemplateId),
     })
 }
 
@@ -360,7 +413,7 @@ fn view_from_row(r: &SqliteRow) -> Result<SavedView> {
 /// Fails on a database error or a stored definition that no longer parses.
 pub async fn list(db: &Db) -> Result<Vec<SavedView>> {
     sqlx::query(
-        "SELECT id, name, definition, position, icon, color FROM views ORDER BY position, id",
+        "SELECT id, name, definition, position, icon, color, template_id FROM views ORDER BY position, id",
     )
     .fetch_all(&db.pool)
     .await?
@@ -402,11 +455,12 @@ pub async fn save(
         }
         None => insert_view(&mut tx, src, name, &json, &look).await?,
     };
-    let row =
-        sqlx::query("SELECT id, name, definition, position, icon, color FROM views WHERE id = ?")
-            .bind(id)
-            .fetch_one(&mut *tx)
-            .await?;
+    let row = sqlx::query(
+        "SELECT id, name, definition, position, icon, color, template_id FROM views WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
     let view = view_from_row(&row)?;
     tx.commit().await?;
     Ok(view)

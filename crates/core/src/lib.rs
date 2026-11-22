@@ -27,6 +27,7 @@ pub mod settings;
 pub mod statuses;
 pub mod templates;
 pub mod undo;
+pub mod view_templates;
 pub mod views;
 pub mod workspace;
 

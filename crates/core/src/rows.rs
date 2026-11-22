@@ -17,6 +17,7 @@ pub(crate) const TABLES: &[&str] = &[
     "property_defs",
     "relations",
     "views",
+    "view_templates",
     "pins",
     "issue_templates",
     "work_blocks",

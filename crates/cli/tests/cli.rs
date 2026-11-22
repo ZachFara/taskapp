@@ -399,3 +399,26 @@ fn setup_sets_the_key_for_new_issues() {
     run(&db, &["add", "Buy milk"]);
     assert_eq!(run_json(&db, &["issue", "get", "XY-1"])["key"], "XY-1");
 }
+
+#[test]
+fn view_templates_from_the_command_line() {
+    let (_d, db) = fresh();
+    let t = run_json(&db, &["view", "save-as-template", "1", "--name", "ABC t"]);
+    assert_eq!(t["name"], "ABC t");
+    let v = run_json(&db, &["view", "from-template", "1"]);
+    assert_eq!(v["template_id"], 1);
+    run_json(&db, &["view", "reset", &v["id"].to_string()]);
+    assert_eq!(
+        run_json(&db, &["view", "templates"])
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
+    run_json(&db, &["view", "delete-template", "1"]);
+    assert_eq!(
+        run_json(&db, &["view", "templates"])
+            .as_array()
+            .map(Vec::len),
+        Some(0)
+    );
+}

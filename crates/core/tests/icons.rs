@@ -17,6 +17,7 @@ fn plain_view() -> ViewDef {
         layout: Layout::List,
         columns: vec![],
         include_archived: false,
+        ..ViewDef::default()
     }
 }
 
