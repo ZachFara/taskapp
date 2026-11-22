@@ -3,7 +3,32 @@ export function createSelection() {
   let focused = $state<number | null>(null);
   let selected = $state<number[]>([]);
   let anchor: number | null = null;
+  let columns = $state<number[][]>([]);
+  let peeked = $state<number | null>(null);
   return {
+    /** Ordered visible ids per column (a list has one column); the views publish them. */
+    get columns() {
+      return columns;
+    },
+    setColumns(cols: number[][]) {
+      columns = cols;
+    },
+    /** Moves focus to the same row index in the column `delta` away, clamped to that column's length. */
+    moveColumn(delta: number) {
+      const cols = columns.filter((c) => c.length);
+      if (!cols.length) return;
+      if (focused === null) return void (focused = cols[0][0]);
+      const at = Math.max(0, cols.findIndex((c) => c.includes(focused!)));
+      const to = Math.min(cols.length - 1, Math.max(0, at + delta));
+      focused = cols[to][Math.min(Math.max(0, cols[at].indexOf(focused)), cols[to].length - 1)];
+    },
+    get peeked() {
+      return peeked;
+    },
+    /** Peeks the focused row, or closes the peek when it is already open. */
+    togglePeek() {
+      peeked = peeked === focused ? null : focused;
+    },
     get focused() {
       return focused;
     },

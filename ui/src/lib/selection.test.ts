@@ -34,3 +34,25 @@ describe('selection', () => {
     expect(s.selected).toEqual([]);
   });
 });
+
+describe('selection columns and peek', () => {
+  it('moves focus to the same row in the adjacent column, clamped to its length', () => {
+    const s = createSelection();
+    s.setColumns([[1, 2, 3], [4]]);
+    s.focus(3);
+    s.moveColumn(1);
+    expect(s.focused).toBe(4);
+    s.moveColumn(-1);
+    expect(s.focused).toBe(1);
+    s.moveColumn(-1);
+    expect(s.focused).toBe(1);
+  });
+  it('peeks the focused row and toggles it off', () => {
+    const s = createSelection();
+    s.focus(2);
+    s.togglePeek();
+    expect(s.peeked).toBe(2);
+    s.togglePeek();
+    expect(s.peeked).toBe(null);
+  });
+});
