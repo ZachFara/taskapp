@@ -71,3 +71,30 @@ export async function clickLabel(label: string) {
   field(document.body, label).click();
   await flush();
 }
+
+// jsdom has no pointer capture; bits-ui calls these when a select opens.
+const proto = Element.prototype as unknown as Record<string, unknown>;
+proto.hasPointerCapture ??= () => false;
+proto.releasePointerCapture ??= () => {};
+proto.scrollIntoView ??= () => {};
+
+/** Opens a bits-ui select by its label and picks the option with this text (the list is portalled to body). */
+export async function pick(root: Element, label: string, option: string) {
+  const trigger = field(root, label);
+  trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }));
+  await flush();
+  const item = [...document.querySelectorAll('[role="option"]')].find((o) => o.textContent?.trim() === option);
+  if (!item) throw new Error(`no option "${option}" for "${label}"`);
+  item.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerType: 'mouse' }));
+  item.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await flush();
+}
+
+/** Clicks the switch with this aria-label, the way a user would. */
+export async function toggle(root: Element, label: string) {
+  field(root, label).click();
+  await flush();
+}
+
+/** The text of the designed status line for a form, if any. */
+export const statusText = (root: Element) => root.querySelector('[data-status]')?.textContent?.trim() ?? '';
