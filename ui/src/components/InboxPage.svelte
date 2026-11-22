@@ -1,7 +1,7 @@
 <script lang="ts">
-  // Stub: replaced by its own task. Props are accepted and ignored.
-  let { ...rest }: Record<string, unknown> = $props();
-  void rest;
+  import EmptyState from '../ui/EmptyState.svelte';
+  import PageHeader from '../ui/PageHeader.svelte';
 </script>
 
-<p data-stub="Inbox">Inbox</p>
+<PageHeader title="Inbox" icon="icon:inbox" />
+<EmptyState title="Inbox arrives in a later release" hint="Triage for captured items and mentions will land here. Nothing is waiting for you yet." />

@@ -84,3 +84,14 @@ describe('PinnedPage', () => {
     expect(links).toContain('https://example.com');
   });
 });
+
+describe('PinnedPage unpin', () => {
+  it('unpin_removes_the_pin', async () => {
+    const mock = await seedPins([['Issue', 'ZF-1'], ['Issue', 'ZF-2']]);
+    const target = await open(mock);
+    const first = cards(target)[0];
+    first.querySelector<HTMLButtonElement>('button[aria-label^="Unpin"]')!.click();
+    await vi.waitFor(() => expect(cards(target)).toHaveLength(1));
+    expect((await mock.pins.listResolved()).map((r) => r.pin.target)).toEqual(['ZF-2']);
+  });
+});
