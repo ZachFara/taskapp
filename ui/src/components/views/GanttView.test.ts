@@ -7,7 +7,7 @@ import type { Issue, SavedView, ViewDef } from '../../lib/bindings';
 import GanttView from './GanttView.svelte';
 
 const def: ViewDef = { filter: null, sorts: [], group_by: null, layout: 'Gantt', columns: [], include_archived: false };
-const issue = (id: number, o: Partial<Issue> = {}): Issue => ({ ...fixtures.issues[0], id, key: `ZF-${id}`, title: `t${id}`, parent_id: null, project_id: 1, start_date: null, due: null, estimate_minutes: null, ...o });
+const issue = (id: number, o: Partial<Issue> = {}): Issue => ({ ...fixtures.issues[0], id, key: `ABC-${id}`, title: `t${id}`, parent_id: null, project_id: 1, start_date: null, due: null, estimate_minutes: null, ...o });
 const dated = (id: number, start: string, end: string, o: Partial<Issue> = {}) => issue(id, { start_date: start, due: { Date: end }, ...o });
 
 let view: ReturnType<typeof mount> | undefined;
@@ -43,7 +43,7 @@ describe('GanttView', () => {
     await block();
     const update = vi.spyOn(api.issues, 'update');
     dragBy(bar('issue-1'), 28);
-    await vi.waitFor(() => expect(document.querySelector('.toast')?.textContent).toContain('Also moves ZF-2'));
+    await vi.waitFor(() => expect(document.querySelector('.toast')?.textContent).toContain('Also moves ABC-2'));
     expect(update).not.toHaveBeenCalled();
     (document.querySelectorAll('.toast button')[0] as HTMLElement).click();
     await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(2));
@@ -99,7 +99,7 @@ describe('GanttView', () => {
   it('multi_project_timeline_groups_by_project', async () => {
     await show([dated(1, '2026-12-01', '2026-12-03'), dated(2, '2026-12-05', '2026-12-07', { project_id: 2 })]);
     const labels = [...document.querySelectorAll('.label.group .text')].map((l) => l.textContent);
-    expect(labels).toEqual(['Home', 'Work']);
+    expect(labels).toEqual([fixtures.projects[0].name, fixtures.projects[1].name]);
     expect(bar('group-1')).not.toBeNull();
     expect(bar('group-2')).not.toBeNull();
   });
@@ -115,7 +115,7 @@ describe('GanttView', () => {
   it('empty_view_shows_empty_state_and_unscheduled_lane', async () => {
     await show([issue(9, { estimate_minutes: 480 })]);
     expect(document.querySelector('.empty')?.textContent).toContain('Nothing scheduled');
-    expect(document.querySelector('.lane')?.textContent).toContain('ZF-9');
+    expect(document.querySelector('.lane')?.textContent).toContain('ABC-9');
   });
 
   it('parent_without_dated_children_has_no_rollup_bar', async () => {
@@ -125,21 +125,21 @@ describe('GanttView', () => {
   });
 
   it('drag_keeps_datetime_due_time_and_zone', async () => {
-    const due = { DateTime: { utc: '2026-12-03T15:00:00Z', tz: 'America/New_York' } };
+    const due = { DateTime: { utc: '2026-12-03T15:00:00Z', tz: 'US/Eastern' } };
     await show([issue(1, { start_date: '2026-12-01', due })]);
     const update = vi.spyOn(api.issues, 'update');
     dragBy(bar('issue-1'), 28);
     await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-    expect(update).toHaveBeenCalledWith(1, { start_date: '2026-12-03', due: { DateTime: { utc: '2026-12-05T15:00:00Z', tz: 'America/New_York' } } });
+    expect(update).toHaveBeenCalledWith(1, { start_date: '2026-12-03', due: { DateTime: { utc: '2026-12-05T15:00:00Z', tz: 'US/Eastern' } } });
   });
 
   it('drag_across_dst_keeps_local_wall_clock', async () => {
-    const due = { DateTime: { utc: '2026-03-06T14:00:00Z', tz: 'America/New_York' } };
+    const due = { DateTime: { utc: '2026-03-06T14:00:00Z', tz: 'US/Eastern' } };
     await show([issue(1, { start_date: '2026-03-06', due })]);
     const update = vi.spyOn(api.issues, 'update');
     dragBy(bar('issue-1'), 42);
     await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-    expect(update.mock.calls[0][1]).toEqual({ start_date: '2026-03-09', due: { DateTime: { utc: '2026-03-09T13:00:00Z', tz: 'America/New_York' } } });
+    expect(update.mock.calls[0][1]).toEqual({ start_date: '2026-03-09', due: { DateTime: { utc: '2026-03-09T13:00:00Z', tz: 'US/Eastern' } } });
   });
 
   it('drag_estimate_only_bar_does_not_invent_due', async () => {

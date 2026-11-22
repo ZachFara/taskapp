@@ -29,7 +29,7 @@ describe('Cycles', () => {
     await add(target, 'Winter');
     await setField(target, 'End of Winter', '2026-12-20');
     expect(calls.filter((c) => c === 'cycles.update')).toHaveLength(1);
-    expect((await api.cycles.list())[0].end_date).toBe('2026-12-20');
+    expect((await api.cycles.list()).find((c) => c.name === 'Winter')!.end_date).toBe('2026-12-20');
   });
 
   it('picker and delete each call once', async () => {

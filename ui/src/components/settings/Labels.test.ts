@@ -29,7 +29,7 @@ describe('Labels', () => {
     await clickLabel('Icon and colour of urgent');
     await clickLabel('bolt');
     expect(calls.filter((c) => c === 'labels.update')).toHaveLength(1);
-    expect((await api.labels.list())[0].icon).toBe('icon:bolt');
+    expect((await api.labels.list()).find((l) => l.name === 'urgent')!.icon).toBe('icon:bolt');
   });
 
   it('delete asks first, then calls once', async () => {

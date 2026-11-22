@@ -39,14 +39,14 @@ describe('gantt date math', () => {
   it('local_day_uses_the_zone_passed_in', () => {
     const t = new Date('2026-12-01T02:30:00Z');
     expect(localDay(t, 'UTC')).toBe('2026-12-01');
-    expect(localDay(t, 'America/New_York')).toBe('2026-11-30');
+    expect(localDay(t, 'US/Eastern')).toBe('2026-11-30');
     expect(localDay(t, 'Pacific/Auckland')).toBe('2026-12-01');
   });
 
   it('shift_local_days_keeps_wall_clock_across_dst', () => {
     // US clocks spring forward on 2026-03-08: 09:00 New York is 14:00Z before and 13:00Z after.
-    expect(shiftLocalDays('2026-03-06T14:00:00Z', 'America/New_York', 3)).toBe('2026-03-09T13:00:00Z');
-    expect(shiftLocalDays('2026-03-09T13:00:00Z', 'America/New_York', -3)).toBe('2026-03-06T14:00:00Z');
+    expect(shiftLocalDays('2026-03-06T14:00:00Z', 'US/Eastern', 3)).toBe('2026-03-09T13:00:00Z');
+    expect(shiftLocalDays('2026-03-09T13:00:00Z', 'US/Eastern', -3)).toBe('2026-03-06T14:00:00Z');
     expect(shiftLocalDays('2026-03-06T14:00:00Z', 'UTC', 3)).toBe('2026-03-09T14:00:00Z');
     // Southern hemisphere zone, falls back on 2026-04-05.
     expect(shiftLocalDays('2026-04-03T00:00:00Z', 'Australia/Sydney', 3)).toBe('2026-04-06T01:00:00Z');

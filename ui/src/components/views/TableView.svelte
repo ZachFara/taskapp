@@ -305,7 +305,6 @@
       cancel,
       status: () => editField('Status'),
       priority: () => editField('Priority'),
-      toggle: () => selection.toggle(),
     };
     const listeners = Object.entries(handlers).map(([id, fn]) => {
       const name = `command:table.${id}`;

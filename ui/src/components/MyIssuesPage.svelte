@@ -4,7 +4,7 @@
   import ListView from './views/ListView.svelte';
 
   // Single-user app: "my" is every issue that is not archived and not finished, grouped by status.
-  const open: Filter = { Cond: { field: { Fixed: 'StatusCategory' }, op: 'NotIn', value: ['Completed', 'Canceled'] } };
+  const open: Filter = { Cond: { field: { Fixed: 'StatusCategory' }, op: 'NotIn', value: ['completed', 'canceled'] } };
   const view: SavedView = {
     id: 0,
     name: 'My issues',

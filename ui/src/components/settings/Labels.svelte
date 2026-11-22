@@ -25,7 +25,9 @@
       await action();
       await load();
     } catch (e) {
-      error = (e as { message?: string }).message ?? String(e);
+      const msg = (e as { message?: string }).message ?? String(e);
+      // The backend reports a duplicate name as a raw UNIQUE constraint error.
+      error = msg.includes('UNIQUE constraint') ? "A label with that name already exists" : msg;
     }
   }
 
