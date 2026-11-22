@@ -69,7 +69,7 @@ describe('CheatSheet', () => {
     const onopenchange = vi.fn();
     app = mount(CheatSheet, { target: document.body, props: { open: true, onopenchange } });
     await settle();
-    search().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await settle();
     expect(document.querySelector('[role=dialog]')).toBeNull();
   });
