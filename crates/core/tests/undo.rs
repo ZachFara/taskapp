@@ -163,29 +163,22 @@ async fn undo_and_redo_are_recorded_with_their_own_source_and_never_loop() -> R 
 }
 
 #[tokio::test]
-async fn undo_refuses_a_step_it_cannot_reverse() -> R {
+async fn undo_of_a_label_create_removes_it() -> R {
     let db = Db::open_in_memory().await?;
     history::step("Create label", async {
-        labels::create(&db, "ABC bug", "#ffffff", None, UI).await
+        labels::create(&db, "ABC bug", "red", None, UI).await
     })
     .await?;
-    let err = undo::undo(&db).await.expect_err("not covered");
-    assert!(err.to_string().contains("cannot undo"), "got {err}");
+    undo::undo(&db).await?;
+    assert_eq!(labels::list(&db).await?.len(), 0);
     Ok(())
 }
 
 #[tokio::test]
-async fn undo_refuses_when_the_old_status_was_deleted() -> R {
+async fn undo_of_a_status_delete_moves_the_issues_back() -> R {
     let db = Db::open_in_memory().await?;
-    let extra = statuses::create(
-        &db,
-        "ABC extra",
-        StatusCategory::Started,
-        "#ffffff",
-        None,
-        UI,
-    )
-    .await?;
+    let extra =
+        statuses::create(&db, "ABC extra", StatusCategory::Started, "blue", None, UI).await?;
     let a = issues::create(
         &db,
         NewIssue {
@@ -199,8 +192,7 @@ async fn undo_refuses_when_the_old_status_was_deleted() -> R {
         statuses::delete(&db, extra.id, StatusId(1)).await
     })
     .await?;
-    let err = undo::undo(&db).await.expect_err("status is gone");
-    assert!(err.to_string().contains("status"), "got {err}");
-    assert_eq!(issues::get(&db, a.id).await?.status_id, StatusId(1));
+    undo::undo(&db).await?;
+    assert_eq!(issues::get(&db, a.id).await?.status_id, extra.id);
     Ok(())
 }
