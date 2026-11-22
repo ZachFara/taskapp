@@ -12,13 +12,27 @@
   let { children }: { children: Snippet } = $props();
   let open = $state(false);
   let issueId = $state<number | null>(null);
-  const ctx = (id: number) => ({ route: location.pathname, selection: selection.selected, focusedIssueId: id, openIssueId: null, api, navigate });
-  const items = $derived(open && issueId !== null ? listCommands(ctx(issueId)).filter((c) => c.run) : []);
+  const ctx = (id: number) => ({ route: location.pathname, layout: selection.layout, selection: selection.selected, focusedIssueId: id, openIssueId: null, api, navigate });
+  // Issue actions only, grouped: properties, then relations and copies, then pin and archive.
+  const ORDER = [
+    'list.title.edit',
+    'issue.status', 'issue.priority', 'issue.labels', 'issue.project', 'issue.cycle', 'issue.start', 'issue.due', 'issue.estimate',
+    'issue.relation', 'issue.parent', 'issue.duplicate', 'issue.copyKey', 'issue.copyLink', 'issue.pin', 'issue.archive',
+  ];
+  const items = $derived.by(() => {
+    if (!open || issueId === null) return [];
+    const live = listCommands(ctx(issueId));
+    return ORDER.flatMap((id) => live.filter((c) => c.id === id));
+  });
+  // A page command opens the command menu at its page, like its key does.
+  const choose = (c: (typeof items)[number], id: number) =>
+    c.run ? c.run(ctx(id)) : dispatchEvent(new CustomEvent('command:palette.open', { detail: { page: c.id } }));
 
   function aim(e: MouseEvent) {
     const row = (e.target as Element).closest<HTMLElement>('[data-id]');
     if (!row) return void e.stopPropagation();
     issueId = Number(row.dataset.id);
+    if (!selection.selected.includes(issueId)) selection.clear();
     selection.focus(issueId);
   }
 </script>
@@ -26,7 +40,7 @@
 <ContextMenu bind:open>
   {#snippet area()}<div class="fill" role="presentation" oncontextmenucapture={aim}>{@render children()}</div>{/snippet}
   {#each items as c (c.id)}
-    <MenuItem label={c.label} icon={c.icon} shortcut={c.shortcut} onSelect={() => c.run!(ctx(issueId!))} />
+    <MenuItem label={c.label} icon={c.icon} shortcut={c.shortcut} onSelect={() => choose(c, issueId!)} />
   {/each}
 </ContextMenu>
 

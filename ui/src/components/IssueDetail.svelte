@@ -88,7 +88,8 @@
   });
 
   const open = (k: string) => (onopen ? onopen(k) : navigate(`/issue/${k}`));
-  const close = () => (onclose ? onclose() : history.back());
+  // Closing the full page never leaves the app: back when there is somewhere to go back to, else home.
+  const close = () => (onclose ? onclose() : history.length > 1 ? history.back() : navigate('/'));
   const step = (d: number) => {
     const at = siblings.indexOf(key) + d;
     if (siblings.indexOf(key) >= 0 && siblings[at]) open(siblings[at]);

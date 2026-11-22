@@ -178,7 +178,7 @@
                 <td>
                   <Select bind:value={() => mapping[h], (v) => (mapping[h] = v)} label={`Map ${h}`} items={FIELDS} />
                   {#if mapping[h] === 'property'}
-                    <TextInput bind:value={propName[h]} label={`Property name for ${h}`} placeholder="Property name" invalid={!propName[h]?.trim()} />
+                    <TextInput bind:value={() => propName[h] ?? '', (v) => (propName[h] = v)} label={`Property name for ${h}`} placeholder="Property name" invalid={!propName[h]?.trim()} />
                   {/if}
                 </td>
               </tr>

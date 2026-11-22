@@ -48,6 +48,21 @@ describe('ImportPage CSV', () => {
     expect(rowFor(target, 'Team')).toContain('Ignore');
   });
 
+  it('choosing_custom_property_writes_the_mapping', async () => {
+    const csvPlan = vi.fn(async () => plan);
+    const { target } = await mountSettings(ImportPage, { import: { csvPlan } });
+    await upload(target, csv);
+    const trigger = target.querySelector<HTMLElement>('[aria-label="Map Team"]')!;
+    trigger.focus();
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 0));
+    const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent?.includes('Custom property'))!;
+    for (const type of ['pointerdown', 'pointerup', 'click']) option.dispatchEvent(new MouseEvent(type, { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(rowFor(target, 'Team')).toContain('Custom property');
+    expect(target.querySelector('input[aria-label="Property name for Team"]')).not.toBeNull();
+  });
+
   it('dry run renders the plan and the skipped rows, and sends the mapping', async () => {
     const csvPlan = vi.fn(async () => plan);
     const { target, api } = await mountSettings(ImportPage, { import: { csvPlan } });

@@ -197,6 +197,12 @@ describe('CalendarView', () => {
     expect(container.querySelector('h1')).toBeNull();
   });
 
+  it('week_start_comes_from_the_week_start_setting', async () => {
+    await mock.settings.set('week_start', 'monday');
+    render(CalendarView, { props: { view } });
+    await waitFor(() => expect(stub().options.firstDay).toBe(1));
+  });
+
   it('next_command_moves_the_date', async () => {
     render(CalendarView, { props: { view } });
     await waitFor(() => expect(stub().options).toBeDefined());

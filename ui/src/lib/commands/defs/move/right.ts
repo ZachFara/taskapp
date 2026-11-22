@@ -4,6 +4,7 @@ import { selection } from '../../../selection.svelte';
 
 defineCommand({
   id: 'move.right',
+  menu: false,
   label: 'Next column',
   icon: 'board',
   group: 'Navigation',

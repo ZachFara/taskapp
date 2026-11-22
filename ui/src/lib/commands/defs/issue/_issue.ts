@@ -23,6 +23,8 @@ export async function loadChoices(api: Api) {
 
 /** The selection, else the focused issue, else the open one. */
 export function targets(ctx: Ctx): number[] {
+  // On an issue page the open issue is the target; a focus left over from the list is stale.
+  if (ctx.route.startsWith('/issue/') && ctx.openIssueId !== null) return [ctx.openIssueId];
   if (ctx.selection.length) return ctx.selection;
   const one = ctx.focusedIssueId ?? ctx.openIssueId;
   return one === null ? [] : [one];
@@ -30,10 +32,14 @@ export function targets(ctx: Ctx): number[] {
 
 export const patchOf = (patch: IssuePatch = {}, rest: Omit<BulkPatch, 'patch'> = {}): BulkPatch => ({ patch, ...rest });
 
+/** The open view loads its rows once, so a write made from the command menu tells the app to redraw it. */
+export const refreshView = () => dispatchEvent(new Event('command:view.refresh'));
+
 /** One backend call, so one undo step, for every target. */
 export async function apply(ctx: Ctx, p: BulkPatch) {
   const ids = targets(ctx);
   if (ids.length) await ctx.api.issues.bulkUpdate(ids, p);
+  refreshView();
 }
 
 type Row = [label: string, patch: BulkPatch, icon?: string];

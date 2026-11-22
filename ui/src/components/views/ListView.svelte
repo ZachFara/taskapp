@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../../lib/api';
-  import type { Cycle, Issue, IssuePatch, Label, Project, SavedView, Status, StatusCategory } from '../../lib/bindings';
+  import type { Cycle, FieldRef, Issue, IssuePatch, Label, Project, SavedView, Status, StatusCategory } from '../../lib/bindings';
   import { listState } from '../../lib/listState.svelte';
   import { selection } from '../../lib/selection.svelte';
   import { navigate } from '../../app/routes';
@@ -17,10 +17,11 @@
   import Skeleton from '../../ui/Skeleton.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import TextInput from '../../ui/TextInput.svelte';
-  import { workspaceZone, dayText, dueDay as dueDayIn, isOverdue } from './dates';
+  import { dueDay as dueDayIn, isOverdue } from './dates';
+  import FieldValue from '../display/FieldValue.svelte';
+  import { LIST_DEFAULT, density, emptyCtx, fieldName, loadCtx, shown, subIssues, type Ctx } from '../display/types';
 
   // shortcut: row and band heights default to the token values when the CSS is not loaded (tests), upgrade if rows vary in height
-  const ROW = 32;
   const BAND = 30;
   const OVERSCAN = 10;
   const WINDOW_ABOVE = 300;
@@ -46,7 +47,16 @@
   let scrollTop = $state(0);
   let height = $state(0);
   let scroller = $state<HTMLElement>();
-  let tz = $state('UTC');
+  let ctx = $state.raw<Ctx>(emptyCtx);
+  const tz = $derived(ctx.tz);
+  const compact = $derived(density(view.def) === 'compact');
+  // shortcut: compact height follows the --row-h-compact token value (28), upgrade if the token changes
+  const ROW = $derived(compact ? 28 : 32);
+  const fields = $derived(shown(view.def, LIST_DEFAULT));
+  const WIDTH: Record<string, string> = { Label: '150px', Project: '140px', DueDate: '56px', Estimate: '56px', Key: '64px', Priority: 'var(--s-8)', Status: '120px', Cycle: '100px', StartDate: '56px', CreatedAt: '56px', UpdatedAt: '56px' };
+  const widthOf = (f: FieldRef) => (f.Property === undefined ? (WIDTH[f.Fixed!] ?? '100px') : ({ Select: '120px', MultiSelect: '150px', Checkbox: '56px', Url: '56px', Number: '72px', Date: '72px' } as Record<string, string>)[ctx.defs.find((d) => d.key === f.Property)?.kind ?? ''] ?? '140px');
+  const rightAligned = (f: FieldRef) => f.Property === undefined ? ['DueDate', 'StartDate', 'Estimate', 'CreatedAt', 'UpdatedAt'].includes(f.Fixed!) : ['Number', 'Date'].includes(ctx.defs.find((d) => d.key === f.Property)?.kind ?? '');
+  const columns = $derived(`var(--s-8) var(--s-8) 64px var(--s-8) minmax(0, 1fr) ${fields.map(widthOf).join(' ')}`);
   let menu = $state<{ id: number; x: number; y: number } | null>(null);
   let menuOpen = $state(false);
   let draft = $state('');
@@ -68,15 +78,15 @@
   }
 
   async function load() {
-    const [st, pr, cy, lb, rows, ws] = await Promise.all([
-      api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.views.query(view.def), workspaceZone(),
+    const [st, pr, cy, lb, rows, c] = await Promise.all([
+      api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.views.query(view.def), loadCtx(),
     ]);
-    tz = ws;
+    ctx = c;
     statuses = st;
     projects = pr;
     cycles = cy;
     labels = lb;
-    issues = rows;
+    issues = subIssues(view.def) === 'hide' ? rows.filter((i) => i.parent_id === null) : rows;
     loaded = true;
   }
   $effect(() => {
@@ -137,6 +147,7 @@
   $effect(() => {
     const ids = visibleRows.map((r) => r.id);
     listState.ids = ids;
+    selection.setLayout('list');
     selection.setColumns([ids]);
     return () => {
       listState.ids = [];
@@ -168,9 +179,6 @@
   const statusOf = (i: Issue) => statuses.find((s) => s.id === i.status_id);
   const dueDay = (i: Issue) => dueDayIn(i, tz);
   const overdue = (i: Issue) => isOverdue(i, statusOf(i)?.category, tz);
-  const estimate = (m: number | null) => (m === null ? '' : m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`);
-  const labelsOf = (i: Issue) => i.label_ids.flatMap((id) => labels.find((l) => l.id === id) ?? []);
-  const projectOf = (i: Issue) => projects.find((p) => p.id === i.project_id);
 
   function pick(e: MouseEvent, id: number) {
     if (e.metaKey || e.ctrlKey) {
@@ -240,8 +248,13 @@
     </EmptyState></div>
 {:else}
   <IssueMenu>
+  <div class="wrap">
+  <div class="heads" style:grid-template-columns={columns} aria-hidden="true">
+    <span></span><span></span><span></span><span></span><span>Title</span>
+    {#each fields as f (f.Property ?? f.Fixed)}<span data-right={rightAligned(f) ? '' : undefined}>{fieldName(f, ctx.defs)}</span>{/each}
+  </div>
   <div class="scroller" role="presentation" bind:this={scroller} onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}>
-    <ul class="list" role="list" aria-label={view.name} style:height="{total}px">
+    <ul class="list" role="list" data-density={compact ? 'compact' : undefined} aria-label={view.name} style:height="{total}px">
       {#each slice as { item, top } (top)}
         {#if 'head' in item}
           <li class="head" style:top="{top}px">
@@ -268,6 +281,8 @@
             data-selected={chosen ? '' : undefined}
             aria-current={selection.focused === i.id ? 'true' : undefined}
             style:top="{top}px"
+            style:grid-template-columns={columns}
+            style:height={compact ? 'var(--row-h-compact)' : undefined}
             onclick={(e) => pick(e, i.id)}
             ondblclick={() => navigate(`/issue/${i.key}`)}
             onmouseenter={() => (hovered = i.id)}
@@ -302,19 +317,16 @@
                 <span class="text">{i.title}</span>
               {/if}
             </span>
-            <span class="labels">
-              {#each labelsOf(i).slice(0, 2) as l (l.id)}<Pill color={l.color}>{l.name}</Pill>{/each}
-              {#if labelsOf(i).length > 2}<span class="more">+{labelsOf(i).length - 2}</span>{/if}
-            </span>
-            <span class="project">
-              {#if projectOf(i)}{@const p = projectOf(i)!}<EntityIcon icon={p.icon ?? 'icon:project'} color={p.color} size={14} /><span class="pname">{p.name}</span>{/if}
-            </span>
-            <span class="due" data-overdue={overdue(i) ? '' : undefined}>{dueDay(i) ? dayText(dueDay(i)!) : ''}</span>
-            <span class="est">{estimate(i.estimate_minutes)}</span>
+            {#each fields as f (f.Property ?? f.Fixed)}
+              <span class="cell" data-field={f.Property !== undefined ? `P:${f.Property}` : `F:${f.Fixed}`} data-right={rightAligned(f) ? '' : undefined} data-overdue={f.Fixed === 'DueDate' && overdue(i) ? '' : undefined}>
+                <FieldValue field={f} issue={i} {ctx} />
+              </span>
+            {/each}
           </li>
         {/if}
       {/each}
     </ul>
+  </div>
   </div>
   </IssueMenu>
 
@@ -328,13 +340,19 @@
 <style>
   .loading { display: grid; gap: var(--s-5); padding: var(--s-6) var(--s-7); }
   .empty { padding-top: var(--s-10); }
-  .scroller { overflow-y: auto; height: 100%; position: relative; font-size: var(--fs-md); font-variant-numeric: tabular-nums; }
+  .wrap { display: flex; flex-direction: column; height: 100%; }
+  .heads {
+    display: grid; align-items: center; column-gap: var(--s-4); flex: none; height: var(--row-h-compact); padding: 0 var(--s-7) 0 var(--s-4);
+    border-bottom: 1px solid var(--border); color: var(--muted); font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .heads span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .heads [data-right] { text-align: right; }
+  .scroller { overflow-y: auto; flex: 1; min-height: 0; position: relative; font-size: var(--fs-md); font-variant-numeric: tabular-nums; }
   .list { list-style: none; margin: 0; padding: 0; position: relative; }
   .head, .row { position: absolute; left: 0; right: 0; }
   .row {
     height: var(--row-h);
     display: grid;
-    grid-template-columns: var(--s-8) var(--s-8) 64px var(--s-8) minmax(0, 1fr) 150px 140px 56px 56px;
     align-items: center;
     column-gap: var(--s-4);
     padding: 0 var(--s-7) 0 var(--s-4);
@@ -352,11 +370,8 @@
   .status:hover { background: var(--active); }
   .title { min-width: 0; font-weight: 500; }
   .text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .labels { display: flex; gap: var(--s-3); overflow: hidden; }
-  .more { color: var(--muted); font-size: var(--fs-sm); align-self: center; }
-  .project { display: flex; align-items: center; gap: var(--s-3); min-width: 0; color: var(--muted); }
-  .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .due, .est { text-align: right; color: var(--muted); }
-  .due[data-overdue] { color: var(--signal); font-weight: 700; }
+  .cell { min-width: 0; display: flex; align-items: center; color: var(--muted); overflow: hidden; }
+  .cell[data-right] { justify-content: flex-end; }
+  .cell[data-overdue] { color: var(--signal); font-weight: 700; }
   .anchor { position: fixed; width: 0; height: 0; }
 </style>
