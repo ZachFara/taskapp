@@ -38,7 +38,9 @@
               <span class="name">{c.label}</span>
               <span class="keys">
                 {#each [c.shortcut ?? []].flat() as seq (seq)}
-                  <span class="combo"><Kbd keys={seq.split(' ')} /></span>
+                  <span class="combo">
+                    {#each seq.split(' ') as key, i (i)}<Kbd keys={key} />{/each}
+                  </span>
                 {/each}
               </span>
             </li>

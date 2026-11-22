@@ -3,29 +3,31 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defineCommand } from '../lib/commands/registry';
 import CheatSheet from './CheatSheet.svelte';
 
-defineCommand({
-  id: 'test.cheatsheet.entry',
-  label: 'Test cheat sheet entry',
-  icon: 'plus',
-  group: 'Testing',
-  shortcut: 'g x',
-  run: () => {},
-});
+// Own commands only: the registry holds every app command, so tests never assert on other entries.
+defineCommand({ id: 'test.cheatsheet.alpha', label: 'Cheat probe alpha', icon: 'plus', group: 'Probe', shortcut: 'g x', run: () => {} });
+defineCommand({ id: 'test.cheatsheet.beta', label: 'Cheat probe beta', icon: 'plus', group: 'Probe', shortcut: 'g g', run: () => {} });
 
 let app: ReturnType<typeof mount> | null = null;
 const settle = async () => {
   for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
   await tick();
 };
-const open = async () => {
-  app = mount(CheatSheet, { target: document.body, props: { open: true } });
+const open = async (props: Record<string, unknown> = {}) => {
+  app = mount(CheatSheet, { target: document.body, props: { open: true, ...props } });
   await settle();
 };
-const search = () => document.querySelector<HTMLInputElement>('input[type=search], input')!;
-const rowFor = (label: string) => [...document.querySelectorAll('li')].find((li) => li.textContent?.includes(label));
+// The dialog portals to document.body, so every query starts from the dialog itself.
+const dialog = () => document.querySelector<HTMLElement>('[role=dialog]');
+const search = () => dialog()!.querySelector<HTMLInputElement>('input')!;
+const type = async (text: string) => {
+  search().value = text;
+  search().dispatchEvent(new Event('input', { bubbles: true }));
+  await settle();
+};
+const rowFor = (label: string) => [...(dialog()?.querySelectorAll('li') ?? [])].find((li) => li.textContent?.includes(label));
 
-// bits-ui drops its escape layer in an effect teardown, so let that flush before the next test.
 afterEach(async () => {
+  // bits-ui drops its escape layer in an effect teardown, so let that flush before the next test.
   if (app) unmount(app);
   app = null;
   await settle();
@@ -33,53 +35,53 @@ afterEach(async () => {
 });
 
 describe('CheatSheet', () => {
-  it('lists_a_newly_registered_command_with_its_keys_as_separate_keys', async () => {
+  it('lists_a_registered_command_with_its_keys_as_separate_keys', async () => {
     await open();
-    const row = rowFor('Test cheat sheet entry');
+    const row = rowFor('Cheat probe alpha');
     expect(row).toBeTruthy();
-    const keys = [...row!.querySelectorAll('kbd')].map((k) => k.textContent);
-    expect(keys).toEqual(['g', 'x']);
+    expect([...row!.querySelectorAll('kbd')].map((k) => k.textContent)).toEqual(['g', 'x']);
   });
 
-  it('lists_commands_from_the_registry_not_a_hand_written_list', async () => {
+  it('renders_a_repeated_key_in_a_sequence_without_breaking_the_dialog', async () => {
     await open();
-    expect(rowFor('Create issue')).toBeTruthy();
-    expect(rowFor('Keyboard shortcuts')).toBeTruthy();
+    const row = rowFor('Cheat probe beta');
+    expect([...row!.querySelectorAll('kbd')].map((k) => k.textContent)).toEqual(['g', 'g']);
+  });
+
+  it('lists_every_registered_command_with_a_shortcut', async () => {
+    await open();
+    expect(rowFor('Cheat probe alpha')).toBeTruthy();
+    expect(rowFor('Cheat probe beta')).toBeTruthy();
   });
 
   it('filter_narrows_the_list', async () => {
     await open();
-    search().value = 'cheat';
-    search().dispatchEvent(new Event('input', { bubbles: true }));
-    await settle();
-    expect(rowFor('Test cheat sheet entry')).toBeTruthy();
-    expect(rowFor('Create issue')).toBeFalsy();
+    await type('probe alpha');
+    expect(rowFor('Cheat probe alpha')).toBeTruthy();
+    expect(rowFor('Cheat probe beta')).toBeFalsy();
   });
 
   it('filter_with_no_match_shows_an_empty_state', async () => {
     await open();
-    search().value = 'zzzz-no-such-command';
-    search().dispatchEvent(new Event('input', { bubbles: true }));
-    await settle();
-    expect(document.querySelectorAll('li[data-row]').length).toBe(0);
-    expect(document.body.textContent).toContain('No shortcuts match');
+    await type('zzzz-no-such-command');
+    expect(dialog()!.querySelectorAll('li[data-row]').length).toBe(0);
+    expect(dialog()!.textContent).toContain('No shortcuts match');
   });
 
   it('escape_closes_the_sheet', async () => {
     const onopenchange = vi.fn();
-    app = mount(CheatSheet, { target: document.body, props: { open: true, onopenchange } });
-    await settle();
+    await open({ onopenchange });
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await settle();
-    expect(document.querySelector('[role=dialog]')).toBeNull();
+    // The node can stay until its exit animation ends, which jsdom never fires; the state is what closed.
+    expect(dialog() === null || dialog()!.getAttribute("data-state") === "closed").toBe(true);
   });
 
   it('opens_when_the_help_shortcuts_command_fires', async () => {
-    app = mount(CheatSheet, { target: document.body, props: { open: false } });
-    await settle();
-    expect(document.querySelector('[role=dialog]')).toBeNull();
+    await open({ open: false });
+    expect(dialog()).toBeNull();
     window.dispatchEvent(new CustomEvent('command:help.shortcuts'));
     await settle();
-    expect(document.querySelector('[role=dialog]')).not.toBeNull();
+    expect(dialog()).not.toBeNull();
   });
 });
