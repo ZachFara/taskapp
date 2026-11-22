@@ -131,9 +131,9 @@ describe('ListView', () => {
         issue(3, { due: { Date: '2001-01-02' }, status_id: done.id }),
       ],
     });
-    expect(row(target, 1).querySelector('.due')!.hasAttribute('data-overdue')).toBe(true);
-    expect(row(target, 2).querySelector('.due')!.hasAttribute('data-overdue')).toBe(false);
-    expect(row(target, 3).querySelector('.due')!.hasAttribute('data-overdue')).toBe(false);
+    expect(row(target, 1).querySelector('[data-field="F:DueDate"]')!.hasAttribute('data-overdue')).toBe(true);
+    expect(row(target, 2).querySelector('[data-field="F:DueDate"]')!.hasAttribute('data-overdue')).toBe(false);
+    expect(row(target, 3).querySelector('[data-field="F:DueDate"]')!.hasAttribute('data-overdue')).toBe(false);
   });
 
   it('publishes_ordered_visible_ids', async () => {

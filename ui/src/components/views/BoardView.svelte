@@ -1,18 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
-  import type { Issue, IssuePatch, Label, Project, SavedView, StatusCategory } from '../../lib/bindings';
+  import type { Issue, IssuePatch, SavedView, StatusCategory } from '../../lib/bindings';
   import { selection } from '../../lib/selection.svelte';
   import { propertyDefs, statuses } from '../../lib/stores.svelte';
   import CommandButton from '../CommandButton.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
   import IssueMenu from './IssueMenu.svelte';
-  import { workspaceZone, dayText, dueDay } from './dates';
   import Contour from '../../ui/Contour.svelte';
   import EntityIcon from '../../ui/EntityIcon.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
   import IconButton from '../../ui/IconButton.svelte';
-  import Pill from '../../ui/Pill.svelte';
+  import FieldValue from '../display/FieldValue.svelte';
+  import { BOARD_DEFAULT, density, emptyCtx, loadCtx, shown, type Ctx } from '../display/types';
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
 
   let { view }: { view: SavedView } = $props();
@@ -94,20 +94,16 @@
   // The board shows exactly the view's query, the same rows the list shows.
   let issues = $state<Issue[]>([]);
   let loaded = $state(false);
-  let tz = $state('UTC');
-  let labels: Label[] = $state([]);
-  let projects: Project[] = $state([]);
   let error: string | null = $state(null);
-  const labelOf = (id: number) => labels.find((l) => l.id === id);
-  const projectOf = (i: Issue) => projects.find((p) => p.id === i.project_id);
+  let ctx = $state.raw<Ctx>(emptyCtx);
+  const fields = $derived(shown(view.def, BOARD_DEFAULT, true));
 
   async function reload() {
     issues = await api.views.query($state.snapshot(view.def));
     loaded = true;
   }
   onMount(async () => {
-    [labels, projects] = await Promise.all([api.labels.list(), api.projects.list()]);
-    tz = await workspaceZone();
+    ctx = await loadCtx();
     await reload();
   });
 
@@ -147,8 +143,6 @@
 
   const isSelected = (id: number) => selection.focused === id || selection.selected.includes(id);
 
-  const due = (i: Issue) => dueDay(i, tz);
-  const dueLabel = dayText;
 
   async function moveTo(col: Column, id: number) {
     const at = issues.findIndex((i) => i.id === id);
@@ -212,9 +206,9 @@
         {#if cards.length}
           <ul class="cards" role="listbox" aria-label={`${col.name} issues`} aria-multiselectable="true">
             {#each cards as i (i.id)}
-              {@const project = projectOf(i)}
               <li
                 class="card"
+                class:compact={density(view.def) === 'compact'}
                 role="option"
                 tabindex={selection.focused === i.id ? 0 : -1}
                 draggable="true"
@@ -235,11 +229,9 @@
                 </span>
                 <span class="title">{i.title}</span>
                 <span class="foot">
-                  {#if project}<span class="project"><EntityIcon icon={project.icon} color={project.color} size={12} />{project.name}</span>{/if}
-                  {#each i.label_ids as id (id)}
-                    {#if labelOf(id)}<Pill color={labelOf(id)?.color}>{labelOf(id)?.name}</Pill>{/if}
+                  {#each fields as f (f.Property ?? f.Fixed)}
+                    <span class="fv" data-field={f.Property !== undefined ? `P:${f.Property}` : `F:${f.Fixed}`}><FieldValue field={f} issue={i} {ctx} named /></span>
                   {/each}
-                  {#if due(i)}<time class="due" datetime={due(i) ?? undefined}>{dueLabel(due(i) ?? '')}</time>{/if}
                 </span>
               </li>
             {/each}
@@ -344,8 +336,8 @@
     color: var(--muted);
     font-size: var(--fs-sm);
   }
-  .project { display: inline-flex; align-items: center; gap: var(--s-2); margin-right: var(--s-2); }
-  .due { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .fv { display: inline-flex; min-width: 0; }
+  .card.compact { padding: var(--s-3) var(--s-5); }
   .none {
     display: grid;
     justify-items: center;
