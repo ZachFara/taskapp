@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defineCommand, duplicateBindings, groups, labelFor, listCommands, shortcutFor, type Ctx } from './index';
+import { defineCommand, duplicateBindings, groups, labelFor, listCommands, scopeOf, shortcutFor, type Ctx } from './index';
 
 const ctx = (over: Partial<Ctx> = {}): Ctx => ({
   route: '/',
@@ -41,7 +41,25 @@ describe('registry', () => {
     expect(duplicateBindings([mk('a', 'x', 'list'), mk('b', 'x', 'board')])).toEqual([]);
   });
 
-  it('when hides a command and contextual commands come first', () => {
+  it('no two commands share a label in one scope', () => {
+    const seen = new Map<string, string>();
+    for (const c of listCommands(ctx(), { all: true })) {
+      const k = `${scopeOf(c)}|${c.label}`;
+      expect(seen.get(k), `${c.id} repeats the label of ${seen.get(k)}`).toBeUndefined();
+      seen.set(k, c.id);
+    }
+  });
+
+  it('a menu lists only what applies: no table or calendar command on a list, issue actions only with an issue', () => {
+    const none = listCommands(ctx({ route: '/view/1', layout: 'list' })).map((c) => c.id);
+    expect(none.some((id) => id.startsWith('table.') || id.startsWith('calendar.') || id.startsWith('timeline.'))).toBe(false);
+    expect(none).not.toContain('issue.status');
+    const some = listCommands(ctx({ route: '/view/1', layout: 'list', focusedIssueId: 1 })).map((c) => c.id);
+    expect(some[0]).toMatch(/^(issue|move)\./);
+    expect(some.indexOf('issue.status')).toBeLessThan(some.indexOf('issue.create'));
+  });
+
+  it('when hides a command', () => {
     defineCommand({ id: 't.plain', label: 'Plain', icon: 'x', group: 'T', noShortcutReason: 'test', run: () => {} });
     defineCommand({
       id: 't.ctx', label: 'Needs selection', icon: 'x', group: 'T', noShortcutReason: 'test', run: () => {},
@@ -49,8 +67,7 @@ describe('registry', () => {
     });
     expect(listCommands(ctx()).map((c) => c.id)).not.toContain('t.ctx');
     const ids = listCommands(ctx({ selection: [1] })).map((c) => c.id);
-    expect(ids.indexOf('t.ctx')).toBeLessThan(ids.indexOf('t.plain'));
-    expect(ids[0]).toBe('t.ctx');
+    expect(ids).toContain('t.plain');
   });
 
   it('a command can open a nested page', () => {

@@ -6,7 +6,7 @@ defineCommand({
   label: 'Gantt layout',
   icon: 'timeline',
   group: 'View',
-  shortcut: '4',
+  shortcut: 'v g',
   when: (ctx) => ctx.route.startsWith('/view/'),
   run: () => dispatchEvent(new CustomEvent('command:view.layout', { detail: 'Gantt' })),
 });

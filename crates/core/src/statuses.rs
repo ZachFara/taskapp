@@ -234,3 +234,42 @@ pub async fn delete(db: &Db, id: StatusId, move_issues_to: StatusId) -> Result<(
     tx.commit().await?;
     Ok(())
 }
+
+/// Hands the positions the listed statuses already hold to the new order, so other categories keep theirs.
+/// One call is one history step; undo restores the old order.
+///
+/// # Errors
+///
+/// `Invalid` for an empty list, a duplicate id or ids from more than one category, `NotFound` for an unknown id.
+pub async fn reorder(db: &Db, ids_in_order: &[StatusId], src: ChangeSource) -> Result<()> {
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let mut slots = Vec::with_capacity(ids_in_order.len());
+    let mut category = None;
+    for id in ids_in_order {
+        let s = fetch(&mut tx, *id).await?;
+        if *category.get_or_insert(s.category) != s.category {
+            return Err(Error::Invalid(
+                "reorder lists one category at a time".into(),
+            ));
+        }
+        slots.push(s.position);
+    }
+    let mut ids: Vec<i64> = ids_in_order.iter().map(|i| i.0).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    if ids.is_empty() || ids.len() != ids_in_order.len() {
+        return Err(Error::Invalid("reorder needs distinct status ids".into()));
+    }
+    slots.sort_unstable();
+    let before = rows::all(&mut tx, "statuses").await?;
+    for (id, position) in ids_in_order.iter().zip(slots) {
+        sqlx::query("UPDATE statuses SET position = ? WHERE id = ?")
+            .bind(position)
+            .bind(id.0)
+            .execute(&mut *tx)
+            .await?;
+    }
+    rows::changed(&mut tx, src, before).await?;
+    tx.commit().await?;
+    Ok(())
+}

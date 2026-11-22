@@ -1,4 +1,6 @@
 <script lang="ts">
+  import FieldValue from '../display/FieldValue.svelte';
+  import { emptyCtx, loadCtx, type Ctx } from '../display/types';
   import { untrack } from 'svelte';
   import { api } from '../../lib/api';
   import type { Issue, IssuePatch, Milestone, Project, Relation, Reschedule, SavedView, Status, ViewDef } from '../../lib/bindings';
@@ -49,6 +51,9 @@
   const ticks = $derived(Array.from({ length: Math.ceil(days / TICK_DAYS[zoom]) }, (_, k) => addDays(span.start, k * TICK_DAYS[zoom])));
   const weekends = $derived(zoom === 'Day' || zoom === 'Week' ? saturdays(span.start, days) : []);
   const categoryOf = (i: Issue) => statusList.find((s) => s.id === i.status_id)?.category;
+  let ctx = $state.raw<Ctx>(emptyCtx);
+  // Up to 3 displayed fields follow the title; a view without its own list keeps the plain label.
+  const extra = $derived((view?.def.columns ?? []).slice(0, 3));
   const projectOf = (id?: number) => projectList.find((p) => p.id === id);
 
   async function load() {
@@ -65,6 +70,7 @@
       : [[], [], []];
     const shown = mode === 'issues' ? new Set(issues.map((i) => i.project_id)) : new Set(projects.map((p) => p.id));
     const milestones: Milestone[] = (await Promise.all(projects.filter((p) => shown.has(p.id)).map((p) => api.projects.listMilestones(p.id)))).flat();
+    ctx = await loadCtx();
     allIssues = issues;
     projectList = projects;
     // Each relation comes back from both of its issues.
@@ -236,6 +242,10 @@
                 {:else if r.kind === 'milestone'}<span class="stone" aria-hidden="true"></span>{/if}
                 {#if r.key}<span class="k">{r.key}</span>{/if}
                 <span class="text">{r.title ?? r.label}</span>
+                {#if r.issueId !== undefined && allIssues.find((i) => i.id === r.issueId)}
+                  {@const iss = allIssues.find((i) => i.id === r.issueId)!}
+                  {#each extra as f (f.Property ?? f.Fixed)}<span class="fv"><FieldValue field={f} issue={iss} {ctx} /></span>{/each}
+                {/if}
               </div>
               <div class="cell">
                 {#if r.start}
@@ -323,6 +333,7 @@
   .line.band .label { text-transform: uppercase; font-size: var(--fs-sm); letter-spacing: 0.04em; }
   .line.todo:hover .label { background: var(--active); }
   .label .text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .label .fv { flex: none; max-width: 96px; display: inline-flex; color: var(--muted); font-size: var(--fs-sm); }
   .label .k { flex: none; color: var(--muted); font-weight: 600; font-size: var(--fs-sm); }
   .label[data-kind='milestone'] { color: var(--muted); }
   .label[data-kind='rollup'] { font-weight: 600; }

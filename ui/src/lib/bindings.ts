@@ -123,6 +123,13 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	statusesReorder: (idsInOrder: StatusId[], options?: InvokeOptions) => __TAURI_INVOKE<null>("statuses_reorder", { idsInOrder }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	statusesDelete: (id: StatusId, moveIssuesTo: StatusId, options?: InvokeOptions) => __TAURI_INVOKE<null>("statuses_delete", { id, moveIssuesTo }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -481,6 +488,13 @@ export const commands = {
 	 * As that command.
 	 */
 	pinsPin: (kind: PinKind, target: string, title: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Pin>("pins_pin", { kind, target, title }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	pinsSet: (kind: PinKind, targets: string[], pinned: boolean, options?: InvokeOptions) => __TAURI_INVOKE<null>("pins_set", { kind, targets, pinned }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 

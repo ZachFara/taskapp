@@ -146,4 +146,23 @@ describe('QuickAdd', () => {
     await oncreated.mock.calls[0][0].undo();
     expect(undo).toHaveBeenCalledTimes(1);
   });
+
+  it('quickadd_template_with_status_prefill_is_one_apply_call_and_one_undo_step', async () => {
+    const status = (await api.statuses.list())[1];
+    await api.templates.create({ name: 'Bug', slug: 'bug', icon: null, color: null, body: { title_prefix: 'Bug: ', fields: {} as never, sub_issues: [] } });
+    await unmount(app!);
+    document.body.innerHTML = '';
+    await open({ status_id: status.id });
+    const update = vi.spyOn(api.issues, 'update');
+    const apply = vi.spyOn(api.templates, 'apply');
+    const undo = vi.spyOn(api.history, 'undo');
+    await type('/bug Crash p2');
+    await enter();
+    expect(update).not.toHaveBeenCalled();
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(apply.mock.calls[0][1]).toEqual(expect.objectContaining({ title: 'Crash', status_id: status.id, priority: 2 }));
+    expect(oncreated.mock.calls[0][0].issue).toEqual(expect.objectContaining({ title: 'Bug: Crash', status_id: status.id }));
+    await oncreated.mock.calls[0][0].undo();
+    expect(undo).toHaveBeenCalledTimes(1);
+  });
 });
