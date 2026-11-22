@@ -65,3 +65,9 @@ export async function press(root: Element, text: string) {
 
 export const hasButton = (root: Element, text: string) =>
   [...root.querySelectorAll('button')].some((b) => b.textContent?.trim() === text);
+
+/** Clicks the control with this aria-label anywhere in the document (dialogs and popovers render in a portal). */
+export async function clickLabel(label: string) {
+  field(document.body, label).click();
+  await flush();
+}

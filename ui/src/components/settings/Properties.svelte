@@ -2,33 +2,32 @@
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
   import { projects, propertyDefs, refreshAll } from '../../lib/stores.svelte';
-  import type { PropertyKind, SelectOption } from '../../lib/bindings';
+  import type { PropertyDef, PropertyKind, SelectOption } from '../../lib/bindings';
+  import IconColorPicker from '../pickers/IconColorPicker.svelte';
+  import Button from '../../ui/Button.svelte';
+  import Dialog from '../../ui/Dialog.svelte';
+  import EmptyState from '../../ui/EmptyState.svelte';
+  import IconButton from '../../ui/IconButton.svelte';
+  import Popover from '../../ui/Popover.svelte';
+  import TextInput from '../../ui/TextInput.svelte';
+  import './entities.css';
 
   const kinds: PropertyKind[] = ['Text', 'Number', 'Date', 'Select', 'MultiSelect', 'Checkbox', 'Url', 'NoteLink'];
   const keyPattern = /^[a-z][a-z0-9_]{0,39}$/;
+  const hasOptions = (k: PropertyKind) => k === 'Select' || k === 'MultiSelect';
 
-  let selected = $state('');
   let error = $state('');
-  let confirming = $state(false);
+  let doomed = $state<PropertyDef | null>(null);
   let newName = $state('');
   let newKey = $state('');
   let newKind = $state<PropertyKind>('Text');
-  let newScope = $state('');
-  let renameTo = $state('');
-  let changeTo = $state<PropertyKind>('Text');
-  let scopeTo = $state('');
+  let newScope = $state<number | null>(null);
+  let optionDraft = $state<Record<string, string>>({});
 
-  const current = $derived(propertyDefs.find((d) => d.key === selected));
+  const scopeName = (id: number | null) => projects.find((p) => p.id === id)?.name ?? 'All projects';
+  const scopes = $derived([{ id: null as number | null, name: 'All projects' }, ...projects]);
 
-  // The scope control shows the selected property's real scope, also after a refused change.
-  $effect(() => {
-    scopeTo = current?.project_id == null ? '' : String(current.project_id);
-  });
-
-  onMount(async () => {
-    await refreshAll();
-    selected = propertyDefs[0]?.key ?? '';
-  });
+  onMount(() => refreshAll());
 
   // Every write goes through here so a refused write shows its message and the lists stay in step.
   async function write(action: () => Promise<unknown>) {
@@ -46,91 +45,132 @@
       error = 'Keys start with a letter and use lowercase letters, digits and underscores.';
       return;
     }
-    const project_id = newScope === '' ? null : Number(newScope);
     void write(async () => {
       await api.properties.createDef({
-        key: newKey, name: newName.trim() || newKey, kind: newKind, options: [], project_id,
+        key: newKey, name: newName.trim() || newKey, kind: newKind, options: [], project_id: newScope,
         position: propertyDefs.length,
       });
       newName = newKey = '';
+      newKind = 'Text';
+      newScope = null;
     });
   }
 
-  function rename() {
-    void write(() => api.properties.renameDef(selected, renameTo.trim()));
-  }
+  const rename = (d: PropertyDef, e: Event) => {
+    const next = (e.target as HTMLInputElement).value.trim();
+    if (next && next !== d.name) void write(() => api.properties.renameDef(d.key, next));
+  };
 
-  function changeKind() {
-    const options: SelectOption[] = changeTo === 'Select' || changeTo === 'MultiSelect' ? current?.options ?? [] : [];
-    void write(() => api.properties.changeKind(selected, changeTo, options));
-  }
+  // Options belong to the kind, so editing them is a kind change to the same kind.
+  const setOptions = (d: PropertyDef, options: SelectOption[]) => write(() => api.properties.changeKind(d.key, d.kind, options));
+  const addOption = (d: PropertyDef) => {
+    const value = (optionDraft[d.key] ?? '').trim();
+    if (!value) return;
+    optionDraft[d.key] = '';
+    void setOptions(d, [...d.options, { value, color: 'gray' }]);
+  };
+  const patchOption = (d: PropertyDef, i: number, patch: Partial<SelectOption>) =>
+    setOptions(d, d.options.map((o, j) => (j === i ? { ...o, ...patch } : o)));
 
-  function setScope() {
-    void write(() => api.properties.setScope(selected, scopeTo === '' ? null : Number(scopeTo)));
-  }
-
-  function move(by: -1 | 1) {
-    const keys = propertyDefs.map((d) => d.key);
-    const at = keys.indexOf(selected);
+  function move(d: PropertyDef, by: -1 | 1) {
+    const keys = propertyDefs.map((x) => x.key);
+    const at = keys.indexOf(d.key);
     if (at + by < 0 || at + by >= keys.length) return;
     [keys[at], keys[at + by]] = [keys[at + by], keys[at]];
     void write(() => api.properties.reorder(keys));
   }
 
-  function remove() {
-    void write(async () => {
-      await api.properties.deleteDef(selected);
-      confirming = false;
-      selected = propertyDefs[0]?.key ?? '';
-    });
-  }
+  const remove = () => write(async () => {
+    await api.properties.deleteDef(doomed!.key);
+    doomed = null;
+  });
 </script>
 
-<h2>Properties</h2>
-<ul>
-  {#each propertyDefs as d (d.key)}
-    <li>{d.name} <code>{d.key}</code> {d.kind}{d.project_id ? ` (project ${d.project_id})` : ''}</li>
-  {/each}
-</ul>
+{#snippet choice(label: string, current: string, items: { id: string; text: string }[], pick: (id: string) => void, prefix: string)}
+  <Popover>
+    {#snippet trigger(props)}
+      <button {...props} class="choice" type="button" aria-label={label}>{current}</button>
+    {/snippet}
+    <div class="menu" role="group" aria-label={label}>
+      {#each items as it (it.id)}
+        <button type="button" aria-label={`${prefix} ${it.text}`} aria-pressed={it.text === current} onclick={() => pick(it.id)}>{it.text}</button>
+      {/each}
+    </div>
+  </Popover>
+{/snippet}
 
-<form onsubmit={(e) => { e.preventDefault(); add(); }}>
-  <h3>Add property</h3>
-  <input aria-label="New property name" placeholder="Name" bind:value={newName} />
-  <input aria-label="New property key" placeholder="key" bind:value={newKey} />
-  <select aria-label="New property kind" bind:value={newKind}>
-    {#each kinds as k (k)}<option value={k}>{k}</option>{/each}
-  </select>
-  <select aria-label="New property scope" bind:value={newScope}>
-    <option value="">All projects</option>
-    {#each projects as p (p.id)}<option value={String(p.id)}>{p.name}</option>{/each}
-  </select>
-  <button type="submit">Add property</button>
-</form>
+<div class="es">
+  <header class="es-head">
+    <h2>Properties</h2>
+    <p>Your own fields on every issue. A property can cover all projects or just one.</p>
+  </header>
 
-<div>
-  <h3>Edit property</h3>
-  <select aria-label="Property" bind:value={selected} onchange={() => (confirming = false)}>
-    {#each propertyDefs as d (d.key)}<option value={d.key}>{d.name}</option>{/each}
-  </select>
-  <input aria-label="Rename to" bind:value={renameTo} />
-  <button onclick={rename}>Rename</button>
-  <select aria-label="New kind" bind:value={changeTo}>
-    {#each kinds as k (k)}<option value={k}>{k}</option>{/each}
-  </select>
-  <button onclick={changeKind}>Change kind</button>
-  <select aria-label="Scope" bind:value={scopeTo}>
-    <option value="">All projects</option>
-    {#each projects as p (p.id)}<option value={String(p.id)}>{p.name}</option>{/each}
-  </select>
-  <button onclick={setScope}>Set scope</button>
-  <button onclick={() => move(-1)}>Move up</button>
-  <button onclick={() => move(1)}>Move down</button>
-  {#if confirming}
-    <button onclick={remove}>Confirm delete</button>
-    <button onclick={() => (confirming = false)}>Cancel</button>
+  {#if propertyDefs.length}
+    <ul class="es-list">
+      {#each propertyDefs as d, i (d.key)}
+        <li class="item">
+          <div class="es-row">
+            <div class="es-name" onchange={(e) => rename(d, e)}><TextInput label={`Name of ${d.name}`} value={d.name} /></div>
+            <span class="es-meta">{d.key}</span>
+            {@render choice(`Kind of ${d.name}`, d.kind, kinds.map((k) => ({ id: k, text: k })), (k) => write(() => api.properties.changeKind(d.key, k as PropertyKind, hasOptions(k as PropertyKind) ? d.options : [])), 'Kind')}
+            {@render choice(`Scope of ${d.name}`, scopeName(d.project_id), scopes.map((s) => ({ id: String(s.id), text: s.name })), (id) => write(() => api.properties.setScope(d.key, id === 'null' ? null : Number(id))), 'Scope')}
+            <div class="es-tools">
+              <IconButton icon="arrow-up" label={`Move ${d.name} up`} disabled={i === 0} onclick={() => move(d, -1)} />
+              <IconButton icon="arrow-down" label={`Move ${d.name} down`} disabled={i === propertyDefs.length - 1} onclick={() => move(d, 1)} />
+              <IconButton icon="trash" label={`Delete ${d.name}`} onclick={() => (doomed = d)} />
+            </div>
+          </div>
+          {#if hasOptions(d.kind)}
+            <div class="opts">
+              {#each d.options as o, j (j)}
+                <div class="opt">
+                  <IconColorPicker colorOnly label={`Colour of option ${o.value}`} value={{ icon: 'icon:circle', color: o.color }} onchange={(v) => patchOption(d, j, { color: v.color ?? o.color })} />
+                  <div class="es-name" onchange={(e) => patchOption(d, j, { value: (e.target as HTMLInputElement).value.trim() || o.value })}><TextInput label={`Option ${o.value}`} value={o.value} /></div>
+                  <IconButton icon="close" label={`Remove option ${o.value}`} onclick={() => setOptions(d, d.options.filter((_, k) => k !== j))} />
+                </div>
+              {/each}
+              <form class="opt" onsubmit={(e) => { e.preventDefault(); addOption(d); }}>
+                <div class="es-name"><TextInput label={`New option of ${d.name}`} placeholder="New option" bind:value={() => optionDraft[d.key] ?? '', (v) => (optionDraft[d.key] = v)} /></div>
+                <Button type="submit">Add option</Button>
+              </form>
+            </div>
+          {/if}
+        </li>
+      {/each}
+    </ul>
   {:else}
-    <button onclick={() => (confirming = true)} disabled={!selected}>Delete</button>
+    <EmptyState title="No properties yet" hint="Add a field such as effort or area below." />
   {/if}
+
+  <form class="es-add" onsubmit={(e) => { e.preventDefault(); add(); }}>
+    <div class="es-name"><TextInput label="New property name" placeholder="Name" bind:value={newName} /></div>
+    <div class="es-name"><TextInput label="New property key" placeholder="key_name" bind:value={newKey} /></div>
+    {@render choice('New property kind', newKind, kinds.map((k) => ({ id: k, text: k })), (k) => (newKind = k as PropertyKind), 'Kind')}
+    {@render choice('New property scope', scopeName(newScope), scopes.map((s) => ({ id: String(s.id), text: s.name })), (id) => (newScope = id === 'null' ? null : Number(id)), 'Scope')}
+    <Button variant="primary" type="submit">Add property</Button>
+  </form>
+  {#if error}<p class="es-err" role="alert">{error}</p>{/if}
 </div>
 
-{#if error}<p role="alert">{error}</p>{/if}
+<Dialog bind:open={() => doomed !== null, (v) => { if (!v) doomed = null; }} title={`Delete ${doomed?.name ?? 'property'}?`} description="Its value is removed from every issue. This cannot be undone.">
+  {#snippet actions()}
+    <Button onclick={() => (doomed = null)}>Cancel</Button>
+    <Button variant="danger" onclick={remove}>Delete property</Button>
+  {/snippet}
+</Dialog>
+
+<style>
+  .item { border-bottom: 1px solid var(--border); }
+  .item .es-row { border-bottom: 0; }
+  .opts { display: grid; gap: var(--s-2); padding: var(--s-2) var(--s-4) var(--s-5) var(--s-10); border-left: 3px solid var(--band-2); margin-left: var(--s-5); }
+  .opt { display: flex; align-items: center; gap: var(--s-4); max-width: 420px; }
+  .choice {
+    height: var(--row-h-compact); padding: 0 var(--s-5); border: 1px solid var(--control); border-radius: var(--r-ctl);
+    background: var(--sheet); color: var(--ink); font-weight: 500; white-space: nowrap;
+  }
+  .choice:hover { border-color: var(--muted); }
+  .menu { display: grid; gap: var(--s-1); }
+  .menu button { text-align: left; height: var(--row-h-compact); padding: 0 var(--s-5); border: 0; border-radius: var(--r-ctl); background: transparent; }
+  .menu button:hover { background: var(--active); }
+  .menu button[aria-pressed='true'] { background: var(--selection); font-weight: 600; }
+</style>
