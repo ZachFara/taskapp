@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { flushSync } from 'svelte';
   import { navigate } from '../app/routes';
   import { api } from '../lib/api';
   import type { Issue, IssuePatch, Project, ResolvedPin, Status } from '../lib/bindings';
@@ -119,6 +120,7 @@
     if (openRow === null && !editingDesc && !editingTitle) usedAt = performance.now();
   });
   const onClose = () => {
+    flushSync(); // the popover may have closed in this same key press; let the stamp effect see it
     if (openRow !== null || editingDesc || editingTitle) {
       openRow = null;
       editingDesc = editingTitle = false;

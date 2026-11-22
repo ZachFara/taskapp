@@ -3,6 +3,7 @@ import { mount, unmount } from 'svelte';
 import { createMockApi } from '../lib/api.mock';
 import { setApi, type Api } from '../lib/api';
 import type { Issue } from '../lib/bindings';
+import { attachKeys } from '../lib/commands';
 import IssueDetail from './IssueDetail.svelte';
 
 let app: object | undefined;
@@ -232,5 +233,47 @@ describe('IssueDetail', () => {
     await settle(100);
     await command('close');
     expect(onclose).toHaveBeenCalledTimes(1);
+  });
+
+  describe('through the real key registry', () => {
+    let detach: () => void;
+    const ctx = () => ({ route: '/issue/x', selection: [], focusedIssueId: null, openIssueId: null, api, navigate: () => {} });
+    const press = async (key: string) => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+      await settle();
+    };
+    afterEach(() => detach?.());
+
+    it('esc_closes_the_open_editor_first_then_the_panel', async () => {
+      const onclose = vi.fn();
+      await open({}, { mode: 'panel', onclose });
+      detach = attachKeys(ctx);
+      await click(row('Priority'));
+      expect(q('[role=listbox][aria-label=Priority]')).not.toBeNull();
+      await press('Escape');
+      expect(q('[role=listbox][aria-label=Priority]')).toBeNull();
+      expect(onclose).not.toHaveBeenCalled();
+      await settle(100);
+      await press('Escape');
+      expect(onclose).toHaveBeenCalledTimes(1);
+    });
+
+    it('brackets_move_to_the_next_and_previous_issue', async () => {
+      const onopen = vi.fn();
+      const mid = await open({ title: 'Mid' }, { onopen });
+      await api.issues.create({ title: 'After' });
+      const keys = (await api.views.query({ filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false })).map((i) => i.key);
+      // Remount so the neighbour list includes the issue created after mount.
+      unmount(app!);
+      document.body.innerHTML = '';
+      app = mount(IssueDetail, { target: document.body, props: { params: { key: mid.key }, onopen } });
+      await settle();
+      detach = attachKeys(ctx);
+      const at = keys.indexOf(mid.key);
+      await press(']');
+      expect(onopen).toHaveBeenLastCalledWith(keys[at + 1]);
+      await press('[');
+      expect(onopen).toHaveBeenLastCalledWith(keys[at - 1]);
+    });
   });
 });
