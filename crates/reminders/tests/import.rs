@@ -89,6 +89,11 @@ async fn imports_and_deletes() -> R {
     );
     assert_eq!(only_issue(&db).await?.description, "2 litres");
     assert_eq!(
+        only_issue(&db).await?.points,
+        None,
+        "a reminder carries no estimate"
+    );
+    assert_eq!(
         count(
             &db,
             "SELECT COUNT(*) FROM import_log WHERE source_deleted = 1"

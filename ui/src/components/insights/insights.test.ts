@@ -4,6 +4,7 @@ import { setApi, type Api } from '../../lib/api';
 import { createMockApi } from '../../lib/api.mock';
 import { clickLabel, pick } from '../settings/testing';
 import { loadConfig, saveConfig } from './config';
+import { progressToToday } from './series';
 import { measuresFor, pointsOf, readEstimation, SCALES } from './estimation';
 import { insightsApi, type ProgressSeries } from './insightsApi';
 import InsightsPanel from './InsightsPanel.svelte';
@@ -61,9 +62,9 @@ describe('estimation settings', () => {
     expect(measuresFor('points')).toEqual(['points', 'count']);
     expect(measuresFor('both')).toEqual(['points', 'count', 'time']);
   });
-  it('defaults to both and fibonacci, and ignores junk', async () => {
+  it('defaults to both and fibonacci, and the backend refuses junk', async () => {
     expect(await readEstimation()).toEqual({ estimation: 'both', scale: 'fibonacci' });
-    await api.settings.set('estimation', 'banana');
+    await expect(api.settings.set('estimation', 'banana')).rejects.toBeTruthy(); // the backend refuses junk
     await api.settings.set('point_scale', 'tshirt');
     expect(await readEstimation()).toEqual({ estimation: 'both', scale: 'tshirt' });
   });
@@ -143,5 +144,28 @@ describe('InsightsPanel', () => {
     insightsApi.setSource({ progress: async () => null, velocity: async () => [] });
     await open();
     expect(document.body.textContent).toContain('Progress appears once issues move');
+  });
+});
+
+describe('progressToToday', () => {
+  const asked: unknown[][] = [];
+  const src = (to: string) => ({
+    progress: async (...a: unknown[]) => { asked.push(a); return { ...series, to: (a[3] as string) ?? to }; },
+    velocity: async () => [],
+  });
+  beforeEach(() => { asked.length = 0; });
+  it('asks again up to today when a project range ends earlier', async () => {
+    insightsApi.setSource(src('2026-11-05'));
+    const p = await progressToToday({ Project: 1 }, 'points', 'auto', '2026-11-20');
+    expect(asked).toEqual([[{ Project: 1 }, 'points', undefined, undefined], [{ Project: 1 }, 'points', '2026-11-01', '2026-11-20']]);
+    expect(p?.to).toBe('2026-11-20');
+  });
+  it('keeps a range that already reaches today, a cycle and a chosen range', async () => {
+    insightsApi.setSource(src('2026-11-20'));
+    await progressToToday({ Project: 1 }, 'points', 'auto', '2026-11-20');
+    insightsApi.setSource(src('2026-11-05'));
+    await progressToToday({ Cycle: 1 }, 'points', 'auto', '2026-11-20');
+    await progressToToday({ Project: 1 }, 'points', '30', '2026-11-20');
+    expect(asked).toHaveLength(3);
   });
 });

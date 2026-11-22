@@ -144,4 +144,14 @@ describe('Sidebar icons', () => {
     const first = fixtures.projects[0].name;
     expect(row(first).querySelector('[data-icon]')?.getAttribute('data-icon')).toBe('project');
   });
+
+  it('shows a sparkline on each project row only when the setting is on', async () => {
+    await open();
+    expect(document.querySelector('[aria-label="Projects"] path.spark')).toBeNull();
+    unmount(app);
+    const on = createMockApi(seed);
+    await on.settings.set('sidebar_sparklines', true);
+    await open(on);
+    expect(document.querySelectorAll('[aria-label="Projects"] path.spark')).toHaveLength(fixtures.projects.length);
+  });
 });

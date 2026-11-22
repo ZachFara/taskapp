@@ -7,6 +7,7 @@
   import { projects, refreshAll, views } from '../lib/stores.svelte';
   import EntityIcon from '../ui/EntityIcon.svelte';
   import Icon from '../ui/Icon.svelte';
+  import ProjectSpark from './insights/ProjectSpark.svelte';
 
   // The app passes its live route; standalone the sidebar reads the address once.
   let { route = location.pathname }: { route?: string } = $props();
@@ -15,11 +16,13 @@
   let closed = $state<Record<string, boolean>>({});
   let cycles = $state<Cycle[]>([]);
   let error = $state('');
+  let sparklines = $state(false);
 
   onMount(async () => {
-    const [, p, c] = await Promise.all([refreshAll(), api.pins.listResolved(), api.cycles.list()]);
+    const [, p, c, sp] = await Promise.all([refreshAll(), api.pins.listResolved(), api.cycles.list(), api.settings.get('sidebar_sparklines').catch(() => null)]);
     pins = p;
     cycles = c;
+    sparklines = sp === true;
   });
 
   const fail = (e: unknown) => (error = (e as { message?: string }).message ?? String(e));
@@ -139,7 +142,7 @@
         {#each projects as p (p.id)}
           {@const href = `/project/${p.slug}`}
           <li class="row">
-            <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><EntityIcon icon={p.icon ?? 'icon:project'} color={p.color} /><span class="t">{p.name}</span></a>
+            <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><EntityIcon icon={p.icon ?? 'icon:project'} color={p.color} /><span class="t">{p.name}</span>{#if sparklines}<ProjectSpark projectId={p.id} name={p.name} />{/if}</a>
             {@render pinBtn('Project', p.slug, p.name)}
           </li>
         {/each}

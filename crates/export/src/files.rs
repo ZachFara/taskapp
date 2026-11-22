@@ -119,6 +119,8 @@ pub struct IssueFront {
     pub due_time: Option<DateTime<Utc>>,
     pub due_tz: Option<String>,
     pub estimate_minutes: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub points: Option<f64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,

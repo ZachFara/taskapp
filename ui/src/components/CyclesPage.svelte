@@ -16,10 +16,11 @@
   import BarChart from './charts/BarChart.svelte';
   import CycleBurnup from './insights/CycleBurnup.svelte';
   import CycleSpark from './insights/CycleSpark.svelte';
-  import { chartsOn, pointsOf } from './insights/estimation';
+  import { chartsOn, defaultMeasure, unitOf } from './insights/estimation';
+  import { insightsApi } from './insights/insightsApi';
 
   type Band = 'current' | 'upcoming' | 'past';
-  type Row = Cycle & { band: Band; done: number; total: number; pts: number };
+  type Row = Cycle & { band: Band; done: number; total: number };
 
   const DAY = 86_400_000;
   const CATEGORY: Record<Band, 'Started' | 'Unstarted' | 'Completed'> = { current: 'Started', upcoming: 'Unstarted', past: 'Completed' };
@@ -29,6 +30,8 @@
   let statuses = $state<Status[]>([]);
   let loaded = $state(false);
   let charts = $state(false);
+  let bars = $state<{ label: string; value: number }[]>([]);
+  let unit = $state('issues');
   let opened = $state<number | null>(null);
   let collapsed = $state<Record<Band, boolean>>({ current: false, upcoming: false, past: true });
   let creating = $state(false);
@@ -59,16 +62,22 @@
     const list = await api.cycles.list();
     const issues = await Promise.all(list.map((c) => api.views.query(cycleView(c).def)));
     rows = list
-      .map((c, i) => ({ ...c, band: bandOf(c, today), done: issues[i].filter(finished).length, total: issues[i].length, pts: issues[i].filter(finished).reduce((n, x) => n + (pointsOf(x) ?? 0), 0) }))
+      .map((c, i) => ({ ...c, band: bandOf(c, today), done: issues[i].filter(finished).length, total: issues[i].length}))
       .sort((a, b) => a.start_date.localeCompare(b.start_date));
     charts = await chartsOn();
+    // Each cycle's own scope, so the bar is the work that belonged to that cycle; the period that starts with it is its entry.
+    const measure = await defaultMeasure();
+    unit = unitOf(measure);
+    bars = charts
+      ? await Promise.all(rows.filter((r) => r.band !== 'upcoming').map(async (r) => ({
+          label: title(r),
+          value: (await insightsApi.velocity({ Cycle: r.id }, measure, rows.length)).find((p) => p.start === r.start_date)?.completed ?? 0,
+        })))
+      : [];
     loaded = true;
   }
 
   const bands = $derived((['current', 'upcoming', 'past'] as Band[]).map((b) => ({ band: b, items: rows.filter((r) => r.band === b) })));
-  // Per cycle that has started: points when anything carries points, else finished issues.
-  const usePts = $derived(rows.some((r) => r.pts > 0));
-  const velocity = $derived(rows.filter((r) => r.band !== 'upcoming').map((r) => ({ label: title(r), value: usePts ? r.pts : r.done })));
   const current = $derived(rows.find((r) => r.band === 'current'));
   const next = $derived(rows.find((r) => r.band === 'upcoming'));
   const daysLeft = (c: Cycle) => Math.max(0, Math.ceil((Date.parse(c.end_date) - Date.parse(todayIn)) / DAY));
@@ -110,8 +119,8 @@
       {#snippet action()}<Button variant="primary" icon="plus" onclick={() => (creating = true)}>New cycle</Button>{/snippet}
     </EmptyState>
   {:else}
-    {#if charts && velocity.length >= 2 && velocity.some((v) => v.value > 0)}
-      <section class="velocity" data-velocity><h3>Completed per cycle</h3><BarChart bars={velocity} unit={usePts ? 'points' : 'issues'} title="Completed per cycle" /></section>
+    {#if charts && bars.length >= 2 && bars.some((v) => v.value > 0)}
+      <section class="velocity" data-velocity><h3>Completed per cycle</h3><BarChart {bars} {unit} title="Completed per cycle" /></section>
     {/if}
     {#each bands as group (group.band)}
       {#if group.items.length > 0}
@@ -178,6 +187,6 @@
   .fill { display: block; height: 100%; background: var(--accent); }
   .velocity { max-width: 560px; padding-top: var(--s-5); }
   h3 { font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: var(--s-3); }
-  .burnup { padding: var(--s-5) var(--s-7) var(--s-7); max-width: 640px; }
+  .burnup { padding: var(--s-5) var(--s-7) var(--s-7); }
   .issues { border-left: 2px solid var(--accent); }
 </style>

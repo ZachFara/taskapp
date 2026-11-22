@@ -61,8 +61,8 @@ describe('ProgressSummary (the project hero)', () => {
     expect(t.querySelector('svg')).toBeNull();
     expect(t.querySelector('[role=img][aria-label="2 of 5 done"]')).not.toBeNull();
   });
-  it('keeps the plain bar when the backend has no insights yet', async () => {
-    insightsApi.setSource(null);
+  it('keeps the plain bar when the backend fails', async () => {
+    insightsApi.setSource({ progress: () => Promise.reject(new Error('down')), velocity: () => Promise.resolve([]) });
     const t = await put(ProgressSummary as never, { projectId: 1, progress: [2, 5] });
     expect(t.querySelector('[role=img][aria-label="2 of 5 done"]')).not.toBeNull();
   });
@@ -134,11 +134,26 @@ describe('CyclesPage', () => {
     await vi.waitFor(() => expect(t.querySelector('[data-group=current] line.ideal')).not.toBeNull());
   });
   it('shows a sparkline on a past cycle row and a velocity chart across cycles', async () => {
+    insightsApi.setSource({
+      progress: async () => series,
+      velocity: async () => [{ start: '2026-10-01', end: '2026-10-14', label: 'Cycle 1', completed: 4 }, { start: '2026-11-16', end: '2026-11-29', label: 'Cycle 2', completed: 2 }],
+    });
     const t = await open();
     t.querySelector<HTMLElement>('[data-group=past] [role=button], [data-group=past] button')!.click();
     await wait();
     await vi.waitFor(() => expect(t.querySelector('[data-group=past] svg path.spark')).not.toBeNull());
     expect(t.querySelector('[data-velocity] rect.bar')).not.toBeNull();
+  });
+  it('takes the velocity bars from the insights api, one cycle scope each', async () => {
+    insightsApi.setSource({
+      progress: async () => series,
+      velocity: async (scope) => ['Cycle' in scope ? scope.Cycle : 0].flatMap((id) => [
+        { start: '2026-10-01', end: '2026-10-14', label: 'Cycle 1', completed: id === 1 ? 7 : 99 },
+        { start: '2026-11-16', end: '2026-11-29', label: 'Cycle 2', completed: id === 2 ? 3 : 99 },
+      ]),
+    });
+    const t = await open();
+    await vi.waitFor(() => expect(t.querySelector('[data-velocity] svg')?.getAttribute('aria-label')).toContain('Cycle 1 7, Cycle 2 3'));
   });
   it('draws no chart when progress charts are off', async () => {
     const t = await open(true);

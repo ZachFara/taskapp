@@ -169,6 +169,7 @@ export const cases: Case[] = [
   call('undo: the issue is gone', 'issues_get_by_key', { key: 'ABC-25' }),
   call('undo: redo', 'history_redo'),
   call('undo: the issue is back', 'issues_get_by_key', { key: 'ABC-25' }),
+  query('undo: the unfiltered list shows the issue again', {}),
   call('undo: nothing left to redo', 'history_redo'),
   call('undo: update an issue', 'issues_update', { id: 5, patch: { title: 'Renamed', priority: 4 } }),
   call('undo: undo the update', 'history_undo'),
@@ -200,6 +201,7 @@ export const cases: Case[] = [
   call('duplicate: an unknown issue copies nothing', 'issues_duplicate', { ids: [2, 999] }),
   call('duplicate: one undo step removes every copy', 'history_undo'),
   call('duplicate: the copies are gone', 'views_query', { def: def({ filter: cond(fixed('Title'), 'Contains', 'Mobile onboarding') }) }),
+  query('duplicate: the unfiltered list has no copies left', {}),
   // Icons and colours
   call('colour: hex maps to the nearest key', 'labels_create', { name: 'Hot', color: '#ff0000', icon: null }),
   call('colour: palette key with emoji icon', 'labels_create', { name: 'Fun', color: 'pink', icon: 'emoji:🚀' }),
@@ -315,4 +317,8 @@ export const cases: Case[] = [
   call('workspace: a malformed key is NotFound', 'issues_get_by_key', { key: 'abc-2' }),
   call('workspace: omitting the zone keeps the stored one', 'workspace_setup', { name: 'Studio', key: 'WRK', timezone: null }),
   call('workspace: pins resolve under the new prefix', 'pins_list_resolved'),
+
+  // A cycle's series follows the issues that leave it (issue 8, three points, is in cycle 1).
+  call('insights: an issue leaves its cycle', 'issues_update', { id: 8, patch: { cycle_id: null } }),
+  call('insights: the cycle series counts it until the day it left', 'insights_progress', { scope: { Cycle: 1 }, measure: 'points', from: null, to: null }),
 ];

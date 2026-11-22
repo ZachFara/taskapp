@@ -2,7 +2,11 @@
 import type { Change, Issue, Measure, ProgressSeries, Status, VelocityPeriod } from './bindings';
 
 type Cat = Status['category'];
-type Timeline = { created: string; cat0: Cat; cat: [string, Cat][]; value0: number; value: [string, number][] };
+type Timeline = {
+  created: string; cat0: Cat; cat: [string, Cat][]; value0: number; value: [string, number][];
+  /** In the scope's cycle (always true for other scopes), and the days it only carries work finished before the cycle. */
+  member0: boolean; member: [string, boolean][]; carried: [string, string] | null;
+};
 
 export const MAX_DAYS = 1100;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -16,20 +20,27 @@ export const localDay = (iso: string, tz: string) => new Date(iso).toLocaleDateS
 const latest = <T>(initial: T, events: [string, T][], day: string): T => [...events].reverse().find(([d]) => d <= day)?.[1] ?? initial;
 const num = (v: unknown) => (typeof v === 'number' ? v : 0);
 
-export function timelines(issues: Issue[], changes: Change[], statuses: Status[], measure: Measure, tz: string): Timeline[] {
+export function timelines(issues: Issue[], changes: Change[], statuses: Status[], measure: Measure, tz: string, cycle?: { id: number; start: string }): Timeline[] {
   const cat = (id: number): Cat => statuses.find((s) => s.id === id)?.category ?? 'Backlog';
   const field = { points: 'points', time: 'estimate_minutes', count: '' }[measure];
   const mine = changes
-    .filter((c) => c.entity === 'issue' && (c.field === 'status_id' || c.field === field))
+    .filter((c) => c.entity === 'issue' && (c.field === 'status_id' || c.field === 'cycle_id' || c.field === field))
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id - b.id);
   return issues.map((i) => {
     const of = (f: string) => mine.filter((c) => c.entity_id === String(i.id) && c.field === f);
-    const [status, value] = [of('status_id'), of(field)];
+    const [status, value, moves] = [of('status_id'), of(field), of('cycle_id')];
+    const inCycle = (v: unknown) => !cycle || v === cycle.id;
+    const cats: [string, Cat][] = status.flatMap((c) => (typeof c.new_value === 'number' ? [[localDay(c.at, tz), cat(c.new_value)] as [string, Cat]] : []));
+    const cat0 = cat(typeof status[0]?.old_value === 'number' ? status[0].old_value : i.status_id);
+    const before = cycle ? latest(cat0, cats, addDays(cycle.start, -1)) : null;
     const current = measure === 'points' ? (i.points ?? 0) : measure === 'time' ? (i.estimate_minutes ?? 0) : 1;
     return {
       created: localDay(i.created_at, tz),
-      cat0: cat(typeof status[0]?.old_value === 'number' ? status[0].old_value : i.status_id),
-      cat: status.flatMap((c) => (typeof c.new_value === 'number' ? [[localDay(c.at, tz), cat(c.new_value)] as [string, Cat]] : [])),
+      cat0,
+      cat: cats,
+      member0: inCycle(moves.length ? moves[0].old_value : i.cycle_id),
+      member: moves.map((c) => [localDay(c.at, tz), inCycle(c.new_value)] as [string, boolean]),
+      carried: cycle && before === 'Completed' ? [cycle.start, cats.find(([d]) => d >= cycle.start)?.[0] ?? '9999-12-31'] : null,
       value0: value.length ? num(value[0].old_value) : current,
       value: value.map((c) => [localDay(c.at, tz), num(c.new_value)] as [string, number]),
     };
@@ -37,7 +48,7 @@ export function timelines(issues: Issue[], changes: Change[], statuses: Status[]
 }
 
 function at(t: Timeline, day: string): [number, number, number] {
-  if (day < t.created) return [0, 0, 0];
+  if (day < t.created || (t.carried && t.carried[0] <= day && day < t.carried[1]) || !latest(t.member0, t.member, day)) return [0, 0, 0];
   const v = latest(t.value0, t.value, day);
   switch (latest(t.cat0, t.cat, day)) {
     case 'Canceled': return [0, 0, 0];

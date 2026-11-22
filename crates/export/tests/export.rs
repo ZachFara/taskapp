@@ -57,6 +57,7 @@ async fn seed_issues(db: &Db) -> Result<(IssueId, IssueId), Box<dyn std::error::
             priority: Some(2),
             due: Some(Due::Date(day(2026, 1, 10))),
             estimate_minutes: Some(90),
+            points: Some(3.5),
             ..NewIssue::default()
         },
         SRC,
@@ -246,6 +247,25 @@ async fn rebuild_roundtrip() -> R {
     let again = tempfile::tempdir()?;
     write::write_snapshot(&rebuilt, again.path()).await?;
     assert_eq!(tree(src.path()), tree(again.path()));
+    Ok(())
+}
+
+#[tokio::test]
+async fn points_survive_export_and_rebuild_and_stay_out_of_files_without_them() -> R {
+    let db = seeded().await?;
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let files = tree(src.path());
+    let text = |k: &str| String::from_utf8_lossy(&files[k]).into_owned();
+    assert!(text("issues/ABC-1.md").contains("points: 3.5"));
+    assert!(
+        !text("issues/ABC-2.md").contains("points"),
+        "no points, no line"
+    );
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    let points = |n| issues::get(&rebuilt, IssueId(n));
+    assert_eq!(points(1).await?.points, Some(3.5));
+    assert_eq!(points(2).await?.points, None);
     Ok(())
 }
 

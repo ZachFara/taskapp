@@ -8,7 +8,7 @@
   import { loadConfig, saveConfig, type Config } from './config';
   import { formatFor, measuresFor, readEstimation, unitOf } from './estimation';
   import { insightsApi, type Measure, type Period, type Scope } from './insightsApi';
-  import { bounds, today, trim } from './series';
+  import { progressToToday, today, trim } from './series';
 
   // The right-hand panel: headline numbers, one chart, and three choices that are remembered per view, project or
   // cycle. The host decides when it is open; it is closed by default.
@@ -52,7 +52,7 @@
     const { measure, range } = cfg;
     const mine = ++seq;
     days = null;
-    void Promise.all([insightsApi.progress(scope, measure, bounds(range, now).from, bounds(range, now).to), insightsApi.velocity(scope, measure, 8)]).then(([p, v]) => {
+    void Promise.all([progressToToday(scope, measure, range, now), insightsApi.velocity(scope, measure, 8)]).then(([p, v]) => {
       if (mine !== seq) return;
       days = p ? trim(p.days) : [];
       periods = v;
@@ -73,7 +73,7 @@
   const pct = $derived(last && last.scope ? Math.round((last.completed / last.scope) * 100) : 0);
   const bars = $derived(periods.map((p) => ({ label: p.label, value: p.completed })));
 
-  // Dragging the left edge resizes; there is no key binding for it, so the panel keeps its width for the session only.
+  // Dragging the left edge resizes, as the issue panel does (pointer only, no key binding there either); the width lasts for the session.
   function grab(e: PointerEvent) {
     const start = e.clientX;
     const from = (e.currentTarget as HTMLElement).parentElement!.getBoundingClientRect().width;
@@ -85,7 +85,7 @@
 </script>
 
 <aside class="panel" aria-label="Insights" style:width={width ? `${width}px` : undefined}>
-  <div class="grip" role="presentation" onpointerdown={grab}></div>
+  <button class="grip" type="button" aria-label="Resize insights panel" onpointerdown={grab}></button>
   <header>
     <h2>{title}</h2>
     <IconButton icon="close" label="Close insights" shortcut="shift+i" onclick={onclose} />
@@ -125,7 +125,8 @@
 
 <style>
   .panel { position: relative; flex: none; width: var(--panel-w); display: flex; flex-direction: column; gap: var(--s-7); overflow-y: auto; padding: var(--s-7); border-left: 1px solid var(--border); background: var(--sheet); }
-  .grip { position: absolute; inset: 0 auto 0 0; width: var(--s-3); cursor: col-resize; }
+  .grip { position: absolute; inset: 0 auto 0 0; width: var(--s-3); padding: 0; border: 0; background: transparent; cursor: col-resize; }
+  .grip:hover, .grip:active { background: var(--control); opacity: 0.5; }
   header { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); }
   h2 { font-size: var(--fs-lg); font-weight: 700; }
   h3 { font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: var(--s-3); }

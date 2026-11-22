@@ -1,5 +1,6 @@
 import { mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
+import { listCommands, shortcutFor, type Command, type Ctx } from '../../lib/commands';
 import BarChart from './BarChart.svelte';
 import type { Day } from './geometry';
 import ProgressChart from './ProgressChart.svelte';
@@ -119,5 +120,41 @@ describe('Sparkline', () => {
   it('draws nothing for fewer than two points', async () => {
     await show(Sparkline, { values: [3], label: 'x' });
     expect(document.querySelector('svg')).toBeNull();
+  });
+});
+
+describe('ProgressChart keyboard', () => {
+  const step = (by: number) => dispatchEvent(new CustomEvent('command:chart.day', { detail: by }));
+  const status = () => document.querySelector('[role=status]')!.textContent;
+  it('is focusable and moves the highlighted day while it has focus, announcing the values', async () => {
+    await show(ProgressChart, { days, measure: 'points', unit: 'points' });
+    const svg = document.querySelector<SVGElement>('svg[role=img]')!;
+    expect(svg.getAttribute('tabindex')).toBe('0');
+    step(-1);
+    await tick();
+    expect(status()).toBe('');
+    svg.focus();
+    step(-1);
+    await tick();
+    expect(status()).toBe('11-05: scope 14, started 12, done 9');
+    step(-1);
+    await tick();
+    expect(status()).toBe('11-04: scope 14, started 10, done 7');
+    expect(document.querySelector('line.guide')).not.toBeNull();
+    for (let i = 0; i < 9; i++) step(-1);
+    await tick();
+    expect(status()).toContain('11-01');
+    step(1);
+    await tick();
+    expect(status()).toContain('11-02');
+  });
+  it('has two commands on the arrow keys that are live only while a chart has focus', async () => {
+    await show(ProgressChart, { days, measure: 'points', unit: 'points' });
+    const all = () => listCommands({} as Ctx, { all: true });
+    const prev = all().find((c) => c.id === 'chart.day.prev') as Command;
+    expect([shortcutFor('chart.day.prev'), shortcutFor('chart.day.next')]).toEqual(['arrowleft', 'arrowright']);
+    expect(prev.when!({} as Ctx)).toBe(false);
+    document.querySelector<SVGElement>('svg[role=img]')!.focus();
+    expect(prev.when!({} as Ctx)).toBe(true);
   });
 });

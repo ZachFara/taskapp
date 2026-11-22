@@ -22,6 +22,11 @@ struct Timeline {
     category: Vec<(NaiveDate, StatusCategory)>,
     value0: f64,
     value: Vec<(NaiveDate, f64)>,
+    /// Whether the issue is in the scope's cycle; always true for other scopes.
+    member0: bool,
+    member: Vec<(NaiveDate, bool)>,
+    /// A cycle's days (first included, last excluded) on which the issue only carries work finished before the cycle.
+    carried: Option<(NaiveDate, NaiveDate)>,
 }
 
 fn latest<T: Copy>(initial: T, events: &[(NaiveDate, T)], day: NaiveDate) -> T {
@@ -35,7 +40,8 @@ fn latest<T: Copy>(initial: T, events: &[(NaiveDate, T)], day: NaiveDate) -> T {
 impl Timeline {
     /// (scope, started, completed) of this issue at the end of `day`.
     fn at(&self, day: NaiveDate) -> (f64, f64, f64) {
-        if day < self.created {
+        let carried = self.carried.is_some_and(|(a, b)| a <= day && day < b);
+        if day < self.created || carried || !latest(self.member0, &self.member, day) {
             return (0.0, 0.0, 0.0);
         }
         let v = latest(self.value0, &self.value, day);
@@ -91,8 +97,11 @@ async fn scope_ids(db: &Db, scope: ProgressScope) -> Result<Vec<i64>> {
             if !cycles::list(db).await?.iter().any(|x| x.id == c) {
                 return Err(Error::NotFound(format!("cycle {}", c.0)));
             }
+            // Issues that left the cycle still count on the days they were in it.
             by_column(
-                "SELECT id FROM issues WHERE cycle_id = ? AND archived_at IS NULL",
+                "SELECT id FROM issues WHERE archived_at IS NULL AND (cycle_id = ?1 OR id IN
+                   (SELECT CAST(entity_id AS INTEGER) FROM changes
+                    WHERE entity = 'issue' AND field = 'cycle_id' AND old_value = CAST(?1 AS TEXT)))",
                 c.0,
             )
             .await
@@ -118,12 +127,12 @@ fn number(v: Option<&str>) -> f64 {
 }
 
 /// (when, old, new) of status and value changes, per (issue, field), oldest first.
-type Events = HashMap<(i64, String), Vec<(DateTime<Utc>, Option<String>, Option<String>)>>;
+type Events = HashMap<(i64, String), Vec<(DateTime<Utc>, Option<String>, Option<String>, i64)>>;
 
 async fn events(db: &Db, value_field: &str) -> Result<Events> {
     let rows = sqlx::query(
-        "SELECT entity_id, field, at, old_value, new_value FROM changes
-         WHERE entity = 'issue' AND field IN ('status_id', ?) ORDER BY at, id",
+        "SELECT entity_id, field, at, old_value, new_value, id FROM changes
+         WHERE entity = 'issue' AND field IN ('status_id', 'cycle_id', 'key', ?) ORDER BY at, id",
     )
     .bind(value_field)
     .fetch_all(&db.pool)
@@ -137,9 +146,82 @@ async fn events(db: &Db, value_field: &str) -> Result<Events> {
             r.try_get(2)?,
             r.try_get(3)?,
             r.try_get(4)?,
+            r.try_get(5)?,
         ));
     }
     Ok(out)
+}
+
+/// What every issue's timeline is built from.
+struct Known {
+    cats: HashMap<i64, StatusCategory>,
+    events: Events,
+    measure: Measure,
+    value_field: &'static str,
+    /// The cycle being charted and its first day, for a cycle scope.
+    cycle: Option<(i64, NaiveDate)>,
+    tz: Tz,
+}
+
+/// One issue row (id, status, points, minutes, created, cycle) replayed against its change history.
+fn timeline_of(k: &Known, r: &sqlx::sqlite::SqliteRow) -> Result<Timeline> {
+    let (tz, cycle, events) = (k.tz, k.cycle, &k.events);
+    let id: i64 = r.try_get(0)?;
+    let cat = |id: i64| k.cats.get(&id).copied().unwrap_or(StatusCategory::Backlog);
+    let current = match k.measure {
+        Measure::Points => r.try_get::<Option<f64>, _>(2)?.unwrap_or(0.0),
+        Measure::Time => r.try_get::<Option<f64>, _>(3)?.unwrap_or(0.0),
+        Measure::Count => 1.0,
+    };
+    let of = |field: &str| {
+        events
+            .get(&(id, field.into()))
+            .map_or(&[][..], Vec::as_slice)
+    };
+    let (status_events, value_events) = (of("status_id"), of(k.value_field));
+    // Creation records no status or value, so the state before the first change is that change's old value.
+    let status_id = |s: &Option<String>| s.as_deref().and_then(|s| s.parse::<i64>().ok());
+    // Creation records its rows (the key last) before anything else can: they are the starting state, not a move.
+    let made = of("key").first().map_or(0, |e| e.3);
+    let all_cycle = of("cycle_id");
+    let cycle_events = &all_cycle[all_cycle.iter().take_while(|e| e.3 < made).count()..];
+    let in_cycle = |v: Option<i64>| cycle.is_none_or(|(c, _)| v == Some(c));
+    let category0 = cat(status_events
+        .first()
+        .and_then(|e| status_id(&e.1))
+        .unwrap_or(r.try_get(1)?));
+    let category: Vec<_> = status_events
+        .iter()
+        .filter_map(|e| Some((local(e.0, tz), cat(status_id(&e.2)?))))
+        .collect();
+    let carried = cycle.and_then(|(_, start)| {
+        let before = latest(category0, &category, start - Duration::days(1));
+        (before == StatusCategory::Completed).then(|| {
+            let reopened = category.iter().map(|e| e.0).find(|d| *d >= start);
+            (start, reopened.unwrap_or(NaiveDate::MAX))
+        })
+    });
+    Ok(Timeline {
+        created: local(r.try_get(4)?, tz),
+        category0,
+        category,
+        member0: in_cycle(match cycle_events.first() {
+            Some(e) => status_id(&e.1),
+            None => r.try_get(5)?,
+        }),
+        member: cycle_events
+            .iter()
+            .map(|e| (local(e.0, tz), in_cycle(status_id(&e.2))))
+            .collect(),
+        carried,
+        value0: value_events
+            .first()
+            .map_or(current, |e| number(e.1.as_deref())),
+        value: value_events
+            .iter()
+            .map(|e| (local(e.0, tz), number(e.2.as_deref())))
+            .collect(),
+    })
 }
 
 async fn timelines(
@@ -149,63 +231,42 @@ async fn timelines(
     tz: Tz,
 ) -> Result<Vec<Timeline>> {
     let ids = scope_ids(db, scope).await?;
-    let cats: HashMap<i64, StatusCategory> = sqlx::query("SELECT id, category FROM statuses")
+    let cycle = match scope {
+        ProgressScope::Cycle(c) => cycles::list(db)
+            .await?
+            .into_iter()
+            .find(|x| x.id == c)
+            .map(|c| (c.id.0, c.start_date)),
+        _ => None,
+    };
+    let cats = sqlx::query("SELECT id, category FROM statuses")
         .fetch_all(&db.pool)
         .await?
         .iter()
         .map(|r| Ok((r.try_get(0)?, parse_category(&r.try_get::<String, _>(1)?)?)))
         .collect::<Result<_>>()?;
-    let cat = |id: i64| cats.get(&id).copied().unwrap_or(StatusCategory::Backlog);
     let value_field = match measure {
         Measure::Points => "points",
         Measure::Time => "estimate_minutes",
         Measure::Count => "",
     };
-    let events = events(db, value_field).await?;
-    let issues = sqlx::query(
-        "SELECT id, status_id, points, CAST(estimate_minutes AS REAL), created_at FROM issues",
+    let known = Known {
+        cats,
+        events: events(db, value_field).await?,
+        measure,
+        value_field,
+        cycle,
+        tz,
+    };
+    sqlx::query(
+        "SELECT id, status_id, points, CAST(estimate_minutes AS REAL), created_at, cycle_id FROM issues",
     )
     .fetch_all(&db.pool)
-    .await?;
-    let mut out = Vec::new();
-    for r in &issues {
-        let id: i64 = r.try_get(0)?;
-        if !ids.contains(&id) {
-            continue;
-        }
-        let current = match measure {
-            Measure::Points => r.try_get::<Option<f64>, _>(2)?.unwrap_or(0.0),
-            Measure::Time => r.try_get::<Option<f64>, _>(3)?.unwrap_or(0.0),
-            Measure::Count => 1.0,
-        };
-        let status_events = events
-            .get(&(id, "status_id".into()))
-            .map_or(&[][..], Vec::as_slice);
-        let value_events = events
-            .get(&(id, value_field.into()))
-            .map_or(&[][..], Vec::as_slice);
-        // Creation records no status or value, so the state before the first change is that change's old value.
-        let status_id = |s: &Option<String>| s.as_deref().and_then(|s| s.parse::<i64>().ok());
-        out.push(Timeline {
-            created: local(r.try_get(4)?, tz),
-            category0: cat(status_events
-                .first()
-                .and_then(|e| status_id(&e.1))
-                .unwrap_or(r.try_get(1)?)),
-            category: status_events
-                .iter()
-                .filter_map(|e| Some((local(e.0, tz), cat(status_id(&e.2)?))))
-                .collect(),
-            value0: value_events
-                .first()
-                .map_or(current, |e| number(e.1.as_deref())),
-            value: value_events
-                .iter()
-                .map(|e| (local(e.0, tz), number(e.2.as_deref())))
-                .collect(),
-        });
-    }
-    Ok(out)
+    .await?
+    .iter()
+    .filter(|r| r.try_get::<i64, _>(0).is_ok_and(|id| ids.contains(&id)))
+    .map(|r| timeline_of(&known, r))
+    .collect()
 }
 
 /// The days the series covers by default: a project's dates, a cycle's dates, a view's last 30 days.

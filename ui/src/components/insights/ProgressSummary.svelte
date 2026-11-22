@@ -4,8 +4,8 @@
   import type { Day } from '../charts/geometry';
   import Button from '../../ui/Button.svelte';
   import { chartsOn, defaultMeasure, formatFor, unitOf } from './estimation';
-  import { insightsApi, type Measure } from './insightsApi';
-  import { bounds, today, trim } from './series';
+  import type { Measure } from './insightsApi';
+  import { progressToToday, today, trim } from './series';
 
   // The project hero's progress: a compact burn-up when the history has a shape, otherwise the plain bar.
   // `progress` is [done, total] issues, so the bar and the figure keep working without any history.
@@ -21,7 +21,7 @@
     if (!(await chartsOn())) return;
     measure = await defaultMeasure();
     now = await today();
-    const p = await insightsApi.progress({ Project: projectId }, measure, bounds('auto', now).from, bounds('auto', now).to);
+    const p = await progressToToday({ Project: projectId }, measure, 'auto', now);
     days = p ? trim(p.days) : [];
   });
 </script>

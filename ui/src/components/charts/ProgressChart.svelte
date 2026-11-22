@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import Button from '../../ui/Button.svelte';
   import ChartTable from './ChartTable.svelte';
   import EmptyChart from './EmptyChart.svelte';
@@ -68,6 +69,19 @@
     hover = Math.min(list.length - 1, Math.max(0, Math.round(frac * (list.length - 1))));
   }
   const tip = $derived(hover === null ? null : list[hover]);
+  const said = $derived(tip ? `${tip.date.slice(5)}: scope ${format(tip.scope)}, started ${format(tip.started)}, done ${format(tip.completed)}` : '');
+
+  // The arrow-key commands (defs/insights/chart.day.*) say which way to go; only the chart that has focus moves.
+  let svg = $state<SVGSVGElement>();
+  onMount(() => {
+    const go = (e: Event) => {
+      if (!svg?.contains(document.activeElement)) return;
+      const by = (e as CustomEvent<number>).detail;
+      hover = hover === null ? list.length - 1 : Math.min(list.length - 1, Math.max(0, hover + by));
+    };
+    addEventListener('command:chart.day', go);
+    return () => removeEventListener('command:chart.day', go);
+  });
 </script>
 
 {#if days === null || empty}
@@ -75,7 +89,7 @@
 {:else}
   <figure use:fit={(w) => (width = w)}>
     <div class="plot">
-      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label={summary(list, unit)}>
+      <svg bind:this={svg} data-chart tabindex="0" width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label={summary(list, unit)} onblur={() => (hover = null)}>
         {#each ticks as t, i (t)}
           <line class={i === 0 ? 'base' : 'grid'} x1={box.left} x2={w - box.right} y1={s.y(t)} y2={s.y(t)} />
           <text class="tick" x={box.left - 6} y={s.y(t) + 4} text-anchor="end">{format(t)}</text>
@@ -108,8 +122,9 @@
         <rect class="hit" x={box.left} y="0" width={w - box.left - box.right} height={h} role="presentation" onpointermove={move} onpointerleave={() => (hover = null)} />
       </svg>
       {#if tip && hover !== null}
-        <div class="tip" style:left={`${Math.min(s.x(hover), w - 190)}px`}>{tip.date.slice(5)}: scope {format(tip.scope)}, started {format(tip.started)}, done {format(tip.completed)}</div>
+        <div class="tip" aria-hidden="true" style:left={`${Math.min(s.x(hover), w - 190)}px`}>{said}</div>
       {/if}
+      <div class="said" role="status">{said}</div>
     </div>
     {#if !compact}
       <div class="more"><Button aria-pressed={table} onclick={() => (table = !table)}>{table ? 'Hide table' : 'View as table'}</Button></div>
@@ -145,4 +160,6 @@
   .hit { fill: transparent; }
   .tip { position: absolute; top: 0; padding: var(--s-2) var(--s-4); background: var(--card); border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--ink); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; pointer-events: none; white-space: nowrap; }
   .more { display: flex; }
+  svg:focus-visible { outline: 2px solid var(--focus, var(--accent)); outline-offset: 2px; }
+  .said { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>

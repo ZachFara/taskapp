@@ -2,6 +2,7 @@ import { localDay } from '../../lib/gantt';
 import { workspaceZone } from '../views/dates';
 import type { Config } from './config';
 import type { Day } from '../charts/geometry';
+import { insightsApi, type Measure, type Scope } from './insightsApi';
 
 const DAY = 86_400_000;
 /** Today in the workspace zone, as a day string. */
@@ -17,3 +18,10 @@ export function bounds(range: Config['range'], day: string): { from?: string; to
 
 /** Days before the scope existed say nothing; a long range would otherwise open with a flat empty stretch. */
 export const trim = (days: Day[]) => days.slice(Math.max(0, days.findIndex((d) => d.scope > 0)));
+
+/** Progress for a range. A project that has run past its target date, with no range chosen, still shows up to today. */
+export async function progressToToday(scope: Scope, measure: Measure, range: Config['range'], day: string) {
+  const b = bounds(range, day);
+  const p = await insightsApi.progress(scope, measure, b.from, b.to);
+  return p && range === 'auto' && !('Cycle' in scope) && p.to < day ? ((await insightsApi.progress(scope, measure, p.from, day)) ?? p) : p;
+}

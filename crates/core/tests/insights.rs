@@ -97,6 +97,29 @@ impl World {
         .await
     }
 
+    /// An issue made on the 1st with `points`, in `cycle`.
+    async fn in_cycle(
+        &self,
+        points: f64,
+        cycle: Option<taskapp_core::CycleId>,
+    ) -> Result<IssueId, Box<dyn std::error::Error>> {
+        let i = issues::create(
+            &self.db,
+            NewIssue {
+                title: format!("ABC cycle issue {points}"),
+                project_id: Some(self.project),
+                status_id: Some(StatusId(TODO)),
+                points: Some(points),
+                cycle_id: cycle,
+                created_at: Some(noon(1)),
+                ..NewIssue::default()
+            },
+            UI,
+        )
+        .await?;
+        Ok(i.id)
+    }
+
     async fn series(
         &self,
         m: Measure,
@@ -273,14 +296,13 @@ async fn cycle_and_view_scopes() -> R {
     let cy = cycles::create(&w.db, None, d(1), d(7), Look::default(), UI).await?;
     let a = w.issue(1, Some(2.0), None).await?;
     w.issue(1, Some(4.0), None).await?;
-    issues::update(
-        &w.db,
+    w.edit(
         a,
         IssuePatch {
             cycle_id: Some(Some(cy.id)),
             ..IssuePatch::default()
         },
-        UI,
+        noon(1),
     )
     .await?;
     w.status(a, DONE, noon(3)).await?;
@@ -412,5 +434,52 @@ async fn velocity_per_cycle_when_cycles_exist() -> R {
     )
     .await?;
     assert_eq!(last.len(), 1);
+    Ok(())
+}
+
+/// A cycle's burn-up counts work from the day it joined the cycle until the day it left, and leaves out work that
+/// was already done when the cycle began.
+#[tokio::test]
+async fn cycle_series_follows_membership_and_ignores_work_done_before_the_cycle() -> R {
+    let w = world().await?;
+    let cy = cycles::create(&w.db, None, d(5), d(11), Look::default(), UI).await?;
+    let doing = w.in_cycle(3.0, Some(cy.id)).await?; // started on the 6th, done on the 8th
+    let joins = w.in_cycle(5.0, None).await?; // joins on the 7th
+    let stays_done = w.in_cycle(2.0, Some(cy.id)).await?; // done on the 3rd: not this cycle's work
+    let reopened = w.in_cycle(8.0, Some(cy.id)).await?; // done on the 3rd, reopened on the 6th
+    let leaves = w.in_cycle(13.0, Some(cy.id)).await?; // leaves on the 9th
+    w.status(doing, DOING, noon(6)).await?;
+    w.status(doing, DONE, noon(8)).await?;
+    let to_cycle = |cycle: Option<taskapp_core::CycleId>| IssuePatch {
+        cycle_id: Some(cycle),
+        ..IssuePatch::default()
+    };
+    w.edit(joins, to_cycle(Some(cy.id)), noon(7)).await?;
+    w.status(stays_done, DONE, noon(3)).await?;
+    w.status(reopened, DONE, noon(3)).await?;
+    w.status(reopened, DOING, noon(6)).await?;
+    w.edit(leaves, to_cycle(None), noon(9)).await?;
+    let s = insights::progress_on(
+        &w.db,
+        ProgressScope::Cycle(cy.id),
+        Measure::Points,
+        None,
+        None,
+        d(10),
+    )
+    .await?;
+    assert_eq!((s.from, s.to), (d(5), d(11)));
+    assert_eq!(
+        rows(&s),
+        vec![
+            (5, 16.0, 0.0, 0.0),
+            (6, 24.0, 11.0, 0.0),
+            (7, 29.0, 11.0, 0.0),
+            (8, 29.0, 11.0, 3.0),
+            (9, 16.0, 11.0, 3.0),
+            (10, 16.0, 11.0, 3.0),
+            (11, 16.0, 11.0, 3.0),
+        ]
+    );
     Ok(())
 }

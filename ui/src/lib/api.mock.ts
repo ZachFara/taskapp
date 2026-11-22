@@ -136,6 +136,11 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       next.updated_at = now();
       if (at >= 0) s.issues[at] = next;
     }
+    // Redo brings back an issue the step created: it is only in the later state, so the loop above never met it.
+    for (const t of to) {
+      const at = s.issues.findIndex((x) => x.id === t.id);
+      if (!from_.some((x) => x.id === t.id) && at >= 0) s.issues[at] = { ...structuredClone(t), updated_at: now() };
+    }
     // Undo replays the step's rows newest first with old and new swapped; a create row pair becomes an archive.
     const src = undo ? 'Undo' : 'Redo';
     for (const r of undo ? [...st.rows].reverse() : st.rows) {
@@ -334,12 +339,13 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     } else if ('Cycle' in scope) {
       const c = find(cycles, scope.Cycle, 'cycle');
       own = [c.start_date, c.end_date];
-      rows = s.issues.filter((i) => i.cycle_id === scope.Cycle && !i.archived_at);
+      // Issues that left the cycle still count on the days they were in it.
+      rows = s.issues.filter((i) => !i.archived_at && (i.cycle_id === scope.Cycle || changes.some((x) => x.entity === 'issue' && x.entity_id === String(i.id) && x.field === 'cycle_id' && x.old_value === scope.Cycle)));
     } else {
       rows = viewIssues(scope.View);
       own = [addDays(now, -29), now];
     }
-    const tls = insights.timelines(s.issues.filter((i) => rows.includes(i)), changes, s.statuses, measure, workspace.timezone);
+    const tls = insights.timelines(s.issues.filter((i) => rows.includes(i)), changes, s.statuses, measure, workspace.timezone, 'Cycle' in scope ? { id: scope.Cycle, start: own![0] } : undefined);
     const [first, last] = insights.activity(tls, now);
     const from = project ? (project.start_date ?? first) : own![0];
     const range: [string, string] = project ? [from, (project.target_date ?? last) > from ? (project.target_date ?? last) : from] : own!;

@@ -1,10 +1,8 @@
 import { api } from '../../lib/api';
 import type { Day } from '../charts/geometry';
 
-// The shapes the backend returns for the progress and velocity queries. They are declared here until the generated
-// bindings carry them; every read is defensive because the backend may not have the commands yet.
-export type Measure = 'points' | 'count' | 'time';
-export type Scope = { Project: number } | { Cycle: number } | { View: number };
+export type { Measure, ProgressScope as Scope } from '../../lib/bindings';
+import type { Measure, ProgressScope as Scope } from '../../lib/bindings';
 export type ProgressSeries = { days: Day[]; measure: Measure; from: string; to: string };
 export type Period = { start: string; end: string; label: string; completed: number };
 type Source = {
@@ -13,18 +11,17 @@ type Source = {
 };
 
 let injected: Source | null = null;
-const backend = () => (api as unknown as { insights?: { progress?: unknown; velocity?: unknown } }).insights;
 
-const source = (): Source | null => {
-  if (injected) return injected;
-  const b = backend();
-  if (typeof b?.progress !== 'function' || typeof b?.velocity !== 'function') return null;
-  const call = <T>(name: 'progress' | 'velocity', args: unknown[]) => (b as Record<string, (...a: unknown[]) => Promise<T>>)[name](...args);
-  return {
-    progress: (...a) => call('progress', a),
-    velocity: (...a) => call('velocity', a),
-  };
+// The generated api, with null totals (a day before the scope existed) read as zero.
+const real: Source = {
+  progress: async (scope, measure, from, to) => {
+    const p = await api.insights.progress(scope, measure, from ?? null, to ?? null);
+    return { ...p, days: p.days.map((d) => ({ date: d.date, scope: d.scope ?? 0, started: d.started ?? 0, completed: d.completed ?? 0 })) };
+  },
+  velocity: async (scope, measure, periods) =>
+    (await api.insights.velocity(scope, measure, periods)).map((v) => ({ ...v, completed: v.completed ?? 0 })),
 };
+const source = (): Source => injected ?? real;
 
 /** Progress and velocity, or "nothing" (null, []) when the backend has none or fails: a chart is never worth an error. */
 export const insightsApi = {
@@ -32,9 +29,8 @@ export const insightsApi = {
   setSource(s: Source | null) {
     injected = s;
   },
-  available: () => source() !== null,
   progress: (scope: Scope, measure: Measure, from?: string, to?: string) =>
-    source()?.progress(scope, measure, from, to).catch(() => null) ?? Promise.resolve(null),
+    source().progress(scope, measure, from, to).catch(() => null),
   velocity: (scope: Scope, measure: Measure, periods = 8) =>
-    source()?.velocity(scope, measure, periods).catch(() => []) ?? Promise.resolve([] as Period[]),
+    source().velocity(scope, measure, periods).catch(() => [] as Period[]),
 };

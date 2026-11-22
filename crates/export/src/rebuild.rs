@@ -263,14 +263,14 @@ async fn insert_issue(
     sqlx::query(
         "INSERT INTO issues (number, title, description, status_id, priority, project_id,
            milestone_id, cycle_id, start_date, due_date, due_time_utc, due_tz, estimate_minutes,
-           properties, created_at, updated_at, completed_at, archived_at)
+           points, properties, created_at, updated_at, completed_at, archived_at)
          VALUES (?, ?, ?,
            (SELECT id FROM statuses WHERE name = ?), ?,
            (SELECT id FROM projects WHERE slug = ?),
            (SELECT m.id FROM milestones m JOIN projects p ON p.id = m.project_id
               WHERE p.slug = ? AND m.name = ? ORDER BY m.id LIMIT 1),
            (SELECT id FROM cycles WHERE number = ?),
-           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(number)
     .bind(&f.title)
@@ -286,6 +286,7 @@ async fn insert_issue(
     .bind(f.due_time)
     .bind(&f.due_tz)
     .bind(f.estimate_minutes)
+    .bind(f.points)
     .bind(serde_json::to_string(&f.properties).map_err(invalid)?)
     .bind(f.created_at)
     .bind(f.updated_at)

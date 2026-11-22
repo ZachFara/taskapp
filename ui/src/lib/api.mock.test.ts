@@ -188,4 +188,23 @@ describe('mock points and progress', () => {
     expect((await mock.issues.get(2)).points).toBeNull();
     await expect(mock.issues.update(2, { points: 0.25 })).rejects.toMatchObject({ kind: 'Invalid' });
   });
+
+  // Sprint 1 holds issues 1, 4, 7, 8, 10 and 16 (5, 8, 13, 3, 5 and 5 points). Issue 10 was done from day -11 to -5, so
+  // it is the previous cycle's work on the first day (day -6) and returns when reopened; issues 4 and 7 were already
+  // revised to 8 and 13 points; issue 16 starts on day -5.
+  it('the seeded current cycle burns up from its first day, not from earlier completions', async () => {
+    const mock = createMockApi();
+    const s = await mock.insights.progress({ Cycle: 1 }, 'points', null, null);
+    const rows = s.days.map((d) => [d.scope, d.started, d.completed]);
+    expect(rows).toHaveLength(14);
+    expect(rows[0]).toEqual([34, 29, 0]);
+    expect(rows.slice(1)).toEqual(Array(13).fill([39, 39, 0]));
+  });
+
+  it('an issue that left the cycle counts until the day it left', async () => {
+    const mock = createMockApi();
+    await mock.issues.update(8, { cycle_id: null }); // 3 points, today
+    const s = await mock.insights.progress({ Cycle: 1 }, 'points', null, null);
+    expect(s.days.map((d) => d.scope)).toEqual([34, ...Array(5).fill(39), ...Array(8).fill(36)]);
+  });
 });
