@@ -34,6 +34,7 @@
 <section aria-label="Relations">
   <GroupHeader name="Relations" count={rows.length} category="Backlog" {collapsed} ontoggle={() => (collapsed = !collapsed)} />
   {#if !collapsed}
+    {#if !rows.length}<p class="none">No relations</p>{/if}
     <ul>
       {#each rows as r (`${r.rel.from}-${r.rel.to}-${r.rel.kind}`)}
         <li>
@@ -53,6 +54,7 @@
 
 <style>
   ul { list-style: none; }
+  .none { padding: var(--s-4) var(--s-5); color: var(--muted); }
   li { display: flex; align-items: center; height: var(--row-h); padding-right: var(--s-4); }
   .go { flex: 1; display: flex; gap: var(--s-4); align-items: center; height: 100%; padding: 0 var(--s-5); border: 0; background: transparent; text-align: left; min-width: 0; }
   .go:hover { background: var(--active); }

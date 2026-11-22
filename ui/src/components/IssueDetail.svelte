@@ -5,13 +5,13 @@
   import type { Issue, IssuePatch, Project, ResolvedPin, Status } from '../lib/bindings';
   import { shortcutFor } from '../lib/commands/registry';
   import Button from '../ui/Button.svelte';
-  import Contour from '../ui/Contour.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import IconButton from '../ui/IconButton.svelte';
   import PageHeader from '../ui/PageHeader.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
   import StatusGlyph from '../ui/StatusGlyph.svelte';
   import TextInput from '../ui/TextInput.svelte';
+  import { dateOf, humanDate } from './detail/format';
   import Comments from './detail/Comments.svelte';
   import Description from './detail/Description.svelte';
   import History from './detail/History.svelte';
@@ -142,12 +142,14 @@
   const tone = $derived({ Backlog: 1, Unstarted: 2, Started: 3, Completed: 4, Canceled: 1 }[status?.category ?? 'Backlog']);
 </script>
 
+{#snippet crumb()}
+  <span class="crumb">{project?.name ?? 'No project'} <span class="sep" aria-hidden="true">/</span>
+    <button type="button" class="key" aria-label="Copy issue key" onclick={copyKey}>{copied ? 'Copied' : issue!.key}</button></span>
+{/snippet}
+
 {#if issue}
   <article class="detail" data-mode={mode}>
-    <PageHeader title={project?.name ?? 'No project'} icon={project?.icon ?? 'project'} color={project?.color ?? undefined}>
-      {#snippet tabs()}
-        <Button tooltip={{ label: 'Copy issue key' }} icon="copy" onclick={copyKey}>{copied ? 'Copied' : issue!.key}</Button>
-      {/snippet}
+    <PageHeader title={crumb} icon={project?.icon ?? 'project'} color={project?.color ?? undefined}>
       {#snippet actions()}
         <IconButton icon="arrow-up" label="Previous issue" shortcut={shortcutFor('issue.detail.prev')} disabled={siblings.indexOf(key) < 1} onclick={() => step(-1)} />
         <IconButton icon="arrow-down" label="Next issue" shortcut={shortcutFor('issue.detail.next')} disabled={siblings.indexOf(key) < 0 || siblings.indexOf(key) >= siblings.length - 1} onclick={() => step(1)} />
@@ -167,7 +169,7 @@
         {:else}
           <h2><button type="button" aria-label="Title" onclick={startTitle}>{issue.title}</button></h2>
         {/if}
-        {#if issue.archived_at}<p class="arch">Archived {issue.archived_at.slice(0, 10)}</p>{/if}
+        {#if issue.archived_at}<p class="arch">Archived {humanDate(dateOf(issue.archived_at))}</p>{/if}
       </div>
       {#if error}<p role="alert" class="error">{error}</p>{/if}
       <div class="cols">
@@ -181,8 +183,7 @@
         <aside aria-label="Details">
           <h3>Details</h3>
           <Properties {issue} {save} {act} bind:openRow />
-          <p class="meta">Created {issue.created_at.slice(0, 10)} · Updated {issue.updated_at.slice(0, 10)}</p>
-          <div class="art" aria-hidden="true"><Contour rings={7} size={200} /></div>
+          <p class="meta">Created {humanDate(dateOf(issue.created_at))} · Updated {humanDate(dateOf(issue.updated_at))}</p>
         </aside>
       </div>
     </div>
@@ -202,6 +203,10 @@
   .scroll { flex: 1; overflow-y: auto; }
   .hero { display: grid; gap: var(--s-4); padding: var(--s-8) var(--s-8) var(--s-7); background: var(--tone); color: var(--band-ink); border-bottom: 2px solid var(--stone); }
   .st { display: inline-flex; align-items: center; gap: var(--s-4); font-size: var(--fs-sm); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--band-count); }
+  .crumb { font-size: var(--fs-lg); font-weight: 600; color: var(--muted); }
+  .sep { margin: 0 var(--s-2); }
+  .key { padding: 0; border: 0; background: transparent; font: inherit; color: var(--ink); font-weight: 700; }
+  .key:hover { text-decoration: underline dotted; text-underline-offset: var(--s-2); }
   h2 { margin: 0; }
   h2 button { display: block; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; font-size: var(--fs-display); font-weight: 800; letter-spacing: -0.03em; line-height: var(--lh-tight); }
   h2 button:hover { text-decoration: underline dotted; text-underline-offset: var(--s-2); }
@@ -211,11 +216,9 @@
   aside { padding: var(--s-7); background: var(--card); border-left: 1px solid var(--border); position: relative; overflow: hidden; }
   aside h3 { font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--stone); padding-bottom: var(--s-3); border-bottom: 2px solid var(--stone); }
   .meta { margin-top: var(--s-7); font-size: var(--fs-sm); color: var(--muted); }
-  .art { color: var(--control); opacity: 0.6; margin: var(--s-8) 0 0 var(--s-8); }
   .error { margin: var(--s-5) var(--s-8) 0; color: var(--signal); font-weight: 600; }
   .loading { display: grid; gap: var(--s-5); padding: var(--s-8); }
   [data-mode='panel'] .cols { grid-template-columns: minmax(0, 1fr); }
   [data-mode='panel'] aside { order: -1; border-left: 0; border-bottom: 1px solid var(--border); }
   [data-mode='panel'] .hero, [data-mode='panel'] main { padding-inline: var(--s-7); }
-  [data-mode='panel'] .art { display: none; }
 </style>

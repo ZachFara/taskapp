@@ -25,13 +25,17 @@
 
 html, body { height: 100%; margin: 0; }
 
+/* The body carries the app face and colours so no screen can fall back to the browser's serif. */
 body {
+  background: var(--frame);
+  color: var(--ink);
+  font: 400 var(--fs-md) / var(--lh-body) var(--font);
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* The app root (the new shell, the design gallery) opts in; the body is left to pages not yet restyled. */
+/* Kept for roots that mount inside a page with other colours (the setup and design screens). */
 .cairn-root {
   background: var(--frame);
   color: var(--ink);

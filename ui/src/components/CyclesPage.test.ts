@@ -51,21 +51,29 @@ describe('CyclesPage', () => {
     expect(group(target, 'current')?.textContent).not.toContain('Cycle 1');
   });
 
-  it('move_unfinished_updates_each_open_issue_once', async () => {
+  it('move_unfinished_is_one_bulk_update', async () => {
     const seed = { ...fixtures, cycles, issues: fixtures.issues.map((i, n) => (n < 3 ? { ...i, cycle_id: 2 } : i)) };
     const mock = createMockApi(seed);
     const unfinished = (await mock.views.query({ filter: { Cond: { field: { Fixed: 'Cycle' }, op: 'Eq', value: 2 } }, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false }))
       .filter((i) => !['Completed', 'Canceled'].includes(seed.statuses.find((s) => s.id === i.status_id)?.category ?? ''));
-    const update = vi.spyOn(mock.issues, 'update');
+    // The mock has no bulk update yet; this stand-in applies the patch per id and records the single call.
+    const bulk = vi.fn(async (ids: number[], p: { patch?: { cycle_id?: number | null } }) => {
+      for (const id of ids) await mock.issues.update(id, p.patch ?? {});
+      return null;
+    });
+    (mock.issues as unknown as { bulkUpdate: typeof bulk }).bulkUpdate = bulk;
     const target = await open(mock);
     button(target, 'Move unfinished to next cycle').click();
     flushSync();
     button(target.ownerDocument, 'Move').click();
-    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(unfinished.length));
-    for (const [id, patch] of update.mock.calls) {
-      expect(unfinished.map((i) => i.id)).toContain(id);
-      expect(patch).toEqual({ cycle_id: 3 });
-    }
+    await vi.waitFor(() => expect(bulk).toHaveBeenCalledTimes(1));
+    expect(bulk).toHaveBeenCalledWith(unfinished.map((i) => i.id), { patch: { cycle_id: 3 } });
+  });
+
+  it('rows_show_human_dates_and_days_left', async () => {
+    const target = await open(createMockApi({ ...fixtures, cycles }));
+    expect(group(target, 'current')?.textContent).toContain('Nov 16 to Nov 29');
+    expect(group(target, 'current')?.textContent).toContain('7 days left');
   });
 
   it('empty_cycles_shows_designed_empty_state', async () => {

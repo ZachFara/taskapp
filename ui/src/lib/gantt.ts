@@ -28,6 +28,8 @@ export type Row = {
   id: string;
   kind: 'bar' | 'rollup' | 'milestone' | 'group';
   label: string;
+  key?: string;
+  title?: string;
   indent: number;
   start?: string;
   end?: string;
@@ -75,7 +77,7 @@ export function buildRows({ mode, issues, bars, projects, milestones, critical, 
     const span = kidSpan ?? own;
     const row: Row[] = span
       ? [{
-          id: `issue-${i.id}`, kind: kidSpan ? 'rollup' : 'bar', label: `${i.key} ${i.title}`, indent, issueId: i.id,
+          id: `issue-${i.id}`, kind: kidSpan ? 'rollup' : 'bar', label: `${i.key} ${i.title}`, key: i.key, title: i.title, indent, issueId: i.id,
           start: span.start, end: span.end, critical: critical.includes(i.id), estimated: !kidSpan && own?.from_estimate,
           category: statuses.find((s) => s.id === i.status_id)?.category,
         }]
@@ -88,6 +90,8 @@ export function buildRows({ mode, issues, bars, projects, milestones, critical, 
   return ids.flatMap((pid): Row[] => {
     const inProject = top.filter((i) => i.project_id === pid);
     const total = rollup(inProject.flatMap(spans));
+    // A project with nothing scheduled would be an empty band; its issues are listed as unscheduled.
+    if (!total) return [];
     return [
       {
         id: `group-${pid}`, kind: 'group', label: projects.find((p) => p.id === pid)?.name ?? 'No project', indent: 0,
@@ -99,8 +103,8 @@ export function buildRows({ mode, issues, bars, projects, milestones, critical, 
   });
 }
 
-/** Issues with an estimate and no dates, for the side lane. */
-export const unscheduled = (issues: Issue[]) => issues.filter((i) => i.estimate_minutes && !i.start_date && !i.due);
+/** Issues that got no row (no dates, no dated children), listed under the Unscheduled band. */
+export const unscheduled = (issues: Issue[], rows: Row[]) => issues.filter((i) => !rows.some((r) => r.issueId === i.id));
 
 /** First and last day to draw, padded; always includes `today` so the marker is on the chart. */
 export function range(rows: Row[], today: string): Span {

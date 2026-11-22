@@ -1,16 +1,20 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
-  import { api } from '../../lib/api';
   import type { FieldRef, FixedField, Issue, IssuePatch, PropertyKind, SavedView, StatusCategory, Value } from '../../lib/bindings';
   import { selection } from '../../lib/selection.svelte';
   import { currentViewId, issues, propertyDefs, refreshAll, statuses, views } from '../../lib/stores.svelte';
   import Checkbox from '../../ui/Checkbox.svelte';
+  import CommandButton from '../CommandButton.svelte';
+  import EntityIcon from '../../ui/EntityIcon.svelte';
+  import IssueMenu from './IssueMenu.svelte';
+  import { api } from '../../lib/api';
+  import type { Label, Project } from '../../lib/bindings';
+  import { workspaceZone, dayText, dueDay, isOverdue } from './dates';
   import EmptyState from '../../ui/EmptyState.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
   import IconButton from '../../ui/IconButton.svelte';
   import Pill from '../../ui/Pill.svelte';
-  import PageHeader from '../../ui/PageHeader.svelte';
-  import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
+    import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
   import Select from '../../ui/Select.svelte';
   import Skeleton from '../../ui/Skeleton.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
@@ -19,7 +23,7 @@
 
   let { view }: { view: SavedView } = $props();
 
-  type EditKind = PropertyKind | 'Status' | 'Priority';
+  type EditKind = PropertyKind | 'Status' | 'Priority' | 'Project' | 'Labels';
   // Fixed fields a table can show and edit. Others are left out of the column picker and skipped in views.
   const FIXED: Partial<Record<FixedField, { label: string; kind: EditKind }>> = {
     Title: { label: 'Title', kind: 'Text' },
@@ -28,7 +32,11 @@
     StartDate: { label: 'Start', kind: 'Date' },
     DueDate: { label: 'Due', kind: 'Date' },
     Estimate: { label: 'Estimate', kind: 'Number' },
+    Project: { label: 'Project', kind: 'Project' },
+    Label: { label: 'Labels', kind: 'Labels' },
   };
+  // A view with no columns of its own shows these.
+  const DEFAULT: FieldRef[] = ['Priority', 'Title', 'Status', 'Project', 'Label', 'DueDate', 'Estimate'].map((f) => ({ Fixed: f as FixedField }));
   const PATCH: Partial<Record<FixedField, (v: Value) => IssuePatch>> = {
     Title: (v) => ({ title: v as string }),
     Status: (v) => ({ status_id: v as number }),
@@ -51,8 +59,9 @@
   const live = $derived(views.find((v) => v.id === view.id) ?? view);
   const def = $derived(live.def);
   // Columns whose property def is gone (or fixed field not supported) are skipped, keeping their index in the def.
+  const base = $derived(def.columns.length ? def.columns : DEFAULT);
   const cols = $derived(
-    def.columns
+    base
       .map((ref, index) => ({ ref, index, id: colId(ref), kind: kindOf(ref), label: label(ref) }))
       .filter((c): c is typeof c & { kind: EditKind } => c.kind !== null),
   );
@@ -61,10 +70,10 @@
   }
   const addable = $derived([
     ...Object.entries(FIXED)
-      .filter(([f]) => !def.columns.some((c) => c.Fixed === f))
+      .filter(([f]) => !base.some((c) => c.Fixed === f))
       .map(([f, m]) => ({ value: `fixed:${f}`, label: m!.label })),
     ...propertyDefs
-      .filter((d) => !def.columns.some((c) => c.Property === d.key))
+      .filter((d) => !base.some((c) => c.Property === d.key))
       .map((d) => ({ value: `prop:${d.key}`, label: d.name })),
   ]);
 
@@ -79,10 +88,14 @@
   let loaded = $state(false);
   let picked = $state('');
   let editorEl = $state<HTMLElement>();
+  let projects = $state.raw<Project[]>([]);
+  let labels = $state.raw<Label[]>([]);
+  let tz = $state('UTC');
 
   onMount(() => {
     currentViewId.value = view.id;
     void refreshAll().finally(() => (loaded = true));
+    void Promise.all([api.projects.list(), api.labels.list(), workspaceZone()]).then(([p, l, z]) => ([projects, labels, tz] = [p, l, z]));
   });
 
   const raw = (i: Issue, ref: FieldRef): Value => {
@@ -92,7 +105,9 @@
       case 'Status': return i.status_id;
       case 'Priority': return i.priority;
       case 'StartDate': return i.start_date;
-      case 'DueDate': return i.due?.Date ?? i.due?.DateTime?.utc.slice(0, 10) ?? null;
+      case 'DueDate': return dueDay(i, tz);
+      case 'Project': return i.project_id;
+      case 'Label': return i.label_ids.join(',');
       case 'Estimate': return i.estimate_minutes;
       default: return null;
     }
@@ -140,19 +155,19 @@
     });
   });
 
-  type Group = { name: string; category: StatusCategory; rows: Issue[] };
-  const groupOf = (i: Issue): { name: string; category: StatusCategory } => {
+  type Group = { name: string; category: StatusCategory; status: boolean; priority?: number; rows: Issue[] };
+  const groupOf = (i: Issue): { name: string; category: StatusCategory; status: boolean; priority?: number } => {
     const field = def.group_by;
     if (field?.Fixed === 'Status') {
       const st = statuses.find((s) => s.id === i.status_id);
-      return { name: st?.name ?? 'Unknown', category: st?.category ?? 'Backlog' };
+      return { name: st?.name ?? 'Unknown', category: st?.category ?? 'Backlog', status: true };
     }
-    if (field?.Fixed === 'Priority') return { name: PRIORITY[i.priority] ?? 'Unknown', category: 'Backlog' };
+    if (field?.Fixed === 'Priority') return { name: PRIORITY[i.priority] ?? 'Unknown', category: 'Backlog' as StatusCategory, status: false, priority: i.priority };
     if (field?.Property !== undefined) {
       const v = i.properties[field.Property];
-      return { name: isEmpty(v ?? null) ? 'None' : String(v), category: 'Backlog' };
+      return { name: isEmpty(v ?? null) ? 'None' : String(v), category: 'Backlog' as StatusCategory, status: false };
     }
-    return { name: '', category: 'Backlog' };
+    return { name: '', category: 'Backlog' as StatusCategory, status: true };
   };
   // Groups keep the order of the rows; status groups follow the status positions.
   const groups = $derived.by<Group[]>(() => {
@@ -177,7 +192,7 @@
 
   function startEdit(issue: Issue, c: number) {
     const col = cols[c];
-    if (!col) return;
+    if (!col || col.kind === 'Project' || col.kind === 'Labels') return;
     if (col.kind === 'Checkbox') return void save(issue, col, raw(issue, col.ref) !== true);
     editing = { row: visibleIds.indexOf(issue.id), col: c };
     original = draft = draftOf(raw(issue, col.ref), col.kind);
@@ -330,18 +345,18 @@
     if (!id) return;
     addValue = '';
     const ref: FieldRef = id.startsWith('prop:') ? { Property: id.slice(5) } : { Fixed: id.slice(6) as FixedField };
-    untrack(() => void saveColumns([...def.columns, ref]));
+    untrack(() => void saveColumns([...base, ref]));
   });
 
   function moveColumn(index: number, delta: number) {
-    const columns = [...def.columns];
+    const columns = [...base];
     const target = index + delta;
     if (target < 0 || target >= columns.length) return;
     [columns[index], columns[target]] = [columns[target], columns[index]];
     void saveColumns(columns);
   }
 
-  const removeColumn = (index: number) => void saveColumns(def.columns.filter((_, i) => i !== index));
+  const removeColumn = (index: number) => void saveColumns(base.filter((_, i) => i !== index));
 
   function cycleSort(id: string) {
     sort = sort?.col !== id ? { col: id, dir: 'asc' } : sort.dir === 'asc' ? { col: id, dir: 'desc' } : null;
@@ -372,25 +387,26 @@
 </script>
 
 <section class="table-view">
-  <PageHeader title={live.name}>
-    {#snippet actions()}
-      <span class="add">
-        <Select label="Add column" placeholder="Add column" items={addable} bind:value={addValue} />
-      </span>
-    {/snippet}
-  </PageHeader>
+  <div class="toolbar">
+    <span class="add">
+      <Select label="Add column" placeholder="Add column" items={addable} bind:value={addValue} />
+    </span>
+  </div>
 
   {#if error}
     <p role="alert" class="error">{error}</p>
   {/if}
 
   {#if loaded && issues.length === 0}
-    <EmptyState title="No issues in this view" hint="Add an issue, or change the view's filter." />
+    <EmptyState title="No issues in this view" hint="Add an issue, or change the view's filter.">
+      {#snippet action()}<CommandButton command="issue.create" variant="primary" />{/snippet}
+    </EmptyState>
   {:else if !loaded}
     <div class="loading" aria-busy="true">
       {#each [0, 1, 2, 3] as n (n)}<Skeleton height="var(--row-h)" />{/each}
     </div>
   {:else}
+    <IssueMenu>
     <table role="grid" class:grouped>
       <colgroup>
         <col class="key-col" />
@@ -402,12 +418,14 @@
         <tr>
           <th scope="col" class="key-head">Key</th>
           {#each cols as col (col.id)}
-            <th scope="col" data-col={col.id} aria-sort={sort?.col === col.id ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+            <th scope="col" data-col={col.id} class:num={col.kind === 'Number'} aria-sort={sort?.col === col.id ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
               <span class="head">
                 <Button variant="quiet" icon={sort?.col === col.id ? (sort.dir === 'asc' ? 'chevron-up' : 'chevron-down') : undefined} onclick={() => cycleSort(col.id)}>{col.label}</Button>
+                <span class="tools">
                 <span class="flip"><IconButton icon="chevron-right" label="Move {col.label} left" onclick={() => moveColumn(col.index, -1)} /></span>
                 <IconButton icon="chevron-right" label="Move {col.label} right" onclick={() => moveColumn(col.index, 1)} />
                 <IconButton icon="close" label="Remove column {col.label}" onclick={() => removeColumn(col.index)} />
+                </span>
               </span>
               <span class="grip" role="separator" aria-orientation="vertical" aria-label="Resize {col.label}" onpointerdown={(e) => startResize(e, col.id)}></span>
             </th>
@@ -419,13 +437,15 @@
           {#if grouped}
             <tr class="band-row">
               <td colspan={cols.length + 1}>
-                <GroupHeader name={g.name || 'None'} count={g.rows.length} category={g.category} collapsed={collapsed.has(g.name)} ontoggle={() => toggleGroup(g.name)} />
+                <GroupHeader name={g.name || 'None'} count={g.rows.length} category={g.status ? g.category : undefined} tone={g.priority ? (Math.min(4, Math.max(1, g.priority)) as 1 | 2 | 3 | 4) : 1} collapsed={collapsed.has(g.name)} ontoggle={() => toggleGroup(g.name)}>
+                  {#snippet leading()}{#if g.priority !== undefined}<PriorityGlyph level={glyphLevel(g.priority)} />{/if}{/snippet}
+                </GroupHeader>
               </td>
             </tr>
           {/if}
           {#if !collapsed.has(g.name)}
             {#each g.rows as issue (issue.id)}
-              <tr data-key={issue.key} aria-selected={rowSelected(issue)} data-focused={issue.id === activeRowId ? '' : undefined}>
+              <tr data-key={issue.key} data-id={issue.id} aria-selected={rowSelected(issue)} data-focused={issue.id === activeRowId ? '' : undefined}>
                 <th scope="row" class="key-cell">{issue.key}</th>
                 {#each cols as col, c (col.id)}
                   {@const isEditing = editing !== null && visibleIds[editing.row] === issue.id && editing.col === c}
@@ -467,6 +487,14 @@
                         <PriorityGlyph level={glyphLevel(issue.priority)} size={14} label={PRIORITY[issue.priority]} />
                         {show(raw(issue, col.ref), col.kind)}
                       </span>
+                    {:else if col.kind === 'Project'}
+                      {@const p = projects.find((x) => x.id === issue.project_id)}
+                      {#if p}<span class="status"><EntityIcon icon={p.icon ?? 'icon:project'} color={p.color} size={14} />{p.name}</span>{/if}
+                    {:else if col.kind === 'Labels'}
+                      {#each issue.label_ids as id (id)}{@const l = labels.find((x) => x.id === id)}{#if l}<Pill color={l.color}>{l.name}</Pill>{/if}{/each}
+                    {:else if col.ref.Fixed === 'DueDate'}
+                      {@const d = dueDay(issue, tz)}
+                      <span class="due" data-overdue={isOverdue(issue, statuses.find((s) => s.id === issue.status_id)?.category, tz) ? '' : undefined}>{d ? dayText(d) : ''}</span>
                     {:else}
                       {show(raw(issue, col.ref), col.kind)}
                     {/if}
@@ -478,23 +506,27 @@
         </tbody>
       {/each}
     </table>
+    </IssueMenu>
   {/if}
 </section>
 
 <style>
   .table-view {
     display: grid;
-    gap: var(--s-7);
-    padding: var(--s-8);
+    gap: var(--s-4);
+    padding: 0;
     min-width: 0;
     background: var(--sheet);
     color: var(--ink);
     font-size: var(--fs-md);
   }
+  .toolbar { display: flex; justify-content: flex-end; padding: var(--s-3) var(--s-7) 0; }
   .add {
     display: inline-flex;
     width: 180px;
   }
+  .due[data-overdue] { color: var(--signal); font-weight: 700; }
+  th.num { text-align: end; }
   .loading {
     display: grid;
     gap: var(--s-3);
@@ -516,9 +548,10 @@
     z-index: var(--z-sticky);
     height: var(--row-h);
     padding: 0 var(--s-5);
-    background: var(--frame);
-    color: var(--frame-ink);
-    font-size: var(--fs-sm);
+    background: var(--sheet);
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    font-size: var(--fs-xs);
     font-weight: 600;
     text-align: start;
     white-space: nowrap;
@@ -544,7 +577,10 @@
     left: 0;
     z-index: calc(var(--z-sticky) + 1);
   }
+  .tools { display: inline-flex; opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+  th:hover .tools, th:focus-within .tools { opacity: 1; }
   td {
+    vertical-align: middle;
     height: var(--row-h);
     padding: 0 var(--s-5);
     border-bottom: 1px solid var(--border);

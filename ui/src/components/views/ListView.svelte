@@ -1,7 +1,6 @@
 <script lang="ts">
   import { api } from '../../lib/api';
   import type { Cycle, Issue, IssuePatch, Label, Project, SavedView, Status, StatusCategory } from '../../lib/bindings';
-  import { listCommands, type Command } from '../../lib/commands';
   import { listState } from '../../lib/listState.svelte';
   import { selection } from '../../lib/selection.svelte';
   import { navigate } from '../../app/routes';
@@ -9,6 +8,8 @@
   import EmptyState from '../../ui/EmptyState.svelte';
   import EntityIcon from '../../ui/EntityIcon.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
+  import CommandButton from '../CommandButton.svelte';
+  import IssueMenu from './IssueMenu.svelte';
   import Menu from '../../ui/Menu.svelte';
   import MenuItem from '../../ui/MenuItem.svelte';
   import Pill from '../../ui/Pill.svelte';
@@ -16,6 +17,7 @@
   import Skeleton from '../../ui/Skeleton.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import TextInput from '../../ui/TextInput.svelte';
+  import { workspaceZone, dayText, dueDay as dueDayIn, isOverdue } from './dates';
 
   // shortcut: row and band heights default to the token values when the CSS is not loaded (tests), upgrade if rows vary in height
   const ROW = 32;
@@ -30,7 +32,7 @@
   let { view }: { view: SavedView } = $props();
 
   const storeKey = (id: number) => `cairn.list.collapsed.${id}`;
-  type Group = { key: string; name: string; category: StatusCategory; order: number; patch: IssuePatch; rows: Issue[] };
+  type Group = { key: string; kind: 'status' | 'project' | 'cycle' | 'priority' | 'label' | 'none'; ref?: Project | Cycle | Label; name: string; category: StatusCategory; order: number; patch: IssuePatch; rows: Issue[] };
   type Item = { head: Group; collapsed: boolean } | { row: Issue };
 
   let issues = $state.raw<Issue[]>([]);
@@ -44,7 +46,8 @@
   let scrollTop = $state(0);
   let height = $state(0);
   let scroller = $state<HTMLElement>();
-  let menu = $state<{ kind: 'status' | 'context'; id: number; x: number; y: number } | null>(null);
+  let tz = $state('UTC');
+  let menu = $state<{ id: number; x: number; y: number } | null>(null);
   let menuOpen = $state(false);
   let draft = $state('');
 
@@ -65,9 +68,10 @@
   }
 
   async function load() {
-    const [st, pr, cy, lb, rows] = await Promise.all([
-      api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.views.query(view.def),
+    const [st, pr, cy, lb, rows, ws] = await Promise.all([
+      api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.views.query(view.def), workspaceZone(),
     ]);
+    tz = ws;
     statuses = st;
     projects = pr;
     cycles = cy;
@@ -93,19 +97,19 @@
       return { name: x ? name(x) : none, order: x ? list.indexOf(x) : Infinity };
     };
     for (const i of issues) {
-      const base = { category: 'Unstarted' as StatusCategory, patch: {} };
+      const base = { category: 'Unstarted' as StatusCategory, patch: {}, kind: 'none' as Group['kind'] };
       if (groupField === 'Status') {
         const s = statuses.find((x) => x.id === i.status_id);
-        put(i, { key: `s${s?.id ?? 'x'}`, name: s?.name ?? 'Unknown', category: s?.category ?? 'Backlog', order: s?.position ?? Infinity, patch: s ? { status_id: s.id } : {} });
+        put(i, { kind: 'status', key: `s${s?.id ?? 'x'}`, name: s?.name ?? 'Unknown', category: s?.category ?? 'Backlog', order: s?.position ?? Infinity, patch: s ? { status_id: s.id } : {} });
       } else if (groupField === 'Project') {
-        put(i, { key: `p${i.project_id}`, ...base, ...named(projects, i.project_id, 'No project', (p) => p.name), patch: { project_id: i.project_id } });
+        put(i, { key: `p${i.project_id}`, ...base, kind: 'project', ref: projects.find((p) => p.id === i.project_id), ...named(projects, i.project_id, 'No project', (p) => p.name), patch: { project_id: i.project_id } });
       } else if (groupField === 'Cycle') {
-        put(i, { key: `c${i.cycle_id}`, ...base, ...named(cycles, i.cycle_id, 'No cycle', (c) => c.name ?? `Cycle ${c.number}`), patch: { cycle_id: i.cycle_id } });
+        put(i, { key: `c${i.cycle_id}`, ...base, kind: 'cycle', ...named(cycles, i.cycle_id, 'No cycle', (c) => c.name ?? `Cycle ${c.number}`), patch: { cycle_id: i.cycle_id } });
       } else if (groupField === 'Priority') {
-        put(i, { key: `r${i.priority}`, ...base, name: i.priority === 0 ? PRIORITY_NAMES[0] : PRIORITY_NAMES[glyph(i.priority)], order: i.priority === 0 ? 9 : i.priority, patch: { priority: i.priority } });
+        put(i, { key: `r${i.priority}`, ...base, kind: 'priority', name: i.priority === 0 ? PRIORITY_NAMES[0] : PRIORITY_NAMES[glyph(i.priority)], order: i.priority === 0 ? 9 : i.priority, patch: { priority: i.priority } });
       } else if (groupField === 'Label') {
         for (const id of i.label_ids.length ? i.label_ids : [null])
-          put(i, { key: `l${id}`, ...base, ...named(labels, id, 'No label', (l) => l.name), patch: { label_ids: id === null ? [] : [id] } });
+          put(i, { key: `l${id}`, ...base, kind: 'label', ref: labels.find((l) => l.id === id), ...named(labels, id, 'No label', (l) => l.name), patch: { label_ids: id === null ? [] : [id] } });
       } else {
         put(i, { key: 'all', ...base, name: '', order: 0 });
       }
@@ -131,9 +135,12 @@
   const visibleRows = $derived(items.flatMap((it) => ('row' in it ? [it.row] : [])));
   // Published for the movement commands: the rows the user can see, in order.
   $effect(() => {
-    listState.ids = visibleRows.map((r) => r.id);
+    const ids = visibleRows.map((r) => r.id);
+    listState.ids = ids;
+    selection.setColumns([ids]);
     return () => {
       listState.ids = [];
+      selection.setColumns([]);
     };
   });
 
@@ -159,14 +166,8 @@
   });
 
   const statusOf = (i: Issue) => statuses.find((s) => s.id === i.status_id);
-  const today = new Date().toISOString().slice(0, 10);
-  const dueDay = (i: Issue) => i.due?.Date ?? i.due?.DateTime?.utc.slice(0, 10) ?? null;
-  const dueText = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-  const overdue = (i: Issue) => {
-    const d = dueDay(i);
-    const cat = statusOf(i)?.category;
-    return d !== null && d < today && cat !== 'Completed' && cat !== 'Canceled';
-  };
+  const dueDay = (i: Issue) => dueDayIn(i, tz);
+  const overdue = (i: Issue) => isOverdue(i, statusOf(i)?.category, tz);
   const estimate = (m: number | null) => (m === null ? '' : m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`);
   const labelsOf = (i: Issue) => i.label_ids.flatMap((id) => labels.find((l) => l.id === id) ?? []);
   const projectOf = (i: Issue) => projects.find((p) => p.id === i.project_id);
@@ -209,14 +210,22 @@
     el?.select();
   }
 
-  function openMenu(kind: 'status' | 'context', id: number, x: number, y: number) {
-    menu = { kind, id, x, y };
+  function openMenu(id: number, x: number, y: number) {
+    menu = { id, x, y };
     menuOpen = true;
   }
-  const ctx = (id: number) => ({ route: location.pathname, selection: selection.selected, focusedIssueId: id, openIssueId: null, api, navigate });
-  const commandsFor = (id: number): Command[] => listCommands(ctx(id)).filter((c) => c.run);
 </script>
 
+{#snippet lead(g: Group)}
+  {#if g.kind === 'priority'}
+    <PriorityGlyph level={g.rows[0] ? glyph(g.rows[0].priority) : 0} />
+  {:else if g.kind === 'project' || g.kind === 'label'}
+    {@const r = g.ref as Project | Label | undefined}
+    <EntityIcon icon={(r as Project | undefined)?.icon ?? (g.kind === 'label' ? 'icon:tag' : 'icon:project')} color={r?.color} size={14} />
+  {:else}
+    <EntityIcon icon="icon:cycle" size={14} />
+  {/if}
+{/snippet}
 {#snippet anchor(props: Record<string, unknown>)}
   <span {...props} class="anchor" style:left="{menu?.x ?? 0}px" style:top="{menu?.y ?? 0}px" aria-hidden="true"></span>
 {/snippet}
@@ -226,8 +235,11 @@
     {#each [0, 1, 2, 3, 4, 5, 6, 7] as k (k)}<Skeleton height="var(--s-7)" width={`${90 - k * 4}%`} />{/each}
   </div>
 {:else if issues.length === 0}
-  <div class="empty"><EmptyState title="No issues in this view" hint="Issues that match this view will show up here." /></div>
+  <div class="empty"><EmptyState title="No issues in this view" hint="Issues that match this view will show up here.">
+      {#snippet action()}<CommandButton command="issue.create" variant="primary" />{/snippet}
+    </EmptyState></div>
 {:else}
+  <IssueMenu>
   <div class="scroller" role="presentation" bind:this={scroller} onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}>
     <ul class="list" role="list" aria-label={view.name} style:height="{total}px">
       {#each slice as { item, top } (top)}
@@ -236,11 +248,14 @@
             <GroupHeader
               name={item.head.name}
               count={item.head.rows.length}
-              category={item.head.category}
+              category={item.head.kind === 'status' ? item.head.category : undefined}
+              tone={item.head.kind === 'priority' ? (Math.min(4, Math.max(1, item.head.order)) as 1 | 2 | 3 | 4) : 1}
               collapsed={item.collapsed}
               ontoggle={() => toggleGroup(item.head.key)}
               onadd={() => add(item.head)}
-            />
+            >
+              {#snippet leading()}{@render lead(item.head)}{/snippet}
+            </GroupHeader>
           </li>
         {:else}
           {@const i = item.row}
@@ -249,16 +264,12 @@
           <li
             class="row"
             data-key={i.key}
+            data-id={i.id}
             data-selected={chosen ? '' : undefined}
             aria-current={selection.focused === i.id ? 'true' : undefined}
             style:top="{top}px"
             onclick={(e) => pick(e, i.id)}
             ondblclick={() => navigate(`/issue/${i.key}`)}
-            oncontextmenu={(e) => {
-              e.preventDefault();
-              selection.focus(i.id);
-              openMenu('context', i.id, e.clientX, e.clientY);
-            }}
             onmouseenter={() => (hovered = i.id)}
             onmouseleave={() => (hovered = null)}
           >
@@ -277,7 +288,7 @@
                 e.stopPropagation();
                 selection.focus(i.id);
                 const r = e.currentTarget.getBoundingClientRect();
-                openMenu('status', i.id, r.left, r.bottom);
+                openMenu(i.id, r.left, r.bottom);
               }}
             >
               <StatusGlyph category={st?.category ?? 'Backlog'} label={st?.name ?? 'Unknown'} />
@@ -298,24 +309,19 @@
             <span class="project">
               {#if projectOf(i)}{@const p = projectOf(i)!}<EntityIcon icon={p.icon ?? 'icon:project'} color={p.color} size={14} /><span class="pname">{p.name}</span>{/if}
             </span>
-            <span class="due" data-overdue={overdue(i) ? '' : undefined}>{dueDay(i) ? dueText(dueDay(i)!) : ''}</span>
+            <span class="due" data-overdue={overdue(i) ? '' : undefined}>{dueDay(i) ? dayText(dueDay(i)!) : ''}</span>
             <span class="est">{estimate(i.estimate_minutes)}</span>
           </li>
         {/if}
       {/each}
     </ul>
   </div>
+  </IssueMenu>
 
   <Menu trigger={anchor} bind:open={menuOpen}>
-    {#if menu?.kind === 'status'}
-      {#each statuses as s (s.id)}
-        <MenuItem label={s.name} icon={s.id === issues.find((x) => x.id === menu?.id)?.status_id ? 'check' : undefined} onSelect={() => patch(menu!.id, { status_id: s.id })} />
-      {/each}
-    {:else if menu}
-      {#each commandsFor(menu.id) as c (c.id)}
-        <MenuItem label={c.label} icon={c.icon} shortcut={c.shortcut} onSelect={() => c.run!(ctx(menu!.id))} />
-      {/each}
-    {/if}
+    {#each statuses as s (s.id)}
+      <MenuItem label={s.name} icon={s.id === issues.find((x) => x.id === menu?.id)?.status_id ? 'check' : undefined} onSelect={() => patch(menu!.id, { status_id: s.id })} />
+    {/each}
   </Menu>
 {/if}
 

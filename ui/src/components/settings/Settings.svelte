@@ -6,19 +6,19 @@
   import Cycles from './Cycles.svelte';
   import Export from './Export.svelte';
   import General from './General.svelte';
+  import ImportPage from '../import/ImportPage.svelte';
   import Labels from './Labels.svelte';
   import Projects from './Projects.svelte';
   import Properties from './Properties.svelte';
   import Reminders from './Reminders.svelte';
   import Statuses from './Statuses.svelte';
   import Templates from './Templates.svelte';
-  import Button from '../../ui/Button.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
   import Icon from '../../ui/Icon.svelte';
   import PageHeader from '../../ui/PageHeader.svelte';
 
-  // Import has no screen yet: it stays in the list and gets the designed empty state.
-  const sections: { id: string; label: string; icon: string; screen?: Component }[] = [
+  // Keyboard shortcuts is not a page: its entry opens the cheat sheet command instead.
+  const sections: { id: string; label: string; icon: string; screen?: Component; action?: string }[] = [
     { id: 'general', label: 'General', icon: 'settings', screen: General },
     { id: 'statuses', label: 'Statuses', icon: 'circle', screen: Statuses },
     { id: 'labels', label: 'Labels', icon: 'tag', screen: Labels },
@@ -26,11 +26,12 @@
     { id: 'cycles', label: 'Cycles', icon: 'cycle', screen: Cycles },
     { id: 'properties', label: 'Properties', icon: 'layers', screen: Properties },
     { id: 'templates', label: 'Templates', icon: 'bookmark', screen: Templates },
-    { id: 'import', label: 'Import', icon: 'arrow-down' },
+    { id: 'import', label: 'Import', icon: 'arrow-down', screen: ImportPage },
     { id: 'reminders', label: 'Reminders', icon: 'bell', screen: Reminders },
     { id: 'calendar', label: 'Calendar', icon: 'calendar', screen: Calendar },
     { id: 'export', label: 'Export', icon: 'download', screen: Export },
     { id: 'backups', label: 'Backups', icon: 'archive', screen: Backups },
+    { id: 'shortcuts', label: 'Keyboard shortcuts', icon: 'help', action: 'command:help.shortcuts' },
   ];
 
   let path = $state(location.pathname);
@@ -42,19 +43,22 @@
 
 <PageHeader title="Settings" icon="icon:settings" />
 <div class="settings">
-  <nav aria-label="Settings sections" data-on-frame>
+  <nav aria-label="Settings sections">
     <ul>
       {#each sections as s (s.id)}
         <li>
           <a
-            href={`/settings/${s.id}`}
+            href={s.action ? '#shortcuts' : `/settings/${s.id}`}
             aria-current={s.id === id ? 'page' : undefined}
-            onclick={(e) => { e.preventDefault(); navigate(`/settings/${s.id}`); }}
+            onclick={(e) => {
+              e.preventDefault();
+              if (s.action) dispatchEvent(new CustomEvent(s.action));
+              else navigate(`/settings/${s.id}`);
+            }}
           ><Icon name={s.icon} />{s.label}</a>
         </li>
       {/each}
     </ul>
-    <Button variant="quiet" icon="help" onclick={() => dispatchEvent(new CustomEvent('command:help.shortcuts'))}>Keyboard shortcuts</Button>
   </nav>
   <section class="pane">
     {#if current?.screen}
@@ -69,12 +73,13 @@
 <style>
   .settings { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); flex: 1; min-height: 0; }
   nav {
-    background: var(--frame);
-    color: var(--frame-ink);
+    background: var(--raised);
+    color: var(--ink);
     padding: var(--s-7) var(--s-5);
     display: flex;
     flex-direction: column;
     gap: var(--s-6);
+    border-right: 1px solid var(--border);
   }
   nav ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-1); }
   nav a {
@@ -85,13 +90,13 @@
     height: var(--row-h);
     padding: 0 var(--s-6);
     border-radius: var(--r-ctl);
-    color: var(--frame-muted);
+    color: var(--muted);
     font-weight: 500;
     text-decoration: none;
     transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
   }
-  nav a:hover { color: var(--frame-ink); background: var(--frame-raised); }
-  nav a[aria-current='page'] { color: var(--frame-ink); background: var(--frame-raised); font-weight: 700; }
+  nav a:hover { color: var(--ink); background: var(--selection); }
+  nav a[aria-current='page'] { color: var(--ink); background: var(--active); font-weight: 700; }
   nav a[aria-current='page']::before {
     content: '';
     position: absolute;

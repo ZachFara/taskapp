@@ -26,9 +26,9 @@
   );
 </script>
 
-<Dialog bind:open title="Keyboard shortcuts">
+<Dialog bind:open title="Keyboard shortcuts" size="lg">
+  <TextInput bind:value={query} label="Filter shortcuts" placeholder="Filter shortcuts" type="search" />
   <div class="sheet">
-    <TextInput bind:value={query} label="Filter shortcuts" placeholder="Filter shortcuts" type="search" />
     {#each sections as s (s.group)}
       <section>
         <h3>{s.group}</h3>
@@ -54,7 +54,7 @@
 </Dialog>
 
 <style>
-  .sheet { display: grid; gap: var(--s-5); columns: 2; column-gap: var(--s-6); }
+  .sheet { columns: 3; column-gap: var(--s-7); margin-top: var(--s-5); }
   .sheet > :global(*) { break-inside: avoid; }
   section { display: grid; gap: var(--s-2); margin-bottom: var(--s-5); }
   h3 {

@@ -131,14 +131,19 @@ describe('QuickAdd', () => {
     expect(input().value).toBe('#quickadd-proj ');
   });
 
-  it('quickadd_status_prefill_sets_status_after_create', async () => {
+  it('quickadd_status_prefill_is_one_create_call_with_the_status_and_one_undo_step', async () => {
     const status = (await api.statuses.list())[1];
     await unmount(app!);
     document.body.innerHTML = '';
     await open({ status_id: status.id });
     const update = vi.spyOn(api.issues, 'update');
-    await type('Draft');
+    const create = vi.spyOn(api.issues, 'create');
+    const undo = vi.spyOn(api.history, 'undo');
+    await type('Draft p2');
     await enter();
-    expect(update).toHaveBeenCalledWith(expect.any(Number), { status_id: status.id });
+    expect(update).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ title: 'Draft', status_id: status.id, priority: 2 }));
+    await oncreated.mock.calls[0][0].undo();
+    expect(undo).toHaveBeenCalledTimes(1);
   });
 });

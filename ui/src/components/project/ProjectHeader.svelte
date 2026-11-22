@@ -6,7 +6,9 @@
   import EntityIcon from '../../ui/EntityIcon.svelte';
   import IconButton from '../../ui/IconButton.svelte';
   import TextArea from '../../ui/TextArea.svelte';
+  import Popover from '../../ui/Popover.svelte';
   import TextInput from '../../ui/TextInput.svelte';
+  import { humanDate } from '../detail/format';
 
   let { project, progress, renaming = $bindable(false), onsaved }: {
     project: Project;
@@ -34,6 +36,7 @@
     editingDesc = false;
     onsaved(await api.projects.update({ ...project, description: desc.trim() || null }));
   }
+  let openDate = $state<string | null>(null);
   async function saveDate(field: 'start_date' | 'target_date', value: string) {
     onsaved(await api.projects.update({ ...project, [field]: value || null }));
   }
@@ -77,14 +80,23 @@
     </div>
     <div>
       <dt>Start</dt>
-      <dd><TextInput label="Start date" type="date" value={project.start_date ?? ''} oninput={(e) => saveDate('start_date', (e.currentTarget as HTMLInputElement).value)} /></dd>
+      <dd>{@render dateField('start_date', 'Start date', 'Set start')}</dd>
     </div>
     <div>
       <dt>Target</dt>
-      <dd><TextInput label="Target date" type="date" value={project.target_date ?? ''} oninput={(e) => saveDate('target_date', (e.currentTarget as HTMLInputElement).value)} /></dd>
+      <dd>{@render dateField('target_date', 'Target date', 'Set target')}</dd>
     </div>
   </dl>
 </div>
+
+{#snippet dateField(field: 'start_date' | 'target_date', label: string, empty: string)}
+  <Popover bind:open={() => openDate === field, (v) => (openDate = v ? field : null)}>
+    {#snippet trigger(props)}
+      <button {...props} type="button" class="date" class:unset={!project[field]} aria-label={label}>{humanDate(project[field], new Date(), empty)}</button>
+    {/snippet}
+    <TextInput label="{label} value" type="date" value={project[field] ?? ''} oninput={(e) => saveDate(field, (e.currentTarget as HTMLInputElement).value)} />
+  </Popover>
+{/snippet}
 
 <style>
   .hero { position: relative; display: flex; gap: var(--s-9); align-items: flex-start; justify-content: space-between; padding: var(--s-8) var(--s-7); border-bottom: 1px solid var(--border); background: var(--band-1); overflow: hidden; }
@@ -98,6 +110,9 @@
   .facts { position: relative; display: grid; gap: var(--s-5); min-width: 220px; margin: 0; }
   dt { font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--band-count); margin-bottom: var(--s-2); }
   dd { margin: 0; }
+  .date { height: var(--ctl-h); padding: 0 var(--s-5); border: 1px solid var(--control); border-radius: var(--r-ctl); background: var(--sheet); color: var(--ink); font-weight: 600; }
+  .date.unset { color: var(--muted); font-weight: 400; }
+  .date:hover { border-color: var(--muted); }
   .progress dd { display: grid; gap: var(--s-3); }
   .fig { font-size: var(--fs-title); font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
   .bar { display: block; height: 6px; border-radius: var(--r-round); background: var(--band-3); overflow: hidden; }
