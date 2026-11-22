@@ -41,3 +41,6 @@
 /ui/src/**/*.svelte
 /ui/harness/*.ts
 /README.md
+/ui/src/**/*.css
+/ui/src/styles/fonts/*.woff2
+/ui/src/styles/fonts/OFL.txt

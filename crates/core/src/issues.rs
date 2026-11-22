@@ -200,13 +200,34 @@ async fn record_created(tx: &mut SqliteConnection, src: ChangeSource, issue: &Is
         Value::from(issue.title.as_str()),
         Value::from(issue.key.as_str()),
     );
-    for (field, v) in [("title", &title), ("key", &key)] {
+    // What the new issue points at is recorded too, so undoing the create lets those rows be deleted, and a
+    // redo links them again. The key comes last: undo archives first, redo restores last.
+    let refs = [
+        ("project_id", issue.project_id.map(|p| p.0)),
+        ("milestone_id", issue.milestone_id.map(|m| m.0)),
+        ("cycle_id", issue.cycle_id.map(|c| c.0)),
+    ]
+    .into_iter()
+    .map(|(f, v)| (f, v.map(Value::from)))
+    .chain(
+        issue
+            .label_ids
+            .iter()
+            .map(|l| ("label", Some(Value::from(l.0)))),
+    );
+    let fields = [("title", Some(title))]
+        .into_iter()
+        .chain(refs)
+        .chain([("key", Some(key))]);
+    for (field, v) in fields {
         let edit = history::Edit {
             field,
             old: None,
-            new: Some(v),
+            new: v.as_ref(),
         };
-        history::record(tx, src, "issue", &id, &edit).await?;
+        if v.is_some() {
+            history::record(tx, src, "issue", &id, &edit).await?;
+        }
     }
     search::reindex_in(tx, issue.id).await
 }

@@ -19,6 +19,7 @@ pub mod projects;
 pub mod properties;
 pub mod quickadd;
 pub mod relations;
+pub mod rows;
 pub mod schedule;
 pub mod search;
 pub mod settings;
