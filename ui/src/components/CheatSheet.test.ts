@@ -39,13 +39,13 @@ describe('CheatSheet', () => {
     await open();
     const row = rowFor('Cheat probe alpha');
     expect(row).toBeTruthy();
-    expect([...row!.querySelectorAll('kbd')].map((k) => k.textContent)).toEqual(['g', 'x']);
+    expect([...row!.querySelectorAll('kbd')].map((k) => k.textContent)).toEqual(['G', 'X']);
   });
 
   it('renders_a_repeated_key_in_a_sequence_without_breaking_the_dialog', async () => {
     await open();
     const row = rowFor('Cheat probe beta');
-    expect([...row!.querySelectorAll('kbd')].map((k) => k.textContent)).toEqual(['g', 'g']);
+    expect([...row!.querySelectorAll('kbd')].map((k) => k.textContent)).toEqual(['G', 'G']);
   });
 
   it('lists_every_registered_command_with_a_shortcut', async () => {

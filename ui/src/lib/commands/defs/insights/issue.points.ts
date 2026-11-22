@@ -1,12 +1,19 @@
-import { readEstimation, pointsOn, SCALES } from '../../../../components/insights/estimation';
+import { readEstimation, pointsOn, SCALES, type Estimation } from '../../../../components/insights/estimation';
 import type { IssuePatch } from '../../../bindings';
 import { defineCommand } from '../../registry';
 import { apply, patchOf } from '../issue/_issue';
 
 const set = (ctx: Parameters<typeof apply>[0], points: number | null) => apply(ctx, patchOf({ points } as IssuePatch));
 
+// `when` is synchronous, so the setting is cached and re-read after every write (a settings change is one).
+let estimation: Estimation = 'both';
+const refresh = () => void readEstimation().then((r) => (estimation = r.estimation));
+refresh();
+addEventListener('history:wrote', refresh);
+
 defineCommand({
   id: 'issue.points', label: 'Set points', icon: 'bolt', group: 'Issue', shortcut: 'shift+e',
+  when: () => pointsOn(estimation),
   page: (ctx) => ({
     title: 'Points',
     // A typed number to one decimal; `none` clears.

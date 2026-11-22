@@ -61,6 +61,7 @@ defineCommand({
 
 beforeEach(async () => {
   setApi(createMockApi());
+  localStorage.clear();
   await refreshAll();
   onclose.mockClear(); oncreate.mockClear(); ran.mockClear(); picked.mockClear();
   checked.clear();
@@ -87,7 +88,7 @@ describe('CommandPalette', () => {
     await type('zebra plain');
     expect(document.querySelector('[role=listbox]')).not.toBeNull();
     expect(rows()[0]).toContain('Zebra plain');
-    expect(document.querySelector('[role=option] kbd')?.textContent).toBe('alt+z');
+    expect(document.querySelector('[role=option] kbd')?.textContent).toBe('⌥Z');
   });
 
   it('issue_actions_show_under_a_selection_header', async () => {
@@ -159,6 +160,28 @@ describe('CommandPalette', () => {
     press('Enter');
     await settle();
     expect(location.pathname).toBe(`/issue/${i.key}`);
+  });
+
+  it('recents_list_the_last_issue_and_command_and_survive_a_reload', async () => {
+    const i = await api.issues.create({ title: 'Quokka recents' });
+    await type('quokka');
+    press('Enter');
+    await settle();
+    await type('zebra plain');
+    press('Enter');
+    await settle();
+    expect(localStorage.getItem('cairn.recent')).toContain(i.key);
+    // A reload: new palette, no in-memory state.
+    unmount(app!);
+    document.body.innerHTML = '';
+    delete (globalThis as { __cairnRecent?: unknown }).__cairnRecent;
+    app = mount(CommandPalette, { target: document.body, props: { onclose, oncreate } });
+    await settle();
+    const group = document.querySelector('[role=group][aria-label=Recent]');
+    expect(group, 'no Recent group').not.toBeNull();
+    expect(group!.textContent).toContain(i.key);
+    expect(group!.textContent).toContain('Zebra plain');
+    expect(group!.querySelector('[role=option]')!.textContent).toContain('Zebra plain');
   });
 
   it('multi_pick_page_stays_open_and_shows_checkmarks', async () => {

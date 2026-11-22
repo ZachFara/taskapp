@@ -243,4 +243,29 @@ describe('walk', { timeout: 20_000 }, () => {
     await panel.getByRole('button', { name: 'Close insights' }).click();
     await pw(panel).toBeHidden();
   });
+
+  it('FX2 the cheat sheet fits the window, scrolls inside, and shows keys as glyphs', async () => {
+    await open('/view/1', { width: 1024, height: 768 });
+    await press('?');
+    const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    await pw(dialog).toBeVisible();
+    const box = (await dialog.boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(768);
+    const scroll = dialog.locator('.scroll');
+    expect(await scroll.evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true);
+    await scroll.evaluate((e) => e.scrollTo(0, e.scrollHeight));
+    await pw(dialog.getByRole('searchbox', { name: 'Filter shortcuts' })).toBeInViewport();
+    const text = (await dialog.textContent())!;
+    expect(text).toContain('⌘');
+    expect(text).not.toMatch(/mod\+|arrowdown|escape/);
+  });
+
+  it('FX2 shortcuts do not fire behind an open menu', async () => {
+    await open();
+    await page.getByRole('button', { name: 'Add filter' }).click();
+    await pw(page.getByRole('menu')).toBeVisible();
+    await press('s');
+    await page.waitForTimeout(300);
+    await pw(palette()).toBeHidden();
+  });
 });

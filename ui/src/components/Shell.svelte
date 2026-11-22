@@ -9,6 +9,7 @@
   import Icon from '../ui/Icon.svelte';
   import CommandButton from './CommandButton.svelte';
   import Kbd from '../ui/Kbd.svelte';
+  import Tooltip from '../ui/Tooltip.svelte';
 
   // The frame: sidebar and top bar are one field, the page is a sheet set into it, the issue panel docks inside the sheet.
   let {
@@ -38,10 +39,9 @@
     [['issue.status'], 'status'],
     [['palette.open'], 'commands'],
   ];
-  const keyName = (s: string) => (s.startsWith('mod+') ? `⌘${s.slice(4).toUpperCase()}` : s === 'enter' ? '↵' : s === 'escape' ? 'Esc' : s);
   const hints = $derived(
     legend
-      .map(([ids, text]) => ({ text, keys: ids.map((id) => shortcutFor(id)).filter((k): k is string => !!k).map(keyName) }))
+      .map(([ids, text]) => ({ text, keys: ids.map((id) => shortcutFor(id)).filter((k): k is string => !!k) }))
       .filter((h) => h.keys.length),
   );
 
@@ -75,11 +75,15 @@
         {#if i === crumb.length - 1}<b aria-current="page">{part}</b>{:else}<span>{part}</span>{/if}
       {/each}
     </nav>
-    <button class="search" type="button" aria-label="Search or run a command" onclick={() => onsearch?.()}>
-      <Icon name="search" />
-      <span>Search or run a command</span>
-      <span data-kbd-inherit><Kbd keys="⌘K" /></span>
-    </button>
+    <Tooltip label="Search or run a command" shortcut={shortcutFor('palette.open')}>
+      {#snippet children(props)}
+        <button {...props} class="search" type="button" aria-label="Search or run a command" onclick={() => onsearch?.()}>
+          <Icon name="search" />
+          <span>Search or run a command</span>
+          <span data-kbd-inherit><Kbd keys={shortcutFor('palette.open') ?? 'mod+k'} /></span>
+        </button>
+      {/snippet}
+    </Tooltip>
     <div class="tools">
       <CommandButton command="help.shortcuts" iconOnly />
       <CommandButton command="theme.cycle" iconOnly />
@@ -104,7 +108,9 @@
     </div>
     {#if panelOpen}
       <aside class="panel" style:--panel-w={width === null ? null : `${width}px`}>
-        <button class="grip" type="button" aria-label="Resize panel" onpointerdown={resize}></button>
+        <Tooltip label="Resize panel">
+          {#snippet children(props)}<button {...props} class="grip" type="button" aria-label="Resize panel" onpointerdown={resize}></button>{/snippet}
+        </Tooltip>
         <div class="contour" aria-hidden="true"><Contour rings={11} size={380} /></div>
         <div class="body">{@render panel?.()}</div>
       </aside>

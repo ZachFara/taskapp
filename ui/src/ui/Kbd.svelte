@@ -1,6 +1,9 @@
 <script lang="ts">
+  import { keycaps } from '../lib/commands/glyphs';
+
+  // Takes registry key syntax or text that is already a glyph; every screen shows keys through here.
   let { keys }: { keys: string | string[] } = $props();
-  const list = $derived(Array.isArray(keys) ? keys : [keys]);
+  const list = $derived(keycaps(keys));
 </script>
 
 {#each list as k, i (i)}<kbd class="kbd">{k}</kbd>{/each}

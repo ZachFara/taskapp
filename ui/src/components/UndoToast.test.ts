@@ -4,7 +4,8 @@ import { setApi } from '../lib/api';
 import { createMockApi } from '../lib/api.mock';
 import { attachKeys, type Ctx } from '../lib/commands';
 import UndoToast from './UndoToast.svelte';
-import { stepLabel } from './undoState.svelte';
+import { ICONS } from '../ui/icons';
+import { dismiss, stepLabel } from './undoState.svelte';
 
 // Microtasks only: fake timers would stall a setTimeout-based wait.
 const settle = async () => {
@@ -34,6 +35,7 @@ beforeEach(async () => {
   setApi(api);
   ctx = { route: '/', selection: [], focusedIssueId: null, openIssueId: null, api, navigate: () => {} };
   detach = attachKeys(() => ctx);
+  dismiss();
   app = mount(UndoToast, { target: document.body });
   await settle();
 });
@@ -89,7 +91,34 @@ describe('UndoToast', () => {
     const { undo } = await api.history.undoStatus();
     expect(undo).toBeTruthy();
     expect(toast()?.textContent).toContain(stepLabel(undo!));
-    expect(toast()?.textContent).toContain('Undo (cmd+Z)');
+    expect(toastButton('Undo')?.textContent).not.toMatch(/cmd/i);
+    expect(toastButton('Undo')?.querySelector('kbd')?.textContent).toBe('⌘Z');
+  });
+
+  it('shows a prose step label from the backend as it is', async () => {
+    vi.spyOn(api.history, 'undoStatus').mockResolvedValue({ undo: 'Set status to Done on 3 issues', redo: null });
+    window.dispatchEvent(new Event('history:wrote'));
+    await settle();
+    expect(toast()?.textContent).toContain('Set status to Done on 3 issues');
+  });
+
+  it('does not use the bell for a step or an undo', async () => {
+    await write();
+    const probe = document.createElement('svg');
+    probe.innerHTML = ICONS.bell; // the browser's own serialisation, so the comparison is exact
+    const bell = probe.innerHTML;
+    expect(bell).not.toBe('');
+    expect(toast()?.querySelector('.lead')?.innerHTML).not.toContain(bell);
+    toastButton('Undo')!.click();
+    await settle();
+    expect(toast()?.querySelector('.lead')?.innerHTML).not.toContain(bell);
+  });
+
+  it('a display-only view change raises no toast', async () => {
+    vi.spyOn(api.history, 'undoStatus').mockResolvedValue({ undo: 'views_save', redo: null });
+    window.dispatchEvent(new Event('history:wrote'));
+    await settle();
+    expect(toast()).toBeNull();
   });
 
   it('hides itself after 6 seconds', async () => {

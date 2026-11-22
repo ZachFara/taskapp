@@ -81,6 +81,12 @@ describe('typed dates and estimates', () => {
     expect(bulk).toHaveBeenLastCalledWith([1, 2], expect.objectContaining({ patch: { estimate_minutes: null } }));
     expect(page('issue.estimate').parse!('lots')).toBeNull();
   });
+
+  it('a bare number is hours', async () => {
+    expect(page('issue.estimate').parse!('5')!.label).toBe('Set the estimate to 5h');
+    await page('issue.estimate').parse!('2.5')!.run();
+    expect(bulk).toHaveBeenLastCalledWith([1, 2], expect.objectContaining({ patch: { estimate_minutes: 150 } }));
+  });
 });
 
 describe('issue commands', () => {

@@ -44,7 +44,7 @@ describe('CommandButton', () => {
     await settle();
     const tip = document.querySelector('.cx-tip');
     expect(tip?.textContent).toContain('Ping test');
-    expect([...tip!.querySelectorAll('kbd')].map((k) => k.textContent)).toEqual(['alt+p']);
+    expect([...tip!.querySelectorAll('kbd')].map((k) => k.textContent)).toEqual(['⌥P']);
   });
 
   it('click_runs_the_command', async () => {

@@ -26,6 +26,9 @@ export * from './registry';
 import { createKeys } from './keys';
 import { inScope, keysOf, listCommands, rankOf, type Command, type Ctx } from './registry';
 
+/** bits-ui menus, selects and popovers all carry cx-surface while open. */
+const OPEN_LAYER = '[role=dialog], [role=menu], .cx-surface';
+
 /** A key on a command that only has a page opens the command menu at that page. */
 const open = (c: Command, ctx: Ctx, count: number) =>
   c.run ? c.run(ctx, count) : dispatchEvent(new CustomEvent('command:palette.open', { detail: { page: c.id } }));
@@ -47,8 +50,8 @@ export function attachKeys(ctx: () => Ctx) {
           }
         },
         run: (count: number) => {
-          // An open dialog owns the plain keys; only `global` combos such as mod+k reach through it.
-          if (!c.global && document.querySelector('[role=dialog]')) return;
+          // An open dialog, menu, select or popover owns the plain keys; only `global` combos such as mod+k reach through.
+          if (!c.global && document.querySelector(OPEN_LAYER)) return;
           void open(c, ctx(), count);
         },
       })),
