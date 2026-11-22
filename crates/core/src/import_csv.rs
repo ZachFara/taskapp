@@ -158,7 +158,7 @@ fn infer(name: &str, values: &[&str]) -> PropertyDef {
             .iter()
             .map(|v| SelectOption {
                 value: (*v).to_owned(),
-                color: "#95a2b3".into(),
+                color: super::plan::COLOR.into(),
             })
             .collect();
         (PropertyKind::Select, options)

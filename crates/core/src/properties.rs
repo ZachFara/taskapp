@@ -3,10 +3,10 @@ use serde_json::{Map, Value, json};
 use sqlx::{Row, SqliteConnection, sqlite::SqliteRow};
 
 use crate::{
-    ChangeSource, Db, Error, FieldRef, Filter, Issue, IssueId, ProjectId, PropertyDef,
-    PropertyKind, Result, SelectOption, ViewDef,
+    ChangeSource, Db, Error, Issue, IssueId, ProjectId, PropertyDef, PropertyKind, Result,
+    SelectOption, ViewDef,
     history::{self, Edit},
-    issues, rows,
+    issues, rows, views,
 };
 
 fn enc<T: serde::Serialize>(v: &T) -> Result<String> {
@@ -411,60 +411,34 @@ pub async fn change_kind(
     Ok(new)
 }
 
-fn strip_filter(f: Filter, key: &str) -> Option<Filter> {
-    match f {
-        Filter::Cond {
-            field: FieldRef::Property(ref k),
-            ..
-        } if k == key => None,
-        Filter::And(v) => Some(
-            v.into_iter()
-                .filter_map(|f| strip_filter(f, key))
-                .collect::<Vec<_>>(),
-        )
-        .filter(|v| !v.is_empty())
-        .map(Filter::And),
-        Filter::Or(v) => Some(
-            v.into_iter()
-                .filter_map(|f| strip_filter(f, key))
-                .collect::<Vec<_>>(),
-        )
-        .filter(|v| !v.is_empty())
-        .map(Filter::Or),
-        Filter::Not(b) => strip_filter(*b, key).map(|f| Filter::Not(Box::new(f))),
-        other @ Filter::Cond { .. } => Some(other),
-    }
-}
-
-fn is_key(f: &FieldRef, key: &str) -> bool {
-    matches!(f, FieldRef::Property(k) if k == key)
-}
-
-/// Removes the property from every saved view's filter, sorts, columns and grouping. Returns the views as they were.
-async fn strip_from_views(tx: &mut SqliteConnection, key: &str) -> Result<rows::Snap> {
-    let views = sqlx::query("SELECT id, definition FROM views")
-        .fetch_all(&mut *tx)
-        .await?;
-    let views_before = rows::all(tx, "views").await?;
-
-    for r in views {
-        let mut def: ViewDef = dec(r.get("definition"))?;
-        let before = def.clone();
-        def.filter = def.filter.and_then(|f| strip_filter(f, key));
-        def.sorts.retain(|s| !is_key(&s.field, key));
-        def.columns.retain(|c| !is_key(c, key));
-        if def.group_by.as_ref().is_some_and(|g| is_key(g, key)) {
-            def.group_by = None;
-        }
-        if def != before {
-            sqlx::query("UPDATE views SET definition = ? WHERE id = ?")
-                .bind(enc(&def)?)
-                .bind(r.get::<i64, _>("id"))
-                .execute(&mut *tx)
-                .await?;
+/// Removes the property from every saved view and view template: filter, sorts, columns, card fields, grouping.
+/// Returns both tables as they were.
+async fn strip_from_views(
+    tx: &mut SqliteConnection,
+    key: &str,
+) -> Result<(rows::Snap, rows::Snap)> {
+    let before = (
+        rows::all(tx, "views").await?,
+        rows::all(tx, "view_templates").await?,
+    );
+    for (table, col) in [("views", "definition"), ("view_templates", "definition")] {
+        let all = sqlx::query(&format!("SELECT id, {col} FROM {table}"))
+            .fetch_all(&mut *tx)
+            .await?;
+        for r in all {
+            let mut def: ViewDef = dec(r.get(col))?;
+            let old = def.clone();
+            views::scrub(&mut def, &|k| k == key);
+            if def != old {
+                sqlx::query(&format!("UPDATE {table} SET {col} = ? WHERE id = ?"))
+                    .bind(enc(&def)?)
+                    .bind(r.get::<i64, _>("id"))
+                    .execute(&mut *tx)
+                    .await?;
+            }
         }
     }
-    Ok(views_before)
+    Ok(before)
 }
 
 /// Removes the definition, every issue's value, and every saved-view reference to it.
@@ -496,8 +470,9 @@ pub async fn delete_def(db: &Db, key: &str, src: ChangeSource) -> Result<()> {
         };
         history::record(&mut tx, src, "issue", &id.to_string(), &edit).await?;
     }
-    let views_before = strip_from_views(&mut tx, key).await?;
+    let (views_before, templates_before) = strip_from_views(&mut tx, key).await?;
     rows::changed(&mut tx, src, views_before).await?;
+    rows::changed(&mut tx, src, templates_before).await?;
     let def_before = rows::by_key(&mut tx, "property_defs", key).await?;
     sqlx::query("DELETE FROM property_defs WHERE key = ?")
         .bind(key)

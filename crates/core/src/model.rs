@@ -113,7 +113,7 @@ pub struct Issue {
 
 /// Everything but `title` is optional; `created_at` and `completed_at` exist for migrations.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, specta::Type)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct NewIssue {
     pub title: String,
     pub description: Option<String>,
@@ -135,7 +135,7 @@ pub struct NewIssue {
 
 /// `None` leaves a field alone; for nullable fields `Some(None)` clears it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, specta::Type)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct IssuePatch {
     pub title: Option<String>,
     pub description: Option<String>,

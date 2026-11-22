@@ -66,9 +66,6 @@ impl Ctx<'_> {
             .iter()
             .find(|d| &d.key == key)
             .ok_or_else(|| Error::Invalid("unknown property".into()))?;
-        if key.contains('"') {
-            return Err(Error::Invalid("invalid property key".into()));
-        }
         Ok(Col {
             sql: "json_extract(issues.properties, ?)".into(),
             bind: Some(Value::String(format!("$.\"{key}\""))),
@@ -272,13 +269,49 @@ fn archived(op: Op, value: &Value) -> Result<String> {
     ))
 }
 
+fn strip_filter(f: Filter, gone: &dyn Fn(&str) -> bool) -> Option<Filter> {
+    let list = |v: Vec<Filter>| {
+        Some(
+            v.into_iter()
+                .filter_map(|f| strip_filter(f, gone))
+                .collect::<Vec<_>>(),
+        )
+        .filter(|v| !v.is_empty())
+    };
+    match f {
+        Filter::Cond {
+            field: FieldRef::Property(ref k),
+            ..
+        } if gone(k) => None,
+        Filter::And(v) => list(v).map(Filter::And),
+        Filter::Or(v) => list(v).map(Filter::Or),
+        Filter::Not(b) => strip_filter(*b, gone).map(|f| Filter::Not(Box::new(f))),
+        other @ Filter::Cond { .. } => Some(other),
+    }
+}
+
+/// Removes every reference to the properties `gone` names: filter conditions, sorts, columns, card fields, grouping.
+pub(crate) fn scrub(def: &mut ViewDef, gone: &dyn Fn(&str) -> bool) {
+    let hit = |f: &FieldRef| matches!(f, FieldRef::Property(k) if gone(k));
+    def.filter = def.filter.take().and_then(|f| strip_filter(f, gone));
+    def.sorts.retain(|s| !hit(&s.field));
+    def.columns.retain(|c| !hit(c));
+    def.card_fields.retain(|c| !hit(c));
+    if def.group_by.as_ref().is_some_and(hit) {
+        def.group_by = None;
+    }
+}
+
 /// Compiles a view definition to SQL plus bind values. Property keys are checked against `defs` and
 /// only ever travel as bind values.
 ///
 /// # Errors
 ///
-/// Fails with `Invalid` on an unknown property, a bad operator or value, or a filter nested too deeply.
+/// Fails with `Invalid` on a bad operator or value, or a filter nested too deeply.
 pub fn compile(def: &ViewDef, defs: &[PropertyDef]) -> Result<(String, Vec<Value>)> {
+    // A reference to a property that no longer exists is dropped, not an error: the view would stay broken.
+    let mut def = def.clone();
+    scrub(&mut def, &|k| !defs.iter().any(|d| d.key == k));
     let mut ctx = Ctx {
         defs,
         binds: vec![],
