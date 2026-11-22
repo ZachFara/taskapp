@@ -107,6 +107,10 @@ jobs:
         with: { node-version: 22, cache: pnpm, cache-dependency-path: ui/pnpm-lock.yaml }
       - run: pnpm -C ui install --frozen-lockfile
       - run: pnpm -C ui build
+      # the contract tests run the mock against a real devserver
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p taskapp-devserver
       - run: pnpm -C ui test
 
   test-swift:
