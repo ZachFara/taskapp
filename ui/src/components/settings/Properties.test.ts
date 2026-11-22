@@ -1,18 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import Properties from './Properties.svelte';
-import { clickLabel, field, mountSettings, press, setField } from './testing';
+import { clickLabel, field, mountSettings, pick, press, setField } from './testing';
 
 async function add(target: Element, key: string, kind = 'Text') {
   await setField(target, 'New property name', key.toUpperCase());
   await setField(target, 'New property key', key);
   if (kind !== 'Text') {
-    await clickLabel('New property kind');
-    await clickLabel(`Kind ${kind}`);
+    await pick(target, 'New property kind', kind);
   }
   await press(target, 'Add property');
 }
 
 describe('Properties', () => {
+  it('kind and scope are Select pickers with a chevron, not bare buttons', async () => {
+    const { target } = await mountSettings(Properties);
+    expect(field(target, 'New property kind').classList.contains('cx-select')).toBe(true);
+    expect(field(target, 'New property scope').classList.contains('cx-select')).toBe(true);
+  });
+
   it('adds a property once', async () => {
     const { target, calls } = await mountSettings(Properties);
     await add(target, 'wobble');
@@ -41,8 +46,7 @@ describe('Properties', () => {
     };
     const { target } = await mountSettings(Properties, { properties: { changeKind: conflict } });
     await add(target, 'wobble');
-    await clickLabel('Kind of WOBBLE');
-    await clickLabel('Kind Number');
+    await pick(target, 'Kind of WOBBLE', 'Number');
     expect(target.querySelector('[role="alert"]')?.textContent).toContain('ABC-1, ABC-4');
   });
 
@@ -69,8 +73,7 @@ describe('Properties', () => {
     const { target, calls, api } = await mountSettings(Properties);
     await add(target, 'wobble');
     const project = (await api.projects.list())[0];
-    await clickLabel('Scope of WOBBLE');
-    await clickLabel(`Scope ${project.name}`);
+    await pick(target, 'Scope of WOBBLE', project.name);
     expect(calls.filter((c) => c === 'properties.setScope')).toHaveLength(1);
     expect((await api.properties.listDefs()).find((d) => d.key === 'wobble')?.project_id).toBe(project.id);
   });

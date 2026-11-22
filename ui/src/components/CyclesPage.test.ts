@@ -38,6 +38,15 @@ const button = (root: ParentNode, text: string) => [...root.querySelectorAll<HTM
 const group = (t: HTMLElement, name: string) => t.querySelector<HTMLElement>(`[data-group="${name}"]`);
 
 describe('CyclesPage', () => {
+  it('group headers carry a cycle icon, never a status glyph', async () => {
+    const target = await open(createMockApi({ ...fixtures, cycles }));
+    for (const band of ['current', 'upcoming', 'past']) {
+      const header = group(target, band)!;
+      expect(header.querySelector('[data-category]'), band).toBeNull();
+      expect(header.querySelector('[data-icon="cycle"]'), band).not.toBeNull();
+    }
+  });
+
   it('cycles_grouped_current_upcoming_past', async () => {
     const target = await open(createMockApi({ ...fixtures, cycles }));
     expect(group(target, 'current')?.textContent).toContain('Cycle 2');
@@ -79,5 +88,16 @@ describe('CyclesPage', () => {
   it('empty_cycles_shows_designed_empty_state', async () => {
     const target = await open(createMockApi({ ...fixtures, cycles: [] }));
     expect(target.textContent).toContain('No cycles yet');
+  });
+
+  it('the command menu opens the move and new-cycle dialogs', async () => {
+    const target = await open(createMockApi(fixtures));
+    window.dispatchEvent(new CustomEvent('command:cycle.move_unfinished'));
+    flushSync();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Move unfinished issues');
+    window.dispatchEvent(new CustomEvent('command:cycle.new'));
+    flushSync();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('New cycle');
+    expect(target).toBeTruthy();
   });
 });
