@@ -290,8 +290,7 @@ async fn token_never_in_debug_or_errors() {
     let leaky = json!({"errors": [{"message": "bad key lin_api_SECRET123"}]});
     let err = linear::response_data(&leaky, &token)
         .err()
-        .map(|e| e.to_string())
-        .unwrap_or_default();
+        .map_or_else(String::new, |e| e.to_string());
     assert!(err.contains("bad key"));
     assert!(!err.contains("SECRET123"));
     let client = linear::CurlLinear::new(token);
