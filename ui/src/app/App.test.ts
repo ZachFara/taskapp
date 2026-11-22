@@ -116,7 +116,7 @@ describe('keys and overlays', () => {
     await open('/my');
     press('c');
     await settle();
-    expect(q('[role=dialog][aria-label="Quick add"]')).not.toBeNull();
+    expect(q('[role=dialog]')!.textContent).toContain('New issue');
   });
 
   it('g_m_navigates_through_the_registry', async () => {
@@ -207,17 +207,16 @@ describe('views inside the frame', () => {
     expect(q<HTMLInputElement>('aside.panel [aria-label=Title]')!.value).toBe('Row probe');
   });
 
-  it('edit_view_opens_the_editor_and_save_refreshes_the_sidebar', async () => {
+  it('rename_view_saves_and_refreshes_the_sidebar', async () => {
     await withView();
-    [...document.querySelectorAll('button')].find((b) => b.textContent === 'Edit view')!.click();
+    q<HTMLButtonElement>('button[aria-label="Rename view"]')!.click();
     await settle();
-    const name = q<HTMLInputElement>('[aria-label=Name]')!;
+    const name = q<HTMLInputElement>('[aria-label="View name"]')!;
     name.value = 'Renamed';
     name.dispatchEvent(new Event('input', { bubbles: true }));
-    [...document.querySelectorAll('button')].find((b) => b.textContent === 'Save')!.click();
+    name.form!.requestSubmit();
     await settle();
     expect(q('aside.sidebar')!.textContent).toContain('Renamed');
-    expect(q('[aria-label=Name]')).toBeNull();
   });
 });
 
