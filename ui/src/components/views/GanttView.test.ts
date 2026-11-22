@@ -87,7 +87,7 @@ describe('GanttView', () => {
     const width = () => parseFloat(document.querySelector<HTMLElement>('.canvas')!.style.width);
     const widths: number[] = [];
     for (const z of ['Day', 'Week', 'Month', 'Quarter']) {
-      ([...document.querySelectorAll('header [role=tab]')].find((b) => b.textContent?.trim() === z) as HTMLElement).focus();
+      ([...document.querySelectorAll('[role=tab]')].find((b) => b.textContent?.trim() === z) as HTMLElement).focus();
       flushSync();
       expect(document.querySelector('.gantt')!.getAttribute('data-zoom')).toBe(z);
       widths.push(width());
@@ -98,7 +98,7 @@ describe('GanttView', () => {
 
   it('multi_project_timeline_groups_by_project', async () => {
     await show([dated(1, '2026-12-01', '2026-12-03'), dated(2, '2026-12-05', '2026-12-07', { project_id: 2 })]);
-    const labels = [...document.querySelectorAll('.label.group .text')].map((l) => l.textContent);
+    const labels = [...document.querySelectorAll('.label[data-kind="group"] .text')].map((l) => l.textContent);
     expect(labels).toEqual([fixtures.projects[0].name, fixtures.projects[1].name]);
     expect(bar('group-1')).not.toBeNull();
     expect(bar('group-2')).not.toBeNull();
@@ -115,7 +115,7 @@ describe('GanttView', () => {
   it('empty_view_shows_empty_state_and_unscheduled_lane', async () => {
     await show([issue(9, { estimate_minutes: 480 })]);
     expect(document.querySelector('.empty')?.textContent).toContain('Nothing scheduled');
-    expect(document.querySelector('.lane')?.textContent).toContain('ABC-9');
+    expect(document.querySelector('.todo')?.textContent).toContain('ABC-9');
   });
 
   it('parent_without_dated_children_has_no_rollup_bar', async () => {
@@ -217,5 +217,36 @@ describe('GanttView', () => {
     await show([dated(1, '2026-12-01', '2026-12-03')]);
     const want = (await api.statuses.list()).find((s) => s.id === fixtures.issues[0].status_id)!.category;
     expect(bar('issue-1').getAttribute('data-category')).toBe(want);
+  });
+
+  it('every_issue_has_a_row_in_the_left_pane', async () => {
+    await show([dated(1, '2026-12-01', '2026-12-03'), issue(2), issue(3, { estimate_minutes: 60 })]);
+    const keys = [...document.querySelectorAll('.label .k')].map((k) => k.textContent);
+    expect(keys).toEqual(['ABC-1', 'ABC-2', 'ABC-3']);
+    expect(document.querySelector('.band.unscheduled')?.textContent).toContain('Unscheduled');
+    expect(document.querySelector('[data-issue="2"]')?.textContent).toContain('drag to schedule');
+  });
+
+  it('a_bar_sits_in_the_same_line_as_its_label', async () => {
+    await show([dated(1, '2026-12-01', '2026-12-03'), dated(2, '2026-12-05', '2026-12-07', { project_id: 2 })]);
+    const lines = [...document.querySelectorAll('.line')];
+    for (const b of document.querySelectorAll('[data-row]')) {
+      const line = b.closest('.line')!;
+      expect(line.querySelector(`.label[data-label="${b.getAttribute('data-row')}"]`)).not.toBeNull();
+      expect(lines.indexOf(line)).toBeGreaterThanOrEqual(0);
+    }
+    expect(document.querySelectorAll('.label').length).toBe(lines.length);
+    // a line must never pick up the bar styles
+    expect(document.querySelector('.line.bar, .line.rollup, .line.milestone, .label.bar')).toBeNull();
+  });
+
+  it('embedded_has_no_title_and_standalone_has_one', async () => {
+    await show([dated(1, '2026-12-01', '2026-12-03')]);
+    expect(document.querySelector('h1')).toBeNull();
+    expect(document.querySelector('[role=tab]')).not.toBeNull();
+    unmount(view!);
+    document.body.innerHTML = '';
+    await show([], { mode: 'projects', view: undefined });
+    expect(document.querySelector('h1')?.textContent).toContain('Project timeline');
   });
 });

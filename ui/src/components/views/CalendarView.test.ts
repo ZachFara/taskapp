@@ -96,6 +96,7 @@ describe('CalendarView', () => {
   });
 
   it('week_shows_timed_due_markers', async () => {
+    localStorage.setItem('cairn.calendar.mode', 'week');
     render(CalendarView, { props: { view } });
     await waitFor(() => expect(stub().options).toBeDefined());
     expect(stub().options.view).toBe('timeGridWeek');
@@ -176,13 +177,24 @@ describe('CalendarView', () => {
   it('week_month_switch_persists', async () => {
     const first = render(CalendarView, { props: { view } });
     await waitFor(() => expect(stub().options).toBeDefined());
-    expect(stub().options.view).toBe('timeGridWeek');
-    window.dispatchEvent(new CustomEvent('command:calendar.month'));
-    await waitFor(() => expect(stub().setOption).toHaveBeenCalledWith('view', 'dayGridMonth'));
+    expect(stub().options.view).toBe('dayGridMonth');
+    window.dispatchEvent(new CustomEvent('command:calendar.week'));
+    await waitFor(() => expect(stub().setOption).toHaveBeenCalledWith('view', 'timeGridWeek'));
     first.unmount();
     render(CalendarView, { props: { view } });
     await waitFor(() => expect(stub().options).toBeDefined());
+    expect(stub().options.view).toBe('timeGridWeek');
+  });
+
+  it('opens_in_month_scrolls_week_to_eight_and_names_days_short', async () => {
+    const { container } = render(CalendarView, { props: { view } });
+    await waitFor(() => expect(stub().options).toBeDefined());
     expect(stub().options.view).toBe('dayGridMonth');
+    expect(stub().options.scrollTime).toBe('08:00:00');
+    // pinned to en-US so the header reads "Sun 22" whatever the machine locale
+    expect(stub().options.views.timeGridWeek.dayHeaderFormat(new Date(2026, 10, 22))).toBe('Sun 22');
+    expect(stub().options.views.dayGridMonth.dayHeaderFormat(new Date(2026, 10, 22))).toBe('Sun');
+    expect(container.querySelector('h1')).toBeNull();
   });
 
   it('next_command_moves_the_date', async () => {

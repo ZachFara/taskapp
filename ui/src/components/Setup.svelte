@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { navigate } from '../app/routes';
   import { api } from '../lib/api';
+  import { setTheme } from '../lib/theme.svelte';
   import Button from '../ui/Button.svelte';
   import Contour from '../ui/Contour.svelte';
   import Select from '../ui/Select.svelte';
@@ -19,6 +21,7 @@
   let tried = $state(false);
   let busy = $state(false);
   let failed = $state(false);
+  let created = $state(false);
 
   const keyOk = $derived(/^[A-Z]{2,5}$/.test(key));
   const nameOk = $derived(name.trim() !== '');
@@ -26,7 +29,7 @@
     !keyOk ? 'Use 2 to 5 letters for the key.' : tried && !nameOk ? 'Name the workspace.' : failed ? 'Could not create the workspace. Try again.' : '',
   );
 
-  // The attribute is the theme switch the tokens already read; nothing is persisted yet.
+  // The attribute previews the choice; it is saved only once the workspace exists.
   $effect(() => {
     const el = document.documentElement;
     if (theme === 'system') el.removeAttribute('data-theme');
@@ -41,7 +44,10 @@
     failed = false;
     try {
       await api.workspace.setup(name.trim(), key, timezone);
-      ondone();
+      // The workspace exists already; a theme that fails to save falls back to the local cache.
+      await api.settings.set('theme', theme).catch(() => {});
+      setTheme(theme, false);
+      created = true;
     } catch {
       failed = true;
     } finally {
@@ -67,6 +73,16 @@
     <p class="preview" aria-label="Issue numbering preview">{key || 'ABC'}-1</p>
   </section>
 
+  {#if created}
+    <section class="card next" aria-label="Next step">
+      <h2>Workspace ready</h2>
+      <p class="note">Start with an empty workspace, or bring your tasks in from a CSV file.</p>
+      <div class="actions">
+        <Button variant="quiet" onclick={() => ondone()}>Start empty</Button>
+        <Button variant="primary" onclick={() => { navigate('/settings/import'); ondone(); }}>Import from CSV</Button>
+      </div>
+    </section>
+  {:else}
   <form class="card" onsubmit={create} novalidate>
     <h2>Create your workspace</h2>
 
@@ -109,6 +125,7 @@
       <Button variant="primary" type="submit" disabled={busy}>Create workspace</Button>
     </div>
   </form>
+  {/if}
 </div>
 
 <style>
@@ -158,7 +175,9 @@
   .row { display: grid; gap: var(--s-3); }
   .row > span { color: var(--muted); font-size: var(--fs-sm); font-weight: 500; }
   .error { color: var(--signal); font-size: var(--fs-sm); }
-  .actions { display: flex; justify-content: flex-end; }
+  .actions { display: flex; justify-content: flex-end; gap: var(--s-4); flex-wrap: wrap; }
+  .next { align-content: start; }
+  .note { color: var(--muted); line-height: var(--lh-body); }
 
   @media (max-width: 760px) {
     .setup { grid-template-columns: 1fr; padding: var(--s-7); }

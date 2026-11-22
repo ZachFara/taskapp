@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../lib/api';
-  import type { FieldRef, Issue, Layout, Milestone, Project, ResolvedPin, Status } from '../lib/bindings';
+  import type { Issue, Layout, Milestone, Project, ResolvedPin, Status, ViewDef } from '../lib/bindings';
   import { navigate } from '../app/routes';
   import { openExternal } from '../lib/openExternal';
   import Button from '../ui/Button.svelte';
@@ -8,9 +8,9 @@
   import EmptyState from '../ui/EmptyState.svelte';
   import IconButton from '../ui/IconButton.svelte';
   import PageHeader from '../ui/PageHeader.svelte';
-  import Select from '../ui/Select.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
   import Tabs from '../ui/Tabs.svelte';
+  import ViewEditor from './ViewEditor.svelte';
   import ProjectHeader from './project/ProjectHeader.svelte';
   import ProjectIssues from './project/ProjectIssues.svelte';
   import Milestones from './project/Milestones.svelte';
@@ -26,12 +26,12 @@
   let statuses = $state<Status[]>([]);
   let pins = $state<ResolvedPin[]>([]);
   let layout = $state<Layout>('List');
-  let group = $state('none');
+  // raw: ViewEditor and the views clone it.
+  let def = $state.raw<ViewDef>({ filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false });
   let renaming = $state(false);
   let confirming = $state(false);
 
   const pinned = $derived(pins.find((p) => p.pin.kind === 'Project' && p.pin.target === slug));
-  const groupBy = $derived<FieldRef | null>(group === 'none' ? null : { Fixed: group as 'Status' | 'Priority' });
   // Only Obsidian and https links get a button; anything else (javascript:, http:, file:) is dropped.
   const docHref = $derived(project?.doc_link && /^(obsidian|https):\/\//i.test(project.doc_link) ? project.doc_link : null);
   const layouts = [
@@ -90,6 +90,8 @@
   });
 </script>
 
+{#snippet crumb()}<span class="crumb">Projects <span aria-hidden="true">/</span> {project?.slug}</span>{/snippet}
+
 {#if project === undefined}
   <div class="load" aria-busy="true"><Skeleton /><Skeleton /><Skeleton /></div>
 {:else if project === null}
@@ -98,8 +100,7 @@
   </EmptyState>
 {:else}
   <div class="page">
-    <PageHeader title={project.name} icon={project.icon ?? 'icon:project'} color={project.color}>
-      {#snippet tabs()}<Tabs tabs={layouts} bind:value={layout as string} label="Layout" />{/snippet}
+    <PageHeader title={crumb} icon={project.icon ?? 'icon:project'} color={project.color}>
       {#snippet actions()}
         {#if docHref}
           <Button icon="link" tooltip={{ label: 'Open the project doc' }} onclick={() => openExternal(docHref)}><span data-testid="open-obsidian">Open doc</span></Button>
@@ -108,13 +109,6 @@
         <IconButton icon="pin" label={pinned ? 'Unpin project' : 'Pin project'} pressed={pinned !== undefined} onclick={togglePin} />
         <IconButton icon="archive" label="Archive project" onclick={() => (confirming = true)} />
       {/snippet}
-      {#snippet filters()}
-        <Select
-          bind:value={group}
-          label="Group by"
-          items={[{ value: 'none', label: 'No grouping' }, { value: 'Status', label: 'Group by status' }, { value: 'Priority', label: 'Group by priority' }]}
-        />
-      {/snippet}
     </PageHeader>
 
     <div class="scroll">
@@ -122,7 +116,11 @@
       <div class="ms">
         <Milestones projectId={project.id} {milestones} issues={rows} {statuses} onchange={() => reload(slug)} />
       </div>
-      <div class="issues"><ProjectIssues projectId={project.id} {layout} {groupBy} /></div>
+      <div class="toolbar" data-testid="issues-toolbar">
+        <Tabs tabs={layouts} bind:value={layout as string} label="Layout" />
+        <ViewEditor {def} onchange={(p) => (def = { ...def, ...p })} />
+      </div>
+      <div class="issues"><ProjectIssues projectId={project.id} {layout} {def} /></div>
     </div>
   </div>
 
@@ -138,6 +136,8 @@
   .page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
   .scroll { flex: 1; min-height: 0; overflow-y: auto; }
   .ms { padding: var(--s-7); }
-  .issues { height: 70vh; border-top: 1px solid var(--border); }
+  .toolbar { display: flex; align-items: center; gap: var(--s-7); flex-wrap: wrap; padding: 0 var(--s-7); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .crumb { font-size: var(--fs-lg); font-weight: 600; color: var(--muted); }
+  .issues { height: 70vh; }
   .load { display: grid; gap: var(--s-5); padding: var(--s-8) var(--s-7); }
 </style>

@@ -76,6 +76,8 @@
 
 <script module lang="ts">
   const label = (c: Cycle) => c.name ?? `${c.start_date} to ${c.end_date}`;
+  // A view without its own icon shows its layout; the stored icon wins when set.
+  const LAYOUT_ICON: Record<string, string> = { List: 'list', Board: 'board', Table: 'table', Gantt: 'timeline', Calendar: 'calendar' };
 </script>
 
 {#snippet head(id: string, title: string, count: number)}
@@ -121,7 +123,7 @@
         {#each views as v (v.id)}
           {@const href = `/view/${v.id}`}
           <li class="row" {...drag(v.id)} ondrop={() => dropView(v.id)}>
-            <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><EntityIcon icon={v.icon ?? 'list'} color={v.color} /><span class="t">{v.name}</span></a>
+            <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><EntityIcon icon={v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`} color={v.color} /><span class="t">{v.name}</span></a>
             {@render pinBtn('View', String(v.id), v.name)}
           </li>
         {/each}
@@ -137,7 +139,7 @@
         {#each projects as p (p.id)}
           {@const href = `/project/${p.slug}`}
           <li class="row">
-            <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><EntityIcon icon="project" /><span class="t">{p.name}</span></a>
+            <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><EntityIcon icon={p.icon ?? 'icon:project'} color={p.color} /><span class="t">{p.name}</span></a>
             {@render pinBtn('Project', p.slug, p.name)}
           </li>
         {/each}

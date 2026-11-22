@@ -9,7 +9,6 @@
   import EmptyState from '../../ui/EmptyState.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
   import IconButton from '../../ui/IconButton.svelte';
-  import PageHeader from '../../ui/PageHeader.svelte';
   import Skeleton from '../../ui/Skeleton.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import Tabs from '../../ui/Tabs.svelte';
@@ -19,12 +18,12 @@
   const HOUR = 60 * 60_000;
   const MODE_KEY = 'cairn.calendar.mode';
   const viewOf = (m: string) => (m === 'month' ? 'dayGridMonth' : 'timeGridWeek');
-  // shortcut: no storage in a private window, the mode falls back to week
+  // shortcut: no storage in a private window, the mode falls back to month
   const readMode = () => {
     try {
-      return localStorage.getItem(MODE_KEY) === 'month' ? 'month' : 'week';
+      return localStorage.getItem(MODE_KEY) === 'week' ? 'week' : 'month';
     } catch {
-      return 'week';
+      return 'month';
     }
   };
 
@@ -258,6 +257,12 @@
   const options = {
     view: viewOf(mode),
     timeZone: 'local',
+    scrollTime: '08:00:00',
+    // A month header names only the weekday; a week header adds the date.
+    views: {
+      dayGridMonth: { dayHeaderFormat: (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short' }) },
+      timeGridWeek: { dayHeaderFormat: (d: Date) => `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${d.getDate()}` },
+    },
     headerToolbar: false,
     editable: true,
     eventStartEditable: true,
@@ -288,17 +293,14 @@
 <svelte:window onkeydown={onKeydown} />
 
 <div class="calendar">
-  <PageHeader title={view.name}>
-    {#snippet tabs()}
-      <Tabs bind:value={mode} tabs={modes} label="Calendar range" />
-    {/snippet}
-    {#snippet actions()}
-      <IconButton icon="chevron-left" label={labelFor('calendar.prev') ?? 'Previous'} shortcut={shortcutFor('calendar.prev')} onclick={() => fire('calendar.prev')} />
-      <Button variant="quiet" tooltip={{ label: labelFor('calendar.today') ?? 'Today', shortcut: shortcutFor('calendar.today') }} onclick={() => fire('calendar.today')}>Today</Button>
-      <IconButton icon="chevron-right" label={labelFor('calendar.next') ?? 'Next'} shortcut={shortcutFor('calendar.next')} onclick={() => fire('calendar.next')} />
-      <span class="range" aria-live="polite">{range}</span>
-    {/snippet}
-  </PageHeader>
+  <div class="toolbar">
+    <Tabs bind:value={mode} tabs={modes} label="Calendar range" />
+    <span class="range" aria-live="polite">{range}</span>
+    <div class="grow"></div>
+    <IconButton icon="chevron-left" label={labelFor('calendar.prev') ?? 'Previous'} shortcut={shortcutFor('calendar.prev')} onclick={() => fire('calendar.prev')} />
+    <Button variant="quiet" tooltip={{ label: labelFor('calendar.today') ?? 'Today', shortcut: shortcutFor('calendar.today') }} onclick={() => fire('calendar.today')}>Today</Button>
+    <IconButton icon="chevron-right" label={labelFor('calendar.next') ?? 'Next'} shortcut={shortcutFor('calendar.next')} onclick={() => fire('calendar.next')} />
+  </div>
 
   <div class="body">
     <div class="grid" data-calendar ondragover={(e) => e.preventDefault()} ondrop={onDrop} role="presentation">
@@ -339,26 +341,37 @@
 
 <style>
   .calendar { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-  .range { font-size: var(--fs-lg); font-weight: 700; letter-spacing: -0.01em; min-width: 12ch; padding: 0 var(--s-6); }
-  .body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) var(--sidebar-w); gap: var(--s-7); padding: 0 var(--s-7) var(--s-7); }
+  .toolbar { flex: none; height: var(--topbar-h); display: flex; align-items: center; gap: var(--s-4); padding: 0 var(--s-7); }
+  .grow { flex: 1; }
+  .range { font-size: var(--fs-lg); font-weight: 700; letter-spacing: -0.01em; padding: 0 var(--s-6); }
+  .body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) calc(var(--sidebar-w) + var(--s-9)); border-top: 1px solid var(--border); }
   .grid {
     min-width: 0;
     min-height: 0;
+    padding: var(--s-6) var(--s-7);
     font-family: var(--font);
     font-size: var(--fs-md);
     color: var(--ink);
+  }
+  /* The library sets its variables and its font on .ec itself, so they are overridden there. */
+  .grid :global(.ec) {
     --ec-bg-color: var(--sheet);
     --ec-day-bg-color: var(--sheet);
     --ec-border-color: var(--border);
     --ec-text-color: var(--ink);
-    --ec-today-bg-color: var(--selection);
+    --ec-today-bg-color: transparent;
     --ec-highlight-color: var(--selection);
     --ec-popup-bg-color: var(--raised);
     --ec-now-indicator-color: var(--signal);
     --ec-event-bg-color: var(--card);
     --ec-event-text-color: var(--ink);
+    font-family: inherit;
+    font-size: inherit;
+    border: 0;
   }
-  .grid :global(.ec-today .ec-day-head) { color: var(--signal); font-weight: 700; }
+  .grid :global(.ec-day-head) { color: var(--muted); font-size: var(--fs-sm); font-weight: 600; }
+  .grid :global(.ec-today .ec-day-head) { color: var(--ink); font-weight: 700; background: color-mix(in srgb, var(--signal) 14%, transparent); box-shadow: inset 0 var(--s-1) 0 var(--signal); }
+  .grid :global(.ec-today .ec-day-num), .grid :global(.ec-today .ec-day-head) { color: var(--signal); }
   .grid :global(.ec-event) { border: 0; border-left: 3px solid var(--control); border-radius: var(--r-sm); }
   .grid :global(.ec-event.due) { border-left-color: var(--stone); }
   .grid :global(.ec-event.block) { --ec-event-bg-color: var(--band-3); border-left-color: var(--accent); }
@@ -366,14 +379,15 @@
   .text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .key { font-weight: 700; color: var(--muted); margin-right: var(--s-2); }
 
-  .side { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); }
-  .side ul { list-style: none; margin: 0; padding: var(--s-2) 0; overflow: auto; }
+  .side { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--raised); }
+  .side ul { list-style: none; margin: 0; padding: 0; overflow: auto; }
   .side li {
     display: flex;
     align-items: center;
     gap: var(--s-4);
     height: var(--row-h);
     padding: 0 var(--s-7);
+    border-bottom: 1px solid var(--border);
     cursor: grab;
     transition: background var(--dur-1) var(--ease);
   }

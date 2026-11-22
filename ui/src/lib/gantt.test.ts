@@ -29,9 +29,15 @@ describe('gantt rows', () => {
     expect(buildRows({ ...base, issues: [issues[0]], bars: [bars[0]] }).some((r) => r.kind === 'group')).toBe(false);
   });
 
-  it('unscheduled_needs_estimate_and_no_dates', () => {
-    const list = unscheduled([issue(1, { estimate_minutes: 60 }), issue(2), issue(3, { estimate_minutes: 60, start_date: '2026-12-01' })]);
-    expect(list.map((i) => i.id)).toEqual([1]);
+  it('unscheduled_is_every_issue_without_a_row', () => {
+    const issues = [issue(1), issue(2, { estimate_minutes: 60 }), issue(3, { start_date: '2026-12-01' })];
+    const rows = buildRows({ ...base, issues, bars: [bar(3, '2026-12-01', '2026-12-02')] });
+    expect(unscheduled(issues, rows).map((i) => i.id)).toEqual([1, 2]);
+  });
+
+  it('rows_carry_key_and_title_apart', () => {
+    const rows = buildRows({ ...base, issues: [issue(1)], bars: [bar(1, '2026-12-01', '2026-12-02')] });
+    expect(rows[0]).toMatchObject({ key: 'ABC-1', title: 't1' });
   });
 });
 

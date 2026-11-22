@@ -31,3 +31,11 @@ export const pct = (done: number, total: number) => (total ? Math.round((done / 
 
 export const dateOf = (iso: string) => iso.slice(0, 10);
 export const sameDue = (a: Issue['due'], b: Issue['due']) => JSON.stringify(a) === JSON.stringify(b);
+
+/** "Dec 10", or "Dec 10, 2027" when not this year; `empty` stands in for no date. `day` is a YYYY-MM-DD calendar day. */
+export function humanDate(day: string | null, now = new Date(), empty = 'None'): string {
+  if (!day) return empty;
+  const [y, m, d] = day.split('-').map(Number);
+  const year = y === now.getFullYear() ? {} : { year: 'numeric' as const };
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', ...year }).format(new Date(Date.UTC(y, m - 1, d)));
+}

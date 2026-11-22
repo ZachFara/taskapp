@@ -4,6 +4,7 @@
   import Button from '../../ui/Button.svelte';
   import Select from '../../ui/Select.svelte';
   import TextInput from '../../ui/TextInput.svelte';
+  import { setTheme, theme } from '../../lib/theme.svelte';
 
   const KEY = /^[A-Z]{2,5}$/;
   const systemZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -26,7 +27,7 @@
   let name = $state('');
   let key = $state('');
   let zone = $state(systemZone);
-  let theme = $state('system');
+  let themeChoice = $state<string>(theme.mode);
   let week = $state('sunday');
   let error = $state('');
   let saved = $state(false);
@@ -37,15 +38,8 @@
     name = (await read('workspace_name')) ?? '';
     key = (await read('issue_prefix')) ?? '';
     zone = (await read('timezone')) ?? systemZone;
-    theme = (await read('theme')) ?? 'system';
     week = (await read('week_start')) ?? 'sunday';
   });
-
-  // Dark and light are set on the root so the tokens switch at once; "system" removes the override.
-  function applyTheme(t: string) {
-    if (t === 'system') delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = t;
-  }
 
   async function save() {
     if (!KEY.test(key)) {
@@ -59,8 +53,8 @@
       await api.settings.set('issue_prefix', key);
       await api.settings.set('timezone', zone);
       await api.settings.set('week_start', week);
-      await api.settings.set('theme', theme);
-      applyTheme(theme);
+      await api.settings.set('theme', themeChoice);
+      setTheme(themeChoice as 'light' | 'dark' | 'system', false);
       saved = true;
     } catch (e) {
       error = (e as { message?: string }).message ?? String(e);
@@ -95,7 +89,7 @@
     </div>
     <div class="st-field">
       <span>Theme</span>
-      <Select label="Theme" items={themeItems} bind:value={theme} />
+      <Select label="Theme" items={themeItems} bind:value={themeChoice} />
     </div>
   </div>
   <div class="st-actions">

@@ -2,7 +2,7 @@
   import { api } from '../../lib/api';
   import type { Change, Issue } from '../../lib/bindings';
   import GroupHeader from '../../ui/GroupHeader.svelte';
-  import { dateOf } from './format';
+  import { dateOf, humanDate } from './format';
 
   let { issue, rev }: { issue: Issue; rev: number } = $props();
   let changes = $state<Change[]>([]);
@@ -26,14 +26,14 @@
   <GroupHeader name="Activity" count={changes.length} category="Completed" {collapsed} ontoggle={() => (collapsed = !collapsed)} />
   {#if !collapsed}
     {#each days as [day, list] (day)}
-      <h4>{day}</h4>
+      <h4>{humanDate(day)}</h4>
       <ul>
         {#each list as c (c.id)}
           <li><b>{name(c.field)}</b> <span class="from">{show(c.old_value)}</span> <span aria-hidden="true">to</span> <span class="to">{show(c.new_value)}</span></li>
         {/each}
       </ul>
     {:else}
-      <p class="none">No changes yet. Created {dateOf(issue.created_at)}.</p>
+      <p class="none">No changes yet. Created {humanDate(dateOf(issue.created_at))}.</p>
     {/each}
   {/if}
 </section>

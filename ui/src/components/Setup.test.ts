@@ -22,11 +22,13 @@ async function submit() {
 
 const ondone = vi.fn();
 let setup: ReturnType<typeof vi.fn>;
+let settingsSet: ReturnType<typeof vi.fn>;
 let app: ReturnType<typeof mount> | null = null;
 
 beforeEach(async () => {
   setup = vi.fn(async (name: string, key: string, timezone: string) => ({ setup_done: true, name, key, timezone }));
-  setApi({ workspace: { setup } } as unknown as TestApi);
+  settingsSet = vi.fn(async () => {});
+  setApi({ workspace: { setup }, settings: { set: settingsSet } } as unknown as TestApi);
   ondone.mockClear();
   vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({
     timeZone: 'Europe/Lisbon',
@@ -76,11 +78,36 @@ describe('Setup', () => {
     expect(document.querySelector('[role=alert]')?.textContent).toMatch(/Name the workspace/);
   });
 
-  it('setup_submit_calls_workspace_setup_then_ondone', async () => {
+  it('setup_submit_calls_workspace_setup_and_offers_next_steps', async () => {
     await type('Workspace name', 'Home');
     await type('Workspace key', 'ab');
     await submit();
     expect(setup).toHaveBeenCalledWith('Home', 'AB', 'Europe/Lisbon');
+    expect(ondone).not.toHaveBeenCalled();
+    const labels = [...document.querySelectorAll('button')].map((b) => b.textContent?.trim());
+    expect(labels).toEqual(expect.arrayContaining(['Start empty', 'Import from CSV']));
+  });
+
+  it('start_empty_finishes_setup', async () => {
+    await type('Workspace name', 'Home');
+    await submit();
+    [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Start empty')!.click();
     expect(ondone).toHaveBeenCalledOnce();
+  });
+
+  it('import_from_csv_opens_the_import_page', async () => {
+    await type('Workspace name', 'Home');
+    await submit();
+    [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Import from CSV')!.click();
+    expect(location.pathname).toBe('/settings/import');
+    expect(ondone).toHaveBeenCalledOnce();
+  });
+
+  it('the chosen theme is saved through the settings api', async () => {
+    await type('Workspace name', 'Home');
+    [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Dark')!.click();
+    await settle();
+    await submit();
+    expect(settingsSet).toHaveBeenCalledWith('theme', 'dark');
   });
 });
