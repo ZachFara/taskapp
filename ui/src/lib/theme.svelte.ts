@@ -1,4 +1,4 @@
-import type { Api } from './api';
+import { api, type Api } from './api';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 const KEY = 'cairn.theme';
@@ -50,3 +50,12 @@ export function setTheme(mode: ThemeMode, persist = true) {
 }
 
 export const cycleTheme = () => setTheme(order[(order.indexOf(theme.mode) + 1) % order.length]);
+
+/** The first day of the week from the `week_start` setting; Sunday when it is unset or unreadable. */
+export async function getWeekStart(): Promise<'sunday' | 'monday'> {
+  try {
+    return (await api.settings.get('week_start')) === 'monday' ? 'monday' : 'sunday';
+  } catch {
+    return 'sunday';
+  }
+}

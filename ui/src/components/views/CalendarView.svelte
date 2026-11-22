@@ -2,6 +2,8 @@
   import { Calendar, DayGrid, Interaction, TimeGrid } from '@event-calendar/core';
   import '@event-calendar/core/index.css';
   import { onMount } from 'svelte';
+  import { getWeekStart } from '../../lib/theme.svelte';
+  import { selection } from '../../lib/selection.svelte';
   import { api } from '../../lib/api';
   import { labelFor, shortcutFor } from '../../lib/commands';
   import type { Due, Issue, SavedView, Status, StatusCategory, WorkBlock } from '../../lib/bindings';
@@ -257,6 +259,7 @@
   const options = {
     view: viewOf(mode),
     timeZone: 'local',
+    firstDay: 0,
     scrollTime: '08:00:00',
     // A month header names only the weekday; a week header adds the date.
     views: {
@@ -276,6 +279,9 @@
   };
 
   onMount(async () => {
+    selection.setLayout('calendar');
+    options.firstDay = (await getWeekStart()) === 'monday' ? 1 : 0;
+    calendar?.setOption('firstDay', options.firstDay);
     try {
       [statuses, issues] = await Promise.all([api.statuses.list(), api.views.query(view.def)]);
       loaded = true;
@@ -307,9 +313,9 @@
       <Calendar bind:this={calendar} plugins={[TimeGrid, DayGrid, Interaction]} {options}>
         {#snippet eventContent(info: any)}
           {@const x = info.event.extendedProps}
-          <span class="chip" data-key={x.key}>
+          <span class="chip" data-key={x.key} title={x.key}>
             {#if x.category}<StatusGlyph category={x.category} size={12} />{/if}
-            <span class="text">{#if x.key}<span class="key">{x.key}</span>{/if}{info.event.title}</span>
+            <span class="text">{info.event.title}</span>
           </span>
         {/snippet}
       </Calendar>

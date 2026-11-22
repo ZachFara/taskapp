@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api } from '../../lib/api';
   import type { Issue, Status } from '../../lib/bindings';
-  import GroupHeader from '../../ui/GroupHeader.svelte';
+  import SectionHeading from './SectionHeading.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import { pct } from './format';
   import IssuePicker from './IssuePicker.svelte';
@@ -23,7 +23,7 @@
 </script>
 
 <section aria-label="Sub-issues">
-  <GroupHeader name="Sub-issues" count={children.length} category="Unstarted" {collapsed} ontoggle={() => (collapsed = !collapsed)} onadd={() => add?.querySelector('input')?.focus()} />
+  <SectionHeading name="Sub-issues" count={children.length} {collapsed} ontoggle={() => (collapsed = !collapsed)} onadd={() => add?.querySelector('input')?.focus()} />
   {#if !collapsed}
     {#if children.length}
       <div class="progress" role="progressbar" aria-label="Sub-issue progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={pct(done, children.length)}>

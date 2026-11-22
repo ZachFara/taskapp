@@ -33,6 +33,24 @@ afterEach(() => {
 });
 
 describe('PinnedPage', () => {
+  it('root_opens_the_first_pinned_view_else_the_first_saved_view', async () => {
+    history.replaceState(null, '', '/');
+    await open(await seedPins([['View', '2']]));
+    expect(location.pathname).toBe('/view/2');
+  });
+
+  it('root_with_nothing_pinned_opens_the_first_saved_view', async () => {
+    history.replaceState(null, '', '/');
+    await open(createMockApi(fixtures));
+    expect(location.pathname).toBe(`/view/${fixtures.views[0].id}`);
+  });
+
+  it('empty_pinned_page_offers_open_a_view', async () => {
+    const target = await open(createMockApi(fixtures));
+    expect(location.pathname).toBe('/pinned');
+    expect([...target.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Open a view')).toBe(true);
+  });
+
   it('pinned_page_groups_by_kind', async () => {
     const mock = await seedPins([['Issue', 'ABC-1'], ['Project', 'website'], ['Issue', 'ABC-2']]);
     const target = await open(mock);
