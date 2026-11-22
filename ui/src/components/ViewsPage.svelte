@@ -84,7 +84,13 @@
     defaultId = t.id;
   }
 
-  onMount(load);
+  onMount(() => {
+    load();
+    // The command menu's "New view" lands here from another route (see defs/create/view.new.ts).
+    const open = () => (creating = true);
+    addEventListener('command:view.new', open);
+    return () => removeEventListener('command:view.new', open);
+  });
 </script>
 
 <PageHeader title="Views" icon="icon:layers">

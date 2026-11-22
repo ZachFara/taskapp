@@ -117,4 +117,13 @@ describe('ViewsPage templates', () => {
     await vi.waitFor(() => expect(document.body.textContent).toContain('Start from'));
     expect(save).not.toHaveBeenCalled();
   });
+
+  it('command_view_new_opens_the_start_from_dialog', async () => {
+    fakeTemplates();
+    const { mock } = await open();
+    const save = vi.spyOn(mock.views, 'save');
+    window.dispatchEvent(new CustomEvent('command:view.new'));
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Start from'));
+    expect(save).not.toHaveBeenCalled();
+  });
 });
