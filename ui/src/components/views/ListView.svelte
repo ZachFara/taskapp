@@ -17,6 +17,8 @@
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
   import Skeleton from '../../ui/Skeleton.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
+  import Tooltip from '../../ui/Tooltip.svelte';
+  import { shortcutFor } from '../../lib/commands/registry';
   import TextInput from '../../ui/TextInput.svelte';
   import { dueDay as dueDayIn, isOverdue } from './dates';
   import FieldValue from '../display/FieldValue.svelte';
@@ -48,17 +50,40 @@
   let scrollTop = $state(0);
   let height = $state(0);
   let scroller = $state<HTMLElement>();
+  let wrapW = $state(0);
+  // Not a bind:clientWidth: the page's own tests run where ResizeObserver does not exist.
+  function watchWidth(node: HTMLElement) {
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => (wrapW = node.clientWidth));
+    ro.observe(node);
+    return { destroy: () => ro.disconnect() };
+  }
   let ctx = $state.raw<Ctx>(emptyCtx);
   const tz = $derived(ctx.tz);
   const compact = $derived(density(view.def) === 'compact');
   // shortcut: compact height follows the --row-h-compact token value (28), upgrade if the token changes
   const ROW = $derived(compact ? 28 : 32);
   // Key, priority and status have their own leading columns, so they are not repeated.
-  const fields = $derived(shown(view.def, LIST_DEFAULT).filter((f) => !LEADING.includes(f.Fixed!)));
+  const allFields = $derived(shown(view.def, LIST_DEFAULT).filter((f) => !LEADING.includes(f.Fixed!) && (ctx.points || f.Fixed !== 'Points')));
   let closedParents = $state<number[]>([]);
   const WIDTH: Record<string, string> = { Label: '150px', Project: '140px', DueDate: '56px', Estimate: '72px', Key: '64px', Priority: 'var(--s-8)', Status: '120px', Cycle: '100px', StartDate: '56px', CreatedAt: '56px', UpdatedAt: '56px' };
   const widthOf = (f: FieldRef) => (f.Property === undefined ? (WIDTH[f.Fixed!] ?? '100px') : ({ Select: '120px', MultiSelect: '150px', Checkbox: '56px', Url: '56px', Number: '72px', Date: '72px' } as Record<string, string>)[ctx.defs.find((d) => d.key === f.Property)?.kind ?? ''] ?? '140px');
   const rightAligned = (f: FieldRef) => f.Property === undefined ? ['DueDate', 'StartDate', 'Estimate', 'Points', 'CreatedAt', 'UpdatedAt'].includes(f.Fixed!) : ['Number', 'Date'].includes(ctx.defs.find((d) => d.key === f.Property)?.kind ?? '');
+  // Metadata columns drop from the right (lowest priority) once the title would get less than TITLE_MIN.
+  const TITLE_MIN = 220;
+  const LEAD_W = 32 + 32 + 64 + 32 + 4 * 8 + 2 * 24;
+  const px = (f: FieldRef) => parseInt(widthOf(f), 10) || 32;
+  const fields = $derived.by(() => {
+    if (!wrapW) return allFields;
+    let room = wrapW - LEAD_W - TITLE_MIN;
+    const keep: FieldRef[] = [];
+    for (const f of allFields) {
+      room -= px(f) + 8;
+      if (room < 0) break;
+      keep.push(f);
+    }
+    return keep;
+  });
   const columns = $derived(`var(--s-8) var(--s-8) 64px var(--s-8) minmax(0, 1fr) ${fields.map(widthOf).join(' ')}`);
   let menu = $state<{ id: number; x: number; y: number } | null>(null);
   let menuOpen = $state(false);
@@ -97,7 +122,7 @@
     load();
   });
 
-  const groupField = $derived(view.def.group_by?.Fixed ?? null);
+  const groupField = $derived(view.def.group_by?.Fixed === 'Points' && !ctx.points ? null : (view.def.group_by?.Fixed ?? null));
   const groups = $derived.by<Group[]>(() => {
     const by = new Map<string, Group>();
     const put = (i: Issue, g: Omit<Group, 'rows'>) => {
@@ -246,6 +271,21 @@
     el?.select();
   }
 
+  // The command menu runs the same handlers as the group header buttons.
+  const focusedGroup = () => groups.find((g) => g.rows.some((r) => r.id === selection.focused));
+  $effect(() => {
+    const on: [string, () => void][] = [
+      ['group.collapse', () => { const g = focusedGroup(); if (g && g.key !== 'all') toggleGroup(g.key); }],
+      ['group.collapse.all', () => {
+        const keys = groups.filter((g) => g.key !== 'all').map((g) => g.key);
+        collapsed = keys.every((k) => collapsed.includes(k)) ? [] : keys;
+      }],
+      ['group.add', () => { const g = focusedGroup() ?? groups[0]; if (g) void add(g); }],
+    ];
+    for (const [n, f] of on) addEventListener(`command:${n}`, f);
+    return () => on.forEach(([n, f]) => removeEventListener(`command:${n}`, f));
+  });
+
   function openMenu(id: number, x: number, y: number) {
     menu = { id, x, y };
     menuOpen = true;
@@ -276,16 +316,16 @@
     </EmptyState></div>
 {:else}
   <IssueMenu>
-  <div class="wrap">
+  <div class="wrap" use:watchWidth>
   <div class="heads" style:grid-template-columns={columns} aria-hidden="true">
     <span></span><span></span><span></span><span></span><span>Title</span>
     {#each fields as f (f.Property ?? f.Fixed)}<span data-right={rightAligned(f) ? '' : undefined}>{fieldName(f, ctx.defs)}</span>{/each}
   </div>
   <div class="scroller" role="presentation" bind:this={scroller} onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}>
-    <ul class="list" role="list" data-density={compact ? 'compact' : undefined} aria-label={view.name} style:height="{total}px">
+    <ul class="list" role="grid" aria-multiselectable="true" data-density={compact ? 'compact' : undefined} aria-label={view.name} style:height="{total}px">
       {#each slice as { item, top } (top)}
         {#if 'head' in item}
-          <li class="head" style:top="{top}px">
+          <li class="head" role="presentation" style:top="{top}px">
             <GroupHeader
               name={item.head.name}
               count={item.head.rows.length}
@@ -305,6 +345,8 @@
           {@const chosen = selection.selected.includes(i.id)}
           <li
             class="row"
+            role="row"
+            aria-selected={chosen}
             data-key={i.key}
             data-id={i.id}
             data-depth={item.depth ? item.depth : undefined}
@@ -325,19 +367,28 @@
             </span>
             <span class="prio"><PriorityGlyph level={glyph(i.priority)} /></span>
             <span class="key">{i.key}</span>
-            <button
-              class="status"
-              type="button"
-              aria-label={`Status ${st?.name ?? 'Unknown'}, change`}
-              onclick={(e) => {
-                e.stopPropagation();
-                selection.focus(i.id);
-                const r = e.currentTarget.getBoundingClientRect();
-                openMenu(i.id, r.left, r.bottom);
-              }}
-            >
-              <StatusGlyph category={st?.category ?? 'Backlog'} label={st?.name ?? 'Unknown'} />
-            </button>
+            {#snippet statusBtn(tp: Record<string, unknown>)}
+              <button
+                {...tp}
+                class="status"
+                type="button"
+                aria-label={`Status ${st?.name ?? 'Unknown'}, change`}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  selection.focus(i.id);
+                  const r = e.currentTarget.getBoundingClientRect();
+                  openMenu(i.id, r.left, r.bottom);
+                }}
+              >
+                <StatusGlyph category={st?.category ?? 'Backlog'} label={st?.name ?? 'Unknown'} />
+              </button>
+            {/snippet}
+            <!-- shortcut: only the hovered or focused row carries a Tooltip (one per row costs ~30% at 1000 rows), upgrade to one delegated tooltip -->
+            {#if hovered === i.id || selection.focused === i.id}
+              <Tooltip label="Status" shortcut={shortcutFor('issue.status')}>{#snippet children(tp)}{@render statusBtn(tp)}{/snippet}</Tooltip>
+            {:else}
+              {@render statusBtn({})}
+            {/if}
             <span class="title" style:padding-left={item.depth ? `calc(${item.depth} * var(--s-6))` : undefined}>
               {#if item.kids}
                 {@const open = !closedParents.includes(i.id)}

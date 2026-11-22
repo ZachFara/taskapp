@@ -31,7 +31,7 @@ describe('mock api', () => {
     const mock = createMockApi();
     const made = await mock.issues.create({ title: 'a' });
     await mock.issues.update(made.id, { title: 'b' });
-    expect(await mock.history.undoStatus()).toEqual({ undo: 'issues_update', redo: null });
+    expect(await mock.history.undoStatus()).toEqual({ undo: 'Edited ABC-25', redo: null });
     await mock.history.undo();
     expect((await mock.issues.get(made.id)).title).toBe('a');
     await mock.history.redo();
@@ -47,9 +47,10 @@ describe('mock api', () => {
     expect(rows.every((i) => i.properties.area === 'home')).toBe(true);
   });
 
-  it('query with an unknown property rejects with Invalid', async () => {
-    const q = createMockApi().views.query(def({ Cond: { field: { Property: 'nope' }, op: 'Eq', value: 1 } }));
-    await expect(q).rejects.toMatchObject({ kind: 'Invalid' });
+  it('query with an unknown property drops the reference instead of failing', async () => {
+    const all = await createMockApi().views.query(def(null));
+    const q = await createMockApi().views.query(def({ Cond: { field: { Property: 'nope' }, op: 'Eq', value: 1 } }));
+    expect(q).toHaveLength(all.length);
   });
 
   it('csv import writes nothing until applied', async () => {

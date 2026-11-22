@@ -158,7 +158,7 @@ fn infer(name: &str, values: &[&str]) -> PropertyDef {
             .iter()
             .map(|v| SelectOption {
                 value: (*v).to_owned(),
-                color: "#95a2b3".into(),
+                color: super::plan::COLOR.into(),
             })
             .collect();
         (PropertyKind::Select, options)
@@ -199,7 +199,7 @@ fn points(cell: &str) -> std::result::Result<f64, String> {
     cell.parse()
         .ok()
         .filter(|p: &f64| crate::issues::valid_points(*p))
-        .ok_or_else(|| format!("`{cell}` is not points (0 or more, one decimal)"))
+        .ok_or_else(|| format!("`{cell}` is not points (0 to 1000, one decimal)"))
 }
 
 fn row_issue(

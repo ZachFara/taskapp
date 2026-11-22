@@ -10,8 +10,8 @@ use sqlx::{Sqlite, Transaction};
 use taskapp_core::{Db, Error, IssueId, Result, ViewDef, search};
 
 use crate::files::{
-    CommentText, CycleRow, IssueFront, LabelRow, PinRow, ProjectFile, PropertyFile, StatusRow,
-    ViewFile, invalid, parse_issue,
+    CommentText, CycleRow, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow, PinRow,
+    ProjectFile, PropertyFile, StatusRow, ViewFile, ViewTemplateFile, invalid, parse_issue,
 };
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -50,8 +50,10 @@ async fn restore_tables(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     restore_cycles(tx, dir).await?;
     restore_projects(tx, dir).await?;
     restore_properties(tx, dir).await?;
+    restore_view_templates(tx, dir).await?;
     restore_views(tx, dir).await?;
     restore_pins(tx, dir).await?;
+    restore_issue_templates(tx, dir).await?;
     Ok(())
 }
 
@@ -65,11 +67,20 @@ async fn restore_issues(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     for (number, front, _, comments) in &issues {
         link_issue(tx, &prefix, *number, front, comments).await?;
     }
-    Ok(())
+    restore_import_log(tx, dir).await
 }
 
 fn read_yaml<T: DeserializeOwned>(path: &Path) -> Result<T> {
     serde_yaml_ng::from_str(&fs::read_to_string(path)?).map_err(invalid)
+}
+
+/// A list file that older exports do not have reads as empty.
+fn read_list<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>> {
+    if path.exists() {
+        read_yaml(path)
+    } else {
+        Ok(vec![])
+    }
 }
 
 /// The sorted files in `dir/sub` with the given extension.
@@ -115,14 +126,15 @@ async fn restore_statuses(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let statuses: Vec<StatusRow> = read_yaml(&dir.join("statuses.yaml"))?;
     for s in statuses {
         sqlx::query(
-            "INSERT INTO statuses (name, category, position, color) VALUES (?, ?, ?, ?)
+            "INSERT INTO statuses (name, category, position, color, icon) VALUES (?, ?, ?, ?, ?)
              ON CONFLICT(name) DO UPDATE SET category = excluded.category,
-               position = excluded.position, color = excluded.color",
+               position = excluded.position, color = excluded.color, icon = excluded.icon",
         )
         .bind(s.name)
         .bind(s.category)
         .bind(s.position)
         .bind(s.color)
+        .bind(s.icon)
         .execute(&mut **tx)
         .await?;
     }
@@ -132,9 +144,10 @@ async fn restore_statuses(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
 async fn restore_labels(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let labels: Vec<LabelRow> = read_yaml(&dir.join("labels.yaml"))?;
     for l in labels {
-        sqlx::query("INSERT INTO labels (name, color) VALUES (?, ?)")
+        sqlx::query("INSERT INTO labels (name, color, icon) VALUES (?, ?, ?)")
             .bind(l.name)
             .bind(l.color)
+            .bind(l.icon)
             .execute(&mut **tx)
             .await?;
     }
@@ -144,11 +157,15 @@ async fn restore_labels(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
 async fn restore_cycles(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let cycles: Vec<CycleRow> = read_yaml(&dir.join("cycles.yaml"))?;
     for c in cycles {
-        sqlx::query("INSERT INTO cycles (number, name, start_date, end_date) VALUES (?, ?, ?, ?)")
-            .bind(c.number)
-            .bind(c.name)
-            .bind(c.start_date)
-            .bind(c.end_date)
+        sqlx::query(
+            "INSERT INTO cycles (number, name, start_date, end_date, icon, color) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(c.number)
+        .bind(c.name)
+        .bind(c.start_date)
+        .bind(c.end_date)
+        .bind(c.icon)
+        .bind(c.color)
             .execute(&mut **tx)
             .await?;
     }
@@ -160,7 +177,7 @@ async fn restore_projects(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         let p: ProjectFile = read_yaml(&path)?;
         let id = sqlx::query(
             "INSERT INTO projects (slug, name, description, doc_link, start_date, target_date,
-               archived_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+               archived_at, created_at, icon, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&p.slug)
         .bind(p.name)
@@ -170,6 +187,8 @@ async fn restore_projects(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         .bind(p.target_date)
         .bind(p.archived_at)
         .bind(p.created_at)
+        .bind(p.icon)
+        .bind(p.color)
         .execute(&mut **tx)
         .await?
         .last_insert_rowid();
@@ -211,12 +230,70 @@ async fn restore_views(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     for v in views {
         // Parsing here rejects a definition the app could not run.
         serde_json::from_value::<ViewDef>(v.definition.clone()).map_err(invalid)?;
-        sqlx::query("INSERT INTO views (name, definition, position) VALUES (?, ?, ?)")
-            .bind(v.name)
-            .bind(v.definition.to_string())
-            .bind(v.position)
-            .execute(&mut **tx)
-            .await?;
+        sqlx::query(
+            "INSERT INTO views (name, definition, position, icon, color, template_id) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(v.name)
+        .bind(v.definition.to_string())
+        .bind(v.position)
+        .bind(v.icon)
+        .bind(v.color)
+        .bind(v.template_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn restore_view_templates(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let templates: Vec<ViewTemplateFile> = read_list(&dir.join("view_templates.yaml"))?;
+    for t in templates {
+        serde_json::from_value::<ViewDef>(t.definition.clone()).map_err(invalid)?;
+        sqlx::query(
+            "INSERT INTO view_templates (id, name, definition, position, icon, color) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(t.id)
+        .bind(t.name)
+        .bind(t.definition.to_string())
+        .bind(t.position)
+        .bind(t.icon)
+        .bind(t.color)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn restore_issue_templates(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let templates: Vec<IssueTemplateFile> = read_list(&dir.join("issue_templates.yaml"))?;
+    for t in templates {
+        sqlx::query(
+            "INSERT INTO issue_templates (name, slug, icon, color, body) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(t.name)
+        .bind(t.slug)
+        .bind(t.icon)
+        .bind(t.color)
+        .bind(t.body.to_string())
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn restore_import_log(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let log: Vec<ImportLogRow> = read_list(&dir.join("import_log.yaml"))?;
+    for l in log {
+        sqlx::query(
+            "INSERT INTO import_log (external_id, source, issue_id, imported_at)
+             VALUES (?, ?, (SELECT id FROM issues WHERE number = ?), ?)",
+        )
+        .bind(l.external_id)
+        .bind(l.source)
+        .bind(l.issue)
+        .bind(l.imported_at)
+        .execute(&mut **tx)
+        .await?;
     }
     Ok(())
 }

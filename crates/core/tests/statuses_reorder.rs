@@ -81,3 +81,13 @@ async fn reorder_refuses_mixed_categories_duplicates_and_unknown_ids() -> R {
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn deleting_a_status_into_itself_is_refused() -> R {
+    let db = Db::open_in_memory().await?;
+    let id = started(&db).await?[0];
+    let e = statuses::delete(&db, id, id).await;
+    assert!(matches!(e, Err(Error::Invalid(_))), "{e:?}");
+    assert!(order(&db, StatusCategory::Started).await?.contains(&id));
+    Ok(())
+}

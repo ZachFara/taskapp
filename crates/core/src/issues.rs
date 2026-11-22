@@ -147,17 +147,18 @@ pub(crate) async fn issues_from_rows(
     rows.iter().map(|r| issue_from_row(r, &prefix)).collect()
 }
 
-/// At least 0 and at most one decimal, so a scale and a free number both fit.
+/// 0 to 1000 with at most one decimal, judged on the shortest text of the number so a float's noise
+/// (0.30000000000000004) is refused rather than rounded.
 pub(crate) fn valid_points(p: f64) -> bool {
-    let tenths = p * 10.0;
-    p.is_finite() && p >= 0.0 && (tenths - tenths.round()).abs() <= 1e-6
+    let one_decimal = |s: String| s.split_once('.').is_none_or(|(_, f)| f.len() == 1);
+    p.is_finite() && (0.0..=1000.0).contains(&p) && one_decimal(p.to_string())
 }
 
 fn check_points(points: Option<f64>) -> Result<()> {
     let Some(p) = points else { return Ok(()) };
     if !valid_points(p) {
         return Err(Error::Invalid(format!(
-            "points {p} must be 0 or more with at most one decimal"
+            "points {p} must be 0 to 1000 with at most one decimal"
         )));
     }
     Ok(())

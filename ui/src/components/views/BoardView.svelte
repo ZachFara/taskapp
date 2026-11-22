@@ -14,6 +14,7 @@
   import FieldValue from '../display/FieldValue.svelte';
   import { BOARD_DEFAULT, density, emptyCtx, loadCtx, pointsName, pointsTotal, shown, type Ctx } from '../display/types';
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
+  import { priorityGlyph } from '../detail/format';
 
   let { view }: { view: SavedView } = $props();
 
@@ -25,7 +26,7 @@
     patch: (i: Issue) => IssuePatch;
   };
 
-  const groupBy = $derived(view.def.group_by);
+  const groupBy = $derived(view.def.group_by?.Fixed === 'Points' && !ctx.points ? null : view.def.group_by);
   const selectProp = $derived.by(() => {
     const key = groupBy?.Property;
     return propertyDefs.find((d) => d.key === key && d.kind === 'Select') ?? null;
@@ -101,7 +102,7 @@
   let error: string | null = $state(null);
   let ctx = $state.raw<Ctx>(emptyCtx);
   // Key and priority are always on the card; the rest follow the view.
-  const fields = $derived(shown(view.def, BOARD_DEFAULT, true).filter((f) => f.Fixed !== 'Key' && f.Fixed !== 'Priority'));
+  const fields = $derived(shown(view.def, BOARD_DEFAULT, true).filter((f) => f.Fixed !== 'Key' && f.Fixed !== 'Priority' && (ctx.points || f.Fixed !== 'Points')));
 
   async function reload() {
     issues = await api.views.query($state.snapshot(view.def));
@@ -232,7 +233,7 @@
               >
                 <span class="top">
                   <span class="key">{i.key}</span>
-                  <PriorityGlyph level={i.priority} size={14} />
+                  <PriorityGlyph level={priorityGlyph(i.priority)} size={14} />
                 </span>
                 <span class="title">{i.title}</span>
                 <span class="foot">

@@ -3,14 +3,21 @@ use chrono_tz::Tz;
 
 use crate::{
     ChangeSource, Db, Due, Issue, NewIssue, ParsedQuickAdd, Result, issues, labels, projects,
-    templates,
+    settings, templates,
 };
 
 /// Pure: parses quick-add text relative to `today` in IANA zone `tz`.
 #[must_use]
 pub fn parse(input: &str, today: NaiveDate, tz: &str) -> ParsedQuickAdd {
+    parse_with(input, today, tz, true)
+}
+
+fn parse_with(input: &str, today: NaiveDate, tz: &str, points_on: bool) -> ParsedQuickAdd {
     let tokens: Vec<&str> = input.split_whitespace().collect();
-    let mut parts = Parts::default();
+    let mut parts = Parts {
+        points_on,
+        ..Parts::default()
+    };
     let mut title: Vec<&str> = Vec::new();
     let mut i = 0;
     while i < tokens.len() {
@@ -51,6 +58,20 @@ pub fn parse(input: &str, today: NaiveDate, tz: &str) -> ParsedQuickAdd {
     }
 }
 
+/// [`parse`] for this workspace: a `3pt` token stays in the title when the `estimation` setting has points off.
+///
+/// # Errors
+///
+/// Fails on a database error.
+pub async fn parse_for(db: &Db, input: &str, today: NaiveDate, tz: &str) -> Result<ParsedQuickAdd> {
+    Ok(parse_with(input, today, tz, points_on(db).await?))
+}
+
+async fn points_on(db: &Db) -> Result<bool> {
+    let setting = settings::get::<String>(db, "estimation").await?;
+    Ok(!matches!(setting.as_deref(), Some("none" | "time")))
+}
+
 /// # Errors
 ///
 /// Fails on a database error or invalid arguments.
@@ -77,7 +98,7 @@ pub async fn create_from(
 ///
 /// Fails on a database error.
 pub async fn new_issue(db: &Db, input: &str, today: NaiveDate, tz: &str) -> Result<NewIssue> {
-    let parsed = parse(input, today, tz);
+    let parsed = parse_for(db, input, today, tz).await?;
     let mut title = parsed.title;
     // Unknown project or label: its token goes back into the title, nothing is created.
     let project_id = match parsed.project_slug {
@@ -138,6 +159,7 @@ struct Parts<'a> {
     labels: Vec<String>,
     estimate: Option<u32>,
     points: Option<f64>,
+    points_on: bool,
 }
 
 /// Consumes the token(s) at `i` into `p`; returns how many were consumed (0 = plain title word).
@@ -160,9 +182,16 @@ fn take<'a>(tokens: &[&'a str], i: usize, today: NaiveDate, p: &mut Parts<'a>) -
         p.estimate = Some(minutes);
         return 1;
     }
-    if let Some(pts) = points(&w) {
-        p.points = Some(pts);
-        return 1;
+    if p.points_on {
+        if let Some(pts) = points(&w) {
+            p.points = Some(pts);
+            return 1;
+        }
+        let unit = tokens.get(i + 1).map(|t| t.to_ascii_lowercase());
+        if let (Some(pts), Some("pt" | "pts")) = (points_number(&w), unit.as_deref()) {
+            p.points = Some(pts);
+            return 2;
+        }
     }
     match w.as_str() {
         "by" | "due" => date_at(tokens, i + 1, today).map_or(0, |(d, n)| {
@@ -209,14 +238,26 @@ fn estimate(w: &str) -> Option<u32> {
     n.checked_mul(per_unit).filter(|m| *m > 0)
 }
 
-/// `3pt`, `0.5pt` or `pt3`: at most one decimal, like the stored value.
+/// `3pt`, `3pts`, `.5pt` or `pt3`: at most one decimal, like the stored value.
 fn points(w: &str) -> Option<f64> {
-    let n = w.strip_suffix("pt").or_else(|| w.strip_prefix("pt"))?;
+    let n = w
+        .strip_suffix("pts")
+        .or_else(|| w.strip_suffix("pt"))
+        .or_else(|| w.strip_prefix("pt"))?;
+    points_number(n)
+}
+
+/// `3`, `0.5` or `.5`, within what a stored value may be.
+fn points_number(n: &str) -> Option<f64> {
     let (whole, frac) = n.split_once('.').map_or((n, None), |(w, f)| (w, Some(f)));
-    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
-    (digits(whole) && frac.is_none_or(|f| f.len() == 1 && digits(f)))
+    let digits = |s: &str| s.bytes().all(|b| b.is_ascii_digit());
+    let shape = digits(whole)
+        && frac.is_none_or(|f| f.len() == 1 && digits(f))
+        && (!whole.is_empty() || frac.is_some());
+    shape
         .then(|| n.parse().ok())
         .flatten()
+        .filter(|p| crate::issues::valid_points(*p))
 }
 
 /// A date starting at token `i`; returns the date and how many tokens it used.

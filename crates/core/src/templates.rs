@@ -41,7 +41,8 @@ pub struct TemplateBody {
 }
 
 /// What create and update take: the whole template, replaced on update.
-#[derive(Debug, Clone, PartialEq, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(deny_unknown_fields)]
 pub struct TemplateInput {
     pub name: String,
     pub slug: String,

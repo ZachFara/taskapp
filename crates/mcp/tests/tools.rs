@@ -535,3 +535,66 @@ fn view_templates_round_trip() {
     );
     assert_eq!(r[4].as_ref().expect("deleted")["deleted"], true);
 }
+
+#[test]
+fn unknown_argument_names_are_rejected_not_ignored() {
+    let (_d, db) = tmp();
+    let r = session(
+        &db,
+        &[
+            ("create_issue", json!({"title":"x","bogus":1})),
+            ("create_issue", json!({"title":"y","migration":true})),
+            ("update_issue", json!({"key":"ABC-1","patch":{"prioriy":3}})),
+            (
+                "bulk_update",
+                json!({"items":[{"key":"ABC-1","patch":{"status":"Done"}}]}),
+            ),
+            (
+                "update_issue",
+                json!({"key":"ABC-1","patch":{"priority":3},"migration":true}),
+            ),
+            ("add_comment", json!({"key":"ABC-1","body":"  "})),
+        ],
+    );
+    let err = |i: usize, name: &str| {
+        let e = r[i].as_ref().expect_err("must be rejected");
+        assert!(e.contains(name), "{e}");
+    };
+    err(0, "bogus");
+    r[1].as_ref().expect("migration is a known argument");
+    err(2, "prioriy");
+    err(3, "status");
+    assert_eq!(r[4].as_ref().expect("valid patch")["priority"], 3);
+    err(5, "comment body is empty");
+}
+
+#[test]
+fn instructions_name_the_one_tool_that_reaches_the_network() {
+    let (_d, db) = tmp();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_taskapp-mcp"))
+        .arg("--db")
+        .arg(&db)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn");
+    let msg = "{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"t\",\"version\":\"0\"}}}\n";
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(msg.as_bytes())
+        .expect("write");
+    let mut out = String::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout")
+        .read_to_string(&mut out)
+        .expect("read");
+    child.wait().expect("exit");
+    let v: Value = serde_json::from_str(out.lines().next().expect("reply")).expect("json");
+    let text = v["result"]["instructions"].as_str().expect("instructions");
+    assert!(!text.contains("Never touches"), "{text}");
+    assert!(text.contains("import_linear_plan"), "{text}");
+}

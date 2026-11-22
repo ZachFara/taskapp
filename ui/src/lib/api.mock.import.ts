@@ -88,7 +88,7 @@ function infer(name: string, values: string[]): PropertyDef {
   else if (filled.length && filled.every(isDate)) kind = 'Date';
   else if (filled.length && uniq.length <= 6 && filled.length >= 3 * uniq.length) {
     kind = 'Select';
-    options = uniq.map((value) => ({ value, color: '#95a2b3' }));
+    options = uniq.map((value) => ({ value, color: 'gray' }));
   }
   return { key: propertyKey(name), name, kind, options, project_id: null, position: 0 };
 }
@@ -148,7 +148,7 @@ export function planCsv(text: string, mappingIn: [string, string][] | null, know
           i.estimate_minutes = Number(cell);
         } else if (f === 'points') {
           const p = /^\+?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(cell) ? Number(cell) : NaN;
-          if (!Number.isFinite(p) || Math.abs(p * 10 - Math.round(p * 10)) > 1e-6) throw `\`${cell}\` is not points (0 or more, one decimal)`;
+          if (!Number.isFinite(p) || !(p >= 0 && p <= 1000) || Number(p.toFixed(1)) !== p) throw `\`${cell}\` is not points (0 to 1000, one decimal)`;
           i.points = p;
         } else {
           const d = defs.get(f.slice(9).trim())!;

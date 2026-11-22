@@ -1,7 +1,7 @@
 <script lang="ts">
   // The filter, group, sort and display controls of a view. It keeps the chips it shows and reports every
   // change as a partial ViewDef; the page decides when to save.
-  import { onMount, untrack } from 'svelte';
+  import { onMount, untrack, type Snippet } from 'svelte';
   import { api } from '../lib/api';
   import type { FieldRef, FixedField, ViewDef } from '../lib/bindings';
   import Button from '../ui/Button.svelte';
@@ -11,9 +11,12 @@
   import Popover from '../ui/Popover.svelte';
   import Select from '../ui/Select.svelte';
   import Switch from '../ui/Switch.svelte';
+  import Tooltip from '../ui/Tooltip.svelte';
+  import { shortcutFor } from '../lib/commands/registry';
   import DisplayPanel from './display/DisplayPanel.svelte';
   import FilterChip from './filters/FilterChip.svelte';
   import { fieldKey, makeLookup, parseField, type Data } from './filters/lookup';
+  import { pointsOn, readEstimation, type Estimation } from './insights/estimation';
   import { buildFilter, newChip, splitFilter, type Chip } from './filters/model';
 
   let { def, onchange, clearSignal = 0 }: { def: ViewDef; onchange: (patch: Partial<ViewDef>) => void; clearSignal?: number } = $props();
@@ -23,6 +26,21 @@
   let advanced = $state(start.advanced);
   let data = $state<Data>({ statuses: [], projects: [], defs: [], cycles: [], labels: [] });
   let openId = $state<number | null>(null);
+  let groupOpen = $state(false);
+  let sortOpen = $state(false);
+  let displayOpen = $state(false);
+  let addOpen = $state(false);
+  let estimation = $state<Estimation>('both');
+  void readEstimation().then((r) => (estimation = r.estimation));
+  // The command menu runs the same open handlers the buttons do.
+  onMount(() => {
+    const on: [string, () => void][] = [
+      ['view.group.open', () => (groupOpen = true)], ['view.sort.open', () => (sortOpen = true)],
+      ['view.display.open', () => (displayOpen = true)], ['view.filter.add', () => (addOpen = true)],
+    ];
+    for (const [n, f] of on) addEventListener(`command:${n}`, f);
+    return () => on.forEach(([n, f]) => removeEventListener(`command:${n}`, f));
+  });
   onMount(async () => {
     const [statuses, projects, defs, cycles, labels] = await Promise.all([
       api.statuses.list(), api.projects.list(), api.properties.listDefs(), api.cycles.list(), api.labels.list(),
@@ -64,7 +82,7 @@
   };
 
   const allFields = $derived([
-    ...(['Status', 'StatusCategory', 'Priority', 'Project', 'Cycle', 'DueDate', 'Points', 'Title'] as FixedField[]).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
+    ...(['Status', 'StatusCategory', 'Priority', 'Project', 'Cycle', 'DueDate', 'Points', 'Title'] as FixedField[]).filter((f) => f !== 'Points' || pointsOn(estimation)).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
     ...data.defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name })),
   ]);
   const fieldItems = $derived(allFields.map((f) => ({ value: fieldKey(f.field), label: f.name })));
@@ -73,6 +91,16 @@
   const setSort = (k: string) => onchange({ sorts: k ? [{ field: parseField(k), descending: sort?.descending ?? false }] : [] });
   const setDesc = (descending: boolean) => sort && onchange({ sorts: [{ ...sort, descending }] });
 </script>
+
+{#snippet tip(label: string, id: string, inner: Snippet)}
+  <Tooltip {label} shortcut={shortcutFor(id)}>
+    {#snippet children(p)}<span {...p} class="trig">{@render inner()}</span>{/snippet}
+  </Tooltip>
+{/snippet}
+{#snippet addBtn()}<Button icon="filter">Add filter</Button>{/snippet}
+{#snippet groupBtn()}<Button icon="group">Group{def.group_by && (def.group_by.Fixed !== 'Points' || pointsOn(estimation)) ? `: ${lookup.name(def.group_by)}` : ''}</Button>{/snippet}
+{#snippet sortBtn()}<Button icon="sort">Sort{sort ? `: ${lookup.name(sort.field)}` : ''}</Button>{/snippet}
+{#snippet displayBtn()}<Button icon="eye">Display</Button>{/snippet}
 
 <div class="bar">
   <div class="chips" role="group" aria-label="Filters">
@@ -84,27 +112,27 @@
         <IconButton icon="close" label="Remove advanced filter" onclick={() => { advanced = null; commit(); }} />
       </span>
     {/if}
-    <Menu>
-      {#snippet trigger(props)}<span {...props} class="trig"><Button icon="filter">Add filter</Button></span>{/snippet}
+    <Menu bind:open={addOpen}>
+      {#snippet trigger(props)}<span {...props} class="trig">{@render tip('Add filter', 'view.filter.add', addBtn)}</span>{/snippet}
       {#each addable as a (fieldKey(a.field))}<MenuItem label={a.name} onSelect={() => add(a.field)} />{/each}
     </Menu>
   </div>
   <div class="tools">
     {#if def.layout !== 'Calendar'}
-    <Popover>
-      {#snippet trigger(props)}<span {...props} class="trig"><Button icon="group">Group{def.group_by ? `: ${lookup.name(def.group_by)}` : ''}</Button></span>{/snippet}
+    <Popover bind:open={groupOpen}>
+      {#snippet trigger(props)}<span {...props} class="trig">{@render tip('Group', 'view.group.open', groupBtn)}</span>{/snippet}
       <Select label="Group by" placeholder="No grouping" items={[{ value: '', label: 'No grouping' }, ...fieldItems]} bind:value={() => (def.group_by ? fieldKey(def.group_by) : ''), setGroup} />
     </Popover>
     {/if}
-    <Popover>
-      {#snippet trigger(props)}<span {...props} class="trig"><Button icon="sort">Sort{sort ? `: ${lookup.name(sort.field)}` : ''}</Button></span>{/snippet}
+    <Popover bind:open={sortOpen}>
+      {#snippet trigger(props)}<span {...props} class="trig">{@render tip('Sort', 'view.sort.open', sortBtn)}</span>{/snippet}
       <div class="stack">
         <Select label="Sort by" placeholder="Default order" items={[{ value: '', label: 'Default order' }, ...fieldItems]} bind:value={() => (sort ? fieldKey(sort.field) : ''), setSort} />
         {#if sort}<Switch label="Descending" bind:checked={() => sort.descending, setDesc} />{/if}
       </div>
     </Popover>
-    <Popover>
-      {#snippet trigger(props)}<span {...props} class="trig"><Button icon="eye">Display</Button></span>{/snippet}
+    <Popover bind:open={displayOpen}>
+      {#snippet trigger(props)}<span {...props} class="trig">{@render tip('Display', 'view.display.open', displayBtn)}</span>{/snippet}
       <DisplayPanel {def} {onchange} />
     </Popover>
   </div>

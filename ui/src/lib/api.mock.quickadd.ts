@@ -91,12 +91,19 @@ const estimate = (w: string) => {
   return n > 0 && n <= 4_294_967_295 ? n : null;
 };
 
+/** `3`, `0.5` or `.5`, within what a stored value may be (core: `points_number`). */
+const pointsNumber = (n: string) => {
+  const m = /^(\d*)(?:\.(\d))?$/.exec(n);
+  const p = m && (m[1] !== '' || m[2] !== undefined) ? Number(n) : NaN;
+  return p >= 0 && p <= 1000 && Number(p.toFixed(1)) === p ? p : null;
+};
+/** `3pt`, `3pts`, `.5pt` or `pt3`. */
 const points = (w: string) => {
-  const m = /^(?:(\d+(?:\.\d)?)pt|pt(\d+(?:\.\d)?))$/.exec(w);
-  return m ? Number(m[1] ?? m[2]) : null;
+  const n = /^(.*)pts?$/.exec(w)?.[1] ?? (w.startsWith('pt') ? w.slice(2) : null);
+  return n === null ? null : pointsNumber(n);
 };
 
-export function parseQuickadd(input: string, today: string, tz: string): ParsedQuickAdd {
+export function parseQuickadd(input: string, today: string, tz: string, pointsOn = true): ParsedQuickAdd {
   const tokens = input.split(/\s+/).filter(Boolean);
   const out = { dueDate: null as string | null, time: null as [[number, number], string] | null, start: null as string | null, priority: null as number | null, slug: null as string | null, labels: [] as string[], estimate: null as number | null, points: null as number | null };
   const title: string[] = [];
@@ -112,7 +119,8 @@ export function parseQuickadd(input: string, today: string, tz: string): ParsedQ
     else if (w.length > 1 && w.startsWith('#')) { out.slug = w.slice(1); used = 1; }
     else if (raw.length > 1 && raw.startsWith('@')) { out.labels.push(raw.slice(1)); used = 1; }
     else if (estimate(w) !== null) { out.estimate = estimate(w); used = 1; }
-    else if (points(w) !== null) { out.points = points(w); used = 1; }
+    else if (pointsOn && points(w) !== null) { out.points = points(w); used = 1; }
+    else if (pointsOn && pointsNumber(w) !== null && /^pts?$/i.test(tokens[i + 1] ?? '')) { out.points = pointsNumber(w); used = 2; }
     else if (w === 'by' || w === 'due') date(i + 1, (d) => (out.dueDate = d), 1);
     else if (w === 'start') date(i + 1, (d) => (out.start = d), 1);
     else if (w === 'at') {

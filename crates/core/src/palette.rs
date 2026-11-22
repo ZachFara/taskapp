@@ -123,6 +123,17 @@ pub async fn map_legacy_colors(pool: &SqlitePool) -> Result<()> {
                     .bind(id)
                     .execute(pool)
                     .await?;
+                // The recorded snapshots must follow, or undo of an older step reads the change as an edit.
+                for col in ["old_value", "new_value"] {
+                    sqlx::query(&format!(
+                        "UPDATE changes SET {col} = json_set({col}, '$.color', ?1) WHERE entity = ?2 AND json_extract({col}, '$.color') = ?3"
+                    ))
+                    .bind(key)
+                    .bind(format!("row:{table}"))
+                    .bind(&hex)
+                    .execute(pool)
+                    .await?;
+                }
             }
         }
     }

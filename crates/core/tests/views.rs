@@ -130,10 +130,10 @@ async fn nested_and_or_not() -> R {
 }
 
 #[tokio::test]
-async fn unknown_property_is_invalid() -> R {
+async fn unknown_property_is_dropped_not_an_error() -> R {
     let f = cond(prop("nope"), Op::Eq, json!(1));
-    let e = views::compile(&def(Some(f)), &[]).expect_err("must fail");
-    assert!(matches!(e, Error::Invalid(_)));
+    let (sql, binds) = views::compile(&def(Some(f)), &[])?;
+    assert!(!sql.contains("json_extract") && binds.is_empty(), "{sql}");
     Ok(())
 }
 
@@ -156,20 +156,27 @@ async fn property_key_never_inlined() -> R {
 }
 
 #[tokio::test]
-async fn hostile_property_key_is_invalid() -> R {
+async fn hostile_property_key_is_never_used() -> R {
     let defs = [pdef("size", PropertyKind::Number)];
     let key = "') OR 1=1 --";
-    let f = cond(prop(key), Op::Eq, json!(1));
-    assert!(matches!(
-        views::compile(&def(Some(f)), &defs),
-        Err(Error::Invalid(_))
-    ));
-    let mut d = def(None);
+    let mut d = def(Some(cond(prop(key), Op::Eq, json!(1))));
     d.sorts = vec![Sort {
         field: prop(key),
         descending: false,
     }];
-    assert!(matches!(views::compile(&d, &defs), Err(Error::Invalid(_))));
+    let (sql, binds) = views::compile(&d, &defs)?;
+    assert!(!sql.contains("OR 1=1") && binds.is_empty(), "{sql}");
+    let bad = taskapp_core::properties::create_def(
+        &Db::open_in_memory().await?,
+        {
+            let mut p = pdef(key, PropertyKind::Text);
+            p.key = key.into();
+            p
+        },
+        taskapp_core::ChangeSource::Ui,
+    )
+    .await;
+    assert!(matches!(bad, Err(Error::Invalid(_))));
     Ok(())
 }
 

@@ -325,7 +325,12 @@ pub async fn progress_on(
     let tls = timelines(db, scope, measure, tz).await?;
     let (dfrom, dto) = default_range(db, scope, &tls, today).await?;
     let (from, to) = (from.unwrap_or(dfrom), to.unwrap_or(dto));
-    if to < from || (to - from).num_days() >= MAX_DAYS {
+    if to < from {
+        return Err(Error::Invalid(format!(
+            "range ends ({to}) before it starts ({from})"
+        )));
+    }
+    if (to - from).num_days() >= MAX_DAYS {
         return Err(Error::Invalid(format!(
             "range {from} to {to} must be 1 to {MAX_DAYS} days"
         )));
