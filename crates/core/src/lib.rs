@@ -7,6 +7,7 @@ mod model;
 
 pub mod backup;
 pub mod blocks;
+pub mod bulk;
 pub mod comments;
 pub mod cycles;
 pub mod history;
