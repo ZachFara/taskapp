@@ -1,8 +1,12 @@
 import type { Component } from 'svelte';
 import CyclesPage from '../components/CyclesPage.svelte';
+import InboxPage from '../components/InboxPage.svelte';
 import IssueDetail from '../components/IssueDetail.svelte';
+import MyIssuesPage from '../components/MyIssuesPage.svelte';
 import PinnedPage from '../components/PinnedPage.svelte';
 import ProjectPage from '../components/ProjectPage.svelte';
+import ProjectsPage from '../components/ProjectsPage.svelte';
+import ViewsPage from '../components/ViewsPage.svelte';
 import Settings from '../components/settings/Settings.svelte';
 import GanttView from '../components/views/GanttView.svelte';
 import ViewPage from './ViewPage.svelte';
@@ -19,6 +23,10 @@ export const routes: { pattern: string; component: Component }[] = [
   { pattern: '/cycles', component: CyclesPage },
   { pattern: '/settings/:section', component: Settings },
   { pattern: '/design', component: DesignGallery },
+  { pattern: '/inbox', component: InboxPage },
+  { pattern: '/my', component: MyIssuesPage },
+  { pattern: '/projects', component: ProjectsPage },
+  { pattern: '/views', component: ViewsPage },
 ];
 
 /** The first route whose pattern fits `path`, with its `:name` segments as params. */
