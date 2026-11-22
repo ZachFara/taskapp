@@ -9,7 +9,7 @@
   import IssueMenu from './IssueMenu.svelte';
   import { api } from '../../lib/api';
   import type { Label, Project } from '../../lib/bindings';
-  import { dayText, dueDay, isOverdue } from './dates';
+  import { workspaceZone, dayText, dueDay, isOverdue } from './dates';
   import EmptyState from '../../ui/EmptyState.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
   import IconButton from '../../ui/IconButton.svelte';
@@ -95,7 +95,7 @@
   onMount(() => {
     currentViewId.value = view.id;
     void refreshAll().finally(() => (loaded = true));
-    void Promise.all([api.projects.list(), api.labels.list(), api.workspace.status()]).then(([p, l, w]) => ([projects, labels, tz] = [p, l, w.timezone]));
+    void Promise.all([api.projects.list(), api.labels.list(), workspaceZone()]).then(([p, l, z]) => ([projects, labels, tz] = [p, l, z]));
   });
 
   const raw = (i: Issue, ref: FieldRef): Value => {
@@ -406,6 +406,7 @@
       {#each [0, 1, 2, 3] as n (n)}<Skeleton height="var(--row-h)" />{/each}
     </div>
   {:else}
+    <IssueMenu>
     <table role="grid" class:grouped>
       <colgroup>
         <col class="key-col" />
@@ -444,8 +445,7 @@
           {/if}
           {#if !collapsed.has(g.name)}
             {#each g.rows as issue (issue.id)}
-              <IssueMenu issueId={issue.id}>
-              <tr data-key={issue.key} aria-selected={rowSelected(issue)} data-focused={issue.id === activeRowId ? '' : undefined}>
+              <tr data-key={issue.key} data-id={issue.id} aria-selected={rowSelected(issue)} data-focused={issue.id === activeRowId ? '' : undefined}>
                 <th scope="row" class="key-cell">{issue.key}</th>
                 {#each cols as col, c (col.id)}
                   {@const isEditing = editing !== null && visibleIds[editing.row] === issue.id && editing.col === c}
@@ -501,12 +501,12 @@
                   </td>
                 {/each}
               </tr>
-              </IssueMenu>
             {/each}
           {/if}
         </tbody>
       {/each}
     </table>
+    </IssueMenu>
   {/if}
 </section>
 

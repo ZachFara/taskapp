@@ -7,23 +7,30 @@
   import ContextMenu from '../../ui/ContextMenu.svelte';
   import MenuItem from '../../ui/MenuItem.svelte';
 
-  // Right-click menu for one issue, built from the registry so it always matches the command menu.
-  let { issueId, children }: { issueId: number; children: Snippet } = $props();
+  // One right-click menu around a whole list, board or table: the row under the pointer (`data-id`) picks the issue,
+  // and the items come from the registry so they always match the command menu. One instance keeps big lists fast.
+  let { children }: { children: Snippet } = $props();
   let open = $state(false);
-  const ctx = () => ({ route: location.pathname, selection: selection.selected, focusedIssueId: issueId, openIssueId: null, api, navigate });
-  const items = $derived(open ? listCommands(ctx()).filter((c) => c.run) : []);
-  $effect(() => {
-    if (open) selection.focus(issueId);
-  });
+  let issueId = $state<number | null>(null);
+  const ctx = (id: number) => ({ route: location.pathname, selection: selection.selected, focusedIssueId: id, openIssueId: null, api, navigate });
+  const items = $derived(open && issueId !== null ? listCommands(ctx(issueId)).filter((c) => c.run) : []);
+
+  function aim(e: MouseEvent) {
+    const row = (e.target as Element).closest<HTMLElement>('[data-id]');
+    if (!row) return void e.stopPropagation();
+    issueId = Number(row.dataset.id);
+    selection.focus(issueId);
+  }
 </script>
 
 <ContextMenu bind:open>
-  {#snippet area()}{@render children()}{/snippet}
+  {#snippet area()}<div class="fill" role="presentation" oncontextmenucapture={aim}>{@render children()}</div>{/snippet}
   {#each items as c (c.id)}
-    <MenuItem label={c.label} icon={c.icon} shortcut={c.shortcut} onSelect={() => c.run!(ctx())} />
+    <MenuItem label={c.label} icon={c.icon} shortcut={c.shortcut} onSelect={() => c.run!(ctx(issueId!))} />
   {/each}
 </ContextMenu>
 
 <style>
   :global(.cx-ctx-area) { display: contents; }
+  .fill { height: 100%; }
 </style>

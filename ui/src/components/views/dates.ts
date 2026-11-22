@@ -1,5 +1,10 @@
 import type { Issue, StatusCategory } from '../../lib/bindings';
+import { api } from '../../lib/api';
 import { localDay } from '../../lib/gantt';
+
+/** The workspace zone; when the status cannot be read, the machine's zone keeps the screens working. */
+export const workspaceZone = () =>
+  api.workspace.status().then((w) => w.timezone, () => Intl.DateTimeFormat().resolvedOptions().timeZone);
 
 /** The due day as the workspace zone sees it, so "which day" never depends on the UTC date. */
 export function dueDay(i: Pick<Issue, 'due'>, tz: string): string | null {

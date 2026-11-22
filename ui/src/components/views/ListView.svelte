@@ -17,7 +17,7 @@
   import Skeleton from '../../ui/Skeleton.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import TextInput from '../../ui/TextInput.svelte';
-  import { dayText, dueDay as dueDayIn, isOverdue } from './dates';
+  import { workspaceZone, dayText, dueDay as dueDayIn, isOverdue } from './dates';
 
   // shortcut: row and band heights default to the token values when the CSS is not loaded (tests), upgrade if rows vary in height
   const ROW = 32;
@@ -69,9 +69,9 @@
 
   async function load() {
     const [st, pr, cy, lb, rows, ws] = await Promise.all([
-      api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.views.query(view.def), api.workspace.status(),
+      api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.views.query(view.def), workspaceZone(),
     ]);
-    tz = ws.timezone;
+    tz = ws;
     statuses = st;
     projects = pr;
     cycles = cy;
@@ -239,6 +239,7 @@
       {#snippet action()}<CommandButton command="issue.create" variant="primary" />{/snippet}
     </EmptyState></div>
 {:else}
+  <IssueMenu>
   <div class="scroller" role="presentation" bind:this={scroller} onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}>
     <ul class="list" role="list" aria-label={view.name} style:height="{total}px">
       {#each slice as { item, top } (top)}
@@ -260,10 +261,10 @@
           {@const i = item.row}
           {@const st = statusOf(i)}
           {@const chosen = selection.selected.includes(i.id)}
-          <IssueMenu issueId={i.id}>
           <li
             class="row"
             data-key={i.key}
+            data-id={i.id}
             data-selected={chosen ? '' : undefined}
             aria-current={selection.focused === i.id ? 'true' : undefined}
             style:top="{top}px"
@@ -311,11 +312,11 @@
             <span class="due" data-overdue={overdue(i) ? '' : undefined}>{dueDay(i) ? dayText(dueDay(i)!) : ''}</span>
             <span class="est">{estimate(i.estimate_minutes)}</span>
           </li>
-          </IssueMenu>
         {/if}
       {/each}
     </ul>
   </div>
+  </IssueMenu>
 
   <Menu trigger={anchor} bind:open={menuOpen}>
     {#each statuses as s (s.id)}

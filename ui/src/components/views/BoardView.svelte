@@ -7,7 +7,7 @@
   import CommandButton from '../CommandButton.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
   import IssueMenu from './IssueMenu.svelte';
-  import { dayText, dueDay } from './dates';
+  import { workspaceZone, dayText, dueDay } from './dates';
   import Contour from '../../ui/Contour.svelte';
   import EntityIcon from '../../ui/EntityIcon.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
@@ -107,7 +107,7 @@
   }
   onMount(async () => {
     [labels, projects] = await Promise.all([api.labels.list(), api.projects.list()]);
-    tz = (await api.workspace.status()).timezone;
+    tz = await workspaceZone();
     await reload();
   });
 
@@ -182,6 +182,7 @@
   <IconButton icon="filter" label="Hide empty columns" pressed={hideEmpty} onclick={toggleHideEmpty} />
 </div>
 
+<IssueMenu>
 <div class="board">
   {#each rows as { col, cards } (col.name)}
     {@const collapsed = isCollapsed(col)}
@@ -211,13 +212,13 @@
           <ul class="cards" role="listbox" aria-label={`${col.name} issues`} aria-multiselectable="true">
             {#each cards as i (i.id)}
               {@const project = projectOf(i)}
-              <IssueMenu issueId={i.id}>
               <li
                 class="card"
                 role="option"
                 tabindex={selection.focused === i.id ? 0 : -1}
                 draggable="true"
                 data-issue={i.key}
+                data-id={i.id}
                 aria-selected={isSelected(i.id)}
                 data-focused={selection.focused === i.id ? '' : undefined}
                 onclick={(e) => pick(e, i.id)}
@@ -240,7 +241,6 @@
                   {#if due(i)}<time class="due" datetime={due(i) ?? undefined}>{dueLabel(due(i) ?? '')}</time>{/if}
                 </span>
               </li>
-              </IssueMenu>
             {/each}
           </ul>
         {:else}
@@ -253,6 +253,7 @@
     </section>
   {/each}
 </div>
+</IssueMenu>
 {/if}
 
 <style>

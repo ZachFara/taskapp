@@ -9,7 +9,7 @@
   import ListRow from '../ui/ListRow.svelte';
   import EntityIcon from '../ui/EntityIcon.svelte';
   import { localDay } from '../lib/gantt';
-  import { dayText } from './views/dates';
+  import { workspaceZone, dayText } from './views/dates';
   import PageHeader from '../ui/PageHeader.svelte';
   import TextInput from '../ui/TextInput.svelte';
   import ListView from './views/ListView.svelte';
@@ -47,7 +47,7 @@
   const finished = (i: Issue) => ['Completed', 'Canceled'].includes(statuses.find((s) => s.id === i.status_id)?.category ?? '');
 
   async function load() {
-    const today = localDay(new Date(), (await api.workspace.status()).timezone);
+    const today = localDay(new Date(), await workspaceZone());
     todayIn = today;
     const list = await api.cycles.list();
     const issues = await Promise.all(list.map((c) => api.views.query(cycleView(c).def)));
