@@ -4,7 +4,8 @@ import type { FieldRef, ViewDef, ViewTemplate } from './bindings';
 export const withDisplay = (d: Partial<ViewDef> & Pick<ViewDef, 'layout'>): ViewDef => ({
   filter: null, sorts: [], group_by: null, columns: [], include_archived: false,
   density: 'comfortable', show_empty_groups: false, show_sub_issues: 'nest', card_fields: [], show_weekends: true,
-  ...structuredClone(d),
+  // JSON, not structuredClone: a def from a Svelte state proxy cannot be structured-cloned.
+  ...JSON.parse(JSON.stringify(d)),
 });
 
 const fixed = (f: Extract<FieldRef, { Fixed: unknown }>['Fixed']): FieldRef => ({ Fixed: f });
