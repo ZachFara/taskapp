@@ -1,17 +1,14 @@
 <script lang="ts">
   import { api } from '../../lib/api';
   import type { Issue, Status } from '../../lib/bindings';
-  import EmptyState from '../../ui/EmptyState.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
-  import TextInput from '../../ui/TextInput.svelte';
   import { pct } from './format';
   import IssuePicker from './IssuePicker.svelte';
 
   let { issue, act, rev, open }: { issue: Issue; act: (p: Promise<unknown>) => void; rev: number; open: (key: string) => void } = $props();
   let children = $state<Issue[]>([]);
   let statuses = $state<Status[]>([]);
-  let title = $state('');
   let collapsed = $state(false);
   let add = $state<HTMLElement>();
 
@@ -22,12 +19,7 @@
   const cat = (i: Issue) => statuses.find((s) => s.id === i.status_id)?.category ?? 'Backlog';
   const done = $derived(children.filter((c) => cat(c) === 'Completed').length);
   const attach = (child: Issue) => child.id !== issue.id && act(api.issues.update(child.id, { parent_id: issue.id }));
-  const create = (e: Event) => {
-    e.preventDefault();
-    const t = title.trim();
-    title = '';
-    if (t) act(api.issues.create({ title: t, parent_id: issue.id, project_id: issue.project_id }));
-  };
+  const create = (t: string) => act(api.issues.create({ title: t, parent_id: issue.id, project_id: issue.project_id }));
 </script>
 
 <section aria-label="Sub-issues">
@@ -44,11 +36,10 @@
         {/each}
       </ul>
     {:else}
-      <EmptyState title="Nothing broken down yet" hint="Split the work into sub-issues to track progress here." />
+      <p class="none">No sub-issues</p>
     {/if}
     <div class="add" bind:this={add}>
-      <form onsubmit={create}><TextInput label="New sub-issue title" placeholder="New sub-issue, press Enter" bind:value={title} /></form>
-      <IssuePicker selfId={issue.id} label="Add sub-issue" pick={attach} />
+      <IssuePicker selfId={issue.id} label="New sub-issue title" placeholder="Add a sub-issue: type a title and press Enter, or pick one" pick={attach} {create} />
     </div>
   {/if}
 </section>
@@ -61,5 +52,6 @@
   li button { display: flex; align-items: center; gap: var(--s-5); width: 100%; height: var(--row-h); padding: 0 var(--s-5); border: 0; background: transparent; text-align: left; }
   li button:hover { background: var(--active); }
   .key { color: var(--muted); font-weight: 700; }
+  .none { padding: var(--s-4) var(--s-5); color: var(--muted); }
   .add { display: grid; gap: var(--s-4); padding: var(--s-4); }
 </style>

@@ -101,7 +101,7 @@ describe('IssueDetail', () => {
     await type('Due date', '2026-12-05');
     expect(spy).toHaveBeenCalledTimes(1);
     expect((await get(i.id)).due).toEqual({ Date: '2026-12-05' });
-    expect(row('Due').textContent).toContain('2026-12-05');
+    expect(row('Due').textContent).toContain('Dec 5');
     await type('Due date', '');
     expect(spy).toHaveBeenLastCalledWith(i.id, { due: null });
     expect((await get(i.id)).due).toBeNull();
@@ -172,7 +172,7 @@ describe('IssueDetail', () => {
   it('sub_issue_picker_never_offers_the_issue_itself', async () => {
     const i = await open({ title: 'Selfish subject' });
     const other = await api.issues.create({ title: 'Selfish other' });
-    await type('Add sub-issue', 'Selfish');
+    await type('New sub-issue title', 'Selfish');
     const keys = [...document.querySelectorAll('[aria-label=Sub-issues] .results button')].map((b) => b.textContent);
     expect(keys.some((t) => t!.includes(i.key + ' '))).toBe(false);
     await click(button(other.key));
@@ -201,7 +201,7 @@ describe('IssueDetail', () => {
     q<HTMLFormElement>('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await settle();
     expect(q('[aria-label=History]').textContent).toContain('Changed');
-    expect(q('[aria-label=History] h4').textContent).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(q('[aria-label=History] h4').textContent).toMatch(/^[A-Z][a-z]{2} \d{1,2}(, \d{4})?$/);
   });
 
   it('pin_and_archive_actions', async () => {
@@ -233,6 +233,65 @@ describe('IssueDetail', () => {
     await settle(100);
     await command('close');
     expect(onclose).toHaveBeenCalledTimes(1);
+  });
+
+  it('header_is_a_breadcrumb_and_the_title_shows_once', async () => {
+    const i = await open({ title: 'Only once please', project_id: 1 });
+    const crumb = q('header h1').textContent!;
+    expect(crumb).toContain(i.key);
+    expect(crumb).toContain('/');
+    expect(crumb).not.toContain('Only once please');
+    expect(q('.hero').textContent!.split('Only once please').length - 1).toBe(1);
+  });
+
+  it('empty_sections_are_one_line_without_an_illustration', async () => {
+    await open();
+    for (const s of ['Sub-issues', 'Relations', 'Comments']) expect(q(`[aria-label=${s}]`).querySelector('.empty, svg.contour, [data-contour]')).toBeNull();
+    expect(q('[aria-label=Sub-issues]').textContent).toContain('No sub-issues');
+    expect(q('[aria-label=Relations]').textContent).toContain('No relations');
+    expect(q('[aria-label=Sub-issues]').querySelectorAll('input').length).toBe(1);
+  });
+
+  it('due_time_uses_a_time_input', async () => {
+    await open({ project_id: 1 });
+    await click(row('Due'));
+    await type('Due date', '2026-12-05');
+    await click(q('[aria-label="Due time"]'));
+    expect(byLabel('Due time of day').type).toBe('time');
+  });
+
+  it('milestone_edit_calls_api_once_and_shows_value', async () => {
+    const i = await open({ project_id: 1 });
+    const m = await api.projects.createMilestone(1, 'Beta', null);
+    unmount(app!);
+    document.body.innerHTML = '';
+    app = mount(IssueDetail, { target: document.body, props: { params: { key: i.key } } });
+    await settle();
+    const spy = vi.spyOn(api.issues, 'update');
+    await click(row('Milestone'));
+    await click(option('Milestone', 'Beta'));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((await get(i.id)).milestone_id).toBe(m.id);
+    expect(row('Milestone').textContent).toContain('Beta');
+  });
+
+  it('relation_kind_select_chooses_blocked_by', async () => {
+    const i = await open({ title: 'Kind subject' });
+    const other = await api.issues.create({ title: 'Kind other' });
+    // jsdom lacks what the select's pointer handling and scrolling call.
+    Element.prototype.hasPointerCapture ??= () => false;
+    Element.prototype.releasePointerCapture ??= () => {};
+    Element.prototype.scrollIntoView ??= () => {};
+    const trigger = byLabel('Relation kind');
+    trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }));
+    await settle();
+    const blockedBy = [...document.querySelectorAll('[role=option]')].find((o) => o.textContent!.trim() === 'blocked by')!;
+    blockedBy.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse' }));
+    blockedBy.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerType: 'mouse' }));
+    await click(blockedBy);
+    await type('Find issue', 'Kind other');
+    await click(button(other.key));
+    expect(await api.relations.forIssue(i.id)).toEqual([{ from: other.id, to: i.id, kind: 'Blocks' }]);
   });
 
   describe('through the real key registry', () => {

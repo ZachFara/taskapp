@@ -4,6 +4,7 @@
   import Button from '../../ui/Button.svelte';
   import IconButton from '../../ui/IconButton.svelte';
   import TextInput from '../../ui/TextInput.svelte';
+  import { humanDate } from '../detail/format';
 
   let { projectId, milestones, issues, statuses, onchange }: {
     projectId: number;
@@ -60,7 +61,7 @@
           <span class="stone" aria-hidden="true"></span>
           <div class="text">
             <span class="name">{m.name}</span>
-            {#if m.target_date}<time>{m.target_date}</time>{/if}
+            {#if m.target_date}<time>{humanDate(m.target_date)}</time>{/if}
           </div>
           <div class="bar" role="img" aria-label={`${c.done} of ${c.total} done`}>
             <span style:width={c.total ? `${(c.done / c.total) * 100}%` : '0%'}></span>

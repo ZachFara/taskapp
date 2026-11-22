@@ -3,6 +3,7 @@ import { mount, tick, unmount } from 'svelte';
 import { api, setApi, type Api } from '../lib/api';
 import { createMockApi, fixtures, type MockSeed } from '../lib/api.mock';
 import type { Project } from '../lib/bindings';
+import { humanDate } from './detail/format';
 import ProjectPage from './ProjectPage.svelte';
 
 const base = fixtures.projects[0];
@@ -82,12 +83,45 @@ describe('ProjectPage', () => {
     const mock = createMockApi(seed([{ start_date: '2026-12-01', target_date: '2027-01-31' }]));
     await mock.projects.createMilestone(1, 'Beta', '2026-12-15');
     const target = await open('/project/website', mock);
-    const dates = [...target.querySelectorAll<HTMLInputElement>('input[type="date"]')].map((i) => i.value);
-    expect(dates).toContain('2026-12-01');
-    expect(dates).toContain('2027-01-31');
+    expect(target.querySelector('[aria-label="Start date"]')?.textContent).toContain(humanDate('2026-12-01'));
+    expect(target.querySelector('[aria-label="Target date"]')?.textContent).toContain(humanDate('2027-01-31'));
     expect(target.textContent).toMatch(/\d+ \/ \d+/);
     expect(target.textContent).toContain('Beta');
-    expect(target.textContent).toContain('2026-12-15');
+    expect(target.textContent).toContain(humanDate('2026-12-15'));
+  });
+
+  it('header_has_no_project_name_hero_has_it_once', async () => {
+    const t = await open('/project/website');
+    expect(t.querySelector('header h1')?.textContent).not.toContain('Project 1');
+    expect(t.querySelector('.hero')?.textContent?.split('Project 1').length).toBe(2);
+  });
+
+  it('toolbar_sits_between_milestones_and_issues', async () => {
+    const t = await open('/project/website');
+    const at = (sel: string) => t.querySelector(sel)!;
+    const before = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(at('header').querySelector('[aria-label="Group by"]')).toBeNull();
+    expect(before(at('.hero'), at('[aria-label=Milestones]'))).toBe(true);
+    expect(before(at('[aria-label=Milestones]'), at('[data-testid="issues-toolbar"]'))).toBe(true);
+    expect(before(at('[data-testid="issues-toolbar"]'), at('.issues'))).toBe(true);
+    expect(at('[data-testid="issues-toolbar"]').textContent).toContain('Group');
+  });
+
+  it('empty_dates_read_set_start_and_set_target', async () => {
+    const t = await open('/project/website', seed([{ start_date: null, target_date: null }]));
+    expect(t.querySelector('[aria-label="Start date"]')?.textContent).toContain('Set start');
+    expect(t.querySelector('[aria-label="Target date"]')?.textContent).toContain('Set target');
+    expect(t.querySelector('input[type="date"]')).toBeNull();
+  });
+
+  it('date_field_edit_saves_the_project', async () => {
+    const t = await open('/project/website', seed([{ start_date: null }]));
+    t.querySelector<HTMLButtonElement>('button[aria-label="Start date"]')!.click();
+    await vi.waitFor(() => expect(document.querySelector('input[aria-label="Start date value"]')).not.toBeNull());
+    const el = document.querySelector<HTMLInputElement>('input[aria-label="Start date value"]')!;
+    el.value = '2026-12-01';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    await vi.waitFor(async () => expect((await api.projects.list())[0].start_date).toBe('2026-12-01'));
   });
 
   it('pin_toggle_pins_project', async () => {
@@ -140,7 +174,7 @@ describe('ProjectPage', () => {
     await type('Milestone date', '2027-02-01');
     click('Save milestone');
     await vi.waitFor(() => expect(t.textContent).toContain('U9 Alpha'));
-    expect(t.textContent).toContain('2027-02-01');
+    expect(t.textContent).toContain(humanDate('2027-02-01'));
 
     click('Edit U9 Alpha');
     await tick();

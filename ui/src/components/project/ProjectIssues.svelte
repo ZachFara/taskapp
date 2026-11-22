@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Component } from 'svelte';
-  import type { FieldRef, Layout, SavedView } from '../../lib/bindings';
+  import type { Filter, Layout, SavedView, ViewDef } from '../../lib/bindings';
   import { issues, selectedIssueId } from '../../lib/stores.svelte';
   import BoardView from '../views/BoardView.svelte';
   import CalendarView from '../views/CalendarView.svelte';
@@ -8,9 +8,14 @@
   import ListView from '../views/ListView.svelte';
   import TableView from '../views/TableView.svelte';
 
-  // Layout and grouping live in the page header; this only turns them into a view of the project's issues.
-  let { projectId, layout, groupBy = null }: { projectId: number; layout: Layout; groupBy?: FieldRef | null } = $props();
+  // The page's toolbar owns filter, group and sort; this only turns them into a view of the project's issues.
+  let { projectId, layout, def }: { projectId: number; layout: Layout; def: ViewDef } = $props();
   const byLayout: Record<Layout, Component<any>> = { List: ListView, Table: TableView, Board: BoardView, Gantt: GanttView, Calendar: CalendarView };
+
+  const inProject = (f: Filter | null): Filter => {
+    const mine: Filter = { Cond: { field: { Fixed: 'Project' }, op: 'Eq', value: projectId } };
+    return f ? { And: [mine, f] } : mine;
+  };
 
   // raw: the views clone the def, which a reactive proxy cannot survive.
   const view = $derived.by<SavedView>(() => ({
@@ -19,14 +24,7 @@
     position: 0,
     icon: null,
     color: null,
-    def: {
-      filter: { Cond: { field: { Fixed: 'Project' }, op: 'Eq', value: projectId } },
-      sorts: [],
-      group_by: groupBy,
-      layout,
-      columns: [],
-      include_archived: false,
-    },
+    def: { ...def, layout, filter: inProject(def.filter) },
   }));
   const Shown = $derived(byLayout[layout]);
 
@@ -39,7 +37,7 @@
   }
 </script>
 
-{#key `${layout}:${projectId}:${JSON.stringify(groupBy)}`}
+{#key `${layout}:${projectId}:${JSON.stringify(def)}`}
   <div class="issues" role="presentation" onclick={pick}><Shown {view} /></div>
 {/key}
 
