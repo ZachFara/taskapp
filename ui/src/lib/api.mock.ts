@@ -1,6 +1,6 @@
 import type { Api } from './api';
 import type {
-  Applied, Bar, Change, Comment, Cycle, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
+  AppliedTemplate, Applied, Bar, Change, Comment, Cycle, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
   NewIssue, Pin, Project, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
   TemplateInput, Value, ViewDef, WorkBlock,
 } from './bindings';
@@ -159,7 +159,7 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
     });
     return { ...f, status_id: status, project_id: project, label_ids, properties: f.properties ?? {} };
   };
-  const applyTemplate = (t: IssueTemplate, o: NewIssue): Applied => {
+  const applyTemplate = (t: IssueTemplate, o: NewIssue): AppliedTemplate => {
     const skipped: string[] = [];
     const f = liveRefs(t.body.fields ?? {}, skipped);
     const own = o.title?.trim() ?? '';
@@ -504,6 +504,25 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
         return path;
       },
       list: async (dir) => backups.filter((p) => p.startsWith(`${dir}/`)),
+    },
+    // shortcut: titles only, split on commas without quote handling; the real command maps every field.
+    import: {
+      csvPlan: async (csv, mapping) => {
+        const [head, ...rows] = csv.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => l.split(','));
+        const col = mapping?.find(([, f]) => f === 'title')?.[0] ?? head.find((h) => /^(title|name|summary)$/i.test(h));
+        if (col === undefined) return fail('Invalid', 'no column is mapped to title');
+        const at = head.indexOf(col);
+        const issues = rows.filter((r) => r[at]?.trim()).map((r) => ({
+          external_id: `csv:${r.join('\u001f')}`, title: r[at].trim(), description: '', status: null, priority: 0,
+          project: null, labels: [], start_date: null, due_date: null, estimate_minutes: null, properties: {},
+          parent: null, cycle: null,
+        }));
+        return { source: 'csv', issues, unmapped: head.filter((h) => h !== col) };
+      },
+      apply: async (plan) => {
+        const made = (plan.issues ?? []).map((i) => create({ title: i.title }));
+        return { created: made.length, warnings: [] };
+      },
     },
     export: { now: ok },
     sync: { status: async () => off, now: async () => off },

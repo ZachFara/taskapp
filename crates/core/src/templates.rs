@@ -62,7 +62,7 @@ pub struct IssueTemplate {
 /// The issue and sub-issues a template created. `skipped` names references the template
 /// no longer resolves (a deleted label, project or status); those fields were left unset.
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
-pub struct Applied {
+pub struct AppliedTemplate {
     pub issue: Issue,
     pub sub_issues: Vec<Issue>,
     pub skipped: Vec<String>,
@@ -330,7 +330,7 @@ pub async fn apply(
     id: TemplateId,
     overrides: NewIssue,
     src: ChangeSource,
-) -> Result<Applied> {
+) -> Result<AppliedTemplate> {
     let template = get(db, id).await?;
     let label = format!("Create from template {}", template.name);
     // Boxed: the transaction's state is large, and callers' futures must stay under clippy's limit.
@@ -347,7 +347,7 @@ async fn apply_in(
     body: TemplateBody,
     overrides: NewIssue,
     src: ChangeSource,
-) -> Result<Applied> {
+) -> Result<AppliedTemplate> {
     let mut skipped = Vec::new();
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let fields = live_refs(&mut tx, body.fields, &mut skipped).await?;
@@ -388,7 +388,7 @@ async fn apply_in(
         sub_issues.push(issues::create_in(&mut tx, sub, src).await?);
     }
     tx.commit().await?;
-    Ok(Applied {
+    Ok(AppliedTemplate {
         issue,
         sub_issues,
         skipped,

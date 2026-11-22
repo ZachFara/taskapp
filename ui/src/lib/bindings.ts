@@ -431,6 +431,20 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	importCsvPlan: (csv: string, mapping: ([string, string])[] | null, options?: InvokeOptions) => __TAURI_INVOKE<ImportPlan>("import_csv_plan", { csv, mapping }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	importApply: (plan: ImportPlan, options?: InvokeOptions) => __TAURI_INVOKE<Applied>("import_apply", { plan }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	searchSearch: (text: string, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<Issue[]>("search_search", { text, limit }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -589,14 +603,9 @@ export const commands = {
 };
 
 /* Types */
-/**
- *  The issue and sub-issues a template created. `skipped` names references the template
- *  no longer resolves (a deleted label, project or status); those fields were left unset.
- */
 export type Applied = {
-	issue: Issue,
-	sub_issues: Issue[],
-	skipped: string[],
+	created: number,
+	warnings: string[],
 };
 
 export type Bar = {
@@ -662,6 +671,25 @@ export type Filter = ({ And: Filter[] }) & { Cond?: never; Not?: never; Or?: nev
 } }) & { And?: never; Not?: never; Or?: never };
 
 export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived";
+
+/**
+ *  Everything an import would create. The lists of statuses, labels, projects, cycles and property
+ *  definitions hold only what does not exist yet.
+ */
+export type ImportPlan = {
+	source?: string,
+	statuses?: PlanStatus[],
+	labels?: string[],
+	projects?: string[],
+	cycles?: PlanCycle[],
+	property_defs?: PropertyDef[],
+	issues?: PlanIssue[],
+	relations?: PlanRelation[],
+	warnings?: string[],
+	skipped?: Skipped[],
+	/**  Source columns no field was mapped to. */
+	unmapped?: string[],
+};
 
 export type Issue = {
 	id: IssueId,
@@ -775,6 +803,43 @@ export type PinId = number;
 
 export type PinKind = "Issue" | "Project" | "View" | "Cycle" | "Note" | "Url";
 
+export type PlanCycle = {
+	name: string | null,
+	start_date: string,
+	end_date: string,
+};
+
+/**
+ *  Names refer to statuses, labels and projects; a cycle is its start date (cycles never overlap);
+ *  `parent` and relation ends are source identifiers.
+ */
+export type PlanIssue = {
+	external_id: string,
+	title: string,
+	description: string,
+	status: string | null,
+	priority: number,
+	project: string | null,
+	labels: string[],
+	start_date: string | null,
+	due_date: string | null,
+	estimate_minutes: number | null,
+	properties: { [key in string]: Value },
+	parent: string | null,
+	cycle: string | null,
+};
+
+export type PlanRelation = {
+	from: string,
+	to: string,
+	kind: RelationKind,
+};
+
+export type PlanStatus = {
+	name: string,
+	category: StatusCategory,
+};
+
 export type Project = {
 	id: ProjectId,
 	slug: string,
@@ -831,6 +896,12 @@ export type SavedView = {
 export type SelectOption = {
 	value: string,
 	color: string,
+};
+
+/**  A source row that will not be imported. `row` counts from 1 (CSV: the header is row 1). */
+export type Skipped = {
+	row: number,
+	reason: string,
 };
 
 export type Sort = {

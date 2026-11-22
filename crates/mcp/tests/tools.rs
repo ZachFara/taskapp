@@ -44,6 +44,9 @@ const TOOL_NAMES: &[&str] = &[
     "update_template",
     "delete_template",
     "apply_template",
+    "import_csv_plan",
+    "import_linear_plan",
+    "import_apply",
     "undo",
     "redo",
     "undo_status",
@@ -367,6 +370,30 @@ fn failed_snapshot_aborts_delete_property() {
     );
     assert!(r[1].is_err(), "{:?}", r[1]);
     assert!(r[2].as_ref().expect("list").to_string().contains("\"p\""));
+}
+
+#[test]
+fn import_plan_writes_nothing_until_apply() {
+    let (_d, db) = tmp();
+    let issue = json!({"external_id":"csv:x","title":"Imported","description":"","status":null,"priority":0,
+        "project":null,"labels":[],"start_date":null,"due_date":null,"estimate_minutes":null,
+        "properties":{},"parent":null,"cycle":null});
+    let r = session(
+        &db,
+        &[
+            ("import_csv_plan", json!({"csv":"Title\nOne\n"})),
+            ("search_issues", json!({"text":"One"})),
+            (
+                "import_apply",
+                json!({"plan":{"source":"csv","issues":[issue]}}),
+            ),
+            ("search_issues", json!({"text":"Imported"})),
+        ],
+    );
+    assert_eq!(r[0].as_ref().expect("plan")["issues"][0]["title"], "One");
+    assert_eq!(r[1].as_ref().expect("search"), &json!([]));
+    assert_eq!(r[2].as_ref().expect("apply")["created"], 1);
+    assert_eq!(r[3].as_ref().expect("search")[0]["title"], "Imported");
 }
 
 #[test]

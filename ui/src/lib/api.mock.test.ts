@@ -41,6 +41,16 @@ describe('mock api', () => {
     await expect(q).rejects.toMatchObject({ kind: 'Invalid' });
   });
 
+  it('csv import writes nothing until applied', async () => {
+    const mock = createMockApi();
+    const plan = await mock.import.csvPlan('Title,Other\nOne\nTwo\n', null);
+    expect(plan.issues).toHaveLength(2);
+    expect(plan.unmapped).toEqual(['Other']);
+    expect(await mock.issues.getByKey('ZF-21').catch(() => null)).toBeNull();
+    expect((await mock.import.apply(plan)).created).toBe(2);
+    expect((await mock.issues.getByKey('ZF-22')).title).toBe('Two');
+  });
+
   it('setApi swaps implementation', async () => {
     const before = api;
     const mock = createMockApi();

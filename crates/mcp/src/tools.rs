@@ -9,8 +9,8 @@ use serde_json::{Map, Value, json};
 use taskapp_core::{
     ChangeSource, Db, Issue, IssuePatch, NewIssue, Project, PropertyDef, PropertyKind, Relation,
     RelationKind, SelectOption, StatusCategory, TemplateInput, ViewDef, backup, comments, cycles,
-    history, issues, labels, pins, projects, properties, relations, search, statuses, templates,
-    undo, views,
+    history, import, issues, labels, pins, projects, properties, relations, search, statuses,
+    templates, undo, views,
 };
 
 type Res<T> = Result<T, String>;
@@ -134,6 +134,21 @@ const TOOLS: &[Row] = &[
         &["items"],
     ),
     (
+        "import_csv_plan",
+        "Dry run of a CSV import; writes nothing. Args: csv (the file's text, header row first), map (optional object of column to field: title, description, status, priority, project, labels, start_date, due_date, estimate in minutes, property:<name>; guessed from headers when absent). Returns the plan; pass it to import_apply.",
+        &["csv"],
+    ),
+    (
+        "import_linear_plan",
+        "Dry run of a Linear import using $LINEAR_API_KEY of this server; writes nothing. Returns the plan; pass it to import_apply.",
+        &[],
+    ),
+    (
+        "import_apply",
+        "Write exactly the plan an import tool returned, in one transaction. Args: plan.",
+        &["plan"],
+    ),
+    (
         "get_history",
         "Change history of an issue. Args: key.",
         &["key"],
@@ -226,6 +241,10 @@ impl Server {
             return Err(format!("missing required argument `{missing}`"));
         }
         // One tool call is one undoable step.
+        // import_apply names its own step ("Import N issues"), which a wrapping step would override.
+        if name == "import_apply" {
+            return self.route(name, &args).await;
+        }
         let routed = history::step(name, async { Ok(self.route(name, &args).await) }).await;
         routed.unwrap_or_else(|e| Err(ce(&e)))
     }
@@ -246,8 +265,30 @@ impl Server {
             | "change_property_kind"
             | "delete_property"
             | "set_property" => self.property_tool(name, args).await,
+            "import_csv_plan" | "import_linear_plan" | "import_apply" => {
+                self.import_tool(name, args).await
+            }
             _ => self.org_tool(name, args).await,
         }
+    }
+
+    async fn import_tool(&self, name: &str, a: &Value) -> Res<Value> {
+        let db = &self.db;
+        let done = match name {
+            "import_csv_plan" => {
+                let map: Option<std::collections::BTreeMap<String, String>> = opt(a, "map")?;
+                import::csv::plan(db, &arg::<String>(a, "csv")?, map.as_ref()).await
+            }
+            "import_linear_plan" => {
+                let token = import::linear::Token::from_env().map_err(|e| ce(&e))?;
+                import::linear::plan(db, &import::linear::CurlLinear::new(token)).await
+            }
+            _ => {
+                let applied = import::apply(db, &arg(a, "plan")?).await;
+                return ok(&applied.map_err(|e| ce(&e))?);
+            }
+        };
+        ok(&done.map_err(|e| ce(&e))?)
     }
 
     async fn snapshot(&self, reason: &str) -> Res<()> {
