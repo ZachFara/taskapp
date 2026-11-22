@@ -212,7 +212,15 @@ async fn get_by_key_unknown_is_not_found() -> R {
 #[tokio::test]
 async fn delete_status_moves_issues() -> R {
     let db = Db::open_in_memory().await?;
-    let s = statuses::create(&db, "Review", StatusCategory::Started, "#112233").await?;
+    let s = statuses::create(
+        &db,
+        "Review",
+        StatusCategory::Started,
+        "#112233",
+        None,
+        ChangeSource::Ui,
+    )
+    .await?;
     let i = issues::create(
         &db,
         NewIssue {

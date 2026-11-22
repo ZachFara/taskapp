@@ -1,7 +1,8 @@
 import type { Api } from './api';
 import type {
-  Bar, Change, Comment, Cycle, FieldRef, Filter, Issue, Label, Layout, Milestone, Pin, Project, PropertyDef,
-  Relation, Reschedule, SavedView, Status, FixedField, Value, ViewDef, WorkBlock,
+  AppliedTemplate, Applied, Bar, Change, Comment, Cycle, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
+  NewIssue, Pin, Project, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
+  TemplateInput, Value, ViewDef, WorkBlock,
 } from './bindings';
 
 export type MockSeed = {
@@ -144,6 +145,45 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
     return issue;
   };
   const getIssue = (id: number) => find(s.issues, id, 'issue');
+  const templates: IssueTemplate[] = [];
+  // Same rule as core: a reference that no longer resolves is dropped and named in `skipped`.
+  const liveRefs = (f: Partial<TemplateFields>, skipped: string[]): TemplateFields => {
+    const status = s.statuses.some((x) => x.id === f.status_id) ? f.status_id : null;
+    if (f.status_id != null && status === null) skipped.push(`status ${f.status_id} does not exist`);
+    const project = s.projects.some((x) => x.id === f.project_id) ? f.project_id : null;
+    if (f.project_id != null && project === null) skipped.push(`project ${f.project_id} does not exist`);
+    const label_ids = (f.label_ids ?? []).filter((l) => {
+      const ok = labels.some((x) => x.id === l);
+      if (!ok) skipped.push(`label ${l} does not exist`);
+      return ok;
+    });
+    return { ...f, status_id: status, project_id: project, label_ids, properties: f.properties ?? {} };
+  };
+  const applyTemplate = (t: IssueTemplate, o: NewIssue): AppliedTemplate => {
+    const skipped: string[] = [];
+    const f = liveRefs(t.body.fields ?? {}, skipped);
+    const own = o.title?.trim() ?? '';
+    const prefix = t.body.title_prefix ?? '';
+    const title = own ? `${prefix}${own}` : prefix.trimEnd();
+    const issue = create({
+      title, description: o.description ?? f.description, status_id: o.status_id ?? f.status_id,
+      priority: o.priority ?? f.priority, project_id: o.project_id ?? f.project_id,
+      label_ids: o.label_ids ?? f.label_ids, estimate_minutes: o.estimate_minutes ?? f.estimate_minutes,
+      properties: { ...f.properties, ...o.properties }, start_date: o.start_date, due: o.due,
+    });
+    const sub_issues = (t.body.sub_issues ?? []).map((sub) => {
+      const sf = liveRefs(sub.fields ?? {}, skipped);
+      return create({
+        title: sub.title, description: sf.description, status_id: sf.status_id, priority: sf.priority,
+        project_id: sf.project_id, label_ids: sf.label_ids, estimate_minutes: sf.estimate_minutes,
+        properties: sf.properties, parent_id: issue.id,
+      });
+    });
+    return { issue, sub_issues, skipped };
+  };
+  const templateOf = (id: number, input: TemplateInput): IssueTemplate => ({
+    id, name: input.name, slug: input.slug, icon: input.icon ?? null, color: input.color ?? null, body: input.body,
+  });
   const parse = (input: string) => {
     const priority = /(?:^|\s)!([0-4])(?=\s|$)/.exec(input);
     const project = /(?:^|\s)#([\w-]+)/.exec(input);
@@ -199,20 +239,24 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
       children: async (id) => s.issues.filter((i) => i.parent_id === id),
       parseQuickadd: async (input) => parse(input),
       createFromQuickadd: async (input) => {
-        const p = parse(input);
-        return create({ title: p.title, priority: p.priority, project_id: s.projects.find((x) => x.slug === p.project_slug)?.id });
+        const m = /^\s*\/([^\s/]+)(?=\s|$)\s*([\s\S]*)$/.exec(input);
+        const p = parse(m ? m[2] : input);
+        const overrides = { title: p.title, priority: p.priority, project_id: s.projects.find((x) => x.slug === p.project_slug)?.id };
+        if (!m) return create(overrides);
+        const t = templates.find((x) => x.slug === m[1]) ?? fail('Invalid', `no template /${m[1]} (known: ${templates.map((x) => `/${x.slug}`).join(', ') || 'none'})`);
+        return applyTemplate(t, overrides).issue;
       },
     },
     statuses: {
       list: async () => [...s.statuses].sort((a, b) => a.position - b.position),
-      create: async (name, category, color) => {
-        const st = { id: next(s.statuses), name, category, color, position: s.statuses.length };
+      create: async (name, category, color, icon) => {
+        const st = { id: next(s.statuses), name, category, color, color_hex: color, icon: icon ?? null, position: s.statuses.length };
         s.statuses.push(st);
         return st;
       },
-      update: async (id, name, color, position) => {
+      update: async (id, name, color, position, icon) => {
         const st = find(s.statuses, id, 'status');
-        return Object.assign(st, { name: name ?? st.name, color: color ?? st.color, position: position ?? st.position });
+        return Object.assign(st, { name: name ?? st.name, color: color ?? st.color, position: position ?? st.position, icon: icon ?? st.icon });
       },
       delete: async (id, moveIssuesTo) => {
         find(s.statuses, moveIssuesTo, 'status');
@@ -265,9 +309,9 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
     },
     projects: {
       list: async () => s.projects,
-      create: async (slug, name) => {
+      create: async (slug, name, icon, color) => {
         if (s.projects.some((p) => p.slug === slug)) fail('Conflict', `project ${slug} exists`);
-        const p = { id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null };
+        const p = { id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: icon ?? null, color: color ?? null };
         s.projects.push(p);
         return p;
       },
@@ -292,19 +336,33 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
     },
     cycles: {
       list: async () => cycles,
-      create: async (name, startDate, endDate) => {
-        const c = { id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name, start_date: startDate, end_date: endDate };
+      create: async (name, startDate, endDate, icon, color) => {
+        const c = { id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name, start_date: startDate, end_date: endDate, icon: icon ?? null, color: color ?? null };
         cycles.push(c);
         return c;
       },
       update: async (c) => upsert(cycles, c, 'cycle'),
       delete: async (id) => nothing(remove(cycles, id, 'cycle')),
     },
+    templates: {
+      list: async () => [...templates],
+      create: async (input) => {
+        const t = templateOf(next(templates), input);
+        templates.push(t);
+        return { ...t };
+      },
+      update: async (id, input) => {
+        Object.assign(find(templates, id, 'template'), templateOf(id, input));
+        return { ...find(templates, id, 'template') };
+      },
+      delete: async (id) => nothing(remove(templates, id, 'template')),
+      apply: async (id, overrides) => applyTemplate(find(templates, id, 'template'), overrides),
+    },
     labels: {
       list: async () => labels,
-      create: async (name, color) => {
+      create: async (name, color, icon) => {
         if (labels.some((l) => l.name === name)) fail('Conflict', `label ${name} exists`);
-        const l = { id: next(labels), name, color };
+        const l = { id: next(labels), name, color, color_hex: color, icon: icon ?? null };
         labels.push(l);
         return l;
       },
@@ -379,13 +437,14 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
     views: {
       query: async (d) => query(d),
       list: async () => views,
-      save: async (id, name, d) => {
+      save: async (id, name, d, icon, color) => {
         if (id === null) {
-          const v = { id: next(views), name, def: d, position: views.length };
+          const v = { id: next(views), name, def: d, position: views.length, icon: icon ?? null, color: color ?? null };
           views.push(v);
           return v;
         }
-        return Object.assign(find(views, id, 'view'), { name, def: d });
+        const v = find(views, id, 'view');
+        return Object.assign(v, { name, def: d, icon: icon ?? v.icon, color: color ?? v.color });
       },
       delete: async (id) => nothing(remove(views, id, 'view')),
       reorder: async (ids) => {
@@ -475,11 +534,11 @@ export function createMockApi(seed: MockSeed = fixtures): Api {
 
 const statuses: Status[] = (
   [['Backlog', 'Backlog'], ['Todo', 'Unstarted'], ['In Progress', 'Started'], ['Done', 'Completed'], ['Canceled', 'Canceled']] as const
-).map(([name, category], position) => ({ id: position + 1, name, category, position, color: '#888888' }));
+).map(([name, category], position) => ({ id: position + 1, name, category, position, color: 'gray', color_hex: '#6b7280', icon: null }));
 
 const projects: Project[] = [
-  { id: 1, slug: 'home', name: 'Home', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null },
-  { id: 2, slug: 'work', name: 'Work', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null },
+  { id: 1, slug: 'home', name: 'Home', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null },
+  { id: 2, slug: 'work', name: 'Work', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null },
 ];
 
 const propertyDefs: PropertyDef[] = [
@@ -504,7 +563,7 @@ const issues: Issue[] = Array.from({ length: 20 }, (_, k) => {
 
 // Same three views the migration seeds. shortcut: no status filter, the mock query has no StatusCategory support.
 const view = (id: number, name: string, layout: Layout, group_by: FieldRef | null = null): SavedView => ({
-  id, name, position: id - 1,
+  id, name, position: id - 1, icon: null, color: null,
   def: { filter: null, sorts: [], group_by, layout, columns: [], include_archived: false },
 });
 const views: SavedView[] = [

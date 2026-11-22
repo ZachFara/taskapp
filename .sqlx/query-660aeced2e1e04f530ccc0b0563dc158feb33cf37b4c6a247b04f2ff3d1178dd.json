@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO cycles (number, name, start_date, end_date, icon, color)\n         VALUES ((SELECT coalesce(max(number), 0) + 1 FROM cycles), ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "660aeced2e1e04f530ccc0b0563dc158feb33cf37b4c6a247b04f2ff3d1178dd"
+}

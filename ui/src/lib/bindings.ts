@@ -81,14 +81,14 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	statusesCreate: (name: string, category: StatusCategory, color: string, options?: InvokeOptions) => __TAURI_INVOKE<Status>("statuses_create", { name, category, color }, options),
+	statusesCreate: (name: string, category: StatusCategory, color: string, icon: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Status>("statuses_create", { name, category, color, icon }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
 	 * # Errors
 	 * As that command.
 	 */
-	statusesUpdate: (id: StatusId, name: string | null, color: string | null, position: number | null, options?: InvokeOptions) => __TAURI_INVOKE<Status>("statuses_update", { id, name, color, position }, options),
+	statusesUpdate: (id: StatusId, name: string | null, color: string | null, position: number | null, icon: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Status>("statuses_update", { id, name, color, position, icon }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -165,7 +165,7 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	projectsCreate: (slug: string, name: string, options?: InvokeOptions) => __TAURI_INVOKE<Project>("projects_create", { slug, name }, options),
+	projectsCreate: (slug: string, name: string, icon: string | null, color: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Project>("projects_create", { slug, name, icon, color }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -228,7 +228,7 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	cyclesCreate: (name: string | null, startDate: string, endDate: string, options?: InvokeOptions) => __TAURI_INVOKE<Cycle>("cycles_create", { name, startDate, endDate }, options),
+	cyclesCreate: (name: string | null, startDate: string, endDate: string, icon: string | null, color: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Cycle>("cycles_create", { name, startDate, endDate, icon, color }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -256,7 +256,7 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	labelsCreate: (name: string, color: string, options?: InvokeOptions) => __TAURI_INVOKE<Label>("labels_create", { name, color }, options),
+	labelsCreate: (name: string, color: string, icon: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Label>("labels_create", { name, color, icon }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -285,6 +285,41 @@ export const commands = {
 	 * As that command.
 	 */
 	labelsRemoveLabel: (issue: IssueId, label: LabelId, options?: InvokeOptions) => __TAURI_INVOKE<null>("labels_remove_label", { issue, label }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	templatesList: (options?: InvokeOptions) => __TAURI_INVOKE<IssueTemplate[]>("templates_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	templatesCreate: (input: TemplateInput, options?: InvokeOptions) => __TAURI_INVOKE<IssueTemplate>("templates_create", { input }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	templatesUpdate: (id: TemplateId, input: TemplateInput, options?: InvokeOptions) => __TAURI_INVOKE<IssueTemplate>("templates_update", { id, input }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	templatesDelete: (id: TemplateId, options?: InvokeOptions) => __TAURI_INVOKE<null>("templates_delete", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	templatesApply: (id: TemplateId, overrides: NewIssue, options?: InvokeOptions) => __TAURI_INVOKE<AppliedTemplate>("templates_apply", { id, overrides }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -375,7 +410,7 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	viewsSave: (id: ViewId | null, name: string, def: ViewDef, options?: InvokeOptions) => __TAURI_INVOKE<SavedView>("views_save", { id, name, def }, options),
+	viewsSave: (id: ViewId | null, name: string, def: ViewDef, icon: string | null, color: string | null, options?: InvokeOptions) => __TAURI_INVOKE<SavedView>("views_save", { id, name, def, icon, color }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -573,6 +608,16 @@ export type Applied = {
 	warnings: string[],
 };
 
+/**
+ *  The issue and sub-issues a template created. `skipped` names references the template
+ *  no longer resolves (a deleted label, project or status); those fields were left unset.
+ */
+export type AppliedTemplate = {
+	issue: Issue,
+	sub_issues: Issue[],
+	skipped: string[],
+};
+
 export type Bar = {
 	issue_id: IssueId,
 	start: string,
@@ -610,6 +655,8 @@ export type Cycle = {
 	name: string | null,
 	start_date: string,
 	end_date: string,
+	icon: string | null,
+	color: string | null,
 };
 
 export type CycleId = number;
@@ -697,10 +744,23 @@ export type IssuePatch = {
 	properties?: { [key in string]: Value } | null,
 };
 
+export type IssueTemplate = {
+	id: TemplateId,
+	name: string,
+	slug: string,
+	icon: string | null,
+	color: string | null,
+	body: TemplateBody,
+};
+
 export type Label = {
 	id: LabelId,
 	name: string,
+	/**  A palette key. */
 	color: string,
+	/**  The reference hex for `color`, for showing it without the palette. */
+	color_hex: string,
+	icon: string | null,
 };
 
 export type LabelId = number;
@@ -805,6 +865,8 @@ export type Project = {
 	start_date: string | null,
 	target_date: string | null,
 	archived_at: string | null,
+	icon: string | null,
+	color: string | null,
 };
 
 export type ProjectId = number;
@@ -847,6 +909,8 @@ export type SavedView = {
 	name: string,
 	def: ViewDef,
 	position: number,
+	icon: string | null,
+	color: string | null,
 };
 
 export type SelectOption = {
@@ -870,12 +934,21 @@ export type Status = {
 	name: string,
 	category: StatusCategory,
 	position: number,
+	/**  A palette key. */
 	color: string,
+	/**  The reference hex for `color`, for showing it without the palette. */
+	color_hex: string,
+	icon: string | null,
 };
 
 export type StatusCategory = "Backlog" | "Unstarted" | "Started" | "Completed" | "Canceled";
 
 export type StatusId = number;
+
+export type SubIssue = {
+	title?: string,
+	fields?: TemplateFields,
+};
 
 export type SyncState = "Off" | ({ Ok: {
 	at: string,
@@ -890,6 +963,35 @@ export type SyncStatus = {
 	export: SyncState,
 	/**  Absent in statuses saved before backups reported here. */
 	backup?: SyncState,
+};
+
+/**  Stored as JSON. `title_prefix` is put before the issue's own title. */
+export type TemplateBody = {
+	title_prefix?: string,
+	fields?: TemplateFields,
+	sub_issues?: SubIssue[],
+};
+
+/**  The fields a template prefills. Each is a default; an override on the issue wins. */
+export type TemplateFields = {
+	description?: string | null,
+	status_id?: StatusId | null,
+	priority?: number | null,
+	project_id?: ProjectId | null,
+	label_ids?: LabelId[],
+	estimate_minutes?: number | null,
+	properties?: { [key in string]: Value },
+};
+
+export type TemplateId = number;
+
+/**  What create and update take: the whole template, replaced on update. */
+export type TemplateInput = {
+	name: string,
+	slug: string,
+	icon: string | null,
+	color: string | null,
+	body: TemplateBody,
 };
 
 /**  What undo and redo would do next: the label of the step, or `None` when the stack is empty. */

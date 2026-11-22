@@ -49,6 +49,8 @@ enum Cmd {
     Relation(RelationCmd),
     #[command(subcommand)]
     Pin(PinCmd),
+    #[command(subcommand)]
+    Template(TemplateCmd),
     /// Change history of an issue.
     History { key: String },
     /// Undo the newest step, whatever made it (UI, agent or CLI).
@@ -220,7 +222,14 @@ enum PropertyCmd {
 #[derive(Subcommand)]
 enum ProjectCmd {
     List,
-    Create { slug: String, name: String },
+    Create {
+        slug: String,
+        name: String,
+        #[arg(long)]
+        icon: Option<String>,
+        #[arg(long)]
+        color: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -235,13 +244,74 @@ enum CycleCmd {
         end: String,
         #[arg(long)]
         name: Option<String>,
+        /// Palette key or #rrggbb.
+        #[arg(long)]
+        color: Option<String>,
+        /// icon:<id> or emoji:<emoji>.
+        #[arg(long)]
+        icon: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+enum TemplateCmd {
+    List,
+    Create {
+        #[command(flatten)]
+        t: TemplateArgs,
+    },
+    Update {
+        id: i64,
+        #[command(flatten)]
+        t: TemplateArgs,
+    },
+    Delete {
+        id: i64,
+    },
+    /// Creates the issue and its sub-issues. TITLE is added to the template's title prefix.
+    Apply {
+        id: i64,
+        title: Option<String>,
+    },
+}
+
+#[derive(clap::Args)]
+struct TemplateArgs {
+    name: String,
+    /// Used as /slug in quick-add.
+    slug: String,
+    #[arg(long)]
+    icon: Option<String>,
+    #[arg(long)]
+    color: Option<String>,
+    /// JSON: `{"title_prefix", "fields": {...}, "sub_issues": [{"title", "fields"}]}`.
+    #[arg(long, default_value = "{}")]
+    body: String,
+}
+
+impl TemplateArgs {
+    fn input(self) -> Result<taskapp_core::TemplateInput> {
+        let body =
+            serde_json::from_str(&self.body).map_err(|e| Error::Invalid(format!("--body: {e}")))?;
+        Ok(taskapp_core::TemplateInput {
+            name: self.name,
+            slug: self.slug,
+            icon: self.icon,
+            color: self.color,
+            body,
+        })
+    }
 }
 
 #[derive(Subcommand)]
 enum LabelCmd {
     List,
-    Create { name: String, color: String },
+    Create {
+        name: String,
+        color: String,
+        #[arg(long)]
+        icon: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]

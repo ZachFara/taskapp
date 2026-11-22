@@ -3,6 +3,7 @@ use chrono_tz::Tz;
 
 use crate::{
     ChangeSource, Db, Due, Issue, NewIssue, ParsedQuickAdd, Result, issues, labels, projects,
+    templates,
 };
 
 /// Pure: parses quick-add text relative to `today` in IANA zone `tz`.
@@ -59,6 +60,13 @@ pub async fn create_from(
     tz: &str,
     src: ChangeSource,
 ) -> Result<Issue> {
+    if let Some((slug, rest)) = templates::split_slug(input) {
+        let template = templates::by_slug(db, slug).await?;
+        let overrides = new_issue(db, rest, today, tz).await?;
+        return Ok(templates::apply(db, template.id, overrides, src)
+            .await?
+            .issue);
+    }
     issues::create(db, new_issue(db, input, today, tz).await?, src).await
 }
 
@@ -107,7 +115,8 @@ pub async fn new_issue(db: &Db, input: &str, today: NaiveDate, tz: &str) -> Resu
         milestone_id: None,
         parent_id: None,
         cycle_id: None,
-        label_ids: Some(label_ids),
+        // None, not an empty list, so a template's labels survive when the text names none.
+        label_ids: (!label_ids.is_empty()).then_some(label_ids),
         start_date: parsed.start_date,
         due: parsed.due,
         estimate_minutes: parsed.estimate_minutes,

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api, httpApi, setApi } from './api';
 import { createMockApi } from './api.mock';
-import type { ViewDef } from './bindings';
+import type { TemplateFields, ViewDef } from './bindings';
 
 const def = (filter: ViewDef['filter']): ViewDef => ({
   filter, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false,
@@ -57,6 +57,36 @@ describe('mock api', () => {
     setApi(mock);
     expect(api).toBe(mock);
     setApi(before);
+  });
+});
+
+describe('mock templates', () => {
+  const fields = (over: Partial<TemplateFields> = {}): TemplateFields => ({
+    description: null, status_id: null, priority: null, project_id: null, label_ids: [], estimate_minutes: null,
+    properties: {}, ...over,
+  });
+
+  it('quick-add /slug applies the template, its sub-issues, and the text overrides', async () => {
+    const mock = createMockApi();
+    await mock.templates.create({
+      name: 'Bug', slug: 'bug', icon: null, color: null,
+      body: { title_prefix: 'Bug: ', fields: fields({ priority: 3 }), sub_issues: [{ title: 'Repro', fields: fields() }] },
+    });
+    const issue = await mock.issues.createFromQuickadd('/bug Fix login !1');
+    expect(issue.title).toBe('Bug: Fix login');
+    expect(issue.priority).toBe(1);
+    expect((await mock.issues.children(issue.id)).map((i) => i.title)).toEqual(['Repro']);
+  });
+
+  it('text with a slash after the first word is a plain title', async () => {
+    const mock = createMockApi();
+    await mock.templates.create({ name: 'Bug', slug: 'bug', icon: null, color: null, body: { title_prefix: '', fields: fields(), sub_issues: [] } });
+    expect((await mock.issues.createFromQuickadd('/usr/bin is full')).title).toBe('/usr/bin is full');
+  });
+
+  it('unknown /slug rejects Invalid and names the known slugs', async () => {
+    const mock = createMockApi();
+    await expect(mock.issues.createFromQuickadd('/nope x')).rejects.toMatchObject({ kind: 'Invalid' });
   });
 });
 

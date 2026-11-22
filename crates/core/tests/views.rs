@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 use taskapp_core::{
-    Db, Error, FieldRef, Filter, FixedField, Issue, Layout, Op, PropertyDef, PropertyKind,
-    SelectOption, Sort, ViewDef, search, views,
+    ChangeSource, Db, Error, FieldRef, Filter, FixedField, Issue, Layout, Op, PropertyDef,
+    PropertyKind, SelectOption, Sort, ViewDef, search, views,
 };
 
 type R = Result<(), Box<dyn std::error::Error>>;
@@ -215,9 +215,25 @@ async fn saved_view_roundtrip() -> R {
         Op::Eq,
         json!(1),
     )));
-    let v = views::save(&db, None, "Mine", d.clone()).await?;
+    let v = views::save(
+        &db,
+        None,
+        "Mine",
+        d.clone(),
+        taskapp_core::palette::Look::default(),
+        ChangeSource::Ui,
+    )
+    .await?;
     assert_eq!(views::list(&db).await?.len(), seeded + 1);
-    let v2 = views::save(&db, Some(v.id), "Renamed", def(None)).await?;
+    let v2 = views::save(
+        &db,
+        Some(v.id),
+        "Renamed",
+        def(None),
+        taskapp_core::palette::Look::default(),
+        ChangeSource::Ui,
+    )
+    .await?;
     assert_eq!((v2.id, v2.name.as_str()), (v.id, "Renamed"));
     assert_eq!(v.def, d);
     views::delete(&db, v.id).await?;

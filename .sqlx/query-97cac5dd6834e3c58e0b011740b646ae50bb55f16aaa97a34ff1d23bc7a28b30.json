@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO issue_templates (name, slug, icon, color, body) VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "97cac5dd6834e3c58e0b011740b646ae50bb55f16aaa97a34ff1d23bc7a28b30"
+}

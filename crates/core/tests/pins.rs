@@ -224,7 +224,7 @@ async fn unpin_missing_is_not_found() -> R {
 async fn pins_survive_project_slug_rename_and_prefix_change() -> R {
     use taskapp_core::{ChangeSource, projects, settings};
     let db = Db::open_in_memory().await?;
-    let mut p = projects::create(&db, "home", "Home", ChangeSource::Ui).await?;
+    let mut p = projects::create(&db, "home", "Home", None, None, ChangeSource::Ui).await?;
     add_issue(&db, 1, "Fix roof", false).await?;
     pins::pin(&db, PinKind::Project, "home", None).await?;
     pins::pin(&db, PinKind::Issue, "ZF-1", None).await?;

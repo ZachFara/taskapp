@@ -9,13 +9,13 @@ use serde_json::{Map, Value, json};
 use taskapp_core::{
     ChangeSource, CycleId, Db, Due, Error, IssueId, IssuePatch, LabelId, NewIssue, PinId, PinKind,
     ProjectId, PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, StatusId,
-    ViewDef, ViewId, backup, comments, cycles, history, import, issues, labels, pins, projects,
-    properties, quickadd, relations, search, undo, views,
+    TemplateId, ViewDef, ViewId, backup, comments, cycles, history, import, issues, labels, pins,
+    projects, properties, quickadd, relations, search, templates, undo, views,
 };
 
 use crate::{
     Cmd, CommentCmd, CycleCmd, ImportCmd, IssueCmd, LabelCmd, PinCmd, ProjectCmd, PropertyCmd,
-    RelationCmd, ViewCmd,
+    RelationCmd, TemplateCmd, ViewCmd,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
@@ -24,6 +24,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
     match cmd {
         Cmd::Undo => val(undo::undo(db).await?),
         Cmd::Redo => val(undo::redo(db).await?),
+        Cmd::Template(cmd) => template(db, cmd).await,
         cmd => run_group(db, dir, cmd).await,
     }
 }
@@ -44,7 +45,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Backup(_) => Err(Error::Invalid(
             "backup runs before the database opens".into(),
         )),
-        Cmd::Undo | Cmd::Redo => unreachable_undo(),
+        Cmd::Undo | Cmd::Redo | Cmd::Template(_) => handled_in_run(),
         Cmd::History { key } => {
             let id = issue_id(db, &key).await?;
             val(history::list_for(db, "issue", &id.0.to_string()).await?)
@@ -52,9 +53,9 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
     }
 }
 
-/// Undo and redo are answered in [`run`] before the group commands.
-fn unreachable_undo() -> Result<Value> {
-    Err(Error::Invalid("undo is handled by run".into()))
+/// Undo, redo and templates are answered in [`run`] before the group commands.
+fn handled_in_run() -> Result<Value> {
+    Err(Error::Invalid("handled by run".into()))
 }
 
 async fn add(db: &Db, text: &str, tz: Option<&str>) -> Result<Value> {
@@ -222,24 +223,66 @@ async fn property(db: &Db, dir: &Path, cmd: PropertyCmd) -> Result<Value> {
 async fn project(db: &Db, cmd: ProjectCmd) -> Result<Value> {
     match cmd {
         ProjectCmd::List => val(projects::list(db).await?),
-        ProjectCmd::Create { slug, name } => val(projects::create(db, &slug, &name, SRC).await?),
+        ProjectCmd::Create {
+            slug,
+            name,
+            icon,
+            color,
+        } => val(projects::create(db, &slug, &name, icon, color, SRC).await?),
     }
 }
 
 async fn cycle(db: &Db, cmd: CycleCmd) -> Result<Value> {
     match cmd {
         CycleCmd::List => val(cycles::list(db).await?),
-        CycleCmd::Create { start, end, name } => {
+        CycleCmd::Create {
+            start,
+            end,
+            name,
+            icon,
+            color,
+        } => {
             let (start, end) = (date(&start)?, date(&end)?);
-            val(cycles::create(db, name, start, end, SRC).await?)
+            val(cycles::create(
+                db,
+                name,
+                start,
+                end,
+                taskapp_core::palette::Look { icon, color },
+                SRC,
+            )
+            .await?)
         }
     }
+}
+
+async fn template(db: &Db, cmd: TemplateCmd) -> Result<Value> {
+    Ok(match cmd {
+        TemplateCmd::List => val(templates::list(db).await?)?,
+        TemplateCmd::Create { t } => val(templates::create(db, t.input()?, SRC).await?)?,
+        TemplateCmd::Update { id, t } => {
+            val(templates::update(db, TemplateId(id), t.input()?, SRC).await?)?
+        }
+        TemplateCmd::Delete { id } => {
+            templates::delete(db, TemplateId(id), SRC).await?;
+            json!({ "deleted": id })
+        }
+        TemplateCmd::Apply { id, title } => {
+            let overrides = NewIssue {
+                title: title.unwrap_or_default(),
+                ..NewIssue::default()
+            };
+            val(templates::apply(db, TemplateId(id), overrides, SRC).await?)?
+        }
+    })
 }
 
 async fn label(db: &Db, cmd: LabelCmd) -> Result<Value> {
     match cmd {
         LabelCmd::List => val(labels::list(db).await?),
-        LabelCmd::Create { name, color } => val(labels::create(db, &name, &color, SRC).await?),
+        LabelCmd::Create { name, color, icon } => {
+            val(labels::create(db, &name, &color, icon, SRC).await?)
+        }
     }
 }
 

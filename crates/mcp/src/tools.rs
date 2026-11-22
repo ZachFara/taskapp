@@ -8,8 +8,9 @@ use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Map, Value, json};
 use taskapp_core::{
     ChangeSource, Db, Issue, IssuePatch, NewIssue, Project, PropertyDef, PropertyKind, Relation,
-    RelationKind, SelectOption, StatusCategory, ViewDef, backup, comments, cycles, history, import,
-    issues, labels, pins, projects, properties, relations, search, statuses, undo, views,
+    RelationKind, SelectOption, StatusCategory, TemplateInput, ViewDef, backup, comments, cycles,
+    history, import, issues, labels, pins, projects, properties, relations, search, statuses,
+    templates, undo, views,
 };
 
 type Res<T> = Result<T, String>;
@@ -89,13 +90,13 @@ const TOOLS: &[Row] = &[
     ("list_statuses", "List statuses.", &[]),
     (
         "create_status",
-        "Create a status. Args: name, category, color.",
+        "Create a status. Args: name, category, color, icon (optional).",
         &["name", "category", "color"],
     ),
     ("list_projects", "List projects.", &[]),
     (
         "create_project",
-        "Create a project. Args: slug, name.",
+        "Create a project. Args: slug, name, icon and color (optional).",
         &["slug", "name"],
     ),
     (
@@ -106,13 +107,13 @@ const TOOLS: &[Row] = &[
     ("list_cycles", "List cycles.", &[]),
     (
         "create_cycle",
-        "Create a cycle. Args: start_date, end_date, name (optional).",
+        "Create a cycle. Args: start_date, end_date, name, icon, color (optional).",
         &["start_date", "end_date"],
     ),
     ("list_labels", "List labels.", &[]),
     (
         "create_label",
-        "Create a label. Args: name, color.",
+        "Create a label. Args: name, color, icon (optional).",
         &["name", "color"],
     ),
     ("list_pins", "List pinned items.", &[]),
@@ -151,6 +152,23 @@ const TOOLS: &[Row] = &[
         "get_history",
         "Change history of an issue. Args: key.",
         &["key"],
+    ),
+    ("list_templates", "Saved issue templates. No args.", &[]),
+    (
+        "create_template",
+        "Create a template. Args: name, slug (lowercase, digits, dashes; used as /slug in quick-add), icon, color, body (title_prefix, fields, sub_issues).",
+        &["name", "slug", "body"],
+    ),
+    (
+        "update_template",
+        "Replace a template. Args: id, name, slug, icon, color, body.",
+        &["id", "name", "slug", "body"],
+    ),
+    ("delete_template", "Delete a template. Args: id.", &["id"]),
+    (
+        "apply_template",
+        "Create an issue and its sub-issues from a template. Args: id, overrides (NewIssue fields; they win over the template). Returns skipped references.",
+        &["id"],
     ),
     (
         "undo",
@@ -239,6 +257,8 @@ impl Server {
             "search_issues" | "query_view" | "get_issue" | "create_issue" | "update_issue"
             | "archive_issue" | "add_comment" | "add_relation" | "remove_relation"
             | "bulk_update" | "get_history" => self.issue_tool(name, args).await,
+            "list_templates" | "create_template" | "update_template" | "delete_template"
+            | "apply_template" => self.template_tool(name, args).await,
             "list_properties"
             | "create_property"
             | "rename_property"
@@ -463,6 +483,38 @@ impl Server {
         }
     }
 
+    async fn template_tool(&self, name: &str, a: &Value) -> Res<Value> {
+        let db = &self.db;
+        let s = src(a);
+        match name {
+            "list_templates" => ok(&templates::list(db).await.map_err(|e| ce(&e))?),
+            "create_template" => {
+                let input: TemplateInput =
+                    serde_json::from_value(a.clone()).map_err(|e| e.to_string())?;
+                ok(&templates::create(db, input, s).await.map_err(|e| ce(&e))?)
+            }
+            "update_template" => {
+                let input: TemplateInput =
+                    serde_json::from_value(a.clone()).map_err(|e| e.to_string())?;
+                ok(&templates::update(db, arg(a, "id")?, input, s)
+                    .await
+                    .map_err(|e| ce(&e))?)
+            }
+            "delete_template" => {
+                templates::delete(db, arg(a, "id")?, s)
+                    .await
+                    .map_err(|e| ce(&e))?;
+                Ok(json!({ "deleted": true }))
+            }
+            _ => {
+                let overrides: NewIssue = opt(a, "overrides")?.unwrap_or_default();
+                ok(&templates::apply(db, arg(a, "id")?, overrides, s)
+                    .await
+                    .map_err(|e| ce(&e))?)
+            }
+        }
+    }
+
     async fn org_tool(&self, name: &str, a: &Value) -> Res<Value> {
         let db = &self.db;
         let s = src(a);
@@ -471,16 +523,18 @@ impl Server {
             "create_status" => {
                 let cat: StatusCategory = arg(a, "category")?;
                 let (n, c) = (arg::<String>(a, "name")?, arg::<String>(a, "color")?);
-                ok(&statuses::create(db, &n, cat, &c)
+                ok(&statuses::create(db, &n, cat, &c, opt(a, "icon")?, s)
                     .await
                     .map_err(|e| ce(&e))?)
             }
             "list_projects" => ok(&projects::list(db).await.map_err(|e| ce(&e))?),
             "create_project" => {
                 let (slug, n) = (arg::<String>(a, "slug")?, arg::<String>(a, "name")?);
-                ok(&projects::create(db, &slug, &n, s)
-                    .await
-                    .map_err(|e| ce(&e))?)
+                ok(
+                    &projects::create(db, &slug, &n, opt(a, "icon")?, opt(a, "color")?, s)
+                        .await
+                        .map_err(|e| ce(&e))?,
+                )
             }
             "create_milestone" => {
                 let id = arg(a, "project_id")?;
@@ -492,15 +546,13 @@ impl Server {
             }
             "update_project" => self.update_project(a).await,
             "list_cycles" => ok(&cycles::list(db).await.map_err(|e| ce(&e))?),
-            "create_cycle" => {
-                let (start, end) = (arg(a, "start_date")?, arg(a, "end_date")?);
-                let made = cycles::create(db, opt(a, "name")?, start, end, s).await;
-                ok(&made.map_err(|e| ce(&e))?)
-            }
+            "create_cycle" => self.create_cycle(a).await,
             "list_labels" => ok(&labels::list(db).await.map_err(|e| ce(&e))?),
             "create_label" => {
                 let (n, c) = (arg::<String>(a, "name")?, arg::<String>(a, "color")?);
-                ok(&labels::create(db, &n, &c, s).await.map_err(|e| ce(&e))?)
+                ok(&labels::create(db, &n, &c, opt(a, "icon")?, s)
+                    .await
+                    .map_err(|e| ce(&e))?)
             }
             "list_pins" => ok(&pins::list_resolved(db).await.map_err(|e| ce(&e))?),
             "pin" => {
@@ -516,6 +568,16 @@ impl Server {
     }
 
     /// Overlays the given fields on the stored project, so null clears a nullable field.
+    async fn create_cycle(&self, a: &Value) -> Res<Value> {
+        let (start, end) = (arg(a, "start_date")?, arg(a, "end_date")?);
+        let look = taskapp_core::palette::Look {
+            icon: opt(a, "icon")?,
+            color: opt(a, "color")?,
+        };
+        let made = cycles::create(&self.db, opt(a, "name")?, start, end, look, src(a)).await;
+        ok(&made.map_err(|e| ce(&e))?)
+    }
+
     async fn update_project(&self, a: &Value) -> Res<Value> {
         let id: taskapp_core::ProjectId = arg(a, "id")?;
         let all = projects::list(&self.db).await.map_err(|e| ce(&e))?;
@@ -530,6 +592,8 @@ impl Server {
             "doc_link",
             "start_date",
             "target_date",
+            "icon",
+            "color",
         ] {
             if let Some(v) = a.get(k) {
                 merged[k] = v.clone();

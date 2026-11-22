@@ -3,34 +3,53 @@ use serde_json::{Value, json};
 use crate::{
     ChangeSource, Db, Error, IssueId, Label, LabelId, Result,
     history::{self, Edit},
+    palette,
 };
+
+fn label(id: i64, name: String, color: String, icon: Option<String>) -> Label {
+    Label {
+        id: LabelId(id),
+        name,
+        color_hex: palette::resolve(&color),
+        color,
+        icon,
+    }
+}
 
 /// # Errors
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn list(db: &Db) -> Result<Vec<Label>> {
-    let rows = sqlx::query!(r#"SELECT id AS "id!: i64", name, color FROM labels ORDER BY id"#)
-        .fetch_all(&db.pool)
-        .await?;
+    let rows =
+        sqlx::query!(r#"SELECT id AS "id!: i64", name, color, icon FROM labels ORDER BY id"#)
+            .fetch_all(&db.pool)
+            .await?;
     Ok(rows
         .into_iter()
-        .map(|r| Label {
-            id: LabelId(r.id),
-            name: r.name,
-            color: r.color,
-        })
+        .map(|r| label(r.id, r.name, r.color, r.icon))
         .collect())
 }
 
 /// # Errors
 ///
 /// Fails on a database error or invalid arguments.
-pub async fn create(db: &Db, name: &str, color: &str, src: ChangeSource) -> Result<Label> {
+pub async fn create(
+    db: &Db,
+    name: &str,
+    color: &str,
+    icon: Option<String>,
+    src: ChangeSource,
+) -> Result<Label> {
+    let color = palette::key_for(color)?;
+    if let Some(icon) = &icon {
+        palette::check_icon(icon)?;
+    }
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let id = sqlx::query!(
-        "INSERT INTO labels (name, color) VALUES (?, ?)",
+        "INSERT INTO labels (name, color, icon) VALUES (?, ?, ?)",
         name,
-        color
+        color,
+        icon
     )
     .execute(&mut *tx)
     .await?
@@ -43,26 +62,27 @@ pub async fn create(db: &Db, name: &str, color: &str, src: ChangeSource) -> Resu
     };
     history::record(&mut tx, src, "label", &id.to_string(), &edit).await?;
     tx.commit().await?;
-    Ok(Label {
-        id: LabelId(id),
-        name: name.to_owned(),
-        color: color.to_owned(),
-    })
+    Ok(label(id, name.to_owned(), color.to_owned(), icon))
 }
 
 /// # Errors
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn update(db: &Db, label: Label, src: ChangeSource) -> Result<Label> {
+    let color = palette::key_for(&label.color)?;
+    if let Some(icon) = &label.icon {
+        palette::check_icon(icon)?;
+    }
     let id = label.id.0;
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
-    let old = sqlx::query!("SELECT name, color FROM labels WHERE id = ?", id)
+    let old = sqlx::query!("SELECT name, color, icon FROM labels WHERE id = ?", id)
         .fetch_optional(&mut *tx)
         .await?
         .ok_or_else(|| Error::NotFound(format!("label {id}")))?;
     for (field, before, after) in [
         ("name", json!(old.name), json!(label.name)),
-        ("color", json!(old.color), json!(label.color)),
+        ("color", json!(old.color), json!(color)),
+        ("icon", json!(old.icon), json!(label.icon)),
     ] {
         if before != after {
             let edit = Edit {
@@ -74,15 +94,16 @@ pub async fn update(db: &Db, label: Label, src: ChangeSource) -> Result<Label> {
         }
     }
     sqlx::query!(
-        "UPDATE labels SET name = ?, color = ? WHERE id = ?",
+        "UPDATE labels SET name = ?, color = ?, icon = ? WHERE id = ?",
         label.name,
-        label.color,
+        color,
+        label.icon,
         id
     )
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(label)
+    Ok(self::label(id, label.name, color.to_owned(), label.icon))
 }
 
 /// Removing a label takes it off every issue; each removal is recorded on that issue.
