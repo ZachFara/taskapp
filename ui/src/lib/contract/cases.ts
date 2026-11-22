@@ -95,6 +95,15 @@ export const cases: Case[] = [
   call('pins: reorder', 'pins_reorder', { ids_in_order: [3, 1, 2] }),
   call('pins: resolved list', 'pins_list_resolved'),
   call('pins: unpin', 'pins_unpin', { id: 2 }),
+  call('pins: set many urls', 'pins_set', { kind: 'Url', targets: ['https://a.example', 'obsidian://open?vault=v&file=n'], pinned: true }),
+  call('pins: set again adds nothing', 'pins_set', { kind: 'Url', targets: ['https://a.example'], pinned: true }),
+  call('pins: set with a bad target is Invalid', 'pins_set', { kind: 'Url', targets: ['https://b.example', 'ftp://x'], pinned: true }),
+  call('pins: list after set', 'pins_list_resolved'),
+  call('pins: set unpins many', 'pins_set', { kind: 'Url', targets: ['https://a.example', 'obsidian://open?vault=v&file=n'], pinned: false }),
+  call('pins: undo brings them back in one step', 'history_undo'),
+  call('pins: list after undo', 'pins_list_resolved'),
+  call('pins: undo the pinning', 'history_undo'),
+  call('pins: list after second undo', 'pins_list_resolved'),
 
   // Cycles
   call('cycles: create unnamed', 'cycles_create', { name: null, start_date: '2030-01-01', end_date: '2030-01-14', icon: 'icon:repeat', color: 'blue' }),
@@ -168,6 +177,13 @@ export const cases: Case[] = [
   call('icon: bad shape is Invalid', 'projects_create', { slug: 'x', name: 'X', icon: 'rocket', color: null }),
   call('colour: project with icon and colour', 'projects_create', { slug: 'garden', name: 'Garden', icon: 'icon:leaf', color: 'green' }),
   call('colour: status with colour hex', 'statuses_create', { name: 'Review', category: 'Started', color: '#f2c94c', icon: null }),
+  call('statuses: reorder within a category', 'statuses_reorder', { ids_in_order: [6, 3] }),
+  call('statuses: order after reorder', 'statuses_list'),
+  call('statuses: undo restores the order', 'history_undo'),
+  call('statuses: order after undo', 'statuses_list'),
+  call('statuses: reorder across categories is Invalid', 'statuses_reorder', { ids_in_order: [6, 1] }),
+  call('statuses: reorder with a duplicate is Invalid', 'statuses_reorder', { ids_in_order: [6, 6] }),
+  call('statuses: reorder with an unknown id is NotFound', 'statuses_reorder', { ids_in_order: [6, 99] }),
 
   // Import
   call('import: csv plan maps the title column', 'import_csv_plan', { csv: 'Title,Notes\nOrder desks,urgent\nBook movers,\n', mapping: null }),

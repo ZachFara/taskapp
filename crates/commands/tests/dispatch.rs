@@ -143,3 +143,62 @@ async fn a_bulk_edit_through_dispatch_is_one_undoable_step() -> R {
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn reorder_statuses_and_pin_many_are_one_undo_step_each() -> R {
+    let s = state().await;
+    let mut ids = vec![];
+    for name in ["ABC one", "ABC two"] {
+        let made = dispatch(
+            &s,
+            "statuses_create",
+            json!({"name": name, "category": "Started", "color": "blue", "icon": null}),
+        )
+        .await?;
+        ids.push(made["id"].clone());
+    }
+    dispatch(
+        &s,
+        "statuses_reorder",
+        json!({"ids_in_order": [ids[1], ids[0]]}),
+    )
+    .await?;
+    let status = dispatch(&s, "history_undo_status", json!({})).await?;
+    assert_eq!(status["undo"], "statuses_reorder");
+    dispatch(&s, "history_undo", json!({})).await?;
+    let list = dispatch(&s, "statuses_list", json!({})).await?;
+    let started: Vec<_> = list
+        .as_array()
+        .expect("list")
+        .iter()
+        .filter(|x| x["category"] == "Started")
+        .map(|x| x["id"].clone())
+        .collect();
+    assert_eq!(started[started.len() - 2..], ids[..]);
+
+    let urls = json!(["https://a.example", "https://b.example"]);
+    dispatch(
+        &s,
+        "pins_set",
+        json!({"kind": "Url", "targets": urls, "pinned": true}),
+    )
+    .await?;
+    assert_eq!(
+        dispatch(&s, "pins_list_resolved", json!({}))
+            .await?
+            .as_array()
+            .map(Vec::len),
+        Some(2)
+    );
+    let status = dispatch(&s, "history_undo_status", json!({})).await?;
+    assert_eq!(status["undo"], "pins_set");
+    dispatch(&s, "history_undo", json!({})).await?;
+    assert_eq!(
+        dispatch(&s, "pins_list_resolved", json!({}))
+            .await?
+            .as_array()
+            .map(Vec::len),
+        Some(0)
+    );
+    Ok(())
+}
