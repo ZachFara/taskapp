@@ -36,7 +36,7 @@ fn def(
 /// Fails when a core call fails, for example on a database that already holds these rows.
 pub async fn run(db: &Db) -> Result<()> {
     for (slug, name) in [("home", "Home"), ("work", "Work")] {
-        projects::create(db, slug, name, Ui).await?;
+        projects::create(db, slug, name, None, None, Ui).await?;
     }
     let area = [("home", "#4caf50"), ("work", "#2196f3")];
     for d in [

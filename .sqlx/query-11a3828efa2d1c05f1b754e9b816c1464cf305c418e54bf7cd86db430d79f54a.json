@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO labels (name, color, icon) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "11a3828efa2d1c05f1b754e9b816c1464cf305c418e54bf7cd86db430d79f54a"
+}

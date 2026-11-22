@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", name, color FROM labels ORDER BY id",
+  "query": "SELECT id AS \"id!: i64\", name, color, icon FROM labels ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -17,6 +17,11 @@
         "name": "color",
         "ordinal": 2,
         "type_info": "Text"
+      },
+      {
+        "name": "icon",
+        "ordinal": 3,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -25,8 +30,9 @@
     "nullable": [
       false,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "5f8b0f060516295ca0aaedb662151249531eacfe88ebdeef06737b5a896b7ced"
+  "hash": "b531b209a42ab880b0fab4877d5ab809b76cf33f2639499ef999d07ff2be602a"
 }

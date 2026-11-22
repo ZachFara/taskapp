@@ -89,13 +89,13 @@ const TOOLS: &[Row] = &[
     ("list_statuses", "List statuses.", &[]),
     (
         "create_status",
-        "Create a status. Args: name, category, color.",
+        "Create a status. Args: name, category, color, icon (optional).",
         &["name", "category", "color"],
     ),
     ("list_projects", "List projects.", &[]),
     (
         "create_project",
-        "Create a project. Args: slug, name.",
+        "Create a project. Args: slug, name, icon and color (optional).",
         &["slug", "name"],
     ),
     (
@@ -106,13 +106,13 @@ const TOOLS: &[Row] = &[
     ("list_cycles", "List cycles.", &[]),
     (
         "create_cycle",
-        "Create a cycle. Args: start_date, end_date, name (optional).",
+        "Create a cycle. Args: start_date, end_date, name, icon, color (optional).",
         &["start_date", "end_date"],
     ),
     ("list_labels", "List labels.", &[]),
     (
         "create_label",
-        "Create a label. Args: name, color.",
+        "Create a label. Args: name, color, icon (optional).",
         &["name", "color"],
     ),
     ("list_pins", "List pinned items.", &[]),
@@ -410,16 +410,18 @@ impl Server {
             "create_status" => {
                 let cat: StatusCategory = arg(a, "category")?;
                 let (n, c) = (arg::<String>(a, "name")?, arg::<String>(a, "color")?);
-                ok(&statuses::create(db, &n, cat, &c)
+                ok(&statuses::create(db, &n, cat, &c, opt(a, "icon")?, s)
                     .await
                     .map_err(|e| ce(&e))?)
             }
             "list_projects" => ok(&projects::list(db).await.map_err(|e| ce(&e))?),
             "create_project" => {
                 let (slug, n) = (arg::<String>(a, "slug")?, arg::<String>(a, "name")?);
-                ok(&projects::create(db, &slug, &n, s)
-                    .await
-                    .map_err(|e| ce(&e))?)
+                ok(
+                    &projects::create(db, &slug, &n, opt(a, "icon")?, opt(a, "color")?, s)
+                        .await
+                        .map_err(|e| ce(&e))?,
+                )
             }
             "create_milestone" => {
                 let id = arg(a, "project_id")?;
@@ -431,15 +433,13 @@ impl Server {
             }
             "update_project" => self.update_project(a).await,
             "list_cycles" => ok(&cycles::list(db).await.map_err(|e| ce(&e))?),
-            "create_cycle" => {
-                let (start, end) = (arg(a, "start_date")?, arg(a, "end_date")?);
-                let made = cycles::create(db, opt(a, "name")?, start, end, s).await;
-                ok(&made.map_err(|e| ce(&e))?)
-            }
+            "create_cycle" => self.create_cycle(a).await,
             "list_labels" => ok(&labels::list(db).await.map_err(|e| ce(&e))?),
             "create_label" => {
                 let (n, c) = (arg::<String>(a, "name")?, arg::<String>(a, "color")?);
-                ok(&labels::create(db, &n, &c, s).await.map_err(|e| ce(&e))?)
+                ok(&labels::create(db, &n, &c, opt(a, "icon")?, s)
+                    .await
+                    .map_err(|e| ce(&e))?)
             }
             "list_pins" => ok(&pins::list_resolved(db).await.map_err(|e| ce(&e))?),
             "pin" => {
@@ -455,6 +455,16 @@ impl Server {
     }
 
     /// Overlays the given fields on the stored project, so null clears a nullable field.
+    async fn create_cycle(&self, a: &Value) -> Res<Value> {
+        let (start, end) = (arg(a, "start_date")?, arg(a, "end_date")?);
+        let look = taskapp_core::palette::Look {
+            icon: opt(a, "icon")?,
+            color: opt(a, "color")?,
+        };
+        let made = cycles::create(&self.db, opt(a, "name")?, start, end, look, src(a)).await;
+        ok(&made.map_err(|e| ce(&e))?)
+    }
+
     async fn update_project(&self, a: &Value) -> Res<Value> {
         let id: taskapp_core::ProjectId = arg(a, "id")?;
         let all = projects::list(&self.db).await.map_err(|e| ce(&e))?;
@@ -469,6 +479,8 @@ impl Server {
             "doc_link",
             "start_date",
             "target_date",
+            "icon",
+            "color",
         ] {
             if let Some(v) = a.get(k) {
                 merged[k] = v.clone();

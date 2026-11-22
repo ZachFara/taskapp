@@ -1,9 +1,12 @@
-use serde_json::Value;
-use sqlx::{Row, query::Query, sqlite::SqliteArguments, sqlite::SqliteRow};
+use serde_json::{Value, json};
+use sqlx::{Row, SqliteConnection, query::Query, sqlite::SqliteArguments, sqlite::SqliteRow};
 
 use crate::{
-    Db, Error, FieldRef, Filter, FixedField, Issue, Op, PropertyDef, PropertyKind, Result,
-    SavedView, Sort, ViewDef, ViewId, issues,
+    ChangeSource, Db, Error, FieldRef, Filter, FixedField, Issue, Op, PropertyDef, PropertyKind,
+    Result, SavedView, Sort, ViewDef, ViewId,
+    history::{self, Edit},
+    issues,
+    palette::{self, Look},
 };
 
 /// Filters come from saved JSON; a limit keeps a hostile one from overflowing the stack.
@@ -346,6 +349,8 @@ fn view_from_row(r: &SqliteRow) -> Result<SavedView> {
         name: r.try_get("name")?,
         def: serde_json::from_str(&def).map_err(|e| Error::Invalid(format!("saved view: {e}")))?,
         position: r.try_get("position")?,
+        icon: r.try_get("icon")?,
+        color: r.try_get("color")?,
     })
 }
 
@@ -353,48 +358,130 @@ fn view_from_row(r: &SqliteRow) -> Result<SavedView> {
 ///
 /// Fails on a database error or a stored definition that no longer parses.
 pub async fn list(db: &Db) -> Result<Vec<SavedView>> {
-    sqlx::query("SELECT id, name, definition, position FROM views ORDER BY position, id")
-        .fetch_all(&db.pool)
-        .await?
-        .iter()
-        .map(view_from_row)
-        .collect()
+    sqlx::query(
+        "SELECT id, name, definition, position, icon, color FROM views ORDER BY position, id",
+    )
+    .fetch_all(&db.pool)
+    .await?
+    .iter()
+    .map(view_from_row)
+    .collect()
 }
 
-/// Creates a view (at the end) when `id` is `None`, otherwise replaces name and definition.
+/// Creates a view (at the end) when `id` is `None`, otherwise replaces name, definition, icon and color.
+/// On update an unset icon or color keeps the current one.
 ///
 /// # Errors
 ///
-/// Fails with `NotFound` for an unknown id, or on a database error.
-pub async fn save(db: &Db, id: Option<ViewId>, name: &str, def: ViewDef) -> Result<SavedView> {
+/// Fails with `NotFound` for an unknown id, `Invalid` for a bad icon or color, or on a database error.
+pub async fn save(
+    db: &Db,
+    id: Option<ViewId>,
+    name: &str,
+    def: ViewDef,
+    look: Look,
+    src: ChangeSource,
+) -> Result<SavedView> {
     let json = serde_json::to_string(&def).map_err(|e| Error::Invalid(e.to_string()))?;
-    let id = if let Some(id) = id {
-        let done = sqlx::query("UPDATE views SET name = ?, definition = ? WHERE id = ?")
-            .bind(name)
-            .bind(&json)
-            .bind(id.0)
-            .execute(&db.pool)
-            .await?;
-        if done.rows_affected() == 0 {
-            return Err(Error::NotFound(format!("view {}", id.0)));
+    let Look { icon, color } = look;
+    if let Some(icon) = &icon {
+        palette::check_icon(icon)?;
+    }
+    let color = color
+        .as_deref()
+        .map(palette::key_for)
+        .transpose()?
+        .map(str::to_owned);
+    let look = Look { icon, color };
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let id = match id {
+        Some(id) => {
+            update_view(&mut tx, src, id, name, &json, &look).await?;
+            id.0
         }
-        id.0
-    } else {
-        sqlx::query(
-            "INSERT INTO views (name, definition, position)
-             VALUES (?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM views))",
-        )
-        .bind(name)
-        .bind(&json)
-        .execute(&db.pool)
-        .await?
-        .last_insert_rowid()
+        None => insert_view(&mut tx, src, name, &json, &look).await?,
     };
-    let row = sqlx::query("SELECT id, name, definition, position FROM views WHERE id = ?")
-        .bind(id)
-        .fetch_one(&db.pool)
+    let row =
+        sqlx::query("SELECT id, name, definition, position, icon, color FROM views WHERE id = ?")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await?;
+    let view = view_from_row(&row)?;
+    tx.commit().await?;
+    Ok(view)
+}
+
+/// Records each changed field, then writes the row. An unset icon or color keeps the stored one.
+async fn update_view(
+    tx: &mut SqliteConnection,
+    src: ChangeSource,
+    id: ViewId,
+    name: &str,
+    json: &str,
+    look: &Look,
+) -> Result<()> {
+    let old = sqlx::query("SELECT name, icon, color FROM views WHERE id = ?")
+        .bind(id.0)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| Error::NotFound(format!("view {}", id.0)))?;
+    let old_name: String = old.try_get("name")?;
+    let old_icon: Option<String> = old.try_get("icon")?;
+    let old_color: Option<String> = old.try_get("color")?;
+    let icon = look.icon.as_deref().or(old_icon.as_deref());
+    let color = look.color.as_deref().or(old_color.as_deref());
+    let changes = [
+        ("name", json!(old_name), json!(name)),
+        ("icon", json!(old_icon), json!(icon)),
+        ("color", json!(old_color), json!(color)),
+    ];
+    for (field, before, after) in changes {
+        if before != after {
+            let edit = Edit {
+                field,
+                old: Some(&before),
+                new: Some(&after),
+            };
+            history::record(tx, src, "view", &id.0.to_string(), &edit).await?;
+        }
+    }
+    sqlx::query("UPDATE views SET name = ?, definition = ?, icon = ?, color = ? WHERE id = ?")
+        .bind(name)
+        .bind(json)
+        .bind(icon)
+        .bind(color)
+        .bind(id.0)
+        .execute(&mut *tx)
         .await?;
-    view_from_row(&row)
+    Ok(())
+}
+
+async fn insert_view(
+    tx: &mut SqliteConnection,
+    src: ChangeSource,
+    name: &str,
+    json: &str,
+    look: &Look,
+) -> Result<i64> {
+    let id = sqlx::query(
+        "INSERT INTO views (name, definition, position, icon, color)
+         VALUES (?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM views), ?, ?)",
+    )
+    .bind(name)
+    .bind(json)
+    .bind(look.icon.as_deref())
+    .bind(look.color.as_deref())
+    .execute(&mut *tx)
+    .await?
+    .last_insert_rowid();
+    let created = json!(name);
+    let edit = Edit {
+        field: "created",
+        old: None,
+        new: Some(&created),
+    };
+    history::record(tx, src, "view", &id.to_string(), &edit).await?;
+    Ok(id)
 }
 
 /// # Errors

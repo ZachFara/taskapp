@@ -267,6 +267,8 @@ mod tests {
             category,
             position: 0,
             color: String::new(),
+            color_hex: String::new(),
+            icon: None,
         }
     }
 
@@ -288,6 +290,8 @@ mod tests {
             start_date: None,
             target_date: None,
             archived_at: None,
+            icon: None,
+            color: None,
         }
     }
 

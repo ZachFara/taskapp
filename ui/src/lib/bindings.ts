@@ -81,14 +81,14 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	statusesCreate: (name: string, category: StatusCategory, color: string, options?: InvokeOptions) => __TAURI_INVOKE<Status>("statuses_create", { name, category, color }, options),
+	statusesCreate: (name: string, category: StatusCategory, color: string, icon: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Status>("statuses_create", { name, category, color, icon }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
 	 * # Errors
 	 * As that command.
 	 */
-	statusesUpdate: (id: StatusId, name: string | null, color: string | null, position: number | null, options?: InvokeOptions) => __TAURI_INVOKE<Status>("statuses_update", { id, name, color, position }, options),
+	statusesUpdate: (id: StatusId, name: string | null, color: string | null, position: number | null, icon: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Status>("statuses_update", { id, name, color, position, icon }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -165,7 +165,7 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	projectsCreate: (slug: string, name: string, options?: InvokeOptions) => __TAURI_INVOKE<Project>("projects_create", { slug, name }, options),
+	projectsCreate: (slug: string, name: string, icon: string | null, color: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Project>("projects_create", { slug, name, icon, color }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -228,7 +228,7 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	cyclesCreate: (name: string | null, startDate: string, endDate: string, options?: InvokeOptions) => __TAURI_INVOKE<Cycle>("cycles_create", { name, startDate, endDate }, options),
+	cyclesCreate: (name: string | null, startDate: string, endDate: string, icon: string | null, color: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Cycle>("cycles_create", { name, startDate, endDate, icon, color }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -256,7 +256,7 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	labelsCreate: (name: string, color: string, options?: InvokeOptions) => __TAURI_INVOKE<Label>("labels_create", { name, color }, options),
+	labelsCreate: (name: string, color: string, icon: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Label>("labels_create", { name, color, icon }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -375,7 +375,7 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	viewsSave: (id: ViewId | null, name: string, def: ViewDef, options?: InvokeOptions) => __TAURI_INVOKE<SavedView>("views_save", { id, name, def }, options),
+	viewsSave: (id: ViewId | null, name: string, def: ViewDef, icon: string | null, color: string | null, options?: InvokeOptions) => __TAURI_INVOKE<SavedView>("views_save", { id, name, def, icon, color }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -570,6 +570,8 @@ export type Cycle = {
 	name: string | null,
 	start_date: string,
 	end_date: string,
+	icon: string | null,
+	color: string | null,
 };
 
 export type CycleId = number;
@@ -641,7 +643,11 @@ export type IssuePatch = {
 export type Label = {
 	id: LabelId,
 	name: string,
+	/**  A palette key. */
 	color: string,
+	/**  The reference hex for `color`, for showing it without the palette. */
+	color_hex: string,
+	icon: string | null,
 };
 
 export type LabelId = number;
@@ -709,6 +715,8 @@ export type Project = {
 	start_date: string | null,
 	target_date: string | null,
 	archived_at: string | null,
+	icon: string | null,
+	color: string | null,
 };
 
 export type ProjectId = number;
@@ -751,6 +759,8 @@ export type SavedView = {
 	name: string,
 	def: ViewDef,
 	position: number,
+	icon: string | null,
+	color: string | null,
 };
 
 export type SelectOption = {
@@ -768,7 +778,11 @@ export type Status = {
 	name: string,
 	category: StatusCategory,
 	position: number,
+	/**  A palette key. */
 	color: string,
+	/**  The reference hex for `color`, for showing it without the palette. */
+	color_hex: string,
+	icon: string | null,
 };
 
 export type StatusCategory = "Backlog" | "Unstarted" | "Started" | "Completed" | "Canceled";

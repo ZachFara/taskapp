@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT name, color FROM labels WHERE id = ?",
+  "query": "SELECT name, color, icon FROM labels WHERE id = ?",
   "describe": {
     "columns": [
       {
@@ -12,6 +12,11 @@
         "name": "color",
         "ordinal": 1,
         "type_info": "Text"
+      },
+      {
+        "name": "icon",
+        "ordinal": 2,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -19,8 +24,9 @@
     },
     "nullable": [
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "8c85b6ce4d2471741d3d8a26aaffafb0969284f3a0bf558fb524152babc949b9"
+  "hash": "b7bfcf7365e074416bf09512e11fd70f3cc04102052346fa20d217c6d2651a96"
 }

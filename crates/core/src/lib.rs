@@ -12,6 +12,7 @@ pub mod cycles;
 pub mod history;
 pub mod issues;
 pub mod labels;
+pub mod palette;
 pub mod pins;
 pub mod projects;
 pub mod properties;
