@@ -91,3 +91,19 @@ async fn deleting_a_status_into_itself_is_refused() -> R {
     assert!(order(&db, StatusCategory::Started).await?.contains(&id));
     Ok(())
 }
+
+#[tokio::test]
+async fn the_last_status_of_a_category_cannot_be_deleted() -> R {
+    let db = Db::open_in_memory().await?;
+    let done = statuses::list(&db)
+        .await?
+        .into_iter()
+        .find(|s| s.category == StatusCategory::Completed)
+        .ok_or("no completed status")?
+        .id;
+    let other = started(&db).await?[0];
+    let e = statuses::delete(&db, done, other).await;
+    assert!(matches!(e, Err(Error::Invalid(_))), "{e:?}");
+    assert!(statuses::list(&db).await?.iter().any(|s| s.id == done));
+    Ok(())
+}

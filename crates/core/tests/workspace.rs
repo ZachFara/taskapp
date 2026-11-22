@@ -138,3 +138,27 @@ async fn setup_is_one_undoable_step() -> R {
     assert_eq!(workspace::status(&db).await?, before);
     Ok(())
 }
+
+#[tokio::test]
+async fn settings_from_the_ui_are_checked_like_their_commands() -> R {
+    use serde_json::{Value, json};
+    use taskapp_core::{Error, settings};
+    let db = Db::open_in_memory().await?;
+    let bad = [
+        ("issue_prefix", json!("bad key!")),
+        ("timezone", json!("Mars/Base")),
+        ("theme", json!("neon")),
+        ("week_start", json!("friday")),
+        ("default_view_template", json!("four")),
+        ("workspace_name", json!("   ")),
+        ("made_up_key", json!(1)),
+    ];
+    for (key, value) in &bad {
+        let e = settings::set_from_user(&db, key, value).await;
+        assert!(matches!(e, Err(Error::Invalid(_))), "{key}={value}: {e:?}");
+    }
+    settings::set_from_user(&db, "theme", &json!("dark")).await?;
+    settings::set_from_user(&db, "insights.view.3", &json!("{}")).await?;
+    settings::set_from_user(&db, "default_view_template", &Value::Null).await?;
+    Ok(())
+}
