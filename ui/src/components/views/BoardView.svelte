@@ -14,6 +14,7 @@
   import FieldValue from '../display/FieldValue.svelte';
   import { BOARD_DEFAULT, density, emptyCtx, loadCtx, pointsName, pointsTotal, shown, type Ctx } from '../display/types';
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
+  import { priorityGlyph } from '../detail/format';
 
   let { view }: { view: SavedView } = $props();
 
@@ -232,7 +233,7 @@
               >
                 <span class="top">
                   <span class="key">{i.key}</span>
-                  <PriorityGlyph level={i.priority} size={14} />
+                  <PriorityGlyph level={priorityGlyph(i.priority)} size={14} />
                 </span>
                 <span class="title">{i.title}</span>
                 <span class="foot">

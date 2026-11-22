@@ -412,7 +412,7 @@
         <tr>
           <th scope="col" class="key-head">Key</th>
           {#each cols as col (col.id)}
-            <th scope="col" data-col={col.id} class:num={col.kind === 'Number'} aria-sort={sort?.col === col.id ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+            <th scope="col" data-col={col.id} data-sticky={col.id === 'fixed:Title' ? '' : undefined} class:num={col.kind === 'Number'} aria-sort={sort?.col === col.id ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
               <span class="head">
                 <Button variant="quiet" icon={sort?.col === col.id ? (sort.dir === 'asc' ? 'chevron-up' : 'chevron-down') : undefined} onclick={() => cycleSort(col.id)}>{col.label}</Button>
                 <span class="tools">
@@ -452,6 +452,7 @@
                   <td
                     role="gridcell"
                     data-col={col.id}
+                    data-sticky={col.id === 'fixed:Title' ? '' : undefined}
                     data-kind={col.kind}
                     class:num={col.kind === 'Number'}
                     data-active={issue.id === activeRowId && c === activeCol ? 'true' : undefined}
@@ -502,7 +503,11 @@
   }
   /* Header labels are quiet text on the sheet; the "+" stays in view at the right edge. */
   .head :global(.btn) { border-color: transparent; background: transparent; padding: 0 var(--s-2); }
-  .add-col { position: sticky; right: 0; z-index: var(--z-sticky); background: var(--sheet); text-align: end; }
+  /* Key and Title stay put while the rest scrolls sideways; the "+" is the last column, never laid over one. */
+  .add-col { width: var(--s-10); text-align: end; }
+  .key-col, .key-head, .key-cell { width: calc(var(--s-10) * 2); min-width: calc(var(--s-10) * 2); box-sizing: border-box; }
+  [data-sticky] { position: sticky; left: calc(var(--s-10) * 2); background: var(--sheet); z-index: 1; box-shadow: 1px 0 0 var(--border); }
+  thead [data-sticky] { z-index: calc(var(--z-sticky) + 1); }
   .trig { display: inline-flex; }
   .due[data-overdue] { color: var(--signal); font-weight: 700; }
   th.num { text-align: end; }

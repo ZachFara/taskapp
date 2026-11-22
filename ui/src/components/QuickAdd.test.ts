@@ -66,7 +66,7 @@ describe('QuickAdd', () => {
     });
     await type('Buy milk p2 #home @errands ~30m');
     expect(parse).toHaveBeenLastCalledWith('Buy milk p2 #home @errands ~30m');
-    expect(chips()).toEqual(['Medium', '#home', '@errands', '30m']);
+    expect(chips()).toEqual(['High', '#home', '@errands', '30m']);
   });
 
   it('quickadd_slash_lists_templates_and_inserts_slug', async () => {
