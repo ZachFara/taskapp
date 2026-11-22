@@ -16,7 +16,7 @@ async fn migrations_seed_statuses_and_prefix() -> R {
     assert_eq!(count(&db, "statuses").await, 5);
     assert_eq!(
         settings::get::<String>(&db, "issue_prefix").await?,
-        Some("ZF".into())
+        Some("ABC".into())
     );
     // The migration created issue_fts, so this build of SQLite has FTS5.
     sqlx::query("INSERT INTO issue_fts (rowid, title) VALUES (1, 'hello')")

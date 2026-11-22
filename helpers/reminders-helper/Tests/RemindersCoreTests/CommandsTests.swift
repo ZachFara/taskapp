@@ -38,11 +38,11 @@ struct CommandsTests {
 
     @Test func fetch_maps_datetime_due_with_tz() async {
         let s = FakeStore()
-        let tz = TimeZone(identifier: "America/New_York")!
+        let tz = TimeZone(identifier: "Europe/Berlin")!
         s.items["L1"] = [RawReminder(externalId: "a", title: "x", due: DateComponents(timeZone: tz, year: 2026, month: 1, day: 5, hour: 9, minute: 30))]
         let (_, out) = await exec(["fetch", "--list", "L1"], s)
         let due = (parse(out[0]) as! [[String: Any]])[0]["due"] as! [String: String]
-        #expect(due == ["datetime": "2026-01-05T14:30:00Z", "tz": "America/New_York"])
+        #expect(due == ["datetime": "2026-01-05T08:30:00Z", "tz": "Europe/Berlin"])
     }
 
     @Test func fetch_excludes_completed() async {

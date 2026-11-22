@@ -57,11 +57,11 @@ async fn resolved_labels_and_routes() -> R {
         .fetch_one(&db.pool)
         .await?;
 
-    pins::pin(&db, PinKind::Issue, "ZF-3", None).await?;
+    pins::pin(&db, PinKind::Issue, "ABC-3", None).await?;
     pins::pin(&db, PinKind::Project, "home", None).await?;
     pins::pin(&db, PinKind::View, &view.to_string(), None).await?;
     pins::pin(&db, PinKind::Cycle, "2", None).await?;
-    pins::pin(&db, PinKind::Note, "obsidian://open?vault=v&file=a", None).await?;
+    pins::pin(&db, PinKind::Note, "obsidian://open?file=a", None).await?;
     pins::pin(&db, PinKind::Url, "https://x.example", Some("Docs".into())).await?;
 
     let resolved = pins::list_resolved(&db).await?;
@@ -72,7 +72,7 @@ async fn resolved_labels_and_routes() -> R {
     assert_eq!(
         got,
         vec![
-            ("Fix lease", "/issue/ZF-3", "ZF-3"),
+            ("Fix lease", "/issue/ABC-3", "ABC-3"),
             ("Home", "/project/home", "home"),
             (
                 view_name.as_str(),
@@ -81,9 +81,9 @@ async fn resolved_labels_and_routes() -> R {
             ),
             ("Cycle 2", "/cycles#2", "2"),
             (
-                "obsidian://open?vault=v&file=a",
-                "obsidian://open?vault=v&file=a",
-                "obsidian://open?vault=v&file=a"
+                "obsidian://open?file=a",
+                "obsidian://open?file=a",
+                "obsidian://open?file=a"
             ),
             ("Docs", "https://x.example", "https://x.example"),
         ]
@@ -97,8 +97,8 @@ async fn archived_issue_pin_kept_and_flagged() -> R {
     let db = Db::open_in_memory().await?;
     add_issue(&db, 4, "Old work", true).await?;
     add_issue(&db, 5, "Live work", false).await?;
-    pins::pin(&db, PinKind::Issue, "ZF-4", None).await?;
-    pins::pin(&db, PinKind::Issue, "ZF-5", None).await?;
+    pins::pin(&db, PinKind::Issue, "ABC-4", None).await?;
+    pins::pin(&db, PinKind::Issue, "ABC-5", None).await?;
 
     let resolved = pins::list_resolved(&db).await?;
     assert_eq!(resolved.len(), 2);
@@ -112,8 +112,8 @@ async fn archived_issue_pin_kept_and_flagged() -> R {
 async fn deleted_target_pin_removed() -> R {
     let db = Db::open_in_memory().await?;
     add_issue(&db, 9, "Soon gone", false).await?;
-    pins::pin(&db, PinKind::Issue, "ZF-9", None).await?;
-    pins::pin(&db, PinKind::Issue, "ZF-99", None).await?;
+    pins::pin(&db, PinKind::Issue, "ABC-9", None).await?;
+    pins::pin(&db, PinKind::Issue, "ABC-99", None).await?;
     sqlx::query("DELETE FROM issues WHERE number = 9")
         .execute(&db.pool)
         .await?;
@@ -192,7 +192,7 @@ async fn url_scheme_must_be_http_or_obsidian() -> R {
         );
     }
     pins::pin(&db, PinKind::Url, "HTTPS://x.example", None).await?;
-    pins::pin(&db, PinKind::Url, "obsidian://open?vault=v", None).await?;
+    pins::pin(&db, PinKind::Url, "obsidian://open?file=a", None).await?;
     assert_eq!(pins::list_resolved(&db).await?.len(), 2);
     Ok(())
 }
@@ -227,7 +227,7 @@ async fn pins_survive_project_slug_rename_and_prefix_change() -> R {
     let mut p = projects::create(&db, "home", "Home", None, None, ChangeSource::Ui).await?;
     add_issue(&db, 1, "Fix roof", false).await?;
     pins::pin(&db, PinKind::Project, "home", None).await?;
-    pins::pin(&db, PinKind::Issue, "ZF-1", None).await?;
+    pins::pin(&db, PinKind::Issue, "ABC-1", None).await?;
     p.slug = "house".into();
     projects::update(&db, p, ChangeSource::Ui).await?;
     settings::set(&db, "issue_prefix", &"AB").await?;

@@ -272,7 +272,7 @@ async fn search_finds_comment_text() -> R {
 async fn search_tolerates_punctuation() -> R {
     let db = seeded().await?;
     search::reindex(&db, taskapp_core::IssueId(1)).await?;
-    search::search(&db, "ZF-1: fix 'x'", 10).await?;
+    search::search(&db, "ABC-1: fix 'x'", 10).await?;
     search::search(&db, "\"unbalanced AND (", 10).await?;
     assert_eq!(search::search(&db, "   ", 10).await?.len(), 0);
     assert_eq!(search::search(&db, "", 10).await?.len(), 0);

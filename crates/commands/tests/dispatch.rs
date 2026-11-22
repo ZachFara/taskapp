@@ -28,7 +28,7 @@ async fn dispatch_routes_by_name_with_named_args() -> R {
         json!({"key": "issue_prefix"}),
     )
     .await?;
-    assert_eq!(out, json!("ZF"));
+    assert_eq!(out, json!("ABC"));
     Ok(())
 }
 #[tokio::test]

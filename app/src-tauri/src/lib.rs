@@ -40,17 +40,6 @@ pub fn export_bindings(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// IANA name of the system time zone, from the `/etc/localtime` symlink.
-fn system_tz() -> String {
-    std::fs::read_link("/etc/localtime")
-        .ok()
-        .and_then(|p| {
-            p.to_str()
-                .and_then(|s| s.split_once("zoneinfo/").map(|(_, tz)| tz.to_owned()))
-        })
-        .unwrap_or_else(|| "UTC".to_owned())
-}
-
 /// Records the system zone as the `timezone` setting when the owner has not set one, so the
 /// calendar's 08:00 alerts land at local time.
 async fn default_timezone(db: &Db, tz: &str) -> taskapp_core::Result<()> {
@@ -117,7 +106,7 @@ pub fn run() {
             let backup_dir =
                 tauri::async_runtime::block_on(settings::get::<String>(&db, "backup_dir"))?
                     .map_or_else(|| dir.join("backups"), PathBuf::from);
-            let tz = system_tz();
+            let tz = taskapp_core::workspace::system_tz();
             tauri::async_runtime::block_on(default_timezone(&db, &tz))?;
             app.manage(AppState {
                 db: db.clone(),
@@ -151,15 +140,13 @@ mod tests {
     #[tokio::test]
     async fn timezone_defaults_to_system_but_keeps_an_owner_value() {
         let db = Db::open_in_memory().await.expect("db");
-        default_timezone(&db, "America/New_York")
-            .await
-            .expect("set");
+        default_timezone(&db, "Europe/Berlin").await.expect("set");
         assert_eq!(
             settings::get::<String>(&db, "timezone")
                 .await
                 .expect("get")
                 .as_deref(),
-            Some("America/New_York")
+            Some("Europe/Berlin")
         );
         default_timezone(&db, "UTC").await.expect("keep");
         assert_eq!(
@@ -167,7 +154,7 @@ mod tests {
                 .await
                 .expect("get")
                 .as_deref(),
-            Some("America/New_York")
+            Some("Europe/Berlin")
         );
     }
 }

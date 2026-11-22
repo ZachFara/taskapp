@@ -74,6 +74,20 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	workspaceStatus: (options?: InvokeOptions) => __TAURI_INVOKE<WorkspaceStatus>("workspace_status", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	workspaceSetup: (name: string, key: string, timezone: string | null, options?: InvokeOptions) => __TAURI_INVOKE<WorkspaceStatus>("workspace_setup", { name, key, timezone }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	statusesList: (options?: InvokeOptions) => __TAURI_INVOKE<Status[]>("statuses_list", undefined, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1021,3 +1035,10 @@ export type WorkBlock = {
 };
 
 export type WorkBlockId = number;
+
+export type WorkspaceStatus = {
+	setup_done: boolean,
+	name: string | null,
+	key: string,
+	timezone: string,
+};
