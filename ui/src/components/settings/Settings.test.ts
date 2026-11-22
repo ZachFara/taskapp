@@ -9,11 +9,23 @@ describe('Settings', () => {
     history.pushState(null, '', '/settings/export');
     const { target } = await mountSettings(Settings);
     expect(target.querySelector('[aria-current="page"]')?.textContent).toBe('Export');
-    expect(target.querySelector('h2')?.textContent).toBe('Export');
+    expect(target.querySelector('h1')?.textContent).toBe('Settings / Export');
     target.querySelector<HTMLAnchorElement>('nav a[href="/settings/backups"]')!.click();
     await new Promise((r) => setTimeout(r, 0));
     expect(location.pathname).toBe('/settings/backups');
-    expect(target.querySelector('h2')?.textContent).toBe('Backups');
+    expect(target.querySelector('h1')?.textContent).toBe('Settings / Backups');
+  });
+
+  it('each section names itself once, in the page header', async () => {
+    for (const id of ['general', 'statuses', 'labels', 'projects', 'cycles', 'properties', 'templates', 'import', 'reminders', 'calendar', 'export', 'backups']) {
+      history.pushState(null, '', `/settings/${id}`);
+      const { target } = await mountSettings(Settings);
+      const label = target.querySelector('nav a[aria-current="page"]')!.textContent!.trim();
+      expect(target.querySelectorAll('h1').length, id).toBe(1);
+      expect(target.querySelector('h1')?.textContent, id).toBe(`Settings / ${label}`);
+      expect([...target.querySelectorAll('h2')].map((h) => h.textContent?.trim()), id).not.toContain(label);
+      target.remove();
+    }
   });
 
   it('lists every section in the left nav, shortcuts included', async () => {

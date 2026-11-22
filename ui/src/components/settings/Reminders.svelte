@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SectionHead from './SectionHead.svelte';
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
   import Button from '../../ui/Button.svelte';
@@ -35,10 +36,7 @@
   }
 </script>
 
-<div class="st-head">
-  <h2>Reminders</h2>
-  <p class="st-lede">Tasks you add to the inbox list in Reminders are imported into the app.</p>
-</div>
+<SectionHead lede="Tasks you add to the inbox list in Reminders are imported into the app." />
 
 <div class="st-card">
   <span class="st-status" data-state={connected ? 'ok' : undefined} data-status>{connected ? 'Connected' : 'Not set up'}</span>

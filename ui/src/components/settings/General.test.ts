@@ -46,4 +46,18 @@ describe('General', () => {
     expect(await api.settings.get('theme')).toBe('dark');
   // Opening the time zone list renders every zone; under load that takes longer than the default 5s.
   }, 30_000);
+
+  it('blank fields say what goes in them, and a time zone change waits for a restart', async () => {
+    const { target } = await mountSettings(General);
+    expect(field(target, 'Workspace name').placeholder).not.toBe('');
+    expect(target.textContent).toContain('applies after restart');
+  });
+
+  it('the settings.save command saves this page', async () => {
+    const { target, api } = await mountSettings(General);
+    await setField(target, 'Workspace key', 'QZ');
+    window.dispatchEvent(new CustomEvent('command:settings.save'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await api.settings.get('issue_prefix')).toBe('QZ');
+  });
 });

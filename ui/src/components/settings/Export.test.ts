@@ -43,4 +43,10 @@ describe('Export', () => {
     await press(target, 'Export now');
     expect(target.querySelector('[role="alert"]')?.textContent).toContain('export directory');
   });
+
+  it('blank export fields show a placeholder', async () => {
+    const { target } = await mountSettings(Export);
+    expect(field(target, 'Export directory').placeholder).not.toBe('');
+    expect(field(target, 'Export remote').placeholder).not.toBe('');
+  });
 });
