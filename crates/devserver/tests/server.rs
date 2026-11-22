@@ -94,8 +94,21 @@ async fn binds_localhost_only() -> R {
     Ok(())
 }
 
+/// Like `output`, but a server that starts instead of refusing is killed and fails the test, not hangs it.
+fn output_within_10s(mut c: Command) -> R<std::process::Output> {
+    let mut child = c.spawn()?;
+    for _ in 0..200 {
+        if child.try_wait()?.is_some() {
+            return Ok(child.wait_with_output()?);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    child.kill()?;
+    Err("the server kept running instead of refusing the database".into())
+}
+
 fn refused(home: &Path, db: &Path) -> R {
-    let out = command(home, db).output()?;
+    let out = output_within_10s(command(home, db))?;
     assert!(!out.status.success());
     assert!(
         String::from_utf8_lossy(&out.stderr).contains("real app database"),
@@ -136,7 +149,7 @@ fn refuses_real_app_db_via_relative_path() -> R {
         Path::new("Library/Application Support/../Application Support/taskapp/taskapp.db"),
     );
     c.current_dir(home.path());
-    let out = c.output()?;
+    let out = output_within_10s(c)?;
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("real app database"));
     Ok(())
