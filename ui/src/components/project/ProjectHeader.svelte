@@ -9,6 +9,7 @@
   import Popover from '../../ui/Popover.svelte';
   import TextInput from '../../ui/TextInput.svelte';
   import { humanDate } from '../detail/format';
+  import ProgressSummary from '../insights/ProgressSummary.svelte';
 
   let { project, progress, renaming = $bindable(false), onsaved }: {
     project: Project;
@@ -23,7 +24,6 @@
   $effect(() => {
     if (renaming) name = project.name;
   });
-  const pct = $derived(progress[1] ? (progress[0] / progress[1]) * 100 : 0);
 
   async function saveName(e: Event) {
     e.preventDefault();
@@ -74,8 +74,7 @@
     <div class="progress" data-testid="progress">
       <dt>Progress</dt>
       <dd>
-        <span class="fig">{progress[0]} / {progress[1]}</span>
-        <span class="bar" role="img" aria-label={`${progress[0]} of ${progress[1]} done`}><span style:width={`${pct}%`}></span></span>
+        <ProgressSummary projectId={project.id} {progress} />
       </dd>
     </div>
     <div>
@@ -107,14 +106,11 @@
   .desc { font-size: var(--fs-lg); line-height: var(--lh-body); }
   form { display: flex; gap: var(--s-4); align-items: center; }
   .descform { align-items: flex-start; flex-direction: column; }
-  .facts { position: relative; display: grid; gap: var(--s-5); min-width: 220px; margin: 0; }
+  .facts { position: relative; --chart-bg: var(--band-1); display: grid; gap: var(--s-5); min-width: 280px; margin: 0; }
   dt { font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--band-count); margin-bottom: var(--s-2); }
   dd { margin: 0; }
   .date { height: var(--ctl-h); padding: 0 var(--s-5); border: 1px solid var(--control); border-radius: var(--r-ctl); background: var(--sheet); color: var(--ink); font-weight: 600; }
   .date.unset { color: var(--muted); font-weight: 400; }
   .date:hover { border-color: var(--muted); }
   .progress dd { display: grid; gap: var(--s-3); }
-  .fig { font-size: var(--fs-title); font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-  .bar { display: block; height: 6px; border-radius: var(--r-round); background: var(--band-3); overflow: hidden; }
-  .bar span { display: block; height: 100%; background: var(--ink); }
 </style>

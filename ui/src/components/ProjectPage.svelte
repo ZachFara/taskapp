@@ -14,6 +14,7 @@
   import ProjectHeader from './project/ProjectHeader.svelte';
   import ProjectIssues from './project/ProjectIssues.svelte';
   import Milestones from './project/Milestones.svelte';
+  import InsightsPanel from './insights/InsightsPanel.svelte';
 
   let { params }: { params: { slug?: string } } = $props();
   const slug = $derived(params.slug ?? '');
@@ -30,6 +31,7 @@
   let def = $state.raw<ViewDef>({ filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false });
   let renaming = $state(false);
   let confirming = $state(false);
+  let insights = $state(false);
 
   const pinned = $derived(pins.find((p) => p.pin.kind === 'Project' && p.pin.target === slug));
   // Only Obsidian and https links get a button; anything else (javascript:, http:, file:) is dropped.
@@ -81,11 +83,14 @@
   $effect(() => {
     const pin = () => void togglePin();
     const ask = () => (confirming = true);
+    const panel = () => (insights = !insights);
     addEventListener('command:project.pin', pin);
     addEventListener('command:project.archive', ask);
+    addEventListener('command:insights.toggle', panel);
     return () => {
       removeEventListener('command:project.pin', pin);
       removeEventListener('command:project.archive', ask);
+      removeEventListener('command:insights.toggle', panel);
     };
   });
 </script>
@@ -111,6 +116,7 @@
       {/snippet}
     </PageHeader>
 
+    <div class="cols">
     <div class="scroll">
       <ProjectHeader {project} {progress} bind:renaming onsaved={(p) => (project = p)} />
       <div class="ms">
@@ -121,6 +127,8 @@
         <ViewEditor {def} onchange={(p) => (def = { ...def, ...p })} />
       </div>
       <div class="issues"><ProjectIssues projectId={project.id} {layout} {def} /></div>
+    </div>
+    {#if insights}<InsightsPanel kind="project" id={project.id} title={project.name} onclose={() => (insights = false)} />{/if}
     </div>
   </div>
 
@@ -134,6 +142,7 @@
 
 <style>
   .page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  .cols { flex: 1; min-height: 0; display: flex; }
   .scroll { flex: 1; min-height: 0; overflow-y: auto; }
   .ms { padding: var(--s-7); }
   .toolbar { display: flex; align-items: center; gap: var(--s-7); flex-wrap: wrap; padding: 0 var(--s-7); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
