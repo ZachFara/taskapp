@@ -300,7 +300,7 @@ async fn token_never_in_debug_or_errors() {
 }
 
 #[tokio::test]
-async fn issues_only_import_undoes_as_one_step_and_new_refs_make_undo_refuse() -> R {
+async fn import_undoes_as_one_step_including_what_it_created() -> R {
     let db = Db::open_in_memory().await?;
     let plain = csv::plan(&db, "Title\nA\nB\n", None).await?;
     apply(&db, &plain).await?;
@@ -315,13 +315,10 @@ async fn issues_only_import_undoes_as_one_step_and_new_refs_make_undo_refuse() -
         ..rich
     };
     apply(&db, &rich).await?;
-    let err = taskapp_core::undo::undo(&db)
-        .await
-        .err()
-        .map(|e| e.to_string());
-    assert!(
-        err.as_ref().is_some_and(|e| e.contains("not covered")),
-        "{err:?}"
-    );
+    taskapp_core::undo::undo(&db).await?;
+    let labels: i64 = sqlx::query_scalar("SELECT count(*) FROM labels WHERE name = 'x'")
+        .fetch_one(&db.pool)
+        .await?;
+    assert_eq!(labels, 0);
     Ok(())
 }

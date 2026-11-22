@@ -200,13 +200,34 @@ async fn record_created(tx: &mut SqliteConnection, src: ChangeSource, issue: &Is
         Value::from(issue.title.as_str()),
         Value::from(issue.key.as_str()),
     );
-    for (field, v) in [("title", &title), ("key", &key)] {
+    // What the new issue points at is recorded too, so undoing the create lets those rows be deleted, and a
+    // redo links them again. The key comes last: undo archives first, redo restores last.
+    let refs = [
+        ("project_id", issue.project_id.map(|p| p.0)),
+        ("milestone_id", issue.milestone_id.map(|m| m.0)),
+        ("cycle_id", issue.cycle_id.map(|c| c.0)),
+    ]
+    .into_iter()
+    .map(|(f, v)| (f, v.map(Value::from)))
+    .chain(
+        issue
+            .label_ids
+            .iter()
+            .map(|l| ("label", Some(Value::from(l.0)))),
+    );
+    let fields = [("title", Some(title))]
+        .into_iter()
+        .chain(refs)
+        .chain([("key", Some(key))]);
+    for (field, v) in fields {
         let edit = history::Edit {
             field,
             old: None,
-            new: Some(v),
+            new: v.as_ref(),
         };
-        history::record(tx, src, "issue", &id, &edit).await?;
+        if v.is_some() {
+            history::record(tx, src, "issue", &id, &edit).await?;
+        }
     }
     search::reindex_in(tx, issue.id).await
 }
@@ -511,15 +532,14 @@ pub async fn get(db: &Db, id: IssueId) -> Result<Issue> {
 
 /// # Errors
 ///
-/// `NotFound` when the key is malformed, has another prefix, or names no issue.
+/// `NotFound` when the key is malformed or names no issue. The prefix is display-only: the number
+/// alone identifies the issue, so keys from before a prefix change still resolve.
 pub async fn get_by_key(db: &Db, key: &str) -> Result<Issue> {
     let mut conn = db.pool.acquire().await?;
     let not_found = || Error::NotFound(format!("issue {key}"));
     let (p, n) = key.rsplit_once('-').ok_or_else(not_found)?;
     let number: i64 = n.parse().map_err(|_| not_found())?;
-    if p != prefix(&mut conn).await? {
-        return Err(not_found());
-    }
+    crate::workspace::validate_key(p).map_err(|_| not_found())?;
     let id = sqlx::query_scalar!(
         r#"SELECT id AS "id!: i64" FROM issues WHERE number = ?"#,
         number

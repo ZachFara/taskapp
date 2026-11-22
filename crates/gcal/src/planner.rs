@@ -252,7 +252,7 @@ mod tests {
 
     use super::*;
 
-    const NY: &str = "America/New_York";
+    const NY: &str = "Europe/Berlin";
 
     fn at(y: i32, m: u32, d: u32, h: u32) -> DateTime<Utc> {
         Utc.with_ymd_and_hms(y, m, d, h, 0, 0)
@@ -300,7 +300,7 @@ mod tests {
         let now = at(2026, 11, 1, 0);
         Issue {
             id: IssueId(id),
-            key: format!("ZF-{id}"),
+            key: format!("ABC-{id}"),
             title: format!("Task {id}"),
             description: String::new(),
             status_id: StatusId(1),
@@ -326,7 +326,7 @@ mod tests {
     }
 
     fn run(issues: &[Issue], blocks: &[WorkBlock]) -> Vec<DesiredEvent> {
-        desired(issues, &statuses(), &[project()], blocks, NY, "ZF")
+        desired(issues, &statuses(), &[project()], blocks, NY, "ABC")
     }
 
     /// Only the all-day digests, without their 08:00 alert events.
@@ -363,9 +363,9 @@ mod tests {
         assert_eq!(e.reminder_minutes, Some(0));
         assert!(
             e.description
-                .starts_with("ZF-1 Task 1\nPriority: High | Project: Home\n")
+                .starts_with("ABC-1 Task 1\nPriority: High | Project: Home\n")
         );
-        assert!(e.description.contains("taskapp://issue/ZF-1"));
+        assert!(e.description.contains("taskapp://issue/ABC-1"));
     }
 
     #[test]
@@ -381,11 +381,11 @@ mod tests {
         );
         assert!(
             e.description
-                .contains("ZF-1 Task 1\nPriority: High | Project: Home\ntaskapp://issue/ZF-1")
+                .contains("ABC-1 Task 1\nPriority: High | Project: Home\ntaskapp://issue/ABC-1")
         );
         assert!(
             e.description
-                .contains("ZF-2 Task 2\nPriority: High | Project: Home\ntaskapp://issue/ZF-2")
+                .contains("ABC-2 Task 2\nPriority: High | Project: Home\ntaskapp://issue/ABC-2")
         );
     }
 
@@ -429,7 +429,7 @@ mod tests {
 
     #[test]
     fn digest_uses_local_date() {
-        let utc = at(2026, 11, 21, 1);
+        let utc = at(2026, 11, 20, 23);
         let events = run(
             &[
                 issue(1, Some(Due::DateTime { utc, tz: NY.into() })),
@@ -442,7 +442,7 @@ mod tests {
             .iter()
             .find(|e| e.managed_key == "issue:1")
             .expect("timed event");
-        assert!(timed.description.contains("2026-11-20 20:00 EST"));
+        assert!(timed.description.contains("2026-11-21 00:00 CET"));
         let digest = events
             .iter()
             .find(|e| e.managed_key == "digest:2026-11-21")
@@ -495,7 +495,7 @@ mod tests {
 
     #[test]
     fn digest_has_a_timed_0800_alert_beside_it() {
-        // Winter: 08:00 in New York is 13:00 UTC.
+        // Winter: 08:00 in Berlin is 07:00 UTC.
         let events = run(&[issue(1, Some(date(21))), issue(2, Some(date(21)))], &[]);
         let alert = events
             .iter()
@@ -505,12 +505,12 @@ mod tests {
         assert_eq!(
             alert.timing,
             EventTiming::Timed {
-                start: at(2026, 11, 21, 13),
-                end: at(2026, 11, 21, 13) + Duration::minutes(15),
+                start: at(2026, 11, 21, 7),
+                end: at(2026, 11, 21, 7) + Duration::minutes(15),
             }
         );
         assert_eq!(alert.reminder_minutes, Some(0));
-        // Summer: the same wall-clock time is 12:00 UTC.
+        // Summer: the same wall-clock time is 06:00 UTC.
         let summer = Due::Date(NaiveDate::from_ymd_opt(2026, 7, 4).expect("valid date"));
         let events = run(&[issue(1, Some(summer))], &[]);
         let alert = events
@@ -520,8 +520,8 @@ mod tests {
         assert_eq!(
             alert.timing,
             EventTiming::Timed {
-                start: at(2026, 7, 4, 12),
-                end: at(2026, 7, 4, 12) + Duration::minutes(15),
+                start: at(2026, 7, 4, 6),
+                end: at(2026, 7, 4, 6) + Duration::minutes(15),
             }
         );
     }

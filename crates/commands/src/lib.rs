@@ -14,9 +14,9 @@ use taskapp_core::{
     Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId, PinKind, Project, ProjectId,
     PropertyDef, PropertyKind, Relation, Reschedule, ResolvedPin, Result, SavedView, SelectOption,
     Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus,
-    ViewDef, ViewId, WorkBlock, WorkBlockId, backup, blocks, bulk, comments, cycles, history,
-    import, issues, labels, pins, projects, properties, quickadd, relations, schedule, search,
-    settings, statuses, templates, undo, views,
+    ViewDef, ViewId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks, bulk, comments,
+    cycles, history, import, issues, labels, pins, projects, properties, quickadd, relations,
+    schedule, search, settings, statuses, templates, undo, views, workspace,
 };
 
 pub struct AppState {
@@ -124,6 +124,11 @@ macro_rules! with_commands {
             }
             issues_create_from_quickadd(s, input: String) -> Issue {
                 quickadd::create_from(&s.db, &input, today(s)?, &s.tz, ChangeSource::Ui).await
+            }
+
+            workspace_status(s) -> WorkspaceStatus { workspace::status(&s.db).await }
+            workspace_setup(s, name: String, key: String, timezone: Option<String>) -> WorkspaceStatus {
+                workspace::setup(&s.db, &name, &key, timezone.as_deref()).await
             }
 
             statuses_list(s) -> Vec<Status> { statuses::list(&s.db).await }

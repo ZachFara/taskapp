@@ -245,7 +245,7 @@ fn read_issues(dir: &Path, prefix: &str) -> Result<Vec<IssueEntry>> {
         .collect()
 }
 
-/// The number in a key such as `ZF-12`; the prefix must be the database's.
+/// The number in a key such as `ABC-12`; the prefix must be the database's.
 fn number_of(prefix: &str, key: &str) -> Result<i64> {
     key.strip_prefix(prefix)
         .and_then(|rest| rest.strip_prefix('-'))

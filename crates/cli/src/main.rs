@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use taskapp_core::{Db, Error, Result, backup, history};
 
 #[derive(Parser)]
-#[command(name = "taskapp", about = "Manage taskapp issues from the terminal")]
+#[command(name = "taskapp", about = "Manage Cairn issues from the terminal")]
 struct Cli {
     /// Database file. Defaults to the app's database.
     #[arg(long, global = true, value_name = "PATH")]
@@ -61,6 +61,14 @@ enum Cmd {
     Backup(BackupCmd),
     #[command(subcommand)]
     Import(ImportCmd),
+    /// First-run setup: workspace name, issue key prefix (2 to 5 capital letters) and time zone.
+    Setup {
+        name: String,
+        key: String,
+        /// IANA time zone. Defaults to the zone already stored, then the system zone.
+        #[arg(long)]
+        tz: Option<String>,
+    },
 }
 
 /// Both sources print the plan and write nothing unless `--apply` is given.

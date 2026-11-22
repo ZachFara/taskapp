@@ -5,7 +5,7 @@ use sqlx::SqliteConnection;
 use crate::{
     ChangeSource, Db, Error, Milestone, MilestoneId, Project, ProjectId, Result,
     history::{self, Edit},
-    palette,
+    palette, rows,
 };
 
 /// Icon and color are checked the same way on create and update.
@@ -28,8 +28,8 @@ fn valid_slug(slug: &str) -> bool {
             .all(|(i, b)| b.is_ascii_lowercase() || b.is_ascii_digit() || (i > 0 && b == b'-'))
 }
 
-/// Only `obsidian://` and `https://` links, or a vault-relative `.md` path. Anything with a
-/// `:` in a path (`javascript:`, `file:`) or escaping the vault (`/`, `..`) is refused.
+/// Only `obsidian://` and `https://` links, or a `.md` path inside the notes folder. Anything with a
+/// `:` in a path (`javascript:`, `file:`) or escaping the notes folder (`/`, `..`) is refused.
 fn valid_doc_link(link: &str) -> bool {
     if link.starts_with("obsidian://") || link.starts_with("https://") {
         return true;
@@ -48,7 +48,7 @@ fn validate(slug: &str, doc_link: Option<&str>) -> Result<()> {
     }
     if let Some(link) = doc_link.filter(|l| !valid_doc_link(l)) {
         return Err(Error::Invalid(format!(
-            "doc link `{link}` must be an obsidian:// or https:// URL, or a vault-relative .md path"
+            "doc link `{link}` must be an obsidian:// or https:// URL, or a .md path inside the notes folder"
         )));
     }
     Ok(())
@@ -154,6 +154,7 @@ pub async fn create(
     .execute(&mut *tx)
     .await?
     .last_insert_rowid();
+    rows::created(&mut tx, src, "projects", id).await?;
     let created = json!(slug);
     let edit = Edit {
         field: "created",
@@ -209,6 +210,14 @@ pub async fn update(db: &Db, mut project: Project, src: ChangeSource) -> Result<
     project.color = check_look(project.icon.as_deref(), project.color.as_deref())?;
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let old = find(&mut tx, project.id).await?;
+    let before = rows::by_key(&mut tx, "projects", project.id.0).await?;
+    let pins = rows::snap(
+        &mut tx,
+        "pins",
+        "kind = 'project' AND target = ?",
+        &old.slug,
+    )
+    .await?;
     record_edits(&mut tx, src, &old, &project).await?;
     sqlx::query!(
         "UPDATE projects SET slug = ?, name = ?, description = ?, doc_link = ?, start_date = ?,
@@ -232,6 +241,8 @@ pub async fn update(db: &Db, mut project: Project, src: ChangeSource) -> Result<
         .bind(&old.slug)
         .execute(&mut *tx)
         .await?;
+    rows::changed(&mut tx, src, pins).await?;
+    rows::changed(&mut tx, src, before).await?;
     tx.commit().await?;
     Ok(project)
 }
@@ -285,9 +296,13 @@ pub async fn delete(db: &Db, id: ProjectId, src: ChangeSource) -> Result<()> {
         )));
     }
     unlink_issues(&mut tx, src, id.0).await?;
+    let milestones = rows::snap(&mut tx, "milestones", "project_id = ?", id.0).await?;
+    let before = rows::by_key(&mut tx, "projects", id.0).await?;
     sqlx::query!("DELETE FROM projects WHERE id = ?", id.0)
         .execute(&mut *tx)
         .await?;
+    rows::changed(&mut tx, src, milestones).await?;
+    rows::changed(&mut tx, src, before).await?;
     let deleted = json!(old.slug);
     let edit = Edit {
         field: "deleted",
@@ -341,6 +356,7 @@ pub async fn create_milestone(
     .execute(&mut *tx)
     .await?
     .last_insert_rowid();
+    rows::created(&mut tx, src, "milestones", id).await?;
     let created = json!(name);
     let edit = Edit {
         field: "created",
@@ -376,6 +392,7 @@ pub async fn update_milestone(
     .fetch_optional(&mut *tx)
     .await?
     .ok_or_else(|| Error::NotFound(format!("milestone {id}")))?;
+    let before_row = rows::by_key(&mut tx, "milestones", id).await?;
     let target = ("milestone", id);
     edit(
         &mut tx,
@@ -396,6 +413,7 @@ pub async fn update_milestone(
     )
     .execute(&mut *tx)
     .await?;
+    rows::changed(&mut tx, src, before_row).await?;
     tx.commit().await?;
     Ok(milestone)
 }
@@ -435,9 +453,11 @@ pub async fn delete_milestone(db: &Db, id: MilestoneId, src: ChangeSource) -> Re
     )
     .execute(&mut *tx)
     .await?;
+    let before = rows::by_key(&mut tx, "milestones", mid).await?;
     sqlx::query!("DELETE FROM milestones WHERE id = ?", mid)
         .execute(&mut *tx)
         .await?;
+    rows::changed(&mut tx, src, before).await?;
     let deleted = json!(name);
     let edit = Edit {
         field: "deleted",
