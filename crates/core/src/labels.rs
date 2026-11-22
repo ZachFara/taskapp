@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 use crate::{
     ChangeSource, Db, Error, IssueId, Label, LabelId, Result,
     history::{self, Edit},
-    palette,
+    palette, rows,
 };
 
 fn label(id: i64, name: String, color: String, icon: Option<String>) -> Label {
@@ -54,6 +54,7 @@ pub async fn create(
     .execute(&mut *tx)
     .await?
     .last_insert_rowid();
+    rows::created(&mut tx, src, "labels", id).await?;
     let created = json!(name);
     let edit = Edit {
         field: "created",
@@ -75,6 +76,7 @@ pub async fn update(db: &Db, label: Label, src: ChangeSource) -> Result<Label> {
     }
     let id = label.id.0;
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let before = rows::by_key(&mut tx, "labels", id).await?;
     let old = sqlx::query!("SELECT name, color, icon FROM labels WHERE id = ?", id)
         .fetch_optional(&mut *tx)
         .await?
@@ -102,6 +104,7 @@ pub async fn update(db: &Db, label: Label, src: ChangeSource) -> Result<Label> {
     )
     .execute(&mut *tx)
     .await?;
+    rows::changed(&mut tx, src, before).await?;
     tx.commit().await?;
     Ok(self::label(id, label.name, color.to_owned(), label.icon))
 }
@@ -133,9 +136,11 @@ pub async fn delete(db: &Db, id: LabelId, src: ChangeSource) -> Result<()> {
         };
         history::record(&mut tx, src, "issue", &issue_id.to_string(), &edit).await?;
     }
+    let before = rows::by_key(&mut tx, "labels", lid).await?;
     sqlx::query!("DELETE FROM labels WHERE id = ?", lid)
         .execute(&mut *tx)
         .await?;
+    rows::changed(&mut tx, src, before).await?;
     let deleted = json!(name);
     let edit = Edit {
         field: "deleted",

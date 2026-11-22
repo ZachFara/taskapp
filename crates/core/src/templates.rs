@@ -7,7 +7,7 @@ use sqlx::SqliteConnection;
 use crate::{
     ChangeSource, Db, Error, Issue, LabelId, NewIssue, ProjectId, Result, StatusId, TemplateId,
     history::{self, Edit},
-    issues, palette,
+    issues, palette, rows,
 };
 
 /// The fields a template prefills. Each is a default; an override on the issue wins.
@@ -185,6 +185,7 @@ pub async fn create(db: &Db, mut input: TemplateInput, src: ChangeSource) -> Res
     .execute(&mut *tx)
     .await?
     .last_insert_rowid();
+    rows::created(&mut tx, src, "issue_templates", id).await?;
     let created = json!(input.slug);
     let edit = Edit {
         field: "created",
@@ -223,6 +224,7 @@ pub async fn update(
         ),
     ];
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let before = rows::by_key(&mut tx, "issue_templates", id.0).await?;
     let changed = sqlx::query!(
         "UPDATE issue_templates SET name = ?, slug = ?, icon = ?, color = ?, body = ? WHERE id = ?",
         input.name,
@@ -238,6 +240,7 @@ pub async fn update(
     if changed == 0 {
         return Err(Error::NotFound(format!("template {}", id.0)));
     }
+    rows::changed(&mut tx, src, before).await?;
     for (field, o, n) in pairs {
         if o != n {
             let edit = Edit {
@@ -258,9 +261,11 @@ pub async fn update(
 pub async fn delete(db: &Db, id: TemplateId, src: ChangeSource) -> Result<()> {
     let old = get(db, id).await?;
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let before = rows::by_key(&mut tx, "issue_templates", id.0).await?;
     sqlx::query!("DELETE FROM issue_templates WHERE id = ?", id.0)
         .execute(&mut *tx)
         .await?;
+    rows::changed(&mut tx, src, before).await?;
     let gone = json!(old.slug);
     let edit = Edit {
         field: "deleted",
