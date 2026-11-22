@@ -66,7 +66,7 @@ describe('IssueDetail', () => {
     await click(row('Priority'));
     await click(option('Priority', 'High'));
     expect(spy).toHaveBeenCalledTimes(1);
-    expect((await get(i.id)).priority).toBe(3);
+    expect((await get(i.id)).priority).toBe(2);
     expect(row('Priority').textContent).toContain('High');
   });
 

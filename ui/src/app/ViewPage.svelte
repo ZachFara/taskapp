@@ -24,6 +24,7 @@
   import Tabs from '../ui/Tabs.svelte';
   import TextInput from '../ui/TextInput.svelte';
   import { navigate } from './routes';
+  import { shortcutFor } from '../lib/commands/registry';
   import NewViewDialog from '../components/display/NewViewDialog.svelte';
   import { templates } from '../components/display/templatesApi';
 
@@ -145,6 +146,8 @@
     const offs = [
       on('command:view.layout', (e) => setLayout((e as CustomEvent<string>).detail)),
       on('command:view.pin', togglePin),
+      on('command:view.rename', () => ((draft = name), (renaming = true))),
+      on('command:view.duplicate', saveAsNew),
       on('command:view.saveAsNew', saveAsNew),
       on('command:view.delete', () => (confirmDelete = true)),
       on('command:view.saveAsTemplate', saveAsTemplate),
@@ -159,6 +162,7 @@
 
   // Every view marks its issue rows with the key (or, in the Gantt, the id); a click on one opens the panel.
   function pick(e: MouseEvent) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey) return; // selecting rows is not opening one
     const el = (e.target as Element).closest<HTMLElement>('[data-key],[data-issue]');
     const tag = el?.dataset.key ?? el?.dataset.issue;
     const hit = issues.find((i) => i.key === tag || String(i.id) === tag);
@@ -178,14 +182,14 @@
       {#snippet filters()}<ViewEditor def={live.def} onchange={change} {clearSignal} />{/snippet}
       {#snippet actions()}
         <Popover bind:open={renaming}>
-          {#snippet trigger(props)}<span {...props} class="trig"><IconButton icon="edit" label="Rename view" onclick={() => (draft = name)} /></span>{/snippet}
+          {#snippet trigger(props)}<span {...props} class="trig"><IconButton icon="edit" label="Rename view" shortcut={shortcutFor('view.rename')} onclick={() => (draft = name)} /></span>{/snippet}
           <form onsubmit={(e) => { e.preventDefault(); rename(); }}>
             <TextInput label="View name" bind:value={draft} />
             <div class="row"><Button variant="primary" type="submit">Rename</Button></div>
           </form>
         </Popover>
         <IconButton icon="target" label="Insights" shortcut="shift+i" pressed={insights} onclick={() => (insights = !insights)} />
-        <IconButton icon="pin" label={pinId === null ? 'Pin view' : 'Unpin view'} pressed={pinId !== null} onclick={togglePin} />
+        <IconButton icon="pin" label={pinId === null ? 'Pin view' : 'Unpin view'} shortcut={shortcutFor('view.pin')} pressed={pinId !== null} onclick={togglePin} />
         <Menu>
           {#snippet trigger(props)}<span {...props} class="trig"><IconButton icon="more" label="More" /></span>{/snippet}
           <MenuItem label="Save as new view" icon="copy" onSelect={saveAsNew} />
