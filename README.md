@@ -17,7 +17,7 @@ pnpm -C ui install --frozen-lockfile
 cd app/src-tauri && cargo tauri dev
 ```
 
-On first launch, set the workspace name, issue key prefix (2 to 5 capital letters, default `ABC`) and time zone. The UI for this step is not finished; the same choices can be made from the CLI or MCP (below).
+On first launch, set the workspace name, issue key prefix (2 to 5 capital letters, default `ABC`) and time zone. The same choices can also be made from the CLI or MCP (below).
 
 ## Dev harness
 
@@ -67,7 +67,6 @@ Tools include `workspace_status`, `workspace_setup`, `search_issues`, `create_is
 - Apple Reminders import against a real list.
 - Google Calendar sync against a real account.
 - GitHub export to a real repository, and restoring from it.
-- The first-run setup screen (the backend is done).
 
 ## Development
 
