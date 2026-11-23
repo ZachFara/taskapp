@@ -35,4 +35,12 @@ describe('LabelPicker', () => {
     expect(ontoggle).toHaveBeenCalledWith(1, true);
     expect(oncreate).not.toHaveBeenCalled();
   });
+
+  it('each label has a delete button that asks the caller', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const ondelete = vi.fn();
+    mount(LabelPicker, { target, props: { labels: [label(1, 'Bug')], selected: [], ontoggle: vi.fn(), oncreate: vi.fn(), ondelete } });
+    target.querySelector<HTMLButtonElement>('[aria-label="Delete label Bug"]')!.click();
+    expect(ondelete).toHaveBeenCalledWith(expect.objectContaining({ id: 1, name: 'Bug' }));
+  });
 });

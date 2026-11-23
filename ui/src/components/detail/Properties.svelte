@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { askDelete } from '../../lib/rowUi.svelte';
   import LabelPicker from './LabelPicker.svelte';
   import { api } from '../../lib/api';
   import type { Cycle, Issue, IssuePatch, Label, Milestone, Project, PropertyDef, Status, Value } from '../../lib/bindings';
@@ -59,6 +60,12 @@
   let draft = $state('');
   const setProp = (key: string, value: Value) => act(api.properties.setValue(issue.id, key, value));
   const toggleLabel = (id: number, on: boolean) => act(on ? api.labels.addLabel(issue.id, id) : api.labels.removeLabel(issue.id, id));
+  // A label renamed or deleted elsewhere (the delete dialog, settings) shows here at once.
+  $effect(() => {
+    const reload = () => void api.labels.list().then((l) => (labels = l));
+    addEventListener('rows:changed', reload);
+    return () => removeEventListener('rows:changed', reload);
+  });
   const createLabel = async (name: string) => {
     const made = await api.labels.create(name, 'gray', null);
     labels = [...labels, made];
@@ -124,7 +131,7 @@
       {#each labels.filter((l) => issue.label_ids.includes(l.id)) as l (l.id)}<Pill color={l.color}>{l.name}</Pill>{:else}{@render none()}{/each}
     {/snippet}
     {#snippet editor()}
-      <LabelPicker {labels} selected={issue.label_ids} ontoggle={toggleLabel} oncreate={createLabel} />
+      <LabelPicker {labels} selected={issue.label_ids} ontoggle={toggleLabel} oncreate={createLabel} ondelete={(l) => askDelete({ kind: 'label', id: l.id, name: l.name })} />
     {/snippet}
   </PropertyRow>
   {/snippet}
