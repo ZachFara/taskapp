@@ -80,10 +80,10 @@
   </PropertyRow>
 
   <PropertyRow id="project" name="Project" cmd="issue.detail.project" bind:openRow>
-    {#snippet value()}{#if project}<EntityIcon icon={project.icon} color={project.color} />{project.name}{:else}{@render none()}{/if}{/snippet}
+    {#snippet value()}{#if project}<EntityIcon icon={project.icon ?? 'icon:project'} color={project.color} />{project.name}{:else}{@render none()}{/if}{/snippet}
     {#snippet editor(close)}
       <OptionList label="Project" none="No project" value={issue.project_id} options={projects} onpick={(id) => { close(); save({ project_id: num(id), milestone_id: null }); }}>
-        {#snippet lead(o)}{@const p = projects.find((x) => x.id === o.id)!}<EntityIcon icon={p.icon} color={p.color} />{/snippet}
+        {#snippet lead(o)}{@const p = projects.find((x) => x.id === o.id)!}<EntityIcon icon={p.icon ?? 'icon:project'} color={p.color} />{/snippet}
       </OptionList>
     {/snippet}
   </PropertyRow>

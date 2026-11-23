@@ -33,11 +33,11 @@
   const byLayout: Record<Layout, Component<any>> = {
     List: ListView, Table: TableView, Board: BoardView, Gantt: GanttView, Calendar: CalendarView,
   };
-  const layoutTabs = [
-    { id: 'List', label: 'List', icon: 'list' }, { id: 'Board', label: 'Board', icon: 'board' },
-    { id: 'Table', label: 'Table', icon: 'table' }, { id: 'Gantt', label: 'Timeline', icon: 'timeline' },
-    { id: 'Calendar', label: 'Calendar', icon: 'calendar' },
-  ];
+  const layoutTabs = $derived([
+    { id: 'List', label: 'List', icon: 'list', cmd: 'list' }, { id: 'Board', label: 'Board', icon: 'board', cmd: 'board' },
+    { id: 'Table', label: 'Table', icon: 'table', cmd: 'table' }, { id: 'Gantt', label: 'Timeline', icon: 'timeline', cmd: 'timeline' },
+    { id: 'Calendar', label: 'Calendar', icon: 'calendar', cmd: 'calendar' },
+  ].map(({ cmd, ...t }) => ({ ...t, shortcut: shortcutFor(`view.layout.${cmd}`) })));
   const SAVE_DELAY = 400;
 
   let view = $state.raw<SavedView | null>(null);

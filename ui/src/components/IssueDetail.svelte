@@ -165,7 +165,7 @@
 
 {#if issue}
   <article class="detail" data-mode={mode}>
-    <PageHeader title={crumb} icon={project?.icon ?? 'project'} color={project?.color ?? undefined}>
+    <PageHeader title={crumb} icon={project?.icon ?? 'icon:project'} color={project?.color ?? undefined}>
       {#snippet actions()}
         <IconButton icon="arrow-up" label="Previous issue" shortcut={shortcutFor('issue.detail.prev')} disabled={siblings.indexOf(key) < 1} onclick={() => step(-1)} />
         <IconButton icon="arrow-down" label="Next issue" shortcut={shortcutFor('issue.detail.next')} disabled={siblings.indexOf(key) < 0 || siblings.indexOf(key) >= siblings.length - 1} onclick={() => step(1)} />

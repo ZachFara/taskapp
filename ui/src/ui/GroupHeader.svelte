@@ -3,6 +3,8 @@
   import Icon from './Icon.svelte';
   import type { Snippet } from 'svelte';
   import StatusGlyph from './StatusGlyph.svelte';
+  import Tooltip from './Tooltip.svelte';
+  import { shortcutFor } from '../lib/commands';
 
   // The legend band. The tone step follows the status category, so the list reads like map elevation:
   // the further along, the deeper the band. A group that is not a status (project, priority, cycle, label)
@@ -23,14 +25,20 @@
 </script>
 
 <div class="band" style:--tone={`var(--band-${step})`} data-step={step}>
-  <button class="toggle" type="button" aria-expanded={!collapsed} aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`} onclick={ontoggle}>
-    <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={12} />
-    {#if category}<StatusGlyph {category} />{:else}{@render leading?.()}{/if}
-    <span class="name">{name}</span>
-    <span class="count">{count}</span>
-    {#if total}<span class="count">{total}</span>{/if}
-  </button>
-  <button class="add" type="button" aria-label={`Add to ${name}`} onclick={onadd}><Icon name="plus" /></button>
+  <Tooltip label={collapsed ? 'Expand group' : 'Collapse group'} shortcut={shortcutFor('group.collapse')}>
+    {#snippet children(tp)}
+      <button {...tp} class="toggle" type="button" aria-expanded={!collapsed} aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`} onclick={ontoggle}>
+        <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={12} />
+        {#if category}<StatusGlyph {category} />{:else}{@render leading?.()}{/if}
+        <span class="name">{name}</span>
+        <span class="count">{count}</span>
+        {#if total}<span class="count">{total}</span>{/if}
+      </button>
+    {/snippet}
+  </Tooltip>
+  <Tooltip label="Add issue to group" shortcut={shortcutFor('group.add')}>
+    {#snippet children(tp)}<button {...tp} class="add" type="button" aria-label={`Add to ${name}`} onclick={onadd}><Icon name="plus" /></button>{/snippet}
+  </Tooltip>
 </div>
 
 <style>

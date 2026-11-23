@@ -238,4 +238,20 @@ describe('walk project', { timeout: 25_000 }, () => {
     await page.locator('aside.panel').waitFor();
     expect(await page.locator('aside.panel').evaluate((e) => getComputedStyle(e).position)).toBe('relative');
   });
+
+  it('R3-4 group header add and collapse, and the layout tabs, show a tooltip with the name', async () => {
+    await open();
+    const tip = async (loc: import('@playwright/test').Locator, text: RegExp) => {
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(150);
+      await loc.hover();
+      await page.locator('.cx-tip').first().waitFor({ timeout: 2500 });
+      expect(await page.locator('.cx-tip').first().innerText()).toMatch(text);
+    };
+    await tip(page.getByRole('button', { name: /^Add to/ }).first(), /Add issue/);
+    await tip(page.getByRole('button', { name: /^Collapse/ }).first(), /Collapse group/);
+    await tip(page.getByRole('tab', { name: 'Board' }), /Board/);
+    expect(await page.getByRole('tab', { name: 'Board' }).getAttribute('data-state')).toBe('inactive');
+    expect(await page.getByRole('tab', { name: 'List' }).getAttribute('data-state')).toBe('active');
+  });
 });

@@ -9,11 +9,11 @@
     action,
     ondismiss,
   }: { tone?: 'info' | 'success' | 'error'; children: Snippet; action?: Snippet; ondismiss?: () => void } = $props();
-  const icon = { info: 'bell', success: 'check', error: 'flag' } as const;
+  const icon = { info: null, success: 'check', error: 'flag' } as const;
 </script>
 
 <div class="toast" role={tone === 'error' ? 'alert' : 'status'} data-tone={tone}>
-  <span class="lead"><Icon name={icon[tone]} /></span>
+  {#if icon[tone]}<span class="lead"><Icon name={icon[tone]} /></span>{/if}
   <span class="msg">{@render children()}</span>
   {#if action}<span class="act">{@render action()}</span>{/if}
   {#if ondismiss}<button class="x" type="button" aria-label="Dismiss" onclick={ondismiss}><Icon name="close" size={12} /></button>{/if}

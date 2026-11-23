@@ -168,4 +168,11 @@ describe('layout pieces', () => {
     render(Toast, { tone: 'error', children: text('Failed') });
     expect(document.querySelector('[role=alert]')?.textContent).toContain('Failed');
   });
+  it('an info Toast draws no icon; success and error keep theirs', () => {
+    for (const [tone, icon] of [['info', null], ['success', 'check'], ['error', 'flag']] as const) {
+      document.body.innerHTML = '';
+      render(Toast, { tone, children: text('x') });
+      expect(document.querySelector('[data-icon]')?.getAttribute('data-icon') ?? null, tone).toBe(icon);
+    }
+  });
 });
