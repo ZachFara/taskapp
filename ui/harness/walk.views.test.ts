@@ -224,4 +224,18 @@ describe('walk project', { timeout: 25_000 }, () => {
     await palette().getByRole('option', { name: 'Todo' }).click();
     await urgentEverywhere('Walk urgent');
   });
+
+  it('R4-01 below 1100px the issue panel overlays the list instead of squeezing it', async () => {
+    await open('/view/1', { width: 1024, height: 768 });
+    const before = (await page.locator('.main').boundingBox())!.width;
+    await rows().first().click();
+    const panel = page.locator('aside.panel');
+    await panel.waitFor();
+    expect(await panel.evaluate((e) => getComputedStyle(e).position)).toBe('absolute');
+    expect((await page.locator('.main').boundingBox())!.width).toBe(before);
+    await open('/view/1', { width: 1440, height: 900 });
+    await rows().first().click();
+    await page.locator('aside.panel').waitFor();
+    expect(await page.locator('aside.panel').evaluate((e) => getComputedStyle(e).position)).toBe('relative');
+  });
 });
