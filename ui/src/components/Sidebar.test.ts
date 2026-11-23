@@ -11,6 +11,18 @@ const settle = async () => {
   flushSync();
 };
 const names = (sel: string) => [...document.querySelectorAll(`${sel} a`)].map((a) => a.textContent);
+const menuItem = (re: RegExp) => {
+  const m = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((e) => re.test(e.textContent?.trim() ?? ''));
+  if (!m) throw new Error(`no menu item ${re}`);
+  return m;
+};
+/** Opens a row's "…" menu and chooses the item. */
+const pick = async (row: string, item: RegExp) => {
+  document.querySelector<HTMLButtonElement>(`[aria-label="More actions for ${row}"]`)!.click();
+  flushSync();
+  await vi.waitFor(() => menuItem(item).click());
+  await settle();
+};
 const fire = (el: Element, type: string) => el.dispatchEvent(new Event(type, { bubbles: true, cancelable: true }));
 const row = (text: string) => [...document.querySelectorAll('.row')].find((r) => r.textContent?.includes(text))!;
 const dragOnto = (from: string, to: string) => {
@@ -35,13 +47,9 @@ afterEach(() => {
 describe('Sidebar', () => {
   it('pin_toggle_on_view_row', async () => {
     await open();
-    const btn = () => document.querySelector<HTMLButtonElement>('[aria-label="Pin Alpha"], [aria-label="Unpin Alpha"]')!;
-    btn().click();
-    await settle();
+    await pick('Alpha', /^Pin Alpha$/);
     expect(names('[aria-label=Pinned]')).toEqual(['Alpha']);
-    expect(btn().getAttribute('aria-label')).toBe('Unpin Alpha');
-    btn().click();
-    await settle();
+    await pick('Alpha', /^Unpin Alpha$/);
     expect(names('[aria-label=Pinned]')).toEqual([]);
   });
 
@@ -174,7 +182,7 @@ describe('Sidebar tooltips', () => {
 
   it('a pin button names its action', async () => {
     await open();
-    expect(await tip(document.querySelector('[aria-label="Pin Alpha"]'))).toContain('Pin Alpha');
+    expect(await tip(document.querySelector('[aria-label="More actions for Alpha"]'))).toContain('More actions for Alpha');
   });
 
   it('a section link shows the go-to key', async () => {

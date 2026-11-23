@@ -194,7 +194,7 @@
 </nav>
 
 <style>
-  nav { --acts-bg: var(--frame-inset); display: flex; flex-direction: column; gap: var(--s-2); min-height: 100%; padding: 0 var(--s-4) var(--s-4); color: var(--frame-ink); font-size: var(--fs-md); }
+  nav { display: flex; flex-direction: column; gap: var(--s-2); min-height: 100%; padding: 0 var(--s-4) var(--s-4); color: var(--frame-ink); font-size: var(--fs-md); }
   ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-1); }
   .bottom { margin-top: auto; padding-top: var(--s-4); }
   .item { display: flex; align-items: center; gap: var(--s-5); flex: 1; min-width: 0; height: var(--ctl-h); padding: 0 var(--s-3); border-radius: var(--r-ctl); color: var(--frame-ink); text-decoration: none; font-weight: 500; transition: background var(--dur-1) var(--ease); }

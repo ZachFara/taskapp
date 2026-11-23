@@ -13,7 +13,6 @@
   import CommandButton from '../CommandButton.svelte';
   import IssueMenu from './IssueMenu.svelte';
   import IconButton from '../../ui/IconButton.svelte';
-  import { listCommands } from '../../lib/commands';
   import Menu from '../../ui/Menu.svelte';
   import MenuItem from '../../ui/MenuItem.svelte';
   import Pill from '../../ui/Pill.svelte';
@@ -291,12 +290,6 @@
     return () => on.forEach(([n, f]) => removeEventListener(`command:${n}`, f));
   });
 
-  // Hover actions run the same registry commands the menus run; a page command opens its page.
-  function runIssue(id: string, issue: number) {
-    const ctx = { route: location.pathname, layout: selection.layout, selection: selection.selected, focusedIssueId: issue, openIssueId: null, api, navigate };
-    const c = listCommands(ctx, { all: true }).find((x) => x.id === id);
-    if (c) (c.run ? c.run(ctx) : dispatchEvent(new CustomEvent('command:palette.open', { detail: { page: c.id } })));
-  }
   function openMenu(id: number, x: number, y: number) {
     menu = { id, x, y };
     menuOpen = true;
@@ -421,10 +414,12 @@
             <!-- shortcut: only the hovered or focused row renders its actions (a tooltip per row costs the 1000-row budget) -->
             {#if hovered === i.id || selection.focused === i.id}
               <span class="hover-acts">
-                <IconButton icon="arrow-right" label={`Open ${i.key}`} onclick={(e) => (e.stopPropagation(), navigate(`/issue/${i.key}`))} />
-                <IconButton icon="flag" label={`Priority of ${i.key}`} onclick={(e) => (e.stopPropagation(), runIssue('issue.priority', i.id))} />
-                <IconButton icon="pin" label={`Pin ${i.key}`} onclick={(e) => (e.stopPropagation(), runIssue('issue.pin', i.id))} />
-                <IconButton icon="archive" label={`Delete ${i.key}`} onclick={(e) => (e.stopPropagation(), runIssue('issue.delete', i.id))} />
+                <!-- The "…" opens the issue menu that right-click opens: the menu's own listener on the list picks the row. -->
+                <IconButton icon="more" label={`More actions for ${i.key}`} onclick={(e) => {
+                  e.stopPropagation();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  e.currentTarget.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: r.left, clientY: r.bottom }));
+                }} />
               </span>
             {/if}
           </li>
