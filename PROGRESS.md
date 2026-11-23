@@ -80,6 +80,11 @@ Added by the owner on 2026-11-22 (later, not built):
 - **Full two-way sync and a restore command.** The Git export is one-way history and backup (see docs/GUIDE.md); it
   leaves out the change history, comments' edit history, work blocks and machine-local settings, and rebuilding a
   database from it has no CLI command. A real sync between machines is still future work.
+- **Application icon.** A real Mac app icon (today the bundle carries the default): the cairn mark on the moss-green
+  tile, in Apple's icon shape, readable at small sizes.
+- **Hover actions.** Pointing at a row or item shows the actions that belong to it, for example delete, rename, pin
+  or duplicate on a view in the sidebar, and the same for projects, cycles, labels, templates and list rows; the same
+  actions also from a right-click menu.
 - **Split the `test-ui` CI job.** It now runs about 1,100 unit tests, 365 contract cases against a built devserver and
   the Playwright walk tests in one job; consider separate unit, contract and walk jobs (the walk job's cold-start
   `page.goto` timed out twice and forced a rerun).
