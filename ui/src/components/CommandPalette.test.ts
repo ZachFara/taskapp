@@ -5,6 +5,7 @@ import { createMockApi } from '../lib/api.mock';
 import { defineCommand } from '../lib/commands/registry';
 import { selection } from '../lib/selection.svelte';
 import { refreshAll } from '../lib/stores.svelte';
+import '../lib/commands/defs/nav.search';
 import CommandPalette from './CommandPalette.svelte';
 
 // Glyph assertions below are the Mac ones whatever machine runs them.
@@ -247,5 +248,25 @@ describe('CommandPalette', () => {
   it('input_keeps_focus', async () => {
     await type('zebra');
     expect(document.activeElement).toBe(input());
+  });
+
+  it('a_word_prefix_finds_the_issue_under_an_Issues_heading_first', async () => {
+    const i = await api.issues.create({ title: 'Walrus crash on save' });
+    await type('cras');
+    expect(document.querySelector('[role=group]')?.getAttribute('aria-label')).toBe('Issues');
+    expect(document.querySelector('[role=group][aria-label=Issues]')?.textContent).toContain(i.key);
+  });
+
+  it('the_root_offers_search_issues_and_running_it_gives_an_issues_only_search', async () => {
+    await api.issues.create({ title: 'Walrus issues only' });
+    await type('search issues');
+    expect(rows()[0]).toContain('Search issues…');
+    press('Enter');
+    await settle();
+    expect(input().placeholder).toBe('Search issues…');
+    expect(document.querySelector('[role=group][aria-label=Navigation]')).toBeNull();
+    await type('walrus');
+    expect(rows().length).toBeGreaterThan(0);
+    expect(rows().every((r) => /^[A-Z]+-\d+ /.test(r.trim()))).toBe(true);
   });
 });

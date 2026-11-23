@@ -26,12 +26,18 @@ beforeAll(async () => {
   vite = spawn('pnpm', ['exec', 'vite', '--host', 'localhost', '--port', String(port), '--strictPort'], {
     cwd: uiDir, env: { ...process.env, VITE_API_MODE: 'mock' }, stdio: 'ignore', detached: true,
   });
-  for (let i = 0; i < 300; i++) {
-    if (await fetch(base).then(() => true, () => false)) break;
-    await new Promise((r) => setTimeout(r, 200));
+  let up = false;
+  for (let i = 0; i < 300 && !up; i++) {
+    up = await fetch(base).then(() => true, () => false);
+    if (!up) await new Promise((r) => setTimeout(r, 200));
   }
+  if (!up) throw new Error(`vite did not answer on ${base}`);
   browser = await chromium.launch();
-}, 120_000);
+  // The first load compiles every module, which is slower than the 5s page timeout the tests use; pay that here.
+  const warm = await browser.newPage();
+  await warm.goto(base, { timeout: 90_000 });
+  await warm.close();
+}, 180_000);
 
 afterAll(async () => {
   await browser?.close();
@@ -172,6 +178,16 @@ describe('walk', { timeout: 20_000 }, () => {
     expect(heads.filter((h) => /^Navigat/.test(h)).length).toBe(1);
     expect(names).toContain('New issue');
     expect(names).not.toContain('Create issue');
+  });
+
+  it('F10 / searches issues by the start of a word; Enter opens the issue', async () => {
+    await open();
+    await press('/');
+    await pw(palette().getByRole('combobox')).toHaveAttribute('aria-label', 'Search issues');
+    await page.keyboard.type('offl');
+    await pw(palette().getByRole('option').first()).toContainText('Offline mode research');
+    await press('Enter');
+    await page.waitForURL(/\/issue\/ABC-/);
   });
 
   it('5 j moves five rows', async () => {

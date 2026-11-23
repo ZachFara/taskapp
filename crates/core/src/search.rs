@@ -2,8 +2,8 @@ use sqlx::SqliteConnection;
 
 use crate::{Db, Issue, IssueId, Result, issues};
 
-/// Each whitespace-separated token becomes a quoted FTS5 phrase, so punctuation and operators in user
-/// text are plain words. Archived issues are not searchable.
+/// Each whitespace-separated token becomes a quoted FTS5 phrase with a prefix star, so punctuation and operators in
+/// user text are plain words and "cras" finds "crash". Archived issues are not searchable.
 ///
 /// # Errors
 ///
@@ -11,7 +11,7 @@ use crate::{Db, Issue, IssueId, Result, issues};
 pub async fn search(db: &Db, text: &str, limit: u32) -> Result<Vec<Issue>> {
     let query = text
         .split_whitespace()
-        .map(|t| format!("\"{}\"", t.replace('"', "\"\"")))
+        .map(|t| format!("\"{}\"*", t.replace('"', "\"\"")))
         .collect::<Vec<_>>()
         .join(" ");
     if query.is_empty() {
