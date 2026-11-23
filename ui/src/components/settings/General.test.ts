@@ -10,6 +10,15 @@ describe('General', () => {
     expect(field(target, 'Workspace key').value).toBe('QX');
   });
 
+  it.each([[null], [undefined], [''], ['Etc/Unlisted']])('shows a zone for a stored time zone of %j', async (stored) => {
+    const { target } = await mountSettings(General, {
+      settings: { get: async (key: unknown) => (key === 'timezone' ? stored : null) },
+    });
+    const shown = field(target, 'Time zone').textContent ?? '';
+    expect(shown).not.toMatch(/^\s*Select\s*$/);
+    expect(shown).toContain(stored ? stored : '(system)');
+  });
+
   it('workspace key rejects anything but 2 to 5 uppercase letters', async () => {
     const { target, calls } = await mountSettings(General);
     for (const bad of ['A', 'ABCDEF', 'A1', 'zf', '']) {

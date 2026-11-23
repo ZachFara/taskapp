@@ -74,6 +74,16 @@ describe('undo keys', () => {
 });
 
 describe('UndoToast', () => {
+  it('a write that adds no step raises no toast when history was already non-empty on load', async () => {
+    unmount(app);
+    await api.issues.create({ title: 'Earlier session' });
+    app = mount(UndoToast, { target: document.body });
+    await settle();
+    window.dispatchEvent(new Event('history:wrote'));
+    await settle();
+    expect(toast()).toBeNull();
+  });
+
   it('names a raw command step in plain words', async () => {
     vi.spyOn(api.history, 'undoStatus').mockResolvedValue({ undo: 'issues_bulk_update', redo: null });
     window.dispatchEvent(new Event('history:wrote'));

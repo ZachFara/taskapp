@@ -100,3 +100,18 @@ async fn view_and_generic_labels() -> R {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn quick_add_is_labelled_like_a_plain_create() -> R {
+    let s = state().await;
+    assert_eq!(
+        label(
+            &s,
+            "issues_create_from_quickadd",
+            json!({"input": "ship it p2"})
+        )
+        .await?,
+        "Created ABC-1"
+    );
+    Ok(())
+}

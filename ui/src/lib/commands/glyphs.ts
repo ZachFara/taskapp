@@ -5,7 +5,7 @@ const OTHER_MOD: Record<string, string> = { mod: 'Ctrl+', shift: 'Shift+', alt: 
 export const isMac = (platform = globalThis.navigator?.platform ?? '') => !/Win|Linux/.test(platform);
 const NAME: Record<string, string> = {
   enter: '↵', escape: 'Esc', esc: 'Esc', arrowup: '↑', arrowdown: '↓', arrowleft: '←', arrowright: '→',
-  backspace: '⌫', tab: 'Tab', ' ': 'Space', space: 'Space',
+  backspace: '⌫', delete: 'Del', tab: 'Tab', ' ': 'Space', space: 'Space',
 };
 
 /** `mod+shift+z` -> `⌘⇧Z`. Text that is already a glyph (`⌘K`, `Esc`, `↵`) passes through. */

@@ -425,4 +425,6 @@ export const cases: Case[] = [
   call('properties: reorder must list every def', 'properties_reorder', { keys: ['effort'] }),
   call('properties: scope a def to no project', 'properties_set_scope', { key: 'link', project: null }),
   call('properties: scope an unknown def is NotFound', 'properties_set_scope', { key: 'nope', project: null }),
+  call('undo: quick add is labelled like a create', 'issues_create_from_quickadd', { input: 'Label me p2' }),
+  call('undo: the quick add step label', 'history_undo_status'),
 ];
