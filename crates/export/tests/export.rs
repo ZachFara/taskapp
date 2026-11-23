@@ -313,8 +313,17 @@ async fn secrets_never_exported() -> R {
     write::write_snapshot(&db, dir.path()).await?;
     for (path, bytes) in tree(dir.path()) {
         let text = String::from_utf8(bytes)?;
-        assert!(!text.contains("TOPSECRET"), "{path} leaks a secret");
+        // local.yaml carries the folder and remote by design (tested apart); no credential may reach it.
+        let marker = if path == "local.yaml" {
+            "TOPSECRET-4"
+        } else {
+            "TOPSECRET"
+        };
+        assert!(!text.contains(marker), "{path} leaks a secret");
     }
+    let local = fs::read_to_string(dir.path().join("local.yaml"))?;
+    assert!(local.contains("example.invalid/r.git"));
+    assert!(!local.contains("token") && !local.contains("secret"));
     let settings_file = fs::read_to_string(dir.path().join("settings.yaml"))?;
     assert!(
         settings_file.contains("gcal_enabled"),
@@ -648,5 +657,182 @@ async fn custom_relation_kinds_and_their_relations_survive_export_and_rebuild() 
             relations::for_issue(&db, IssueId(id)).await?
         );
     }
+    Ok(())
+}
+
+/// A source database exported, committed and pushed to a local bare repo, then cloned the way the app does.
+async fn pushed_and_cloned(db: &Db, root: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let repo = temp_repo(root);
+    let bare = root.join("remote.git");
+    git_in(
+        root,
+        &["init", "-q", "--bare", bare.to_str().expect("test io")],
+    );
+    write::write_snapshot(db, &repo).await?;
+    git::commit_and_push(&repo, "export", bare.to_str()).await?;
+    let clone = root.join("clone");
+    git_in(
+        root,
+        &[
+            "clone",
+            "-q",
+            bare.to_str().expect("test io"),
+            clone.to_str().expect("test io"),
+        ],
+    );
+    Ok(clone)
+}
+
+#[tokio::test]
+async fn restore_replaces_a_used_workspace_keeps_a_backup_and_continues_the_history() -> R {
+    let src = seeded().await?;
+    settings::set(
+        &src,
+        "export_remote",
+        &"https://me:hunter2@example.invalid/x.git",
+    )
+    .await?;
+    settings::set(&src, "backup_dir", &"/somewhere/else").await?;
+    let root = tempfile::tempdir()?;
+    let clone = pushed_and_cloned(&src, root.path()).await?;
+    assert!(!fs::read_to_string(clone.join("local.yaml"))?.contains("hunter2"));
+
+    // A workspace with other data and a change history of its own.
+    // A file database, as in the app (VACUUM INTO writes nothing for a memory one).
+    let used = Db::open(&root.path().join("used.db")).await?;
+    let (docs, ship) = seed_issues(&used).await?;
+    seed_rest(&used, docs, ship).await?;
+    labels::create(&used, "stale-label", "red", None, SRC).await?;
+    settings::set(&used, "estimation", &"points").await?;
+    let backups = root.path().join("backups");
+    let out = taskapp_export::restore::restore_from_dir(
+        &used,
+        &clone,
+        Some("git@example.invalid:me/x.git"),
+        &backups,
+        false,
+    )
+    .await?;
+
+    assert_eq!(dump(&used).await?, dump(&src).await?);
+    assert!(
+        out.backup.exists(),
+        "the old database was backed up first: {:?}",
+        out.backup
+    );
+    let history: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM changes WHERE entity != 'row:settings'")
+            .fetch_one(&used.pool)
+            .await?;
+    let rows: Vec<(String, String, String)> =
+        sqlx::query_as("SELECT entity, entity_id, field FROM changes")
+            .fetch_all(&used.pool)
+            .await?;
+    assert_eq!(
+        history, 0,
+        "old row ids would point at the wrong rows: {rows:?}"
+    );
+    let get = |k: &'static str| settings::get::<String>(&used, k);
+    assert_eq!(get("export_dir").await?.as_deref(), clone.to_str());
+    assert_eq!(
+        get("export_remote").await?.as_deref(),
+        Some("git@example.invalid:me/x.git")
+    );
+    assert_eq!(
+        get("backup_dir").await?,
+        None,
+        "local settings are offered, not forced"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_next_export_after_a_restore_builds_on_the_cloned_history() -> R {
+    let src = seeded().await?;
+    let root = tempfile::tempdir()?;
+    let clone = pushed_and_cloned(&src, root.path()).await?;
+    let fresh = Db::open_in_memory().await?;
+    taskapp_export::restore::restore_from_dir(&fresh, &clone, None, &root.path().join("b"), false)
+        .await?;
+
+    // The next export differs only in local.yaml and setup_done (this machine's settings) and builds on the clone's history.
+    write::write_snapshot(&fresh, &clone).await?;
+    assert_eq!(
+        git_in(&clone, &["status", "--porcelain", "-uall"])
+            .lines()
+            .count(),
+        2
+    );
+    git_in(&clone, &["config", "user.name", "t"]);
+    git_in(&clone, &["config", "user.email", "t@example.invalid"]);
+    assert!(git::commit_and_push(&clone, "export", None).await?);
+    assert_eq!(commit_count(&clone), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn restore_offers_the_local_settings_when_asked() -> R {
+    let src = seeded().await?;
+    settings::set(&src, "backup_dir", &"~/Backups").await?;
+    let root = tempfile::tempdir()?;
+    let clone = pushed_and_cloned(&src, root.path()).await?;
+    let fresh = Db::open_in_memory().await?;
+    taskapp_export::restore::restore_from_dir(&fresh, &clone, None, &root.path().join("b"), true)
+        .await?;
+    assert_eq!(
+        settings::get::<String>(&fresh, "backup_dir")
+            .await?
+            .as_deref(),
+        Some("~/Backups")
+    );
+    assert_eq!(
+        settings::get::<bool>(&fresh, "setup_done").await?,
+        Some(true)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_broken_export_leaves_the_workspace_as_it_was() -> R {
+    let src = seeded().await?;
+    let root = tempfile::tempdir()?;
+    let clone = pushed_and_cloned(&src, root.path()).await?;
+    fs::write(clone.join("statuses.yaml"), "not: [a list")?;
+    let used = seeded().await?;
+    let before = dump(&used).await?;
+    let err = taskapp_export::restore::restore_from_dir(
+        &used,
+        &clone,
+        None,
+        &root.path().join("b"),
+        false,
+    )
+    .await;
+    assert!(err.is_err());
+    assert_eq!(dump(&used).await?, before);
+    let issues: i64 = sqlx::query_scalar("SELECT count(*) FROM issues")
+        .fetch_one(&used.pool)
+        .await?;
+    assert!(issues > 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_folder_with_a_symlink_is_refused() -> R {
+    let src = seeded().await?;
+    let root = tempfile::tempdir()?;
+    let clone = pushed_and_cloned(&src, root.path()).await?;
+    fs::remove_file(clone.join("pins.yaml"))?;
+    std::os::unix::fs::symlink("/etc/hosts", clone.join("pins.yaml"))?;
+    let used = Db::open_in_memory().await?;
+    let err = taskapp_export::restore::restore_from_dir(
+        &used,
+        &clone,
+        None,
+        &root.path().join("b"),
+        false,
+    )
+    .await;
+    assert!(err.is_err());
     Ok(())
 }

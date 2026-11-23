@@ -1103,6 +1103,18 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       },
     },
     export: { now: ok, pull: async () => ({ created: 0, warnings: [] }) },
+    // Same checks as the real command; a source containing "bad" stands for an export that does not parse.
+    restore: {
+      fromExport: async (source) => {
+        const text = source.trim();
+        if (!text) fail('Invalid', 'enter the export folder or the Git address');
+        if (/^[a-z]+:\/\//i.test(text) && !/^(https|ssh):\/\//.test(text)) fail('Invalid', 'use an https:// or ssh:// Git URL, or git@host:path');
+        await new Promise((r) => setTimeout(r, 400));
+        if (text.includes('bad')) fail('Invalid', 'statuses.yaml: invalid export file');
+        workspace = { ...workspace, setup_done: true };
+        return text;
+      },
+    },
     sync: { status: async () => off, now: async () => off },
     gcal: { connect: ok, listCalendars: async () => [['primary', 'Primary']] },
     reminders: { listLists: async () => [['1', 'Reminders']] },

@@ -10,7 +10,7 @@ Contents: [What it is](#what-cairn-is) - [First run](#first-run) - [The screen](
 [Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) - [Events](#events) -
 [Points and insights](#points-and-insights) - [Custom properties](#custom-properties) -
 [Statuses, labels, icons, colours](#statuses-labels-icons-and-colours) - [Templates](#issue-templates) -
-[Import, export, backups](#import-export-and-backups) - [Reminders and Google Calendar](#reminders-and-google-calendar) -
+[Import, export, backups](#import-export-and-backups) - [Restore](#restore) - [Reminders and Google Calendar](#reminders-and-google-calendar) -
 [Settings](#settings) - [Command menu](#the-command-menu) - [Keyboard reference](#keyboard-reference) -
 [CLI](#cli-reference) - [MCP](#mcp-tools-reference) - [How do I ...](#how-do-i-) - [Limits](#limits-and-not-built-yet)
 
@@ -39,6 +39,7 @@ to bring tasks in. The same step can be done from the terminal: `taskapp setup "
 (MCP: `workspace_setup`). You can change the name, key and zone later in Settings > General. A new database starts
 with five statuses (Backlog, Todo, In Progress, Done, Canceled) and three saved views (Active, Board, Timeline: all
 projects).
+The same screen has a second choice, "Restore from an export": see [Restore](#restore).
 
 ## The screen
 
@@ -333,20 +334,44 @@ quick-add, `taskapp template apply <id> [title]`, or MCP `apply_template`.
 - **Export** (Settings > Export): turn it on, choose a folder and optionally a Git remote, "Export now". It writes one
   markdown file per issue and commits and pushes it. Needs your own Git remote (see docs/github-setup.md). Not verified
   against a real repository. The export carries everything but secrets, machine-local settings and the raw change
-  history, including each issue's work blocks.
+  history, including each issue's work blocks. It also writes `local.yaml`: this machine's export folder, remote
+  (a password or token inside the address is removed) and backup folder, which a restore offers back but never forces.
 - **Two machines** (same remote on both): before it writes, an export fetches the remote. If another machine pushed
   first, nothing is overwritten; Settings > Export shows the message and "Pull and apply" fast-forwards the folder and
   applies the incoming issues in one undoable step, "Sync from remote". The newer edit (by updated time) wins per
   issue; conflicts are listed under "Last pull from the remote". New issues, comments, relations and work blocks are
   added. Statuses, labels, projects, settings and deletions are not carried over yet (docs/decisions/0017). If both
   machines have unpushed commits the export stops with a message; merge them in the export folder with git.
-- **Restore from an export**: `taskapp restore --from <export folder> --db <new database path>` builds a fresh database
-  from the files. It refuses to overwrite an existing database. Quit the app first and point `--db` at a path that does
-  not exist; then move it into place. Not yet proven on real data, which is why backups stay (docs/decisions/0017).
+- **Restore from an export**: in the app, see [Restore](#restore). From the terminal,
+  `taskapp restore --from <export folder> --db <new database path>` builds a fresh database from the files and refuses
+  to overwrite an existing one; quit the app first and point `--db` at a path that does not exist.
 - **Backups** (Settings > Backups): set a folder, "Snapshot now" writes a copy of the database to `snapshots/`; a nightly
   copy goes to `nightly/`. The newest 14 nightly and 30 snapshot files are kept. Before risky changes (property type
   change or delete, a bulk update over 10 items) a snapshot is taken. To restore: quit the app, then
   `taskapp backup restore <file> --yes`. `taskapp backup list --dir <folder>` lists backups.
+
+## Restore
+
+Loads a whole workspace back from an export, from inside the app. Two ways in: on the first-run screen choose
+"Restore from an export", or in a workspace that already has data open the command menu and run "Restore from
+export...". Type the export folder, or the Git address of the repository it was pushed to (`https://...`,
+`ssh://...` or `git@host:path`). An address is cloned with your own `git` and your own sign-in into the app's data
+folder; no password or token is ever stored. A folder with a link in it is refused.
+
+The command asks first: it replaces everything in the workspace, and it saves a backup of the current database
+(in the backup folder, `snapshots/`) before it replaces anything. A broken export changes nothing. Afterwards the export
+settings point at the restored folder (and the address it came from), so the next export continues the same history.
+"Also restore the export's remote and backup folder" applies `local.yaml`; leave it off to keep this machine's own.
+
+Comes back: issues with their descriptions, comments, labels, parents, relations (and custom relation kinds), work
+blocks, projects and milestones, cycles, events and their issue links, statuses, views and view templates, issue
+templates, pins, custom properties, the import log, and the settings the export carries (workspace name, key, time
+zone, theme, estimation and the like). Issue numbers stay; row ids inside the database are new.
+
+Never comes back: the change history behind undo (it names rows by internal id, so it could not be replayed safely;
+the old history is cleared on restore), the Google and Reminders sign-ins and tokens (connect them again in Settings), and anything in a setting named like a
+token, secret, path or remote, except what `local.yaml` offers. A restore that you did not ask for can be undone by
+restoring the backup it wrote (`taskapp backup restore`).
 
 ## Reminders and Google Calendar
 
@@ -584,6 +609,7 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `settings.calendar` | Calendar | (none) | Open Settings, Calendar. |
 | `settings.cycles` | Cycles | (none) | Open Settings, Cycles. |
 | `settings.export` | Export | (none) | Open Settings, Export. |
+| `settings.restore` | Restore from export... | (none) | Replace this workspace with an export folder or Git repository, after a backup. |
 | `settings.export.pull` | Pull and apply from remote | (none) | On Settings, Export: pull the remote export and apply it. |
 | `settings.general` | General | (none) | Open Settings, General. |
 | `settings.import` | Import | (none) | Open Settings, Import. |
@@ -782,5 +808,5 @@ From PROGRESS.md "After this plan" and from reading the code:
   Interface size setting.
 - Single user, one Mac, one writer. No signed or notarized build and no licence yet.
 - A new database seeds the issue prefix `ZF` until setup runs.
-- Not verified against real accounts: Apple Reminders import, Google Calendar sync, GitHub export, a restore from the export.
+- Not verified against real accounts: Apple Reminders import, Google Calendar sync, GitHub export, a restore from a real export (proven only on throwaway data and a local bare repo).
 - The CLI cannot create statuses or milestones, change settings, or unarchive; the MCP server cannot read settings.

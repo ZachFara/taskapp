@@ -32,13 +32,75 @@ pub async fn rebuild(dir: &Path, db_path: &Path) -> Result<Db> {
         )));
     }
     let db = Db::open(db_path).await?;
+    restore_into(&db, dir).await?;
+    Ok(db)
+}
+
+/// Replaces everything in an open database with the export's content, in one transaction: a folder
+/// that fails to parse leaves the database as it was. Settings the export does not carry (this
+/// machine's own) stay; the change history goes, because its row ids name rows that no longer exist.
+///
+/// # Errors
+///
+/// As [`rebuild`]; nothing is changed then.
+pub async fn restore_into(db: &Db, dir: &Path) -> Result<()> {
     let mut tx = db.pool.begin().await?;
+    wipe(&mut tx).await?;
     restore_tables(&mut tx, dir).await?;
     restore_issues(&mut tx, dir).await?;
     tx.commit().await?;
     // reindex rebuilds every search row at once; the id argument is not used.
-    search::reindex(&db, IssueId(0)).await?;
-    Ok(db)
+    search::reindex(db, IssueId(0)).await?;
+    Ok(())
+}
+
+/// Per-machine settings in `local.yaml` (the export folder, the remote, the backup folder): written
+/// by every export, applied only when the person asks.
+///
+/// # Errors
+///
+/// Fails when the file is malformed or a setting cannot be written.
+pub async fn apply_local(db: &Db, dir: &Path) -> Result<()> {
+    let local: BTreeMap<String, String> = if fs::symlink_metadata(dir.join("local.yaml")).is_ok() {
+        read_yaml(&dir.join("local.yaml"))?
+    } else {
+        BTreeMap::new()
+    };
+    for key in crate::write::LOCAL_KEYS {
+        if let Some(v) = local.get(key) {
+            taskapp_core::settings::set(db, key, v).await?;
+        }
+    }
+    Ok(())
+}
+
+/// Empties every table the export fills. Order follows the foreign keys.
+async fn wipe(tx: &mut Tx<'_>) -> Result<()> {
+    for sql in [
+        "DELETE FROM changes",
+        "DELETE FROM event_issues",
+        "DELETE FROM events",
+        "DELETE FROM relations",
+        "DELETE FROM issue_labels",
+        "DELETE FROM comments",
+        "DELETE FROM work_blocks",
+        "DELETE FROM import_log",
+        "DELETE FROM issues",
+        "DELETE FROM property_defs",
+        "DELETE FROM milestones",
+        "DELETE FROM projects",
+        "DELETE FROM cycles",
+        "DELETE FROM labels",
+        "DELETE FROM pins",
+        "DELETE FROM views",
+        "DELETE FROM view_templates",
+        "DELETE FROM issue_templates",
+        "DELETE FROM statuses",
+        "DELETE FROM relation_kinds WHERE built_in = 0",
+    ] {
+        sqlx::query(sql).execute(&mut **tx).await?;
+    }
+    Ok(())
 }
 
 /// `(number, frontmatter, description, comments)` for one issue file.

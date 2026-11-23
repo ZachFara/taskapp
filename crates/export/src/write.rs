@@ -110,6 +110,7 @@ async fn template_files(db: &Db, files: &mut BTreeMap<String, String>) -> Result
     let issue_templates = yaml(&issue_templates(db).await?)?;
     files.insert("issue_templates.yaml".to_string(), issue_templates);
     files.insert("import_log.yaml".to_string(), yaml(&import_log(db).await?)?);
+    files.insert("local.yaml".to_string(), yaml(&local_settings(db).await?)?);
     files.insert(
         "relation_kinds.yaml".to_string(),
         yaml(&relation_kinds(db).await?)?,
@@ -135,6 +136,43 @@ fn exported_setting(key: &str) -> bool {
     const LOCAL: [&str; 6] = ["token", "secret", "path", "dir", "remote", "sync_status"];
     let key = key.to_ascii_lowercase();
     !LOCAL.iter().any(|word| key.contains(word))
+}
+
+/// The per-machine settings that are safe to write down; `restore` offers them back.
+pub(crate) const LOCAL_KEYS: [&str; 3] = ["export_dir", "export_remote", "backup_dir"];
+
+async fn local_settings(db: &Db) -> Result<BTreeMap<String, String>> {
+    let mut out = BTreeMap::new();
+    for key in LOCAL_KEYS {
+        if let Some(v) = settings::get::<String>(db, key)
+            .await?
+            .filter(|v| !v.is_empty())
+        {
+            out.insert(key.to_string(), home_relative(&without_credentials(&v)));
+        }
+    }
+    Ok(out)
+}
+
+/// A path under the home folder becomes `~/...`, so the file names no one and fits another machine.
+fn home_relative(value: &str) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    match value.strip_prefix(&home) {
+        Some(rest) if !home.is_empty() && rest.starts_with('/') => format!("~{rest}"),
+        _ => value.to_string(),
+    }
+}
+
+/// `https://user:token@host/x` loses its `user:token@`; a bare `git@host:x` has no secret and stays.
+pub(crate) fn without_credentials(url: &str) -> String {
+    if let Some((scheme, rest)) = url.split_once("://")
+        && let Some((auth, host)) = rest.split_once('@')
+        && auth.contains(':')
+        && !auth.contains('/')
+    {
+        return format!("{scheme}://{host}");
+    }
+    url.to_string()
 }
 
 async fn settings_map(db: &Db) -> Result<BTreeMap<String, Value>> {

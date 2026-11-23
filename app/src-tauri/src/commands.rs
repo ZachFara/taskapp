@@ -7,7 +7,7 @@ use crate::sync_loop::{Real, Syncer};
 use taskapp_commands::AppState;
 
 use taskapp_core::{Applied, Db, Error, Result, SyncStatus, settings};
-use tauri::State;
+use tauri::{Manager, State};
 use tauri_specta::{Builder, collect_commands};
 
 macro_rules! wrap {
@@ -34,7 +34,8 @@ macro_rules! wrap {
         pub fn builder() -> Builder<tauri::Wry> {
             Builder::new().commands(collect_commands![
                 $($name,)*
-                gcal_list_calendars, gcal_connect, reminders_list_lists, sync_now, export_now, export_pull
+                gcal_list_calendars, gcal_connect, reminders_list_lists, sync_now, export_now, export_pull,
+                restore_from_export
             ])
         }
     };
@@ -133,6 +134,45 @@ pub async fn export_pull(state: State<'_, AppState>) -> Result<Applied> {
     let last = serde_json::json!({"at": chrono::Utc::now(), "changed": out.created, "conflicts": out.warnings});
     settings::set(db, "last_remote_sync", &last).await?;
     Ok(out)
+}
+
+/// Replaces this workspace with an export: a folder, or a Git URL (https or ssh) cloned with the machine's
+/// own git into `clone_to` (default: the app data folder). A backup of the current database is written
+/// first. Afterwards the export settings point at the restored folder. Returns that folder.
+///
+/// # Errors
+/// Fails on a bad source, a failed clone or an export that does not parse; the workspace is unchanged then.
+#[tauri::command]
+#[specta::specta]
+pub async fn restore_from_export(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    source: String,
+    clone_to: Option<String>,
+    apply_local: bool,
+) -> Result<String> {
+    let data = app
+        .path()
+        .data_dir()
+        .map_err(|e| Error::Invalid(e.to_string()))?
+        .join("taskapp");
+    let backups = match settings::get::<String>(&state.db, "backup_dir").await? {
+        Some(typed) if !typed.is_empty() => settings::home_path(&typed)?,
+        _ => data.join("backups"),
+    };
+    let clone_to = match clone_to.filter(|c| !c.trim().is_empty()) {
+        Some(typed) => settings::home_path(typed.trim())?,
+        None => data.join("export"),
+    };
+    let out = taskapp_export::restore::restore_from_export(
+        &state.db,
+        &source,
+        &clone_to,
+        &backups,
+        apply_local,
+    )
+    .await?;
+    Ok(out.dir.display().to_string())
 }
 
 #[cfg(test)]
