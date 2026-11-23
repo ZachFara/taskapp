@@ -285,13 +285,14 @@ async fn restore_import_log(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let log: Vec<ImportLogRow> = read_list(&dir.join("import_log.yaml"))?;
     for l in log {
         sqlx::query(
-            "INSERT INTO import_log (external_id, source, issue_id, imported_at)
-             VALUES (?, ?, (SELECT id FROM issues WHERE number = ?), ?)",
+            "INSERT INTO import_log (external_id, source, issue_id, imported_at, source_deleted)
+             VALUES (?, ?, (SELECT id FROM issues WHERE number = ?), ?, ?)",
         )
         .bind(l.external_id)
         .bind(l.source)
         .bind(l.issue)
         .bind(l.imported_at)
+        .bind(l.source_deleted)
         .execute(&mut **tx)
         .await?;
     }
@@ -423,6 +424,17 @@ async fn link_issue(
     }
     for c in comments {
         insert_comment(tx, number, c).await?;
+    }
+    for b in &f.work_blocks {
+        sqlx::query(
+            "INSERT INTO work_blocks (issue_id, start_utc, end_utc)
+             VALUES ((SELECT id FROM issues WHERE number = ?), ?, ?)",
+        )
+        .bind(number)
+        .bind(b.start)
+        .bind(b.end)
+        .execute(&mut **tx)
+        .await?;
     }
     Ok(())
 }

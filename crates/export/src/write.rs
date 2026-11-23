@@ -8,8 +8,8 @@ use taskapp_core::{Db, Result, settings};
 
 use crate::files::{
     CommentText, CycleRow, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow, MilestoneRow,
-    PinRow, ProjectFile, PropertyFile, StatusRow, ViewFile, ViewTemplateFile, invalid, key,
-    render_issue, safe_name,
+    PinRow, ProjectFile, PropertyFile, StatusRow, ViewFile, ViewTemplateFile, WorkBlockRow,
+    invalid, key, render_issue, safe_name,
 };
 
 pub struct ExportStats {
@@ -258,20 +258,23 @@ async fn issue_templates(db: &Db) -> Result<Vec<IssueTemplateFile>> {
 }
 
 async fn import_log(db: &Db) -> Result<Vec<ImportLogRow>> {
-    let rows = sqlx::query_as::<_, (String, String, i64, String)>(
-        "SELECT l.external_id, l.source, i.number, l.imported_at
+    let rows = sqlx::query_as::<_, (String, String, i64, String, bool)>(
+        "SELECT l.external_id, l.source, i.number, l.imported_at, l.source_deleted
          FROM import_log l JOIN issues i ON i.id = l.issue_id ORDER BY l.external_id",
     )
     .fetch_all(&db.pool)
     .await?;
     Ok(rows
         .into_iter()
-        .map(|(external_id, source, issue, imported_at)| ImportLogRow {
-            external_id,
-            source,
-            issue,
-            imported_at,
-        })
+        .map(
+            |(external_id, source, issue, imported_at, source_deleted)| ImportLogRow {
+                external_id,
+                source,
+                issue,
+                imported_at,
+                source_deleted,
+            },
+        )
         .collect())
 }
 
@@ -345,6 +348,7 @@ struct IssueSide {
     labels: BTreeMap<i64, Vec<String>>,
     relations: BTreeMap<i64, Relations>,
     comments: BTreeMap<i64, Vec<CommentText>>,
+    blocks: BTreeMap<i64, Vec<WorkBlockRow>>,
 }
 
 async fn issue_side(db: &Db) -> Result<IssueSide> {
@@ -389,10 +393,22 @@ async fn issue_side(db: &Db) -> Result<IssueSide> {
         })
         .collect(),
     );
+    let blocks = group(
+        sqlx::query_as::<_, (i64, DateTime<Utc>, DateTime<Utc>)>(
+            "SELECT i.number, b.start_utc, b.end_utc FROM work_blocks b
+             JOIN issues i ON i.id = b.issue_id ORDER BY b.start_utc, b.end_utc, b.id",
+        )
+        .fetch_all(&db.pool)
+        .await?
+        .into_iter()
+        .map(|(number, start, end)| (number, WorkBlockRow { start, end }))
+        .collect(),
+    );
     Ok(IssueSide {
         labels,
         relations,
         comments,
+        blocks,
     })
 }
 
@@ -408,7 +424,8 @@ async fn issue_files(db: &Db, prefix: &str) -> Result<Vec<(String, String)>> {
         let labels = side.labels.remove(&number).unwrap_or_default();
         let rels = side.relations.remove(&number).unwrap_or_default();
         let comments = side.comments.remove(&number).unwrap_or_default();
-        let (front, description) = front_of(prefix, row, labels, &rels)?;
+        let (mut front, description) = front_of(prefix, row, labels, &rels)?;
+        front.work_blocks = side.blocks.remove(&number).unwrap_or_default();
         let text = render_issue(&front, &description, &comments)?;
         out.push((front.key, text));
     }
@@ -468,6 +485,7 @@ fn front_of(
         related: keys_of(rels, "related", prefix),
         duplicate: keys_of(rels, "duplicate", prefix),
         properties: serde_json::from_str(&properties).map_err(invalid)?,
+        work_blocks: vec![],
     };
     Ok((front, description))
 }

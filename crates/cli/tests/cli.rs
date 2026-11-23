@@ -476,3 +476,35 @@ fn points_flags_and_insights() {
             .success()
     );
 }
+
+#[test]
+fn restore_builds_a_new_database_from_an_export_and_refuses_an_existing_one() {
+    let (_src, src_db) = fresh();
+    run(&src_db, &["add", "Keep me"]);
+    let export = tempfile::tempdir().expect("tempdir");
+    tokio::runtime::Runtime::new()
+        .expect("runtime")
+        .block_on(async {
+            let db = taskapp_core::Db::open(&src_db).await.expect("open");
+            taskapp_export::write::write_snapshot(&db, export.path())
+                .await
+                .expect("export");
+        });
+    let from = export.path().to_str().expect("utf8");
+
+    let (_dst, dst_db) = fresh();
+    let out = run(&dst_db, &["restore", "--from", from]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        run_json(&dst_db, &["issue", "get", "ABC-1"])["title"],
+        "Keep me"
+    );
+
+    let again = run(&dst_db, &["restore", "--from", from]);
+    assert!(!again.status.success());
+    assert!(String::from_utf8_lossy(&again.stderr).contains("already exists"));
+}

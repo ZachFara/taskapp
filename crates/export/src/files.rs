@@ -153,6 +153,15 @@ pub struct ImportLogRow {
     pub source: String,
     pub issue: i64,
     pub imported_at: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub source_deleted: bool,
+}
+
+/// One planned work block of an issue, listed in its frontmatter.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct WorkBlockRow {
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
 }
 
 /// Frontmatter of `issues/<KEY>.md`. Every reference is by name or key, never by database id.
@@ -186,6 +195,8 @@ pub struct IssueFront {
     pub duplicate: Vec<String>,
     #[serde(default, skip_serializing_if = "Map::is_empty")]
     pub properties: Map<String, Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub work_blocks: Vec<WorkBlockRow>,
 }
 
 /// The frontmatter, the description, and the comments of one issue file.

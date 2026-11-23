@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::sync_loop::{Real, Syncer};
 use taskapp_commands::AppState;
 
-use taskapp_core::{Db, Error, Result, SyncStatus, settings};
+use taskapp_core::{Applied, Db, Error, Result, SyncStatus, settings};
 use tauri::State;
 use tauri_specta::{Builder, collect_commands};
 
@@ -34,7 +34,7 @@ macro_rules! wrap {
         pub fn builder() -> Builder<tauri::Wry> {
             Builder::new().commands(collect_commands![
                 $($name,)*
-                gcal_list_calendars, gcal_connect, reminders_list_lists, sync_now, export_now
+                gcal_list_calendars, gcal_connect, reminders_list_lists, sync_now, export_now, export_pull
             ])
         }
     };
@@ -105,9 +105,34 @@ async fn export_snapshot(db: &Db) -> Result<()> {
         .ok_or_else(|| Error::Invalid("choose an export directory first".into()))?;
     let remote = setting("export_remote").await?;
     let dir = settings::home_path(&dir)?;
-    taskapp_export::write::write_snapshot(db, &dir).await?;
-    taskapp_export::git::commit_and_push(&dir, "export", remote.as_deref()).await?;
-    Ok(())
+    taskapp_export::sync::export(db, &dir, remote.as_deref()).await
+}
+
+/// Fast-forwards the export folder to the remote and applies the incoming issues as one undoable step,
+/// then writes the export again so both sides agree. `created` counts issues created or changed;
+/// `warnings` are conflicts, kept so Settings can show them.
+///
+/// # Errors
+/// Fails when no export directory or remote is set, the histories diverged, or git fails.
+#[tauri::command]
+#[specta::specta]
+pub async fn export_pull(state: State<'_, AppState>) -> Result<Applied> {
+    let db = &state.db;
+    let dir: String = settings::get(db, "export_dir").await?.unwrap_or_default();
+    let remote: String = settings::get(db, "export_remote")
+        .await?
+        .unwrap_or_default();
+    if dir.is_empty() || remote.is_empty() {
+        return Err(Error::Invalid(
+            "set an export directory and a Git remote first".into(),
+        ));
+    }
+    let dir = settings::home_path(&dir)?;
+    let out = taskapp_export::sync::pull_and_apply(db, &dir, &remote).await?;
+    taskapp_export::sync::export(db, &dir, Some(&remote)).await?;
+    let last = serde_json::json!({"at": chrono::Utc::now(), "changed": out.created, "conflicts": out.warnings});
+    settings::set(db, "last_remote_sync", &last).await?;
+    Ok(out)
 }
 
 #[cfg(test)]

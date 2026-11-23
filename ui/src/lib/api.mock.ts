@@ -1035,7 +1035,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return { created: ids.size, warnings };
       },
     },
-    export: { now: ok },
+    export: { now: ok, pull: async () => ({ created: 0, warnings: [] }) },
     sync: { status: async () => off, now: async () => off },
     gcal: { connect: ok, listCalendars: async () => [['primary', 'Primary']] },
     reminders: { listLists: async () => [['1', 'Reminders']] },

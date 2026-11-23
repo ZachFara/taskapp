@@ -522,6 +522,7 @@ async fn dump(
         "property_defs",
         "pins",
         "import_log",
+        "work_blocks",
     ] {
         let cols: Vec<String> = sqlx::query_scalar(
             "SELECT name FROM pragma_table_info(?1) WHERE (name != 'id' OR ?1 = 'view_templates')
@@ -531,7 +532,7 @@ async fn dump(
         .fetch_all(&db.pool)
         .await?;
         let mut fields: Vec<String> = cols.iter().map(|c| format!("'{c}', \"{c}\"")).collect();
-        if t == "import_log" {
+        if t == "import_log" || t == "work_blocks" {
             fields.push("'issue', (SELECT number FROM issues WHERE id = issue_id)".into());
         }
         let sql = format!(
@@ -572,6 +573,9 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
            VALUES ('Bug report', 'bug-report', 'icon:bug', 'red', '{\"title_prefix\":\"Bug: \",\"fields\":{\"priority\":2},\"sub_issues\":[]}')",
         "INSERT INTO import_log (external_id, source, issue_id, imported_at)
            VALUES ('row-1', 'csv', (SELECT id FROM issues WHERE number = 1), '2026-01-02T03:04:05Z')",
+        "UPDATE import_log SET source_deleted = 1",
+        "INSERT INTO work_blocks (issue_id, start_utc, end_utc)
+           VALUES ((SELECT id FROM issues WHERE number = 2), '2026-01-05T09:00:00+00:00', '2026-01-05T10:30:00+00:00')",
     ] {
         sqlx::query(sql).execute(&db.pool).await?;
     }
