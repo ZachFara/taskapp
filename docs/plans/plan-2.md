@@ -66,6 +66,12 @@ Stub files and route lines for every new screen, so wave 1 tasks replace a stub 
 | U20 | Template editor | `components/settings/Templates.svelte` | Haiku |
 | U21 | Undo and redo: commands, toast | `lib/commands/defs/history/**`, `components/UndoToast.svelte` | Haiku |
 
+### Added by the owner on 2026-11-22
+| ID | Task | Model |
+|---|---|---|
+| W1 | Display options per view (which fields and custom properties show in each layout), custom properties in every layout, view templates that new views start from | Sonnet |
+| X1 | Optional points (estimation setting, point scale, quick add `3pt`) and progress charts: burn-up, stacked area, velocity bars and sparklines in an optional insights panel on views, the project page and cycles | Sonnet x2 |
+
 ### Finish
 One review (4 reviewers by area, plus a visual review of every screen against the design system), one fix wave, a
 live click-through in Chrome on the real-mode harness, records, one PR to main. Stop for the owner.

@@ -240,6 +240,28 @@ The prefix is display-only: issue numbers do not change when it changes. Backend
 
 ---
 
+## 5.12 Added in plan 2
+
+This section records what plan 2 added. The decision records in docs/decisions/0010 to 0016 hold the reasons.
+
+- **Look.** The "Survey map" design system (0010): a green frame around a pale sheet, legend bands for groups, contour
+  art for empty states, stone glyphs for status, rings for priority. Light and dark. Every value is a token; a check
+  keeps raw values out of components. A themes system is future work.
+- **Commands and keys.** One registry feeds the command menu (Cmd+K, Cmd+P), the keys, the right-click menu, tooltips,
+  the legend bar and the cheat sheet (0011). Vim-style movement and single-key edits; every mouse action is a command.
+- **Selection, bulk edit, undo.** Multi-select with keys and mouse; an action on a selection is one step; every change
+  by a person or an agent can be undone and redone (0012).
+- **Issue templates.** Saved templates prefill fields, properties and sub-issues; `/slug` in quick add.
+- **Icons and colours.** Projects, views, labels, statuses, cycles and templates carry an icon and a palette colour.
+- **Import.** CSV with column mapping and Linear through its API; both show a dry run first and can be undone.
+- **Display options per view.** Each view stores which fields and custom properties it shows, their order, density,
+  how sub-issues show, and layout options; one renderer draws a field the same way in every layout (0014).
+- **View templates.** A new view can start blank, from a template or as a copy; views can be saved as templates and
+  reset to them; one template can be the default (0014).
+- **Points and progress charts.** Optional points with a chosen scale; an optional insights panel on any view with a
+  burn-up line, stacked area or bars; a chart on the project page; a burn-up on the current cycle; sparklines (0015).
+- **Harness.** The mock equals the backend, held by contract cases (0013); walk tests drive the app in CI.
+
 # 6. Build order
 
 0. Development harness, alongside the project skeleton.

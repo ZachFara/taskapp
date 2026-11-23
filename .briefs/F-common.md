@@ -3,7 +3,7 @@
 Read AGENTS.md, docs/IMPLEMENTER-CONTRACT.md, this file, then your own brief. Do not read the whole plan.
 
 - Integration branch: `plan-2`. Make your own worktree and branch:
-  `git -C /Users/user1/Ark/Development/active/taskapp worktree add ../taskapp-wt/<ID> -b task/<ID> origin/plan-2`
+  `git -C <workspace>/taskapp worktree add ../taskapp-wt/<ID> -b task/<ID> origin/plan-2`
   Work ONLY inside that worktree. Use its own `target/` (do not set CARGO_TARGET_DIR). Run `pnpm -C ui install --frozen-lockfile` there if you touch ui/.
 - Backend only: core logic, a schema migration, the command in crates/commands (dispatch), Tauri command, MCP tool,
   CLI subcommand, mock api support (ui/src/lib/api.mock.ts, api.ts, bindings.ts) and tests.
