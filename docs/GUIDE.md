@@ -237,6 +237,16 @@ saved automatically (after a short pause). Filter changes show an "Undo" toast.
   insights panel. Rename, pin and archive are in the header. Archiving asks first, keeps the issues, and can be
   restored. Fields: slug, name, description, doc link, start date, target date, icon, colour. A project can also scope
   a custom property.
+- **Project status, priority, labels and properties.** A project has a status of its own (Settings > Project statuses:
+  Planned, In progress, Paused, Done, Cancelled; add, rename, recolour, reorder, delete moves the projects to another
+  status), a priority (the same scale as issues), labels (the same labels) and any custom property set to apply to
+  projects. A "Project details" plate on the project page edits all of them; each edit is one undo step. In the command
+  menu on a project page: "Set project status", "Set project priority", "Add or remove project labels" and "Set project
+  property" (Select and Checkbox only). The Projects page shows Status, Priority, Labels and a column per project
+  property, and groups by status or priority, sorts, and filters by status, priority or label. The sidebar shows each
+  project's status glyph. CLI: `project statuses`, `project set <slug> --status --priority --label --property`; MCP:
+  `list_project_statuses`, and `update_project` takes `status_id`, `priority`, `label_ids`, `properties`. Export writes
+  `project_statuses.yaml` and the fields into each project file.
 - **Milestones.** On a project page, "Milestones": add a name and a date. An issue is assigned a milestone in the
   issue panel (after choosing the project) or with the "Change milestone" command. Milestones draw as markers on the timeline.
 - **Cycles.** Fixed, numbered, non-overlapping date ranges. Cycles page > New cycle (optional name, start, end), or
@@ -278,8 +288,8 @@ belong to many events. Times are wall-clock times with no zone.
 
 ## Custom properties
 
-Your own fields on every issue (or just one project's). Kinds: Text, Number, Date, Select, MultiSelect, Checkbox, Url,
-NoteLink. Create in Settings > Properties (name, key like `effort`, kind, scope, and options for Select kinds), or
+Your own fields on issues, on projects, or on both (or, for issues, just one project's). Kinds: Text, Number, Date, Select, MultiSelect, Checkbox, Url,
+NoteLink. Create in Settings > Properties (name, key like `effort`, kind, applies to (Issues, Projects or Both), scope, and options for Select kinds), or
 CLI `property create`, or MCP `create_property`. Set a value in the issue panel, in a table cell, with `a` (Select and
 Checkbox only), or CLI `property set`. Show a property in views through the Display panel; filter, group and sort on
 it. Changing a property's kind or deleting it takes a database snapshot first (and deleting removes every issue's
@@ -396,7 +406,7 @@ restoring the backup it wrote (`taskapp backup restore`).
 
 ## Settings
 
-Settings is a list of sections: General, Statuses, Labels, Projects, Cycles, Fields, Properties, Relations, Templates, Import, Reminders,
+Settings is a list of sections: General, Statuses, Project statuses, Labels, Projects, Cycles, Fields, Properties, Relations, Templates, Import, Reminders,
 Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` saves the open page.
 
 | General setting | Values | Notes |

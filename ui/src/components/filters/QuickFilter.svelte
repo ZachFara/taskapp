@@ -30,7 +30,7 @@
     const [statuses, projects, defs, cycles, labels] = await Promise.all([
       api.statuses.list(), api.projects.list(), api.properties.listDefs(), api.cycles.list(), api.labels.list(),
     ]);
-    data = { statuses, projects, defs, cycles, labels };
+    data = { statuses, projects, defs: defs.filter((d) => d.applies_to !== 'Projects'), cycles, labels };
   });
 
   // Same chip rules as the saved filter: a pick-list field starts "any of", a text field "contains".

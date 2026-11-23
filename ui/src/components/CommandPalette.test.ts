@@ -85,7 +85,7 @@ defineCommand({ id: 'settings.statuses', label: 'Statuses', icon: 'circle', grou
 describe('CommandPalette', () => {
   it('each_settings_page_is_listed_once', async () => {
     await type('statuses');
-    expect(rows().filter((r) => /statuses/i.test(r)).length).toBe(1);
+    expect(rows().filter((r) => /statuses/i.test(r) && !/project/i.test(r)).length).toBe(1);
   });
 
   it('lists_commands_in_a_listbox_with_the_registry_shortcut', async () => {

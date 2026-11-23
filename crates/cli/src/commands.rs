@@ -11,8 +11,8 @@ use taskapp_core::{
     Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind,
     Relation, RelationKind, Result, SelectOption, StatusId, TemplateId, ViewDef, ViewId,
     ViewTemplateId, backup, comments, cycles, events, history, import, insights, issues, labels,
-    pins, projects, properties, quickadd, relations, search, templates, undo, view_templates,
-    views,
+    pins, project_statuses, projects, properties, quickadd, relations, search, templates, undo,
+    view_templates, views,
 };
 
 use crate::{
@@ -258,6 +258,7 @@ async fn property(db: &Db, dir: &Path, cmd: PropertyCmd) -> Result<Value> {
             name,
             kind: kind_name,
             options,
+            applies_to,
         } => {
             let def = PropertyDef {
                 key,
@@ -266,6 +267,7 @@ async fn property(db: &Db, dir: &Path, cmd: PropertyCmd) -> Result<Value> {
                 options: select_options(&options),
                 project_id: None,
                 position: 0,
+                applies_to: applies_to_of(&applies_to)?,
             };
             val(properties::create_def(db, def, SRC).await?)
         }
@@ -296,9 +298,76 @@ async fn property(db: &Db, dir: &Path, cmd: PropertyCmd) -> Result<Value> {
     }
 }
 
+fn applies_to_of(s: &str) -> Result<taskapp_core::PropertyAppliesTo> {
+    use taskapp_core::PropertyAppliesTo as A;
+    match s {
+        "issues" => Ok(A::Issues),
+        "projects" => Ok(A::Projects),
+        "both" => Ok(A::Both),
+        other => Err(Error::Invalid(format!(
+            "applies-to {other}: use issues, projects or both"
+        ))),
+    }
+}
+
+async fn project_set(
+    db: &Db,
+    slug: &str,
+    status: Option<String>,
+    priority: Option<u8>,
+    label_names: &[String],
+    property: &[String],
+) -> Result<Value> {
+    let mut p = projects::list(db)
+        .await?
+        .into_iter()
+        .find(|p| p.slug == slug)
+        .ok_or_else(|| Error::NotFound(format!("project {slug}")))?;
+    if let Some(name) = status {
+        let all = project_statuses::list(db).await?;
+        let found = all.iter().find(|s| s.name.eq_ignore_ascii_case(&name));
+        p.status_id = found
+            .ok_or_else(|| Error::NotFound(format!("project status {name}")))?
+            .id;
+    }
+    if let Some(n) = priority {
+        p.priority = n;
+    }
+    if !label_names.is_empty() {
+        let all = labels::list(db).await?;
+        p.label_ids = label_names
+            .iter()
+            .map(|n| {
+                all.iter()
+                    .find(|l| l.name.eq_ignore_ascii_case(n))
+                    .map(|l| l.id)
+                    .ok_or_else(|| Error::NotFound(format!("label {n}")))
+            })
+            .collect::<Result<_>>()?;
+    }
+    for kv in property.chunks(2) {
+        let value = serde_json::from_str::<Value>(&kv[1])
+            .map_err(|e| Error::Invalid(format!("value is not JSON: {e}")))?;
+        if value.is_null() {
+            p.properties.remove(&kv[0]);
+        } else {
+            p.properties.insert(kv[0].clone(), value);
+        }
+    }
+    val(projects::update(db, p, SRC).await?)
+}
+
 async fn project(db: &Db, cmd: ProjectCmd) -> Result<Value> {
     match cmd {
         ProjectCmd::List => val(projects::list(db).await?),
+        ProjectCmd::Statuses => val(project_statuses::list(db).await?),
+        ProjectCmd::Set {
+            slug,
+            status,
+            priority,
+            labels,
+            property,
+        } => project_set(db, &slug, status, priority, &labels, &property).await,
         ProjectCmd::Create {
             slug,
             name,

@@ -405,6 +405,8 @@ async fn property_defs(db: &Db) -> Result<Vec<PropertyDef>> {
                     .try_get::<Option<i64>, _>("project_id")?
                     .map(crate::ProjectId),
                 position: r.try_get("position")?,
+                // Issue views only look at the issue side.
+                applies_to: crate::PropertyAppliesTo::Issues,
             })
         })
         .collect()

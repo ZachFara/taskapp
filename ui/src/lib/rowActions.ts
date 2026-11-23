@@ -1,12 +1,12 @@
 import { api } from './api';
 import { refreshAll } from './stores.svelte';
-import type { PinKind } from './bindings';
+import type { PinKind, Project } from './bindings';
 import { templates } from '../components/display/templatesApi';
 
 /** What a row action acts on. `id` is the entity's own id (a project's id, not its slug). */
 export type Kind = 'view' | 'project' | 'cycle' | 'label' | 'template' | 'folder';
 export type Target = { kind: Kind; id: number; name: string };
-type Change = { name?: string; icon?: string | null; color?: string | null };
+type Change = { name?: string; icon?: string | null; color?: string | null } & Partial<Pick<Project, 'status_id' | 'priority' | 'label_ids' | 'properties'>>;
 
 const PIN: Partial<Record<Kind, PinKind>> = { view: 'View', project: 'Project', cycle: 'Cycle' };
 

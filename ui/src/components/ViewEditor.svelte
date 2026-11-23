@@ -44,7 +44,7 @@
     const [statuses, projects, defs, cycles, labels, relationKinds] = await Promise.all([
       api.statuses.list(), api.projects.list(), api.properties.listDefs(), api.cycles.list(), api.labels.list(), api.relation.kindsList(),
     ]);
-    data = { statuses, projects, defs, cycles, labels, relationKinds };
+    data = { statuses, projects, defs: defs.filter((d) => d.applies_to !== 'Projects'), cycles, labels, relationKinds };
   });
   const lookup = $derived(makeLookup(data));
 

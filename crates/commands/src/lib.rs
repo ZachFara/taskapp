@@ -15,13 +15,14 @@ use taskapp_core::{
     CycleId, Db, Error, Event, EventId, EventInput, ImportPlan, Issue, IssueId, IssuePatch,
     IssueStats, IssueTemplate, Label, LabelId, Measure, Milestone, MilestoneId, NewIssue,
     ParsedQuickAdd, Pin, PinId, PinKind, ProgressScope, ProgressSeries, Project, ProjectId,
-    PropertyDef, PropertyKind, Relation, RelationKind, RelationKindDef, Reschedule, ResolvedPin,
-    Result, SavedView, SelectOption, Status, StatusCategory, StatusId, SyncState, SyncStatus,
-    TemplateId, TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewFolder, ViewFolderId,
-    ViewId, ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks,
-    bulk, comments, cycles, events, history, import, insights, issues, labels, pins, projects,
-    properties, quickadd, relation_kinds, relations, schedule, search, settings, statuses,
-    templates, undo, view_folders, view_templates, views, workspace,
+    ProjectStatus, ProjectStatusCategory, ProjectStatusId, PropertyAppliesTo, PropertyDef,
+    PropertyKind, Relation, RelationKind, RelationKindDef, Reschedule, ResolvedPin, Result,
+    SavedView, SelectOption, Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId,
+    TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewFolder, ViewFolderId, ViewId,
+    ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks, bulk,
+    comments, cycles, events, history, import, insights, issues, labels, pins, project_statuses,
+    projects, properties, quickadd, relation_kinds, relations, schedule, search, settings,
+    statuses, templates, undo, view_folders, view_templates, views, workspace,
 };
 
 pub struct AppState {
@@ -170,9 +171,28 @@ macro_rules! with_commands {
             properties_set_scope(s, key: String, project: Option<ProjectId>) -> PropertyDef {
                 properties::set_scope(&s.db, &key, project, ChangeSource::Ui).await
             }
+            properties_set_applies_to(s, key: String, applies_to: PropertyAppliesTo) -> PropertyDef {
+                properties::set_applies_to(&s.db, &key, applies_to, ChangeSource::Ui).await
+            }
             properties_delete_def(s, key: String) -> () { properties::delete_def(&s.db, &key, ChangeSource::Ui).await }
             properties_set_value(s, issue: IssueId, key: String, value: Option<Value>) -> Issue {
                 properties::set_value(&s.db, issue, &key, value, ChangeSource::Ui).await
+            }
+
+            project_statuses_list(s) -> Vec<ProjectStatus> { project_statuses::list(&s.db).await }
+            project_statuses_create(s, name: String, category: ProjectStatusCategory, color: String, icon: Option<String>)
+                -> ProjectStatus {
+                project_statuses::create(&s.db, &name, category, &color, icon, ChangeSource::Ui).await
+            }
+            project_statuses_update(s, id: ProjectStatusId, name: Option<String>, color: Option<String>, icon: Option<String>)
+                -> ProjectStatus {
+                project_statuses::update(&s.db, id, name, taskapp_core::palette::Look { icon, color }, ChangeSource::Ui).await
+            }
+            project_statuses_reorder(s, ids_in_order: Vec<ProjectStatusId>) -> () {
+                project_statuses::reorder(&s.db, &ids_in_order, ChangeSource::Ui).await
+            }
+            project_statuses_delete(s, id: ProjectStatusId, move_projects_to: ProjectStatusId) -> () {
+                project_statuses::delete(&s.db, id, move_projects_to, ChangeSource::Ui).await
             }
 
             projects_list(s) -> Vec<Project> { projects::list(&s.db).await }

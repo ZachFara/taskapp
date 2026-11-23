@@ -26,6 +26,7 @@ fn pdef(key: &str, kind: PropertyKind) -> PropertyDef {
         options: Vec::<SelectOption>::new(),
         project_id: None,
         position: 0,
+        applies_to: taskapp_core::PropertyAppliesTo::Issues,
     }
 }
 

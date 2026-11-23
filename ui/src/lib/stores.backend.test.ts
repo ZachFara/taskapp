@@ -12,6 +12,8 @@ vi.mock('./api', () => ({
     statuses: { list: vi.fn(async () => []) },
     projects: { list: vi.fn(async () => []) },
     properties: { listDefs: vi.fn(async () => []) },
+    folders: { list: vi.fn(async () => []) },
+    project: { statusesList: vi.fn(async () => []) },
   },
 }));
 

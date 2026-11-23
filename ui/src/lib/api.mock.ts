@@ -9,13 +9,14 @@ import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
 import { scrubDef, seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
   AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, Event, EventInput, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
-  NewIssue, Pin, Project, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
+  NewIssue, Pin, Project, ProjectStatus, ProjectStatusCategory, PropertyAppliesTo, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
   TemplateInput, Value, ViewDef, ViewFolder, ViewTemplate, WorkBlock,
 } from './bindings';
 
 export type MockSeed = {
   statuses: Status[];
   projects: Project[];
+  projectStatuses?: ProjectStatus[];
   propertyDefs: PropertyDef[];
   issues: Issue[];
   labels?: Label[];
@@ -92,6 +93,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const s = structuredClone(seed);
   let workspace: Workspace = s.workspace ?? { setup_done: false, name: null, key: 'ABC', timezone: tz };
   const labels = s.labels ?? [];
+  const projectStatuses = (s.projectStatuses ??= structuredClone(projectStatusSeed));
   const cycles = s.cycles ?? [];
   const events: Event[] = [];
   const views = s.views ?? [];
@@ -109,7 +111,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, events, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, importLog] as unknown[][];
+  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, importLog] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -435,6 +437,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   };
   const upsert = <T extends { id: number }>(rows: T[], row: T, what: string) =>
     Object.assign(find(rows, row.id, what), row);
+  const projectDefaults = () => ({ status_id: [...projectStatuses].sort((a, b) => a.position - b.position)[0].id, priority: 0, label_ids: [] as number[], properties: {} as Record<string, Value> });
   const def = (key: string) => s.propertyDefs.find((d) => d.key === key) ?? fail('NotFound', `property ${key}`);
   const backups: string[] = [];
   const importLog: { external_id: string; issue_id: number }[] = [];
@@ -606,12 +609,44 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return nothing(remove(s.statuses, id, 'status'));
       },
     },
+    project: {
+      statusesList: async () => [...projectStatuses].sort((a, b) => a.position - b.position),
+      statusesCreate: async (name, category, color, icon) => {
+        checkIcon(icon);
+        if (!name.trim()) fail('Invalid', 'project status name is empty');
+        const key = colorKey(color)!;
+        if (projectStatuses.some((x) => x.name === name)) fail('Conflict', `project status ${name} already exists`);
+        const st = { id: next(projectStatuses), name, category, color: key, color_hex: hexOf(key)!, icon: icon ?? null, position: Math.max(-1, ...projectStatuses.map((x) => x.position)) + 1 };
+        projectStatuses.push(st);
+        return st;
+      },
+      statusesUpdate: async (id, name, color, icon) => {
+        const st = find(projectStatuses, id, 'project status');
+        checkIcon(icon);
+        if (name !== null && !name.trim()) fail('Invalid', 'project status name is empty');
+        const key = colorKey(color) ?? st.color;
+        if (name && projectStatuses.some((x) => x.id !== id && x.name === name)) fail('Conflict', `project status ${name} already exists`);
+        return Object.assign(st, { name: name ?? st.name, color: key, color_hex: hexOf(key)!, icon: icon ?? st.icon });
+      },
+      statusesReorder: async (ids) => {
+        reposition(projectStatuses, ids, (x) => x.id, 'project status');
+        return null;
+      },
+      statusesDelete: async (id, moveProjectsTo) => {
+        if (id === moveProjectsTo) fail('Invalid', 'cannot move projects into the deleted status');
+        find(projectStatuses, id, 'project status');
+        find(projectStatuses, moveProjectsTo, 'project status');
+        s.projects.forEach((p) => p.status_id === id && (p.status_id = moveProjectsTo));
+        return nothing(remove(projectStatuses, id, 'project status'));
+      },
+    },
     properties: {
       listDefs: async () => [...s.propertyDefs].sort((a, b) => a.position - b.position),
       createDef: async (d) => {
         if (s.propertyDefs.some((x) => x.key === d.key)) fail('Conflict', `property ${d.key} exists`);
+        if (d.applies_to === 'Projects' && d.project_id !== null) fail('Invalid', 'a projects-only property cannot be limited to one project');
         // The position is the next free one whatever the caller sends, like the backend.
-        const made = { ...d, position: Math.max(-1, ...s.propertyDefs.map((x) => x.position)) + 1 };
+        const made = { ...d, applies_to: d.applies_to ?? 'Issues', position: Math.max(-1, ...s.propertyDefs.map((x) => x.position)) + 1 };
         s.propertyDefs.push(made);
         return made;
       },
@@ -625,6 +660,18 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         });
         if (bad.length) fail('Conflict', `values do not fit ${kind}: ${bad.map((i) => i.key).join(', ')}`);
         const text = (v: Value): string => (typeof v === 'string' ? v : Array.isArray(v) ? v.map(text).join(', ') : JSON.stringify(v));
+        const badProjects = s.projects.filter((p) => {
+          const v = p.properties[key];
+          if (v == null) return false;
+          return kind === 'Number' ? Number.isNaN(Number(v)) : kind === 'Select' && !options.some((o) => o.value === v);
+        });
+        if (badProjects.length) fail('Conflict', `cannot convert ${key} to ${kind} on projects ${badProjects.map((p) => p.slug).join(', ')}`);
+        for (const p of s.projects) {
+          const v = p.properties[key];
+          if (v == null) continue;
+          if (kind === 'Number') p.properties[key] = Number(v);
+          else if (kind === 'Text') p.properties[key] = text(v);
+        }
         for (const i of s.issues) {
           const v = i.properties[key];
           if (v == null) continue;
@@ -637,8 +684,16 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         reposition(s.propertyDefs, keys, (d) => d.key, 'property');
         return null;
       },
+      setAppliesTo: async (key, appliesTo) => {
+        const d = def(key);
+        const held = (rows: { properties: Record<string, Value> }[]) => rows.filter((r) => r.properties[key] != null).length;
+        if (appliesTo === 'Projects' && held(s.issues)) fail('Conflict', `${key} has values on ${held(s.issues)} issues`);
+        if (appliesTo === 'Issues' && held(s.projects)) fail('Conflict', `${key} has values on ${held(s.projects)} projects`);
+        return Object.assign(d, { applies_to: appliesTo, project_id: appliesTo === 'Projects' ? null : d.project_id });
+      },
       setScope: async (key, project) => {
         const d = def(key);
+        if (d.applies_to === 'Projects' && project !== null) fail('Invalid', 'a projects-only property cannot be limited to one project');
         const bad = s.issues.filter((i) => i.properties[key] != null && project !== null && i.project_id !== project);
         if (bad.length) fail('Conflict', `${key} has values on issues outside the project: ${bad.map((i) => i.key).join(', ')}`);
         return Object.assign(d, { project_id: project });
@@ -646,12 +701,14 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       deleteDef: async (key) => {
         s.propertyDefs.splice(s.propertyDefs.indexOf(def(key)), 1);
         s.issues.forEach((i) => delete i.properties[key]);
+        s.projects.forEach((p) => delete p.properties[key]);
         [...views, ...viewTemplates].forEach((v) => (v.def = scrubDef(v.def, (k) => k === key)));
         return null;
       },
       setValue: async (issue, key, value) => {
         const d = def(key);
         const i = getIssue(issue);
+        if (d.applies_to === 'Projects') fail('Invalid', `${key} applies to projects only`);
         if (d.project_id !== null && d.project_id !== i.project_id) fail('Invalid', `${key} is scoped to another project than ${i.key}`);
         if (value !== null && !validValue(d, value)) fail('Invalid', `${JSON.stringify(value)} is not a valid ${d.kind} for ${key}`);
         const old = i.properties[key] ?? null;
@@ -669,14 +726,23 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       create: async (slug, name, icon, color) => {
         if (s.projects.some((p) => p.slug === slug)) fail('Db', 'error returned from database: (code: 2067) UNIQUE constraint failed: projects.slug');
         checkIcon(icon);
-        const p = { id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: icon ?? null, color: colorKey(color) };
+        const p = { id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: icon ?? null, color: colorKey(color), ...projectDefaults() };
         s.projects.push(p);
         return p;
       },
       update: async (p) => {
         checkIcon(p.icon);
+        find(s.projects, p.id, 'project');
         if (s.projects.some((x) => x.id !== p.id && x.slug === p.slug)) fail('Db', 'error returned from database: (code: 2067) UNIQUE constraint failed: projects.slug');
-        return upsert(s.projects, { ...p, color: colorKey(p.color) }, 'project');
+        if (p.priority > 4) fail('Invalid', 'priority is 0 to 4');
+        find(projectStatuses, p.status_id, 'project status');
+        for (const [k, v] of Object.entries(p.properties)) {
+          const d = def(k);
+          if (d.applies_to === 'Issues') fail('Invalid', `${k} does not apply to projects`);
+          if (!validValue(d, v)) fail('Invalid', `${JSON.stringify(v)} is not a valid ${d.kind} for ${k}`);
+        }
+        for (const l of p.label_ids) find(labels, l, 'label');
+        return upsert(s.projects, { ...p, color: colorKey(p.color), label_ids: [...new Set(p.label_ids)].sort((a, b) => a - b) }, 'project');
       },
       delete: async (id) => {
         remove(s.projects, id, 'project');
@@ -780,6 +846,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         for (const i of s.issues) if (i.label_ids.includes(id)) rec(i.id, 'label', id, null);
         remove(labels, id, 'label');
         s.issues.forEach((i) => (i.label_ids = i.label_ids.filter((x) => x !== id)));
+        s.projects.forEach((p) => (p.label_ids = p.label_ids.filter((x) => x !== id)));
         return null;
       },
       addLabel: async (issue, label) => {
@@ -1094,7 +1161,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           const base = projectSlug(name);
           let slug = base;
           for (let n = 2; s.projects.some((p) => p.slug === slug); n++) slug = `${base}-${n}`;
-          s.projects.push({ id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null });
+          s.projects.push({ id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null, ...projectDefaults() });
         }
         for (const c of plan.cycles ?? []) {
           if (!cycles.some((x) => x.start_date === c.start_date)) cycles.push({ id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name: c.name, start_date: c.start_date, end_date: c.end_date, icon: null, color: null });
@@ -1150,7 +1217,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   };
   const commandOf = (mod: string, fn: string) => `${mod}_${fn.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}`;
   const mutating = (
-    'issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.delete ' +
+    'issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
     'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
     'projects.create projects.update projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink templates.create templates.update templates.delete templates.apply ' +
@@ -1175,8 +1242,15 @@ const statuses: Status[] = (
   ] as const
 ).map(([name, category, color], position) => ({ id: position + 1, name, category, position, color, color_hex: hexOf(color)!, icon: null }));
 
+export const projectStatusSeed: ProjectStatus[] = (
+  [
+    ['Planned', 'Planned', 'gray'], ['In progress', 'Started', 'amber'], ['Paused', 'Paused', 'orange'],
+    ['Done', 'Completed', 'indigo'], ['Cancelled', 'Cancelled', 'gray'],
+  ] as [string, ProjectStatusCategory, string][]
+).map(([name, category, color], position) => ({ id: position + 1, name, category, position, color, color_hex: hexOf(color)!, icon: null }));
+
 const project = (id: number, slug: string, name: string): Project =>
-  ({ id, slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null });
+  ({ id, slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null, status_id: 1, priority: 0, label_ids: [], properties: {} });
 const projects: Project[] = [
   project(1, 'website', 'Website relaunch'), project(2, 'mobile', 'Mobile app'), project(3, 'office', 'Office move'),
 ];
@@ -1201,9 +1275,9 @@ const milestones: Milestone[] = [
 ];
 
 const propertyDefs: PropertyDef[] = [
-  { key: 'area', name: 'Area', kind: 'Select', options: [{ value: 'home', color: '#4caf50' }, { value: 'work', color: '#2196f3' }], project_id: null, position: 0 },
-  { key: 'effort', name: 'Effort', kind: 'Number', options: [], project_id: null, position: 1 },
-  { key: 'review_on', name: 'Review on', kind: 'Date', options: [], project_id: null, position: 2 },
+  { key: 'area', name: 'Area', kind: 'Select', options: [{ value: 'home', color: '#4caf50' }, { value: 'work', color: '#2196f3' }], project_id: null, position: 0, applies_to: 'Issues' },
+  { key: 'effort', name: 'Effort', kind: 'Number', options: [], project_id: null, position: 1, applies_to: 'Issues' },
+  { key: 'review_on', name: 'Review on', kind: 'Date', options: [], project_id: null, position: 2, applies_to: 'Issues' },
 ];
 
 type Row = {

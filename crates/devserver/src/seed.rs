@@ -29,6 +29,7 @@ fn def(
             .collect(),
         project_id: None,
         position,
+        applies_to: taskapp_core::PropertyAppliesTo::Issues,
     }
 }
 

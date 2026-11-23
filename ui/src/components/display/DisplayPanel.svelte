@@ -22,7 +22,7 @@
   let dragFrom = $state<string | null>(null);
   let focused = $state<string | null>(null);
   onMount(async () => {
-    defs = await api.properties.listDefs();
+    defs = (await api.properties.listDefs()).filter((d) => d.applies_to !== 'Projects');
   });
 
   // The board draws its cards from card_fields when set; every other layout from columns.

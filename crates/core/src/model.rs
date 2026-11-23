@@ -13,6 +13,7 @@ macro_rules! ids {
 ids!(
     IssueId,
     StatusId,
+    ProjectStatusId,
     ProjectId,
     MilestoneId,
     CycleId,
@@ -225,6 +226,28 @@ pub struct Status {
     pub icon: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+pub enum ProjectStatusCategory {
+    Planned,
+    Started,
+    Paused,
+    Completed,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct ProjectStatus {
+    pub id: ProjectStatusId,
+    pub name: String,
+    pub category: ProjectStatusCategory,
+    pub position: i32,
+    /// A palette key.
+    pub color: String,
+    /// The reference hex for `color`, for showing it without the palette.
+    pub color_hex: String,
+    pub icon: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct Project {
     pub id: ProjectId,
@@ -237,6 +260,11 @@ pub struct Project {
     pub archived_at: Option<DateTime<Utc>>,
     pub icon: Option<String>,
     pub color: Option<String>,
+    pub status_id: ProjectStatusId,
+    /// The issue scale: 0 none, 1 urgent, 2 high, 3 medium, 4 low.
+    pub priority: u8,
+    pub label_ids: Vec<LabelId>,
+    pub properties: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -333,14 +361,26 @@ pub struct SelectOption {
     pub color: String,
 }
 
+/// Which entities a custom property applies to.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub enum PropertyAppliesTo {
+    #[default]
+    Issues,
+    Projects,
+    Both,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct PropertyDef {
     pub key: String,
     pub name: String,
     pub kind: PropertyKind,
     pub options: Vec<SelectOption>,
+    /// Limits the issue side to one project; never set for a projects-only property.
     pub project_id: Option<ProjectId>,
     pub position: i32,
+    #[serde(default)]
+    pub applies_to: PropertyAppliesTo,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]

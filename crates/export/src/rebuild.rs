@@ -11,8 +11,8 @@ use taskapp_core::{Db, Error, IssueId, Result, ViewDef, search};
 
 use crate::files::{
     CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow,
-    PinRow, ProjectFile, PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewFolderFile,
-    ViewTemplateFile, invalid, parse_issue, plain_dir, read_plain,
+    PinRow, ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow, ViewFile,
+    ViewFolderFile, ViewTemplateFile, invalid, parse_issue, plain_dir, read_plain,
 };
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -88,6 +88,7 @@ async fn wipe(tx: &mut Tx<'_>) -> Result<()> {
         "DELETE FROM issues",
         "DELETE FROM property_defs",
         "DELETE FROM milestones",
+        "DELETE FROM project_labels",
         "DELETE FROM projects",
         "DELETE FROM cycles",
         "DELETE FROM labels",
@@ -111,6 +112,7 @@ async fn restore_tables(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     restore_settings(tx, dir).await?;
     restore_statuses(tx, dir).await?;
     restore_labels(tx, dir).await?;
+    restore_project_statuses(tx, dir).await?;
     restore_relation_kinds(tx, dir).await?;
     restore_cycles(tx, dir).await?;
     restore_projects(tx, dir).await?;
@@ -251,6 +253,30 @@ async fn restore_statuses(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     Ok(())
 }
 
+async fn restore_project_statuses(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let statuses: Vec<ProjectStatusRow> = read_list(&dir.join("project_statuses.yaml"))?;
+    if statuses.is_empty() {
+        return Ok(());
+    }
+    // The export is the whole list, so it replaces the seeded one.
+    sqlx::query("DELETE FROM project_statuses")
+        .execute(&mut **tx)
+        .await?;
+    for s in statuses {
+        sqlx::query(
+            "INSERT INTO project_statuses (name, category, position, color, icon) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(s.name)
+        .bind(s.category)
+        .bind(s.position)
+        .bind(s.color)
+        .bind(s.icon)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
 async fn restore_labels(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let labels: Vec<LabelRow> = read_yaml(&dir.join("labels.yaml"))?;
     for l in labels {
@@ -306,7 +332,10 @@ async fn restore_projects(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         let p: ProjectFile = read_yaml(&path)?;
         let id = sqlx::query(
             "INSERT INTO projects (slug, name, description, doc_link, start_date, target_date,
-               archived_at, created_at, icon, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+               archived_at, created_at, icon, color, status_id, priority, properties)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               COALESCE((SELECT id FROM project_statuses WHERE name = ?),
+                        (SELECT id FROM project_statuses ORDER BY position, id LIMIT 1)), ?, ?)",
         )
         .bind(&p.slug)
         .bind(p.name)
@@ -318,9 +347,22 @@ async fn restore_projects(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         .bind(p.created_at)
         .bind(p.icon)
         .bind(p.color)
+        .bind(p.status)
+        .bind(p.priority)
+        .bind(Value::Object(p.properties).to_string())
         .execute(&mut **tx)
         .await?
         .last_insert_rowid();
+        for label in p.labels {
+            sqlx::query(
+                "INSERT INTO project_labels (project_id, label_id)
+                 VALUES (?, (SELECT id FROM labels WHERE name = ?))",
+            )
+            .bind(id)
+            .bind(label)
+            .execute(&mut **tx)
+            .await?;
+        }
         for m in p.milestones {
             sqlx::query("INSERT INTO milestones (project_id, name, target_date) VALUES (?, ?, ?)")
                 .bind(id)
@@ -337,8 +379,8 @@ async fn restore_properties(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let props: Vec<PropertyFile> = read_yaml(&dir.join("properties.yaml"))?;
     for p in props {
         sqlx::query(
-            "INSERT INTO property_defs (key, name, kind, options, project_id, position)
-             VALUES (?, ?, ?, ?, (SELECT id FROM projects WHERE slug = ?), ?)",
+            "INSERT INTO property_defs (key, name, kind, options, project_id, position, applies_to)
+             VALUES (?, ?, ?, ?, (SELECT id FROM projects WHERE slug = ?), ?, ?)",
         )
         .bind(p.key)
         .bind(p.name)
@@ -346,6 +388,7 @@ async fn restore_properties(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         .bind(p.options.to_string())
         .bind(p.project)
         .bind(p.position)
+        .bind(p.applies_to)
         .execute(&mut **tx)
         .await?;
     }

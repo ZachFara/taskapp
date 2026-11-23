@@ -58,3 +58,15 @@ describe('ProjectsPage', () => {
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('New project');
   });
 });
+
+describe('ProjectsPage fields', () => {
+  it('has status, priority and label columns and a project-scoped property column', async () => {
+    const mock = createMockApi(fixtures);
+    await mock.properties.createDef({ key: 'sponsor', name: 'Sponsor', kind: 'Text', options: [], project_id: null, position: 0, applies_to: 'Projects' });
+    const { target } = await open(mock);
+    await vi.waitFor(() => expect([...target.querySelectorAll('th')].map((h) => h.textContent)).toContain('Sponsor'));
+    const heads = [...target.querySelectorAll('thead th')].map((h) => h.textContent);
+    expect(heads.slice(0, 4)).toEqual(['Project', 'Status', 'Priority', 'Labels']);
+    expect(target.querySelector('tbody tr td:nth-child(2)')?.textContent).toContain('Planned');
+  });
+});
