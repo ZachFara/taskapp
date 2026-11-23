@@ -24,6 +24,7 @@ afterEach(() => {
   if (app) unmount(app);
   app = null;
   document.body.innerHTML = '';
+  localStorage.clear();
 });
 
 async function open() {
@@ -32,6 +33,22 @@ async function open() {
 }
 
 describe('Shell', () => {
+  it('sidebar_collapses_and_widths_are_remembered_per_device', async () => {
+    await open();
+    dispatchEvent(new CustomEvent('command:pane.sidebar.wider'));
+    await tick();
+    expect(localStorage.getItem('cairn.sidebarWidth')).toBe(String(232 + 16));
+    dispatchEvent(new CustomEvent('command:sidebar.toggle'));
+    await tick();
+    expect(document.querySelector<HTMLElement>('aside.sidebar')!.hidden).toBe(true);
+    expect(localStorage.getItem('cairn.sidebarCollapsed')).toBe('1');
+    dispatchEvent(new CustomEvent('command:pane.sidebar.reset'));
+    dispatchEvent(new CustomEvent('command:sidebar.toggle'));
+    await tick();
+    expect(localStorage.getItem('cairn.sidebarWidth')).toBeNull();
+    expect(document.querySelector<HTMLElement>('aside.sidebar')!.hidden).toBe(false);
+  });
+
   it('sync_error_shows_indicator', async () => {
     const api = createMockApi();
     api.sync.status = async () => ({ reminders: 'Off', gcal: { Error: { at: 'now', message: 'token expired' } }, export: 'Off' });
