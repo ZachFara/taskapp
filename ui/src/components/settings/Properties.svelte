@@ -153,6 +153,9 @@
 <style>
   .item { border-bottom: 1px solid var(--border); }
   .item .es-row { border-bottom: 0; }
+  /* Name, key, kind, applies-to and scope no longer fit one line: wrap instead of squeezing the names to nothing. */
+  .es-row, .es-add { flex-wrap: wrap; }
+  .es-name { min-width: 8rem; }
   .opts { display: grid; gap: var(--s-2); padding: var(--s-2) var(--s-4) var(--s-5) var(--s-10); border-left: 3px solid var(--band-2); margin-left: var(--s-5); }
   .opt { display: flex; align-items: center; gap: var(--s-4); max-width: 420px; }
   .opt-add :global(.field) { border-color: var(--control); background: var(--sheet); }
