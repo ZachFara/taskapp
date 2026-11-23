@@ -585,13 +585,6 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	viewsMove: (id: ViewId, folderId: ViewFolderId | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("views_move", { id, folderId }, options),
-	/**
-	 * Forwards to the command of the same name.
-	 * 
-	 * # Errors
-	 * As that command.
-	 */
 	foldersList: (options?: InvokeOptions) => __TAURI_INVOKE<ViewFolder[]>("folders_list", undefined, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -599,7 +592,14 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	foldersCreate: (name: string, options?: InvokeOptions) => __TAURI_INVOKE<ViewFolder>("folders_create", { name }, options),
+	foldersItems: (options?: InvokeOptions) => __TAURI_INVOKE<Placement[]>("folders_items", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	foldersCreate: (section: FolderSection, parentId: ViewFolderId | null, name: string, options?: InvokeOptions) => __TAURI_INVOKE<ViewFolder>("folders_create", { section, parentId, name }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -620,7 +620,14 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	foldersReorder: (ids: ViewFolderId[], options?: InvokeOptions) => __TAURI_INVOKE<null>("folders_reorder", { ids }, options),
+	foldersPlace: (id: ViewFolderId, parentId: ViewFolderId | null, index: number | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("folders_place", { id, parentId, index }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	foldersPlaceItem: (section: FolderSection, id: number, folderId: ViewFolderId | null, index: number | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("folders_place_item", { section, id, folderId, index }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -1019,6 +1026,9 @@ export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "P
 /**  Filter only: the issue has a relation of the given kind id(s), on either end. */
 "RelationKind";
 
+/**  The sidebar section a folder belongs to; its items live in the table of the same name. */
+export type FolderSection = "pin" | "view" | "project" | "cycle";
+
 /**
  *  Everything an import would create. The lists of statuses, labels, projects, cycles and property
  *  definitions hold only what does not exist yet.
@@ -1170,6 +1180,14 @@ export type Pin = {
 export type PinId = number;
 
 export type PinKind = "Issue" | "Project" | "View" | "Cycle" | "Note" | "Url";
+
+/**  Where one pin, view, project or cycle sits: the folder (`None` is the section's top level) and its place there. */
+export type Placement = {
+	section: FolderSection,
+	id: number,
+	folder_id: ViewFolderId | null,
+	position: number,
+};
 
 export type PlanCycle = {
 	name: string | null,
@@ -1447,11 +1465,13 @@ export type ViewDef = {
 	show_weekends?: boolean,
 };
 
-/**  A sidebar folder of views. */
+/**  A sidebar folder. It holds items of its own section and folders of that section, nested by `parent_id`. */
 export type ViewFolder = {
 	id: ViewFolderId,
 	name: string,
 	position: number,
+	section: FolderSection,
+	parent_id: ViewFolderId | null,
 };
 
 export type ViewFolderId = number;

@@ -226,7 +226,7 @@ async fn relation_kinds(db: &Db) -> Result<Vec<RelationKindRow>> {
 
 async fn cycles(db: &Db) -> Result<Vec<CycleRow>> {
     let rows = sqlx::query_as(
-        "SELECT number, name, start_date, end_date, icon, color FROM cycles ORDER BY number",
+        "SELECT number, name, start_date, end_date, icon, color, folder_id, position FROM cycles ORDER BY number",
     )
     .fetch_all(&db.pool)
     .await?;
@@ -293,10 +293,11 @@ async fn events(db: &Db, prefix: &str) -> Result<Vec<EventFile>> {
 }
 
 async fn pins(db: &Db) -> Result<Vec<PinRow>> {
-    let rows =
-        sqlx::query_as("SELECT kind, target, title, position FROM pins ORDER BY position, id")
-            .fetch_all(&db.pool)
-            .await?;
+    let rows = sqlx::query_as(
+        "SELECT kind, target, title, position, folder_id FROM pins ORDER BY position, id",
+    )
+    .fetch_all(&db.pool)
+    .await?;
     Ok(rows)
 }
 
@@ -358,14 +359,20 @@ async fn views(db: &Db) -> Result<Vec<ViewFile>> {
 }
 
 async fn view_folders(db: &Db) -> Result<Vec<ViewFolderFile>> {
-    let rows = sqlx::query_as::<_, (i64, String, i64)>(
-        "SELECT id, name, position FROM view_folders ORDER BY position, id",
+    let rows = sqlx::query_as::<_, (i64, String, i64, String, Option<i64>)>(
+        "SELECT id, name, position, section, parent_id FROM view_folders ORDER BY position, id",
     )
     .fetch_all(&db.pool)
     .await?;
     Ok(rows
         .into_iter()
-        .map(|(id, name, position)| ViewFolderFile { id, name, position })
+        .map(|(id, name, position, section, parent_id)| ViewFolderFile {
+            id,
+            name,
+            position,
+            section,
+            parent_id,
+        })
         .collect())
 }
 
@@ -434,7 +441,7 @@ async fn import_log(db: &Db) -> Result<Vec<ImportLogRow>> {
 async fn projects(db: &Db) -> Result<Vec<ProjectFile>> {
     let mut projects: Vec<ProjectFile> = sqlx::query_as(
         "SELECT p.slug, p.name, p.description, p.doc_link, p.start_date, p.target_date, p.archived_at,
-                p.created_at, p.icon, p.color, s.name AS status, p.priority
+                p.created_at, p.icon, p.color, s.name AS status, p.priority, p.folder_id, p.position
          FROM projects p JOIN project_statuses s ON s.id = p.status_id ORDER BY p.slug",
     )
     .fetch_all(&db.pool)

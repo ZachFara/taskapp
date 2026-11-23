@@ -113,6 +113,15 @@ pub struct CycleRow {
     pub icon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder_id: Option<i64>,
+    #[serde(default = "unplaced")]
+    pub position: i64,
+}
+
+/// The position a row has until it is placed by hand; an older export carries none.
+fn unplaced() -> i64 {
+    1_000_000
 }
 
 /// `events/<id>.yaml`. Times are local wall-clock text; `issues` are keys.
@@ -142,6 +151,8 @@ pub struct PinRow {
     pub target: String,
     pub title: Option<String>,
     pub position: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder_id: Option<i64>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
@@ -170,6 +181,10 @@ pub struct ProjectFile {
     pub status: Option<String>,
     #[serde(default)]
     pub priority: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder_id: Option<i64>,
+    #[serde(default = "unplaced")]
+    pub position: i64,
     #[sqlx(skip)]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub labels: Vec<String>,
@@ -220,6 +235,14 @@ pub struct ViewFolderFile {
     pub id: i64,
     pub name: String,
     pub position: i64,
+    #[serde(default = "views_section")]
+    pub section: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<i64>,
+}
+
+fn views_section() -> String {
+    "view".into()
 }
 
 /// One entry of `view_templates.yaml`. The id is kept because views point at it.

@@ -583,6 +583,10 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
         "INSERT INTO view_templates (id, name, definition, position, icon, color)
            VALUES (7, 'Board', '{\"filter\":null,\"sorts\":[],\"group_by\":null,\"layout\":\"Board\",\"columns\":[],\"include_archived\":false}', 0, 'icon:kanban', 'indigo')",
         "INSERT INTO view_folders (id, name, position) VALUES (3, 'Work', 0)",
+        "INSERT INTO view_folders (id, name, position, section, parent_id) VALUES (4, 'Inner', 1, 'project', NULL), (5, 'Deep', 2, 'project', 4)",
+        "UPDATE projects SET folder_id = 5, position = 2",
+        "UPDATE cycles SET folder_id = NULL, position = 3",
+        "UPDATE pins SET folder_id = 3",
         "UPDATE views SET icon = 'icon:star', color = 'yellow', template_id = 7, folder_id = 3 WHERE id = (SELECT min(id) FROM views)",
         "INSERT INTO issue_templates (name, slug, icon, color, body)
            VALUES ('Bug report', 'bug-report', 'icon:bug', 'red', '{\"title_prefix\":\"Bug: \",\"fields\":{\"priority\":2},\"sub_issues\":[]}')",
@@ -690,7 +694,14 @@ async fn pushed_and_cloned(db: &Db, root: &Path) -> Result<PathBuf, Box<dyn std:
 /// Leftovers a restore must clear: a label, a view folder, a project status and a project's label.
 async fn seed_stale(used: &Db) -> R {
     labels::create(used, "stale-label", "red", None, SRC).await?;
-    taskapp_core::view_folders::create(used, "stale-folder", SRC).await?;
+    taskapp_core::view_folders::create(
+        used,
+        taskapp_core::FolderSection::Pin,
+        None,
+        "stale-folder",
+        SRC,
+    )
+    .await?;
     settings::set(used, "estimation", &"points").await?;
     for sql in [
         "INSERT INTO project_statuses (name, category, position, color) VALUES ('Stale', 'paused', 9, 'red')",

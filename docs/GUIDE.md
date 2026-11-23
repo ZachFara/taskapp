@@ -177,12 +177,18 @@ saved automatically (after a short pause). Filter changes show an "Undo" toast.
 
 - **Make one.** Views page > New view, or the view menu > "New view..." (choose Blank, a copy of the current view, or
   a template), or "Save as new view" (copies the current one).
-- **Folders.** The sidebar's Views menu (the "..." beside the heading) or the command menu has "New folder"; name it
-  in the dialog. A folder is a row you click to collapse; which folders are collapsed is remembered on this device
-  only. Rename or delete a folder from its row actions: deleting only moves its views to the top level. Drag a view
-  onto a folder to move it in, or onto a view outside any folder to take it out; from the keyboard, open a view and
-  use the command "Move view to folder...". Drag a folder onto another to reorder. The Views page groups by folder
-  too. Each move is one undo step.
+- **Folders.** Every sidebar section (Pinned, Views, Projects, Cycles) can hold folders, and folders can sit inside
+  folders, up to three deep. Make one from the section's "..." menu, by right-clicking empty space in the section, from
+  a folder's menu ("New folder inside"), or from the command menu ("New folder", for the page you are on); name it in
+  the dialog. Click a folder to collapse it; which folders are collapsed is remembered on this device only. A folder
+  only holds items of its own section. Rename or delete from the folder's right-click menu; deleting moves what is in
+  it up one level, it never deletes the contents. Three ways to move something, each one undo step:
+  drag the row (press, move a few pixels, release; a ghost follows the pointer). Drop on a folder to put it inside
+  (hold over a collapsed folder and it opens); drop between rows to reorder, where the line shows the place; drop in
+  the "Move to top level" strip at the end of the section to take it out. Esc cancels the drag. Or right-click the row
+  and choose "Move to folder" (the folders are listed by depth, plus "Top level" and "New folder..."). Or open a view
+  or project and use the command menu's "Move to folder...". The Views, Projects and Cycles pages show the same
+  folders, nested and indented.
 - **Layouts.** Tabs in the header, or `v l` list, `v b` board, `v t` table, `v g` timeline, `v c` calendar.
 - **Filter.** "Add filter" (`f`) lists Status, Status category, Project, Label, Priority, Due and every custom property.
   Each filter is a chip: click it to change the operator and values; the x removes it. Operators: is, is not, is any

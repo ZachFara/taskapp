@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../lib/api';
-  import type { Label, Project, ProjectStatus, PropertyDef } from '../lib/bindings';
+  import type { Label, Placement, Project, ProjectStatus, PropertyDef, ViewFolder } from '../lib/bindings';
+  import { buildRows } from '../lib/folderTree';
+  import Icon from '../ui/Icon.svelte';
   import { arrange, glyphCategory, noFilters, type Group, type Sort } from '../lib/projectFields';
   import { PRIORITIES, priorityGlyph } from '../lib/priority';
   import Button from '../ui/Button.svelte';
@@ -30,6 +32,9 @@
   let name = $state('');
   let statuses = $state<ProjectStatus[]>([]);
   let labels = $state<Label[]>([]);
+  let folders = $state<ViewFolder[]>([]);
+  let places = $state<Placement[]>([]);
+  const filtered = $derived(group !== 'none' || fStatus !== '' || fPriority !== '' || fLabel !== '');
   let defs = $state<PropertyDef[]>([]);
   // The toolbar: what to show, in what order, grouped how. Select values are strings, '' meaning no filter.
   let sort = $state<Sort>('name');
@@ -54,7 +59,7 @@
     const list = await api.projects.list();
     const progress = await Promise.all(list.map((p) => api.projects.progress(p.id)));
     rows = list.map((p, i) => ({ ...p, done: progress[i][0], total: progress[i][1] }));
-    [statuses, labels, defs] = await Promise.all([api.project.statusesList(), api.labels.list(), api.properties.listDefs()]);
+    [statuses, labels, defs, folders, places] = await Promise.all([api.project.statusesList(), api.labels.list(), api.properties.listDefs(), api.folders.list(), api.folders.items()]);
     pinned = new Set((await api.pins.listResolved()).filter((r) => r.pin.kind === 'Project').map((r) => r.pin.target));
     loaded = true;
   }
@@ -114,10 +119,15 @@
               <span class="cell">{#if g.status}<StatusGlyph category={glyphCategory[g.status.category]} />{/if}{g.name}<span class="muted">{g.rows.length}</span></span>
             </th></tr>
           {/if}
-          {#each g.rows as p (p.id)}
+          <!-- Folders (nested) around the projects; the page's own sort orders the projects inside each. -->
+          {#each buildRows('project', folders, places, g.rows, { hideEmpty: filtered }) as r (r.type === 'folder' ? `f${r.folder.id}` : `p${r.item.id}`)}
+            {#if r.type === 'folder'}
+              <tr class="fold" data-folder-id={r.folder.id}><td colspan={7 + propCols.length} style:padding-left={`calc(var(--s-4) + ${r.depth} * var(--s-8))`}><span class="cell"><Icon name="folder" size={12} />{r.folder.name}<span class="muted">{r.count}</span></span></td></tr>
+            {:else}
+            {@const p = r.item}
             {@const st = statusOf(p)}
             <tr data-slug={p.slug} onclick={() => navigate(`/project/${p.slug}`)}>
-              <td>
+              <td style:padding-left={`calc(var(--s-4) + ${r.depth} * var(--s-8))`}>
                 <div role="presentation" onclick={(e) => e.stopPropagation()}>
                   <RowActions label={p.name} actions={rowActs({ kind: 'project', id: p.id, name: p.name }, pinned.has(p.slug))}>
                     <IconColorPicker label={`Icon and colour of ${p.name}`} value={{ icon: p.icon ?? 'icon:project', color: p.color }} onchange={(c) => patch({ kind: 'project', id: p.id, name: p.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `project:${p.id}`, (o) => (rowUi.picking = o ? `project:${p.id}` : null)} />
@@ -135,6 +145,7 @@
               {#each propCols as d (d.key)}<td class="muted">{shown(p.properties[d.key])}</td>{/each}
               <td class="num">{p.total}</td>
             </tr>
+            {/if}
           {/each}
         </tbody>
       {/each}
@@ -173,6 +184,7 @@
   .cell { display: inline-flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
   .group th { padding: var(--s-5) var(--s-4) var(--s-3); background: var(--band-1); color: var(--ink); font-size: var(--fs-md); }
   .group .muted { margin-left: var(--s-4); font-weight: 500; }
+  .fold td { color: var(--muted); font-weight: 600; background: var(--band-1); }
   .none { padding: var(--s-6) var(--s-4); }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .meter { display: block; width: 160px; height: 6px; border-radius: var(--r-round); background: var(--active); overflow: hidden; }
