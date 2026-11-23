@@ -94,10 +94,10 @@ Added by the owner on 2026-11-22 (later, not built):
   title stay), and order them; a field that is off disappears from the details panel, quick add, filters, display
   options, commands and the cheat sheet. Custom properties can already be added and removed; this covers the built-in
   ones. Today only points (through the estimation setting) can be switched off.
-- **More relation kinds, and custom ones.** Today an issue can relate to another only with the built-in kinds
-  (see `RelationKind` in crates/core/src/model.rs). Add more built-in kinds (for example "duplicates", "relates to",
-  "follows / precedes", "caused by") and let the workspace define its own named kinds with a forward and a reverse
-  label, shown on both issues, usable in filters, the command menu, import and export.
+- **More relation kinds, and custom ones.** Today there are three kinds: blocks (and blocked by), related, and
+  duplicate (`RelationKind` in crates/core/src/model.rs), plus parent and sub-issue. Add more built-in kinds (for
+  example "follows / precedes", "caused by", "part of") and let the workspace define its own named kinds with a
+  forward and a reverse label, shown on both issues, usable in filters, the command menu, import and export.
 - **Split the `test-ui` CI job.** It now runs about 1,100 unit tests, 365 contract cases against a built devserver and
   the Playwright walk tests in one job; consider separate unit, contract and walk jobs (the walk job's cold-start
   `page.goto` timed out twice and forced a rerun).
