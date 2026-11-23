@@ -82,6 +82,8 @@
     }
     return keep;
   });
+  // Per-column facts, worked out once rather than for every cell of every row.
+  const cells = $derived(fields.map((f) => ({ f, key: f.Property !== undefined ? `P:${f.Property}` : `F:${f.Fixed}`, right: rightAligned(f) })));
   const columns = $derived(`var(--s-8) var(--s-8) 64px var(--s-8) minmax(0, 1fr) ${fields.map(widthOf).join(' ')}`);
   let menu = $state<{ id: number; x: number; y: number } | null>(null);
   let menuOpen = $state(false);
@@ -166,7 +168,9 @@
   function ordered(rows: Issue[]): Item[] {
     if (subIssues(view.def) !== 'nest') return rows.map((row) => ({ row, depth: 0, kids: 0 }));
     const ids = new Set(rows.map((r) => r.id));
-    const kidsOf = (id: number) => rows.filter((r) => r.parent_id === id);
+    const byParent = new Map<number, Issue[]>();
+    for (const r of rows) if (r.parent_id !== null) byParent.set(r.parent_id, [...(byParent.get(r.parent_id) ?? []), r]);
+    const kidsOf = (id: number) => byParent.get(id) ?? [];
     const out: Item[] = [];
     const walk = (row: Issue, depth: number) => {
       const kids = kidsOf(row.id);
@@ -400,8 +404,8 @@
                 <span class="text">{i.title}</span>
               {/if}
             </span>
-            {#each fields as f (f.Property ?? f.Fixed)}
-              <span class="cell" data-field={f.Property !== undefined ? `P:${f.Property}` : `F:${f.Fixed}`} data-right={rightAligned(f) ? '' : undefined} data-overdue={f.Fixed === 'DueDate' && overdue(i) ? '' : undefined}>
+            {#each cells as { f, key, right } (key)}
+              <span class="cell" data-field={key} data-right={right ? '' : undefined} data-overdue={f.Fixed === 'DueDate' && overdue(i) ? '' : undefined}>
                 <FieldValue field={f} issue={i} {ctx} />
               </span>
             {/each}

@@ -1,6 +1,6 @@
 <script lang="ts">
   // One renderer for a displayed field, shared by every layout so a custom property looks the same everywhere.
-  import type { FieldRef, Issue, Value } from '../../lib/bindings';
+  import type { FieldRef, Issue, PropertyDef, Value } from '../../lib/bindings';
   import EntityIcon from '../../ui/EntityIcon.svelte';
   import Icon from '../../ui/Icon.svelte';
   import Pill from '../../ui/Pill.svelte';
@@ -16,27 +16,18 @@
 
   const day = (iso: string | null) => (iso ? dayText(iso.slice(0, 10)) : '');
   const estimate = (m: number | null) => (m === null ? '' : m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`);
-  const def = $derived(field.Property !== undefined ? ctx.defs.find((d) => d.key === field.Property) : undefined);
-  const raw = $derived<Value>(field.Property !== undefined ? (issue.properties[field.Property] ?? null) : null);
-  const optColor = (v: Value) => paletteKey(def?.options.find((o) => o.value === v)?.color);
-  const stat = $derived(ctx.stats.get(issue.id));
-  const milestone = $derived(ctx.milestones.find((m) => m.id === issue.milestone_id));
-  const parent = $derived(issue.parent_id === null ? undefined : issues.find((i) => i.id === issue.parent_id));
-  const status = $derived(ctx.statuses.find((s) => s.id === issue.status_id));
-  const project = $derived(ctx.projects.find((p) => p.id === issue.project_id));
-  const cycle = $derived(ctx.cycles.find((c) => c.id === issue.cycle_id));
-  const labels = $derived(issue.label_ids.flatMap((id) => ctx.labels.find((l) => l.id === id) ?? []));
-  const due = $derived(dueDay(issue, ctx.tz));
-  const level = $derived(priorityGlyph(issue.priority));
+  const optColor = (def: PropertyDef | undefined, v: Value) => paletteKey(def?.options.find((o) => o.value === v)?.color);
 </script>
 
 {#if field.Property !== undefined}
+  {@const def = ctx.defs.find((d) => d.key === field.Property)}
+  {@const raw = (issue.properties[field.Property] ?? null) as Value}
   {#if raw === null || raw === ''}
     <span class="none"></span>
   {:else if def?.kind === 'Select'}
-    <Pill color={optColor(raw)}>{raw}</Pill>
+    <Pill color={optColor(def, raw)}>{raw}</Pill>
   {:else if def?.kind === 'MultiSelect' && Array.isArray(raw)}
-    <span class="chips">{#each raw as v (String(v))}<Pill color={optColor(v)}>{v}</Pill>{/each}</span>
+    <span class="chips">{#each raw as v (String(v))}<Pill color={optColor(def, v)}>{v}</Pill>{/each}</span>
   {:else if def?.kind === 'Checkbox'}
     <span class="check" role="img" aria-label={raw ? 'Yes' : 'No'}>{#if raw}<Icon name="check" size={14} />{/if}</span>
   {:else if def?.kind === 'Url'}
@@ -53,29 +44,40 @@
 {:else if field.Fixed === 'Key'}
   <span class="text muted">{issue.key}</span>
 {:else if field.Fixed === 'Priority'}
+  {@const level = priorityGlyph(issue.priority)}
   <PriorityGlyph {level} size={14} />
 {:else if field.Fixed === 'Status'}
+  {@const status = ctx.statuses.find((s) => s.id === issue.status_id)}
   <span class="with"><StatusGlyph category={status?.category ?? 'Backlog'} label={status?.name ?? 'Unknown'} /><span class="text">{status?.name}</span></span>
 {:else if field.Fixed === 'Label'}
+  {@const labels = issue.label_ids.flatMap((id) => ctx.labels.find((l) => l.id === id) ?? [])}
   <span class="chips">
     {#each labels.slice(0, 2) as l (l.id)}<Pill color={l.color}>{l.name}</Pill>{/each}
     {#if labels.length > 2}<span class="muted">+{labels.length - 2}</span>{/if}
   </span>
 {:else if field.Fixed === 'Project'}
+  {@const project = ctx.projects.find((p) => p.id === issue.project_id)}
   {#if project}<span class="with"><EntityIcon icon={project.icon ?? 'icon:project'} color={project.color} size={14} /><span class="text">{project.name}</span></span>{/if}
 {:else if field.Fixed === 'Cycle'}
+  {@const cycle = ctx.cycles.find((c) => c.id === issue.cycle_id)}
   {#if cycle}<span class="text muted">{cycle.name ?? `Cycle ${cycle.number}`}</span>{/if}
 {:else if field.Fixed === 'Milestone'}
+  {@const milestone = ctx.milestones.find((m) => m.id === issue.milestone_id)}
   {#if milestone}<span class="text muted">{milestone.name}</span>{/if}
 {:else if field.Fixed === 'Parent'}
+  {@const parent = issue.parent_id === null ? undefined : issues.find((i) => i.id === issue.parent_id)}
   {#if parent}<span class="text muted">{parent.key}</span>{/if}
 {:else if field.Fixed === 'SubIssueProgress'}
+  {@const stat = ctx.stats.get(issue.id)}
   {#if stat && stat.sub_total > 0}<span class="num muted">{stat.sub_done}/{stat.sub_total}</span>{/if}
 {:else if field.Fixed === 'RelationCount'}
+  {@const stat = ctx.stats.get(issue.id)}
   <span class="num muted">{stat?.relations ?? 0}</span>
 {:else if field.Fixed === 'CommentCount'}
+  {@const stat = ctx.stats.get(issue.id)}
   <span class="num muted">{stat?.comments ?? 0}</span>
 {:else if field.Fixed === 'DueDate'}
+  {@const due = dueDay(issue, ctx.tz)}
   {#if due}<span class="num">{dayText(due)}</span>{/if}
 {:else if field.Fixed === 'StartDate'}
   <span class="num">{day(issue.start_date)}</span>
