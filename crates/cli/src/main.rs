@@ -42,6 +42,8 @@ enum Cmd {
     #[command(subcommand)]
     Cycle(CycleCmd),
     #[command(subcommand)]
+    Event(EventCmd),
+    #[command(subcommand)]
     Label(LabelCmd),
     #[command(subcommand)]
     Comment(CommentCmd),
@@ -327,6 +329,41 @@ enum CycleCmd {
         /// icon:<id> or emoji:<emoji>.
         #[arg(long)]
         icon: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum EventCmd {
+    /// Events overlapping a date range.
+    List {
+        /// YYYY-MM-DD.
+        #[arg(long)]
+        from: Option<String>,
+        /// YYYY-MM-DD.
+        #[arg(long)]
+        to: Option<String>,
+    },
+    Create {
+        title: String,
+        /// Local time, YYYY-MM-DDTHH:MM or YYYY-MM-DD.
+        #[arg(long)]
+        start: String,
+        /// Local time, same form as --start.
+        #[arg(long)]
+        end: Option<String>,
+        #[arg(long)]
+        all_day: bool,
+        #[arg(long)]
+        place: Option<String>,
+        #[arg(long)]
+        notes: Option<String>,
+    },
+    /// Link an event to an issue.
+    Link {
+        /// Event id.
+        id: i64,
+        /// Issue key.
+        key: String,
     },
 }
 

@@ -523,6 +523,7 @@ async fn dump(
         "pins",
         "import_log",
         "relation_kinds",
+        "events",
     ] {
         let cols: Vec<String> = sqlx::query_scalar(
             "SELECT name FROM pragma_table_info(?1) WHERE (name != 'id' OR ?1 = 'view_templates')
@@ -573,6 +574,9 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
            VALUES ('Bug report', 'bug-report', 'icon:bug', 'red', '{\"title_prefix\":\"Bug: \",\"fields\":{\"priority\":2},\"sub_issues\":[]}')",
         "INSERT INTO import_log (external_id, source, issue_id, imported_at)
            VALUES ('row-1', 'csv', (SELECT id FROM issues WHERE number = 1), '2026-01-02T03:04:05Z')",
+        "INSERT INTO events (id, title, starts_at, ends_at, all_day, place, notes, icon, color)
+           VALUES (4, 'Offsite', '2026-12-10 09:00:00', '2026-12-11 17:00:00', 0, 'Lisbon', 'Bring slides', 'icon:flag', 'teal')",
+        "INSERT INTO event_issues (event_id, issue_id) VALUES (4, (SELECT id FROM issues WHERE number = 1))",
     ] {
         sqlx::query(sql).execute(&db.pool).await?;
     }
@@ -583,6 +587,12 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
     for (table, rows) in &want {
         assert_eq!(&got[table], rows, "table {table}");
     }
+    let linked = sqlx::query_scalar::<_, i64>(
+        "SELECT i.number FROM event_issues e JOIN issues i ON i.id = e.issue_id WHERE e.event_id = 4",
+    )
+    .fetch_all(&rebuilt.pool)
+    .await?;
+    assert_eq!(linked, vec![1]);
     Ok(())
 }
 

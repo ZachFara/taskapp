@@ -185,6 +185,10 @@
     {/if}
   </section>
 
+  <ul class="top">
+    <li>{@render navLink('/events', 'calendar', 'Events', 'nav.events', route === '/events' || route.startsWith('/event/'))}</li>
+  </ul>
+
   <ul class="bottom">
     <li>{@render navLink('/settings/general', 'settings', 'Settings', 'nav.settings', route.startsWith('/settings'))}</li>
   </ul>

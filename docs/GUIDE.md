@@ -7,7 +7,7 @@ registry (`ui/src/lib/commands/defs/**`); `ui/src/lib/commands/guide.test.ts` ke
 
 Contents: [What it is](#what-cairn-is) - [First run](#first-run) - [The screen](#the-screen) - [Issues](#issues) -
 [Selection and bulk edit](#selection-and-bulk-edit) - [Undo and redo](#undo-and-redo) - [Views](#views) -
-[Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) -
+[Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) - [Events](#events) -
 [Points and insights](#points-and-insights) - [Custom properties](#custom-properties) -
 [Statuses, labels, icons, colours](#statuses-labels-icons-and-colours) - [Templates](#issue-templates) -
 [Import, export, backups](#import-export-and-backups) - [Reminders and Google Calendar](#reminders-and-google-calendar) -
@@ -238,6 +238,23 @@ saved automatically (after a short pause). Filter changes show an "Undo" toast.
   to the next cycle. Set an issue's cycle with `shift+c`.
 - **Pins.** Pin issues, projects, views and cycles (CLI also notes and URLs). The Pinned page lists them; `g h`.
 
+## Events
+
+An event is a dated thing (a meeting, a launch, a deadline day) that many issues can be linked to, and one issue can
+belong to many events. Times are wall-clock times with no zone.
+
+- **Events page** (sidebar "Events", `g e`): upcoming events grouped by day, with past ones behind a "Past" toggle.
+  "New event" (or the command) asks for title, date, optional end date, all day or a from and to time, place and notes.
+- **An event** (click it, `/event/<id>`): details, Edit, Delete (undoable), and the linked issues with "Link an issue"
+  (search by text) and a remove button on each.
+- **On an issue**: the Events section lists its events, with "Add to event" and a remove button on each.
+- **Calendar layout**: events show as their own chip (calendar icon, accent edge); click one to open it. They are not
+  dragged from the calendar and do not follow the view's filter.
+- Undo covers create, edit, delete, link and unlink. The export writes one `events/<id>.yaml` per event and a rebuild
+  restores it with its links.
+- CLI: `event list`, `event create`, `event link`. MCP: `list_events`, `create_event`, `link_event`.
+- Not built: writing events to Google Calendar, recurrence, reminders, and searching events.
+
 ## Points and insights
 
 - **Estimation setting** (Settings > General): None, Points, Time or Both. Points show only for Points or Both; time
@@ -406,6 +423,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.pinned` | Go to Pinned | `g h` | Go to Pinned. |
 | `nav.projects` | Go to Projects | `g p` | Go to the project list. |
 | `nav.cycles` | Go to Cycles | `g c` | Go to Cycles. |
+| `nav.events` | Go to Events | `g e` | Go to Events. |
 | `nav.views` | Go to Views | `g v` | Go to Views. |
 | `nav.timeline` | Go to Timeline | `g t` | Go to the all-projects timeline. |
 | `nav.settings` | Go to Settings | `g s` | Go to Settings. |
@@ -584,7 +602,7 @@ These are handled by the dialogs themselves, not the command registry, so they a
 
 Binary `taskapp` (build: `cargo build -p taskapp-cli`; or `cargo run -p taskapp-cli -- <args>`). Global options:
 `--db <path>` (default: the app's database) and `--json` (JSON instead of a table). `taskapp --help` and
-`taskapp <command> --help` print the full list. Every write is one undoable step with source Cli. There are 45
+`taskapp <command> --help` print the full list. Every write is one undoable step with source Cli. There are 48
 subcommands; keys are issue keys such as `ABC-1`, ids are numbers.
 
 | Command | What it does | Example |
@@ -594,6 +612,9 @@ subcommands; keys are issue keys such as `ABC-1`, ids are numbers.
 | `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points`. | `taskapp issue update ABC-1 --status 3` |
 | `issue get <key>` | Show one issue. | `taskapp issue get ABC-1` |
 | `issue archive <key>` | Archive an issue. | `taskapp issue archive ABC-1` |
+| `event list [--from --to]` | Events overlapping a date range. | `taskapp event list --from 2026-12-01` |
+| `event create <title> --start T [--end T --all-day --place --notes]` | Create an event (`T` is `YYYY-MM-DDTHH:MM` or a date). | `taskapp event create Demo --start 2026-12-10T09:30` |
+| `event link <id> <key>` | Link an event to an issue. | `taskapp event link 1 ABC-1` |
 | `issue search <text> [--limit 20]` | Full-text search (archived issues are left out). | `taskapp issue search rent` |
 | `view query [--def JSON \| --id N]` | Run an ad hoc view definition or a saved view. | `taskapp view query --id 1` |
 | `view templates` | List view templates. | `taskapp view templates` |
@@ -630,7 +651,7 @@ The CLI has no command for statuses, milestones, settings or unarchiving; use th
 ## MCP tools reference
 
 Server `taskapp-mcp` over stdio (`taskapp-mcp [--db <path>]`). Writes use source Agent, or Migration when a call passes
-`migration: true`. Unknown argument names are refused. Only `import_linear_plan` uses the network. 51 tools:
+`migration: true`. Unknown argument names are refused. Only `import_linear_plan` uses the network. 54 tools:
 
 | Tool | What it does (key arguments) |
 |---|---|
@@ -640,6 +661,9 @@ Server `taskapp-mcp` over stdio (`taskapp-mcp [--db <path>]`). Writes use source
 | `create_issue` | Create. Fields of NewIssue (`title` required; `due` as `{"Date":"2026-01-10"}`; `properties`; `created_at`, `completed_at`). |
 | `update_issue` | Change an issue. `key`, `patch` (null clears a nullable field). |
 | `archive_issue` | Archive. `key`. |
+| `list_events` | Events overlapping a range. `from`, `to` (dates, optional). |
+| `create_event` | Create an event. `title`, `starts_at` (`2026-12-10T09:30:00`), `ends_at`, `all_day`, `place`, `notes`, `icon`, `color`. |
+| `link_event` | Link an event to an issue. `id` (event), `key` (issue). |
 | `bulk_update` | Many patches. `items` = list of `{key, patch}`; over 10 snapshots first; an unknown key applies nothing. |
 | `add_comment` | `key`, `body`, `created_at`. |
 | `add_relation` / `remove_relation` | `from_key`, `to_key`, `kind` (an id or name, as in the CLI). |

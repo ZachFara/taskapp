@@ -1,6 +1,6 @@
 //! Every type shared across crates. Ids and enums derive `Copy`/`Eq`/`Hash` where cheap, for use as map keys.
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 
@@ -22,7 +22,8 @@ ids!(
     CommentId,
     WorkBlockId,
     PinId,
-    TemplateId
+    TemplateId,
+    EventId
 );
 
 /// A patch field that can also be cleared: absent is `None`, set to null is `Some(None)`.
@@ -254,6 +255,36 @@ pub struct Cycle {
     pub end_date: NaiveDate,
     pub icon: Option<String>,
     pub color: Option<String>,
+}
+
+/// Times are local wall-clock (no zone); an all-day event keeps midnight and the UI ignores the time.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct Event {
+    pub id: EventId,
+    pub title: String,
+    pub starts_at: NaiveDateTime,
+    pub ends_at: Option<NaiveDateTime>,
+    pub all_day: bool,
+    pub place: Option<String>,
+    pub notes: String,
+    pub icon: Option<String>,
+    pub color: Option<String>,
+    pub archived: bool,
+    pub issue_ids: Vec<IssueId>,
+}
+
+/// What create and update take: everything on [`Event`] except the id and the links.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct EventInput {
+    pub title: String,
+    pub starts_at: NaiveDateTime,
+    pub ends_at: Option<NaiveDateTime>,
+    pub all_day: bool,
+    pub place: Option<String>,
+    pub notes: String,
+    pub icon: Option<String>,
+    pub color: Option<String>,
+    pub archived: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]

@@ -7,9 +7,9 @@ use sqlx::FromRow;
 use taskapp_core::{Db, Result, settings};
 
 use crate::files::{
-    CommentText, CycleRow, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow, MilestoneRow,
-    PinRow, ProjectFile, PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewTemplateFile,
-    invalid, key, render_issue, safe_name,
+    CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow,
+    MilestoneRow, PinRow, ProjectFile, PropertyFile, RelationKindRow, StatusRow, ViewFile,
+    ViewTemplateFile, invalid, key, render_issue, safe_name,
 };
 
 pub struct ExportStats {
@@ -19,7 +19,7 @@ pub struct ExportStats {
 }
 
 /// Directories whose files come from the database alone, so a file not in the snapshot is stale.
-const MANAGED_DIRS: [&str; 2] = ["issues", "projects"];
+const MANAGED_DIRS: [&str; 3] = ["issues", "projects", "events"];
 
 /// Writes the whole export under `dir`, touching only files whose content changed.
 ///
@@ -79,10 +79,6 @@ async fn render(db: &Db) -> Result<BTreeMap<String, String>> {
     files.insert("settings.yaml".to_string(), yaml(&settings_map(db).await?)?);
     files.insert("statuses.yaml".to_string(), yaml(&statuses(db).await?)?);
     files.insert("labels.yaml".to_string(), yaml(&labels(db).await?)?);
-    files.insert(
-        "relation_kinds.yaml".to_string(),
-        yaml(&relation_kinds(db).await?)?,
-    );
     files.insert("cycles.yaml".to_string(), yaml(&cycles(db).await?)?);
     files.insert("properties.yaml".to_string(), yaml(&properties(db).await?)?);
     files.insert("views.yaml".to_string(), yaml(&views(db).await?)?);
@@ -92,6 +88,7 @@ async fn render(db: &Db) -> Result<BTreeMap<String, String>> {
         let rel = format!("projects/{}.yaml", safe_name(&project.slug)?);
         files.insert(rel, yaml(&project)?);
     }
+    event_files(db, &prefix, &mut files).await?;
     for (key, text) in issue_files(db, &prefix).await? {
         files.insert(format!("issues/{key}.md"), text);
     }
@@ -104,6 +101,10 @@ async fn template_files(db: &Db, files: &mut BTreeMap<String, String>) -> Result
     let issue_templates = yaml(&issue_templates(db).await?)?;
     files.insert("issue_templates.yaml".to_string(), issue_templates);
     files.insert("import_log.yaml".to_string(), yaml(&import_log(db).await?)?);
+    files.insert(
+        "relation_kinds.yaml".to_string(),
+        yaml(&relation_kinds(db).await?)?,
+    );
     Ok(())
 }
 
@@ -169,6 +170,65 @@ async fn cycles(db: &Db) -> Result<Vec<CycleRow>> {
     .fetch_all(&db.pool)
     .await?;
     Ok(rows)
+}
+
+async fn event_files(db: &Db, prefix: &str, files: &mut BTreeMap<String, String>) -> Result<()> {
+    for event in events(db, prefix).await? {
+        files.insert(format!("events/{}.yaml", event.id), yaml(&event)?);
+    }
+    Ok(())
+}
+
+async fn events(db: &Db, prefix: &str) -> Result<Vec<EventFile>> {
+    type Row = (
+        i64,
+        String,
+        String,
+        Option<String>,
+        bool,
+        Option<String>,
+        String,
+        Option<String>,
+        Option<String>,
+        bool,
+        String,
+        String,
+    );
+    let rows = sqlx::query_as::<_, Row>(
+        "SELECT id, title, starts_at, ends_at, all_day, place, notes, icon, color, archived,
+                created_at, updated_at FROM events ORDER BY id",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    let mut links = group(
+        sqlx::query_as::<_, (i64, i64)>(
+            "SELECT e.event_id, i.number FROM event_issues e JOIN issues i ON i.id = e.issue_id
+             ORDER BY i.number",
+        )
+        .fetch_all(&db.pool)
+        .await?
+        .into_iter()
+        .map(|(event, number)| (event, key(prefix, number)))
+        .collect(),
+    );
+    Ok(rows
+        .into_iter()
+        .map(|r| EventFile {
+            issues: links.remove(&r.0).unwrap_or_default(),
+            id: r.0,
+            title: r.1,
+            starts_at: r.2,
+            ends_at: r.3,
+            all_day: r.4,
+            place: r.5,
+            notes: r.6,
+            icon: r.7,
+            color: r.8,
+            archived: r.9,
+            created_at: r.10,
+            updated_at: r.11,
+        })
+        .collect())
 }
 
 async fn pins(db: &Db) -> Result<Vec<PinRow>> {

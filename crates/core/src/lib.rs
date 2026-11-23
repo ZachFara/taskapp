@@ -10,6 +10,7 @@ pub mod blocks;
 pub mod bulk;
 pub mod comments;
 pub mod cycles;
+pub mod events;
 pub mod history;
 pub mod import;
 pub mod insights;

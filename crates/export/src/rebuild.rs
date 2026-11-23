@@ -10,9 +10,9 @@ use sqlx::{Sqlite, Transaction};
 use taskapp_core::{Db, Error, IssueId, Result, ViewDef, search};
 
 use crate::files::{
-    CommentText, CycleRow, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow, PinRow,
-    ProjectFile, PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewTemplateFile, invalid,
-    parse_issue,
+    CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow,
+    PinRow, ProjectFile, PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewTemplateFile,
+    invalid, parse_issue,
 };
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -69,7 +69,44 @@ async fn restore_issues(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     for (number, front, _, comments) in &issues {
         link_issue(tx, &prefix, *number, front, comments).await?;
     }
+    restore_events(tx, dir, &prefix).await?;
     restore_import_log(tx, dir).await
+}
+
+/// After the issues, so the links can name them.
+async fn restore_events(tx: &mut Tx<'_>, dir: &Path, prefix: &str) -> Result<()> {
+    for path in files_in(dir, "events", "yaml")? {
+        let e: EventFile = read_yaml(&path)?;
+        sqlx::query(
+            "INSERT INTO events (id, title, starts_at, ends_at, all_day, place, notes, icon, color,
+               archived, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(e.id)
+        .bind(e.title)
+        .bind(e.starts_at)
+        .bind(e.ends_at)
+        .bind(e.all_day)
+        .bind(e.place)
+        .bind(e.notes)
+        .bind(e.icon)
+        .bind(e.color)
+        .bind(e.archived)
+        .bind(e.created_at)
+        .bind(e.updated_at)
+        .execute(&mut **tx)
+        .await?;
+        for key in &e.issues {
+            sqlx::query(
+                "INSERT INTO event_issues (event_id, issue_id)
+                 VALUES (?, (SELECT id FROM issues WHERE number = ?))",
+            )
+            .bind(e.id)
+            .bind(number_of(prefix, key)?)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+    Ok(())
 }
 
 fn read_yaml<T: DeserializeOwned>(path: &Path) -> Result<T> {

@@ -7,10 +7,10 @@ use rmcp::model::Tool;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Map, Value, json};
 use taskapp_core::{
-    ChangeSource, Db, Issue, IssuePatch, NewIssue, PinKind, Project, PropertyDef, PropertyKind,
-    Relation, RelationKind, SelectOption, StatusCategory, TemplateInput, ViewDef, backup, comments,
-    cycles, history, import, insights, issues, labels, pins, projects, properties, relations,
-    search, statuses, templates, undo, view_templates, views, workspace,
+    ChangeSource, Db, EventInput, Issue, IssuePatch, NewIssue, PinKind, Project, PropertyDef,
+    PropertyKind, Relation, RelationKind, SelectOption, StatusCategory, TemplateInput, ViewDef,
+    backup, comments, cycles, events, history, import, insights, issues, labels, pins, projects,
+    properties, relations, search, statuses, templates, undo, view_templates, views, workspace,
 };
 
 type Res<T> = Result<T, String>;
@@ -109,6 +109,21 @@ const TOOLS: &[Row] = &[
         "create_cycle",
         "Create a cycle. Args: start_date, end_date, name, icon, color (optional).",
         &["start_date", "end_date"],
+    ),
+    (
+        "list_events",
+        "List events overlapping a date range, oldest first. Args: from, to (dates, both optional).",
+        &[],
+    ),
+    (
+        "create_event",
+        "Create an event in local time. Args: title, starts_at (2026-01-10T09:00:00), ends_at, all_day, place, notes, icon, color (optional except title and starts_at).",
+        &["title", "starts_at"],
+    ),
+    (
+        "link_event",
+        "Link an event to an issue. Args: id (event id), key (issue key).",
+        &["id", "key"],
     ),
     ("list_labels", "List labels.", &[]),
     (
@@ -257,6 +272,7 @@ fn ce(e: &taskapp_core::Error) -> String {
 
 /// Every argument name a tool reads. A name outside this list is a typo, so the call is refused.
 const ARG_NAMES: &[&str] = &[
+    "all_day",
     "body",
     "category",
     "color",
@@ -266,6 +282,7 @@ const ARG_NAMES: &[&str] = &[
     "description",
     "doc_link",
     "end_date",
+    "ends_at",
     "from",
     "icon",
     "id",
@@ -278,10 +295,12 @@ const ARG_NAMES: &[&str] = &[
     "migration",
     "name",
     "new_name",
+    "notes",
     "options",
     "overrides",
     "patch",
     "periods",
+    "place",
     "plan",
     "points",
     "project_id",
@@ -289,6 +308,7 @@ const ARG_NAMES: &[&str] = &[
     "scope",
     "slug",
     "start_date",
+    "starts_at",
     "target",
     "target_date",
     "template_id",
@@ -395,6 +415,7 @@ impl Server {
                 self.import_tool(name, args).await
             }
             "workspace_status" | "workspace_setup" => self.workspace_tool(name, args).await,
+            "list_events" | "create_event" | "link_event" => self.event_tool(name, args).await,
             _ => self.org_tool(name, args).await,
         }
     }
@@ -715,6 +736,35 @@ impl Server {
             )
             .await
             .map_err(|e| ce(&e))?),
+        }
+    }
+
+    async fn event_tool(&self, name: &str, a: &Value) -> Res<Value> {
+        let (db, s) = (&self.db, src(a));
+        match name {
+            "list_events" => ok(&events::list(db, opt(a, "from")?, opt(a, "to")?)
+                .await
+                .map_err(|e| ce(&e))?),
+            "create_event" => {
+                let input = EventInput {
+                    title: arg(a, "title")?,
+                    starts_at: arg(a, "starts_at")?,
+                    ends_at: opt(a, "ends_at")?,
+                    all_day: opt(a, "all_day")?.unwrap_or(false),
+                    place: opt(a, "place")?,
+                    notes: opt(a, "notes")?.unwrap_or_default(),
+                    icon: opt(a, "icon")?,
+                    color: opt(a, "color")?,
+                    archived: false,
+                };
+                ok(&events::create(db, input, s).await.map_err(|e| ce(&e))?)
+            }
+            _ => {
+                let issue = self.issue_by_key(a, "key").await?;
+                let done = events::link(db, arg(a, "id")?, issue.id, s).await;
+                done.map_err(|e| ce(&e))?;
+                Ok(json!({ "ok": true }))
+            }
         }
     }
 
