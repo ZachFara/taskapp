@@ -61,14 +61,27 @@ h1, h2, h3, h4, h5, h6, p { margin: 0; }
 
 * { scrollbar-width: thin; scrollbar-color: var(--control) transparent; }
 
+/* Reduced motion switches animation off unless the user picked an animation speed (data-motion-set, motion.svelte.ts). */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  :root:not([data-motion-set]) *, :root:not([data-motion-set]) *::before, :root:not([data-motion-set]) *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
 }
+
+/* Entering motion, shared by every layer (menus, popovers, tooltips, dialogs, toasts, the issue panel). Each
+   layer's durations come from --dur-2 or --dur-3; a layer that opens from a side sets --cx-dx / --cx-dy. */
+@keyframes cx-fade { from { opacity: 0; } }
+@keyframes cx-in { from { opacity: 0; transform: translate(var(--cx-dx, 0px), var(--cx-dy, -4px)) scale(0.98); } }
+@keyframes cx-in-centred { from { opacity: 0; transform: translate(-50%, -4px) scale(0.98); } }
+@keyframes cx-toast-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes cx-panel-in { from { opacity: 0; transform: translateX(12px); } }
+.cx-surface, .cx-tip { animation: cx-in var(--dur-2) var(--ease); }
+.cx-surface[data-side='top'], .cx-tip[data-side='top'] { --cx-dy: 4px; }
+.cx-surface[data-side='left'], .cx-tip[data-side='left'] { --cx-dx: 4px; --cx-dy: 0px; }
+.cx-surface[data-side='right'], .cx-tip[data-side='right'] { --cx-dx: -4px; --cx-dy: 0px; }
 
 /* Bare URLs in rendered markdown (components/detail/markdown.ts) */
 .md a.chip { display: inline-flex; align-items: center; gap: var(--s-2); max-width: 100%; padding: 0 var(--s-2); border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--raised); color: var(--ink); text-decoration: none; vertical-align: baseline; }

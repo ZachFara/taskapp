@@ -14,6 +14,7 @@
   import Splitter from './Splitter.svelte';
   import { clampWidth, readFlag, readWidth, writeFlag, writeWidth } from '../lib/paneSize';
   import '../lib/interfaceSize.svelte'; // applies the saved interface size before the first paint
+  import '../lib/motion.svelte'; // applies the saved animation speed before the first paint
 
   // The frame: sidebar and top bar are one field, the page is a sheet set into it, the issue panel docks inside the sheet.
   let {
@@ -43,6 +44,10 @@
   const sideWidth = () => sideW ?? (parseFloat(getComputedStyle(side).getPropertyValue('--sidebar-w')) || SIDE.def);
   let sheet: HTMLElement;
   let panelEl: HTMLElement;
+  // The panel slides in when opened after first paint; a page that opens with it shows it at once.
+  let settled = $state(false);
+  onMount(() => (settled = true));
+  const slideIn = (node: HTMLElement) => { if (settled) node.classList.add('enter'); };
   // The panel may take 70% of the sheet at most, so the list keeps room.
   const clampSide = (w: number) => clampWidth(w, SIDE.min, SIDE.max);
   const clampPanel = (w: number) => clampWidth(w, PANEL.min, sheet.clientWidth * 0.7);
@@ -142,7 +147,7 @@
       </footer>
     </div>
     {#if panelOpen}
-      <aside class="panel" bind:this={panelEl} style:--panel-w={panelW === null ? null : `${panelW}px`}>
+      <aside class="panel" use:slideIn bind:this={panelEl} style:--panel-w={panelW === null ? null : `${panelW}px`}>
         <div class="edge panel-edge">
           <Splitter label="Resize panel" clamp={clampPanel} fromPointer={(x) => (sheet.getBoundingClientRect().right - x) / zoom()} onchange={setPanel} onreset={() => setPanel(null)} />
         </div>
@@ -190,6 +195,8 @@
   .dot { width: var(--s-4); height: var(--s-4); border-radius: var(--r-round); background: var(--positive); }
   .dot.error { background: var(--signal); }
   .panel { position: relative; flex: none; width: var(--panel-w); min-height: 0; display: flex; flex-direction: column; background: var(--raised); border-left: 1px solid var(--border); overflow: hidden; }
+  /* A transform, not a width: the list beside it keeps its layout while the panel arrives. */
+  .panel.enter { animation: cx-panel-in var(--dur-3) var(--ease); }
   /* Narrow window: the panel floats over the sheet so the list keeps its width. */
   @media (max-width: 1100px) {
     .panel { position: absolute; top: 0; right: 0; bottom: 0; z-index: var(--z-sticky); box-shadow: var(--shadow-float); }

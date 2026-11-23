@@ -152,6 +152,13 @@ describe('walk', { timeout: 20_000 }, () => {
     await pw(panel).toHaveCount(0);
   });
 
+  it('M1 c then typing at once: every character lands in the title while the dialog arrives', async () => {
+    await open();
+    await press('c');
+    await page.keyboard.type('Quick motion title');
+    await pw(page.getByLabel('Title, with quick-add tokens')).toHaveValue('Quick motion title');
+  });
+
   it('F6 the created toast has a readable Undo; u with nothing to undo is quiet', async () => {
     await open();
     await press('c');

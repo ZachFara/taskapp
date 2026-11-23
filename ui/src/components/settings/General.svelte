@@ -7,6 +7,7 @@
   import TextInput from '../../ui/TextInput.svelte';
   import { SKINS, setSkin, setTheme, theme } from '../../lib/theme.svelte';
   import { interfaceSize, setInterfaceSize, SIZES } from '../../lib/interfaceSize.svelte';
+  import { motion, setSpeed, type Speed } from '../../lib/motion.svelte';
   import Switch from '../../ui/Switch.svelte';
   import { estimationItems, scaleItems } from '../insights/estimation';
 
@@ -26,6 +27,12 @@
     { value: 'dark', label: 'Dark' },
   ];
   const sizeItems = SIZES.map((n) => ({ value: String(n), label: `${n}%` }));
+  const speedItems = [
+    { value: 'off', label: 'Off' },
+    { value: 'fast', label: 'Fast' },
+    { value: 'normal', label: 'Normal' },
+    { value: 'slow', label: 'Slow' },
+  ];
   const weekItems = [
     { value: 'sunday', label: 'Sunday' },
     { value: 'monday', label: 'Monday' },
@@ -132,6 +139,11 @@
         {/each}
       </div>
       <span class="st-hint">Applies at once. Light, dark or system above works with every look.</span>
+    </div>
+    <div class="st-field">
+      <span>Animation speed</span>
+      <Select label="Animation speed" items={speedItems} bind:value={() => motion.speed, (v) => setSpeed(v as Speed)} />
+      <span class="st-hint">How long dialogs, menus and the issue panel take to arrive. Off is the default when the system asks for reduced motion. Applies at once.</span>
     </div>
     <div class="st-field">
       <span>Estimation</span>

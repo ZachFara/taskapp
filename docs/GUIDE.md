@@ -411,11 +411,19 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 | Progress charts | on or off | Burn-ups and sparklines on projects and cycles. |
 | Sidebar sparklines | on or off | A small progress line per project. |
 | Interface size | 100%, 110%, 115%, 125% | Scales the whole app on this device (not saved in the workspace). Default 110%. Applies at once. |
+| Animation speed | Off, Fast, Normal, Slow | Per device, like interface size. Default Normal; Off by default when the system asks for reduced motion. Applies at once. |
 
 Sidebar and issue panel widths are remembered per device. Drag an edge to resize; double-click it to reset.
 
 Other stored settings (not all with a screen): backup folder, Reminders list, Google Calendar choice and switch, export
 folder, remote and switch, the default view template.
+
+### Motion
+
+Dialogs, the command menu, menus, popovers and tooltips fade and move a few pixels as they arrive, toasts slide up,
+and the issue panel slides in from the right. Nothing animates when a page first opens. Settings > General > Animation
+speed sets how long this takes (Off, Fast, Normal, Slow). Keys are never delayed by it: a key typed during an animation
+lands where it should. The command menu has "Faster animations" and "Slower animations" too.
 
 ### Themes
 
@@ -596,6 +604,8 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `app.reload` | Reload | (none) | Reload the window. |
 | `pane.sidebar.reset` | Reset sidebar width | (none) | Back to the default sidebar width. |
 | `pane.panel.reset` | Reset issue panel width | (none) | Back to the default issue panel width. |
+| `motion.faster` | Faster animations | (none) | One animation speed step faster (Normal, then Fast, then Off). |
+| `motion.slower` | Slower animations | (none) | One animation speed step slower (Normal, then Slow). |
 | `cycle.move_unfinished` | Move unfinished issues to the next cycle | (none) | Move unfinished issues of the cycle to the next cycle (Cycles page). |
 | `cycle.new` | New cycle | (none) | New cycle. |
 | `group.add` | Add issue to this group | (none) | Add an issue to this group. |
