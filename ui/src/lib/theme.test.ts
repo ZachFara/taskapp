@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { initTheme, setTheme, theme } from './theme.svelte';
+import { initTheme, setSkin, setTheme, theme } from './theme.svelte';
 
 const root = () => document.documentElement;
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 afterEach(() => {
   root().removeAttribute('data-theme');
+  root().removeAttribute('data-skin');
   localStorage.clear();
   vi.restoreAllMocks();
 });
@@ -34,5 +35,23 @@ describe('theme store', () => {
     setTheme('dark', false);
     setTheme('system', false);
     expect(root().hasAttribute('data-theme')).toBe(false);
+  });
+
+  it('a skin is saved, cached and applied; the first skin removes the attribute', () => {
+    const settings = { get: vi.fn(async () => null), set: vi.fn(async () => {}) };
+    initTheme({ settings } as never);
+    setSkin('scholastic');
+    expect(settings.set).toHaveBeenCalledWith('skin', 'scholastic');
+    expect(localStorage.getItem('cairn.skin')).toBe('scholastic');
+    expect(root().dataset.skin).toBe('scholastic');
+    setSkin('survey', false);
+    expect(root().hasAttribute('data-skin')).toBe(false);
+  });
+
+  it('the saved skin wins over the cache', async () => {
+    const settings = { get: vi.fn(async (k: string) => (k === 'skin' ? 'jira' : null)), set: vi.fn(async () => {}) };
+    initTheme({ settings } as never);
+    await flush();
+    expect(root().dataset.skin).toBe('jira');
   });
 });
