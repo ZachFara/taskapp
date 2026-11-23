@@ -96,6 +96,7 @@ describe('Shell', () => {
     expect(legend).toContain('⌘K');
     expect(legend).toContain('commands');
     expect(legend).toContain('status');
+    expect(legend).toContain('select');
   });
 
   it('the_search_button_has_a_tooltip_naming_its_key', async () => {
