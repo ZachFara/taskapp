@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify';
 import { Marked } from 'marked';
-import { openExternal } from '../../lib/openExternal';
+import { isAllowedUrl, openExternal } from '../../lib/openExternal';
 import { ICONS } from '../../ui/icons';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -32,13 +32,15 @@ const marked = new Marked({
       start: (src: string) => src.match(/obsidian:\/\//)?.index,
       tokenizer(src: string) {
         const m = /^obsidian:\/\/[^\s<]*[^\s<.,;:!?)"']/.exec(src);
-        if (m) return { type: 'obsidianLink', raw: m[0], text: m[0] };
+        if (m && isAllowedUrl(m[0])) return { type: 'obsidianLink', raw: m[0], text: m[0] };
       },
       renderer: (t) => chip(t.text),
     },
   ],
   renderer: {
     link({ href, text, tokens }) {
+      // A disallowed obsidian action (new, plugin commands) is plain text, never a link.
+      if (/^obsidian:/i.test(href) && !isAllowedUrl(href)) return this.parser.parseInline(tokens);
       if (text === href) return chip(href);
       return `<a href="${esc(href)}">${this.parser.parseInline(tokens)}</a>`;
     },
@@ -60,7 +62,8 @@ export function openLinks(node: HTMLElement) {
     if (!a || !node.contains(a)) return;
     e.preventDefault();
     e.stopPropagation();
-    void openExternal(a.getAttribute('href') ?? '');
+    const href = a.getAttribute('href') ?? '';
+    if (isAllowedUrl(href)) void openExternal(href);
   };
   node.addEventListener('click', onClick, true);
   return { destroy: () => node.removeEventListener('click', onClick, true) };

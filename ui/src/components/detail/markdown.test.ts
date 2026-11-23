@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 const openExternal = vi.fn(async (_url: string) => true);
-vi.mock('../../lib/openExternal', () => ({ openExternal: (url: string) => openExternal(url) }));
+vi.mock('../../lib/openExternal', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/openExternal')>()),
+  openExternal: (url: string) => openExternal(url),
+}));
 
 import { openLinks, renderMarkdown } from './markdown';
 
@@ -46,6 +49,30 @@ describe('bare URLs as link chips', () => {
   });
 });
 
+describe('obsidian links are limited to open with vault and file', () => {
+  it('a plain open link with vault and file is a chip', () => {
+    const d = dom(renderMarkdown('obsidian://open?vault=v&file=n'));
+    expect(d.querySelector('a.chip')!.textContent).toBe('Obsidian: n');
+  });
+
+  it.each([
+    'obsidian://new?vault=v&name=n&content=x',
+    'obsidian://open?vault=v&file=n&content=x',
+    'obsidian://open?vault=v&file=n&path=/etc/passwd',
+    'obsidian://unknown?vault=v&file=n',
+  ])('%s is never a link, only text', (src) => {
+    const d = dom(renderMarkdown(`see ${src} now`));
+    expect(d.querySelector('a')).toBeNull();
+    expect(d.textContent).toContain(src);
+  });
+
+  it('a markdown link to a disallowed obsidian URI is plain text', () => {
+    const d = dom(renderMarkdown('[x](obsidian://new?vault=v&content=x)'));
+    expect(d.querySelector('a')).toBeNull();
+    expect(d.textContent!.trim()).toBe('x');
+  });
+});
+
 describe('sanitising stays intact', () => {
   it.each([
     '[x](javascript:alert(1))',
@@ -64,6 +91,18 @@ describe('sanitising stays intact', () => {
 });
 
 describe('openLinks', () => {
+  it('a click on a disallowed obsidian link never reaches openExternal', () => {
+    openExternal.mockClear();
+    const host = document.createElement('div');
+    host.innerHTML = '<a href="obsidian://new?vault=v&content=x">x</a>';
+    document.body.append(host);
+    const action = openLinks(host);
+    host.querySelector('a')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(openExternal).not.toHaveBeenCalled();
+    action.destroy?.();
+    host.remove();
+  });
+
   it('opens a clicked chip through openExternal and stops the click going further', () => {
     openExternal.mockClear();
     const host = dom(renderMarkdown('go https://example.com/x'));

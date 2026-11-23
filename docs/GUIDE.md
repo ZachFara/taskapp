@@ -122,9 +122,10 @@ Quick-add has no token for status, parent, cycle or milestone. Example: `Pay ren
 
 ### Links in descriptions and comments
 
-- A bare web or `obsidian://` link in a description, comment or project description shows as a chip: an icon, the host
+- A bare web link, or an `obsidian://open` link with only `vault` and `file`, in a description, comment or project description shows as a chip: an icon, the host
   and a short path (an Obsidian link reads `Obsidian: <note name>`). Hover shows the full URL. Click opens it in your
-  browser or Obsidian. The chip is built from the URL alone: nothing is fetched.
+  browser or Obsidian. The chip is built from the URL alone: nothing is fetched. Other `obsidian://` actions (new, plugin
+  commands) and other schemes (javascript:, file:) stay plain text and never open.
 - A link you wrote with its own text (`[the spec](https://...)`) stays as that text.
 - Edit the description to see the raw URL again. Preview in the editor shows the chip.
 - Link previews (page title, summary, image) are not built: they need a network fetch from the app, and the setting
