@@ -5,7 +5,7 @@
   import SectionHeading from './SectionHeading.svelte';
   import TextArea from '../../ui/TextArea.svelte';
   import { humanDate } from './format';
-  import { renderMarkdown } from './markdown';
+  import { openLinks, renderMarkdown } from './markdown';
 
   let { issue, act, rev }: { issue: Issue; act: (p: Promise<unknown>) => void; rev: number } = $props();
   let comments = $state<Comment[]>([]);
@@ -32,7 +32,7 @@
     {#each comments as c (c.id)}
       <article class="comment">
         <time datetime={c.created_at}>{humanDate(c.created_at.slice(0, 10))} {c.created_at.slice(11, 16)}</time>
-        <div class="md">{@html renderMarkdown(c.body)}</div>
+        <div class="md" use:openLinks>{@html renderMarkdown(c.body)}</div>
       </article>
     {:else}
       <p class="none">No comments yet</p>

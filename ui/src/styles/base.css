@@ -69,3 +69,8 @@ h1, h2, h3, h4, h5, h6, p { margin: 0; }
     scroll-behavior: auto !important;
   }
 }
+
+/* Bare URLs in rendered markdown (components/detail/markdown.ts) */
+.md a.chip { display: inline-flex; align-items: center; gap: var(--s-2); max-width: 100%; padding: 0 var(--s-2); border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--raised); color: var(--ink); text-decoration: none; vertical-align: baseline; }
+.md a.chip:hover { background: var(--active); }
+.md a.chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

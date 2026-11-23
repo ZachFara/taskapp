@@ -120,6 +120,17 @@ Quick-add has no token for status, parent, cycle or milestone. Example: `Pay ren
   previous or next issue.
 - Copy: `mod+c` copies the key, `mod+shift+c` the link. Pin: `.`. Duplicate: `mod+d`.
 
+### Links in descriptions and comments
+
+- A bare web link, or an `obsidian://open` link with only `vault` and `file`, in a description, comment or project description shows as a chip: an icon, the host
+  and a short path (an Obsidian link reads `Obsidian: <note name>`). Hover shows the full URL. Click opens it in your
+  browser or Obsidian. The chip is built from the URL alone: nothing is fetched. Other `obsidian://` actions (new, plugin
+  commands) and other schemes (javascript:, file:) stay plain text and never open.
+- A link you wrote with its own text (`[the spec](https://...)`) stays as that text.
+- Edit the description to see the raw URL again. Preview in the editor shows the chip.
+- Link previews (page title, summary, image) are not built: they need a network fetch from the app, and the setting
+  to switch them on is left out until that fetch is decided. Links stay chips with no fetch.
+
 ### Sub-issues, relations, comments, history
 
 - **Sub-issues.** In the issue panel, "Sub-issues" shows a progress bar and a field: type a title and press enter to
@@ -685,7 +696,7 @@ From PROGRESS.md "After this plan" and from reading the code:
   keyboard resize of panels.
 - Later, from the owner: ephemeral view filters (today every filter chip is saved with the view); resizable panes by
   dragging (today only the issue and insights panels have a grip, mouse only, the sidebar cannot be resized); compact
-  link chips and optional previews; picking icons where the thing is (today the picker is only in Settings); an
+  link previews (title, summary, image; they need a network fetch, so none is built); picking icons where the thing is (today the picker is only in Settings); an
   Interface size setting.
 - Single user, one Mac, one writer. No signed or notarized build and no licence yet.
 - A new database seeds the issue prefix `ZF` until setup runs.
