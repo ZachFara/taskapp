@@ -18,6 +18,7 @@ pub mod issues;
 pub mod labels;
 pub mod palette;
 pub mod pins;
+pub mod project_statuses;
 pub mod projects;
 pub mod properties;
 pub mod quickadd;

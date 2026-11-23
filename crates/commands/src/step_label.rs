@@ -85,6 +85,10 @@ pub fn step_label(name: &str, args: &Value, out: Option<&Value>) -> String {
             let n = args["targets"].as_array().map_or(0, Vec::len);
             format!("{verb} {}", count(n, "item"))
         }
+        "project_statuses_create" => "Created project status".into(),
+        "project_statuses_update" => "Edited project status".into(),
+        "project_statuses_reorder" => "Reordered project statuses".into(),
+        "project_statuses_delete" => "Deleted project status".into(),
         "relation_kinds_create" => "Created relation kind".into(),
         "relation_kinds_update" => "Edited relation kind".into(),
         "relation_kinds_delete" => "Deleted relation kind".into(),

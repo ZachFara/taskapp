@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../lib/api';
-  import type { Project } from '../lib/bindings';
+  import type { Label, Project, ProjectStatus, PropertyDef } from '../lib/bindings';
+  import { arrange, glyphCategory, noFilters, type Group, type Sort } from '../lib/projectFields';
+  import { PRIORITIES, priorityGlyph } from '../lib/priority';
   import Button from '../ui/Button.svelte';
   import Dialog from '../ui/Dialog.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
@@ -12,7 +14,11 @@
   import { navigate } from '../app/routes';
   import { dayText } from './views/dates';
   import PageHeader from '../ui/PageHeader.svelte';
+  import Pill from '../ui/Pill.svelte';
+  import PriorityGlyph from '../ui/PriorityGlyph.svelte';
+  import Select from '../ui/Select.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
+  import StatusGlyph from '../ui/StatusGlyph.svelte';
   import TextInput from '../ui/TextInput.svelte';
 
   type Row = Project & { done: number; total: number };
@@ -22,6 +28,21 @@
   let pinned = $state<Set<string>>(new Set());
   let creating = $state(false);
   let name = $state('');
+  let statuses = $state<ProjectStatus[]>([]);
+  let labels = $state<Label[]>([]);
+  let defs = $state<PropertyDef[]>([]);
+  // The toolbar: what to show, in what order, grouped how. Select values are strings, '' meaning no filter.
+  let sort = $state<Sort>('name');
+  let group = $state<Group>('none');
+  let fStatus = $state('');
+  let fPriority = $state('');
+  let fLabel = $state('');
+  const num = (v: string) => (v === '' ? null : Number(v));
+  const groups = $derived(arrange(rows, statuses, { sort, group, filters: { ...noFilters, status: num(fStatus), priority: num(fPriority), label: num(fLabel) } }));
+  const propCols = $derived(defs.filter((d) => d.applies_to !== 'Issues'));
+  const statusOf = (p: Project) => statuses.find((s) => s.id === p.status_id);
+  const shown = (v: unknown) => (v === undefined || v === null || v === '' ? '' : Array.isArray(v) ? v.join(', ') : v === true ? 'Yes' : v === false ? 'No' : String(v));
+  const any = (label: string) => ({ value: '', label });
 
   $effect(() => {
     const open = () => (creating = true);
@@ -33,6 +54,7 @@
     const list = await api.projects.list();
     const progress = await Promise.all(list.map((p) => api.projects.progress(p.id)));
     rows = list.map((p, i) => ({ ...p, done: progress[i][0], total: progress[i][1] }));
+    [statuses, labels, defs] = await Promise.all([api.project.statusesList(), api.labels.list(), api.properties.listDefs()]);
     pinned = new Set((await api.pins.listResolved()).filter((r) => r.pin.kind === 'Project').map((r) => r.pin.target));
     loaded = true;
   }
@@ -70,30 +92,54 @@
       {#snippet action()}<Button variant="primary" icon="plus" onclick={() => (creating = true)}>New project</Button>{/snippet}
     </EmptyState>
   {:else}
+    <div class="bar" role="group" aria-label="Arrange projects">
+      <Select label="Group by" bind:value={group as string} items={[{ value: 'none', label: 'No grouping' }, { value: 'status', label: 'Group by status' }, { value: 'priority', label: 'Group by priority' }]} />
+      <Select label="Sort by" bind:value={sort as string} items={[{ value: 'name', label: 'Sort by name' }, { value: 'status', label: 'Sort by status' }, { value: 'priority', label: 'Sort by priority' }, { value: 'target', label: 'Sort by target date' }]} />
+      <Select label="Filter by status" bind:value={fStatus} items={[any('Any status'), ...statuses.map((s) => ({ value: String(s.id), label: s.name }))]} />
+      <Select label="Filter by priority" bind:value={fPriority} items={[any('Any priority'), ...PRIORITIES.map((label, i) => ({ value: String(i), label }))]} />
+      <Select label="Filter by label" bind:value={fLabel} items={[any('Any label'), ...labels.map((l) => ({ value: String(l.id), label: l.name }))]} />
+    </div>
     <table class="table">
       <thead>
-        <tr><th scope="col">Project</th><th scope="col">Progress</th><th scope="col">Target</th><th scope="col" class="num">Issues</th></tr>
+        <tr>
+          <th scope="col">Project</th><th scope="col">Status</th><th scope="col">Priority</th><th scope="col">Labels</th><th scope="col">Progress</th><th scope="col">Target</th>
+          {#each propCols as d (d.key)}<th scope="col">{d.name}</th>{/each}
+          <th scope="col" class="num">Issues</th>
+        </tr>
       </thead>
-      <tbody>
-        {#each rows as p (p.id)}
-          <tr data-slug={p.slug} onclick={() => navigate(`/project/${p.slug}`)}>
-            <td>
-              <div role="presentation" onclick={(e) => e.stopPropagation()}>
-                <RowActions label={p.name} actions={rowActs({ kind: 'project', id: p.id, name: p.name }, pinned.has(p.slug))}>
-                  <IconColorPicker label={`Icon and colour of ${p.name}`} value={{ icon: p.icon ?? 'icon:project', color: p.color }} onchange={(c) => patch({ kind: 'project', id: p.id, name: p.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `project:${p.id}`, (o) => (rowUi.picking = o ? `project:${p.id}` : null)} />
-                  <a class="name" href={`/project/${p.slug}`} onclick={(e) => (e.preventDefault(), navigate(`/project/${p.slug}`))}>{p.name}</a>
-                </RowActions>
-              </div>
-            </td>
-            <td>
-              <span class="prog"><span class="meter" aria-label={`${p.done} of ${p.total} done`}><span class="fill" style:width={`${p.total ? (p.done / p.total) * 100 : 0}%`}></span></span><span class="muted">{p.done} of {p.total}</span></span>
-            </td>
-            <td class="muted">{p.target_date ? dayText(p.target_date) : 'No target'}</td>
-            <td class="num">{p.total}</td>
-          </tr>
-        {/each}
-      </tbody>
+      {#each groups as g (g.key)}
+        <tbody>
+          {#if group !== 'none'}
+            <tr class="group"><th scope="rowgroup" colspan={7 + propCols.length}>
+              <span class="cell">{#if g.status}<StatusGlyph category={glyphCategory[g.status.category]} />{/if}{g.name}<span class="muted">{g.rows.length}</span></span>
+            </th></tr>
+          {/if}
+          {#each g.rows as p (p.id)}
+            {@const st = statusOf(p)}
+            <tr data-slug={p.slug} onclick={() => navigate(`/project/${p.slug}`)}>
+              <td>
+                <div role="presentation" onclick={(e) => e.stopPropagation()}>
+                  <RowActions label={p.name} actions={rowActs({ kind: 'project', id: p.id, name: p.name }, pinned.has(p.slug))}>
+                    <IconColorPicker label={`Icon and colour of ${p.name}`} value={{ icon: p.icon ?? 'icon:project', color: p.color }} onchange={(c) => patch({ kind: 'project', id: p.id, name: p.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `project:${p.id}`, (o) => (rowUi.picking = o ? `project:${p.id}` : null)} />
+                    <a class="name" href={`/project/${p.slug}`} onclick={(e) => (e.preventDefault(), navigate(`/project/${p.slug}`))}>{p.name}</a>
+                  </RowActions>
+                </div>
+              </td>
+              <td>{#if st}<span class="cell"><StatusGlyph category={glyphCategory[st.category]} />{st.name}</span>{/if}</td>
+              <td><span class="cell"><PriorityGlyph level={priorityGlyph(p.priority)} />{p.priority ? PRIORITIES[p.priority] : ''}</span></td>
+              <td><span class="cell">{#each labels.filter((l) => p.label_ids.includes(l.id)) as l (l.id)}<Pill color={l.color}>{l.name}</Pill>{/each}</span></td>
+              <td>
+                <span class="prog"><span class="meter" aria-label={`${p.done} of ${p.total} done`}><span class="fill" style:width={`${p.total ? (p.done / p.total) * 100 : 0}%`}></span></span><span class="muted">{p.done} of {p.total}</span></span>
+              </td>
+              <td class="muted">{p.target_date ? dayText(p.target_date) : 'No target'}</td>
+              {#each propCols as d (d.key)}<td class="muted">{shown(p.properties[d.key])}</td>{/each}
+              <td class="num">{p.total}</td>
+            </tr>
+          {/each}
+        </tbody>
+      {/each}
     </table>
+    {#if groups.length === 0}<p class="muted none">No project matches these filters.</p>{/if}
   {/if}
 </main>
 
@@ -123,6 +169,11 @@
   .prog { display: inline-flex; align-items: center; gap: var(--s-4); }
   tbody tr { cursor: pointer; }
   .muted { color: var(--muted); }
+  .bar { display: flex; flex-wrap: wrap; gap: var(--s-4); padding: var(--s-5) 0; }
+  .cell { display: inline-flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
+  .group th { padding: var(--s-5) var(--s-4) var(--s-3); background: var(--band-1); color: var(--ink); font-size: var(--fs-md); }
+  .group .muted { margin-left: var(--s-4); font-weight: 500; }
+  .none { padding: var(--s-6) var(--s-4); }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .meter { display: block; width: 160px; height: 6px; border-radius: var(--r-round); background: var(--active); overflow: hidden; }
   .fill { display: block; height: 100%; background: var(--accent); }

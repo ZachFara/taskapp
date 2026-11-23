@@ -73,6 +73,17 @@ pub struct StatusRow {
     pub icon: Option<String>,
 }
 
+/// One entry of `project_statuses.yaml`.
+#[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
+pub struct ProjectStatusRow {
+    pub name: String,
+    pub category: String,
+    pub position: i64,
+    pub color: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
 pub struct LabelRow {
     pub name: String,
@@ -154,6 +165,17 @@ pub struct ProjectFile {
     pub icon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// The project status name; an older export without one gets the first status.
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub priority: i64,
+    #[sqlx(skip)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<String>,
+    #[sqlx(skip)]
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub properties: Map<String, Value>,
     #[sqlx(skip)]
     #[serde(default)]
     pub milestones: Vec<MilestoneRow>,
@@ -168,6 +190,12 @@ pub struct PropertyFile {
     pub options: Value,
     pub project: Option<String>,
     pub position: i64,
+    #[serde(default = "applies_to_issues")]
+    pub applies_to: String,
+}
+
+fn applies_to_issues() -> String {
+    "issues".into()
 }
 
 /// One entry of `views.yaml`.

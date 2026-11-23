@@ -179,6 +179,13 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	propertiesSetAppliesTo: (key: string, appliesTo: PropertyAppliesTo, options?: InvokeOptions) => __TAURI_INVOKE<PropertyDef>("properties_set_applies_to", { key, appliesTo }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	propertiesDeleteDef: (key: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("properties_delete_def", { key }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -187,6 +194,41 @@ export const commands = {
 	 * As that command.
 	 */
 	propertiesSetValue: (issue: IssueId, key: string, value: Value | null, options?: InvokeOptions) => __TAURI_INVOKE<Issue>("properties_set_value", { issue, key, value }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	projectStatusesList: (options?: InvokeOptions) => __TAURI_INVOKE<ProjectStatus[]>("project_statuses_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	projectStatusesCreate: (name: string, category: ProjectStatusCategory, color: string, icon: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ProjectStatus>("project_statuses_create", { name, category, color, icon }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	projectStatusesUpdate: (id: ProjectStatusId, name: string | null, color: string | null, icon: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ProjectStatus>("project_statuses_update", { id, name, color, icon }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	projectStatusesReorder: (idsInOrder: ProjectStatusId[], options?: InvokeOptions) => __TAURI_INVOKE<null>("project_statuses_reorder", { idsInOrder }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	projectStatusesDelete: (id: ProjectStatusId, moveProjectsTo: ProjectStatusId, options?: InvokeOptions) => __TAURI_INVOKE<null>("project_statuses_delete", { id, moveProjectsTo }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -1147,17 +1189,43 @@ export type Project = {
 	archived_at: string | null,
 	icon: string | null,
 	color: string | null,
+	status_id: ProjectStatusId,
+	/**  The issue scale: 0 none, 1 urgent, 2 high, 3 medium, 4 low. */
+	priority: number,
+	label_ids: LabelId[],
+	properties: { [key in string]: Value },
 };
 
 export type ProjectId = number;
+
+export type ProjectStatus = {
+	id: ProjectStatusId,
+	name: string,
+	category: ProjectStatusCategory,
+	position: number,
+	/**  A palette key. */
+	color: string,
+	/**  The reference hex for `color`, for showing it without the palette. */
+	color_hex: string,
+	icon: string | null,
+};
+
+export type ProjectStatusCategory = "Planned" | "Started" | "Paused" | "Completed" | "Cancelled";
+
+export type ProjectStatusId = number;
+
+/**  Which entities a custom property applies to. */
+export type PropertyAppliesTo = "Issues" | "Projects" | "Both";
 
 export type PropertyDef = {
 	key: string,
 	name: string,
 	kind: PropertyKind,
 	options: SelectOption[],
+	/**  Limits the issue side to one project; never set for a projects-only property. */
 	project_id: ProjectId | null,
 	position: number,
+	applies_to?: PropertyAppliesTo,
 };
 
 export type PropertyKind = "Text" | "Number" | "Date" | "Select" | "MultiSelect" | "Checkbox" | "Url" | "NoteLink";

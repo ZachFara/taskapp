@@ -11,6 +11,8 @@ pub(crate) const TABLES: &[&str] = &[
     "statuses",
     "labels",
     "projects",
+    "project_statuses",
+    "project_labels",
     "milestones",
     "cycles",
     "comments",

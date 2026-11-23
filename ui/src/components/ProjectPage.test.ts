@@ -208,3 +208,26 @@ describe('ProjectPage', () => {
     await vi.waitFor(async () => expect((await api.projects.list())[0].archived_at).not.toBeNull());
   });
 });
+
+describe('ProjectPage details', () => {
+  it('shows status, priority and labels, and a priority edit is one update', async () => {
+    const mock = createMockApi(seed());
+    const update = vi.spyOn(mock.projects, 'update');
+    const target = await open('/project/website', mock);
+    expect(target.querySelector('section[aria-label="Project details"]')?.textContent).toContain('Planned');
+    target.querySelector<HTMLButtonElement>('section[aria-label="Project details"] button[aria-label="Priority"]')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[role="option"]')).not.toBeNull());
+    [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((o) => o.textContent?.includes('High'))!.click();
+    await vi.waitFor(() => expect(update).toHaveBeenCalledOnce());
+    expect(update.mock.calls[0][0].priority).toBe(2);
+  });
+
+  it('lists custom properties that apply to projects, not issue-only ones', async () => {
+    const mock = createMockApi(seed());
+    await mock.properties.createDef({ key: 'sponsor', name: 'Sponsor', kind: 'Text', options: [], project_id: null, position: 0, applies_to: 'Projects' });
+    const target = await open('/project/website', mock);
+    const plate = target.querySelector('section[aria-label="Project details"]')!;
+    await vi.waitFor(() => expect(plate.querySelector('button[aria-label="Sponsor"]')).not.toBeNull());
+    expect(plate.querySelector('button[aria-label="Effort"]')).toBeNull();
+  });
+});

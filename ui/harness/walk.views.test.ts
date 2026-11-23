@@ -183,6 +183,17 @@ describe('walk project', { timeout: 25_000 }, () => {
     await page.getByLabel('Milestone name').waitFor();
   });
 
+  it('a project status set from the command menu shows in the details plate and the Projects list', async () => {
+    await open('/project/website');
+    await press('Meta+k');
+    await page.keyboard.type('Set project status');
+    await palette().getByRole('option', { name: /Set project status/ }).first().click();
+    await palette().getByRole('option', { name: 'Paused' }).click();
+    await pw(page.getByLabel('Project details').getByText('Paused')).toBeVisible();
+    await press('g', 'p');
+    await pw(page.locator('tr[data-slug=website]').getByText('Paused')).toBeVisible();
+  });
+
   // Priority means the same on every screen: whichever way it was set, the list, table, board and detail all say Urgent.
   // The mock has no db-changed event, so each tab switch mounts a view that reads the rows fresh.
   const urgentEverywhere = async (title: string) => {

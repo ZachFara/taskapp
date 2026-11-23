@@ -115,6 +115,7 @@ async fn seed_rest(db: &Db, docs: IssueId, ship: IssueId) -> R {
             options: vec![],
             project_id: None,
             position: 0,
+            applies_to: taskapp_core::PropertyAppliesTo::Issues,
         },
         SRC,
     )
@@ -514,6 +515,7 @@ async fn dump(
         "statuses",
         "labels",
         "projects",
+        "project_statuses",
         "milestones",
         "cycles",
         "views",
@@ -648,5 +650,43 @@ async fn custom_relation_kinds_and_their_relations_survive_export_and_rebuild() 
             relations::for_issue(&db, IssueId(id)).await?
         );
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn project_status_priority_labels_and_properties_survive_export_and_rebuild() -> R {
+    let db = seeded().await?;
+    for sql in [
+        "INSERT INTO project_statuses (name, category, position, color, icon) VALUES ('Blocked', 'paused', 9, 'red', 'icon:flag')",
+        "INSERT INTO property_defs (key, name, kind, options, project_id, position, applies_to)
+           VALUES ('sponsor', 'Sponsor', '\"Text\"', '[]', NULL, 5, 'projects')",
+        "UPDATE projects SET priority = 3, properties = '{\"sponsor\":\"sam\"}',
+           status_id = (SELECT id FROM project_statuses WHERE name = 'Blocked')",
+        "INSERT INTO project_labels (project_id, label_id) SELECT p.id, l.id FROM projects p, labels l",
+    ] {
+        sqlx::query(sql).execute(&db.pool).await?;
+    }
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    let q = "SELECT s.name || '|' || p.priority || '|' || p.properties || '|' ||
+               (SELECT group_concat(name) FROM (SELECT l.name FROM project_labels pl JOIN labels l ON l.id = pl.label_id WHERE pl.project_id = p.id ORDER BY l.name))
+             FROM projects p JOIN project_statuses s ON s.id = p.status_id ORDER BY p.slug";
+    let want: Vec<String> = sqlx::query_scalar(q).fetch_all(&db.pool).await?;
+    let got: Vec<String> = sqlx::query_scalar(q).fetch_all(&rebuilt.pool).await?;
+    assert!(
+        !want.is_empty() && want[0].starts_with("Blocked|3|"),
+        "{want:?}"
+    );
+    assert_eq!(got, want);
+    let applies: String =
+        sqlx::query_scalar("SELECT applies_to FROM property_defs WHERE key = 'sponsor'")
+            .fetch_one(&rebuilt.pool)
+            .await?;
+    assert_eq!(applies, "projects");
+    assert_eq!(
+        dump(&db).await?["project_statuses"],
+        dump(&rebuilt).await?["project_statuses"]
+    );
     Ok(())
 }

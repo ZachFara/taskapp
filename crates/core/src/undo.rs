@@ -147,6 +147,7 @@ const DESCRIPTIVE: &[&str] = &[
     "cycle",
     "property_def",
     "status",
+    "project_status",
     "view",
     "view_template",
     "template",

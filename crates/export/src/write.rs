@@ -8,8 +8,9 @@ use taskapp_core::{Db, Result, settings};
 
 use crate::files::{
     CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow,
-    MilestoneRow, PinRow, ProjectFile, PropertyFile, RelationKindRow, StatusRow, ViewFile,
-    ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir, read_plain, render_issue, safe_name,
+    MilestoneRow, PinRow, ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow,
+    ViewFile, ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir, read_plain, render_issue,
+    safe_name,
 };
 
 pub struct ExportStats {
@@ -110,6 +111,8 @@ async fn template_files(db: &Db, files: &mut BTreeMap<String, String>) -> Result
     let issue_templates = yaml(&issue_templates(db).await?)?;
     files.insert("issue_templates.yaml".to_string(), issue_templates);
     files.insert("import_log.yaml".to_string(), yaml(&import_log(db).await?)?);
+    let project_statuses = yaml(&project_statuses(db).await?)?;
+    files.insert("project_statuses.yaml".to_string(), project_statuses);
     files.insert(
         "relation_kinds.yaml".to_string(),
         yaml(&relation_kinds(db).await?)?,
@@ -150,6 +153,15 @@ async fn settings_map(db: &Db) -> Result<BTreeMap<String, Value>> {
 async fn statuses(db: &Db) -> Result<Vec<StatusRow>> {
     let rows = sqlx::query_as(
         "SELECT name, category, position, color, icon FROM statuses ORDER BY position, id",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
+async fn project_statuses(db: &Db) -> Result<Vec<ProjectStatusRow>> {
+    let rows = sqlx::query_as(
+        "SELECT name, category, position, color, icon FROM project_statuses ORDER BY position, id",
     )
     .fetch_all(&db.pool)
     .await?;
@@ -249,24 +261,27 @@ async fn pins(db: &Db) -> Result<Vec<PinRow>> {
 }
 
 async fn properties(db: &Db) -> Result<Vec<PropertyFile>> {
-    let rows = sqlx::query_as::<_, (String, String, String, String, Option<String>, i64)>(
-        "SELECT d.key, d.name, d.kind, d.options, p.slug, d.position
+    let rows = sqlx::query_as::<_, (String, String, String, String, Option<String>, i64, String)>(
+        "SELECT d.key, d.name, d.kind, d.options, p.slug, d.position, d.applies_to
          FROM property_defs d LEFT JOIN projects p ON p.id = d.project_id
          ORDER BY d.position, d.key",
     )
     .fetch_all(&db.pool)
     .await?;
     rows.into_iter()
-        .map(|(key, name, kind, options, project, position)| {
-            Ok(PropertyFile {
-                key,
-                name,
-                kind: serde_json::from_str(&kind).map_err(invalid)?,
-                options: serde_json::from_str(&options).map_err(invalid)?,
-                project,
-                position,
-            })
-        })
+        .map(
+            |(key, name, kind, options, project, position, applies_to)| {
+                Ok(PropertyFile {
+                    key,
+                    name,
+                    kind: serde_json::from_str(&kind).map_err(invalid)?,
+                    options: serde_json::from_str(&options).map_err(invalid)?,
+                    project,
+                    position,
+                    applies_to,
+                })
+            },
+        )
         .collect()
 }
 
@@ -362,11 +377,23 @@ async fn import_log(db: &Db) -> Result<Vec<ImportLogRow>> {
 
 async fn projects(db: &Db) -> Result<Vec<ProjectFile>> {
     let mut projects: Vec<ProjectFile> = sqlx::query_as(
-        "SELECT slug, name, description, doc_link, start_date, target_date, archived_at, created_at, icon, color
-         FROM projects ORDER BY slug",
+        "SELECT p.slug, p.name, p.description, p.doc_link, p.start_date, p.target_date, p.archived_at,
+                p.created_at, p.icon, p.color, s.name AS status, p.priority
+         FROM projects p JOIN project_statuses s ON s.id = p.status_id ORDER BY p.slug",
     )
     .fetch_all(&db.pool)
     .await?;
+    let labels = sqlx::query_as::<_, (String, String)>(
+        "SELECT p.slug, l.name FROM project_labels pl JOIN projects p ON p.id = pl.project_id
+         JOIN labels l ON l.id = pl.label_id ORDER BY l.name",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    let mut labels = group(labels);
+    let values = sqlx::query_as::<_, (String, String)>("SELECT slug, properties FROM projects")
+        .fetch_all(&db.pool)
+        .await?;
+    let mut values: BTreeMap<String, String> = values.into_iter().collect();
     let milestones = sqlx::query_as::<_, (String, String, Option<NaiveDate>)>(
         "SELECT p.slug, m.name, m.target_date FROM milestones m
          JOIN projects p ON p.id = m.project_id ORDER BY m.id",
@@ -381,6 +408,9 @@ async fn projects(db: &Db) -> Result<Vec<ProjectFile>> {
     );
     for project in &mut projects {
         project.milestones = by_slug.remove(&project.slug).unwrap_or_default();
+        project.labels = labels.remove(&project.slug).unwrap_or_default();
+        let text = values.remove(&project.slug).unwrap_or_default();
+        project.properties = serde_json::from_str(&text).map_err(invalid)?;
     }
     Ok(projects)
 }

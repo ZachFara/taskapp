@@ -47,6 +47,7 @@ async fn display_settings_round_trip_and_query_returns_property_values() -> R {
             options: vec![],
             project_id: None,
             position: 0,
+            applies_to: taskapp_core::PropertyAppliesTo::Issues,
         },
         UI,
     )
@@ -277,6 +278,7 @@ async fn area_def(db: &Db) -> R {
             options: vec![],
             project_id: None,
             position: 0,
+            applies_to: taskapp_core::PropertyAppliesTo::Issues,
         },
         UI,
     )

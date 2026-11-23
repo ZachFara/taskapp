@@ -326,6 +326,7 @@ async fn update_merges_properties_and_validates_defined_keys() -> R {
         options: vec![],
         project_id: None,
         position: 0,
+        applies_to: taskapp_core::PropertyAppliesTo::Issues,
     };
     properties::create_def(&db, num, ChangeSource::Ui).await?;
     let i = issues::create(&db, new("a"), ChangeSource::Ui).await?;

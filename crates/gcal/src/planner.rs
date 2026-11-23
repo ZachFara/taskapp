@@ -292,6 +292,10 @@ mod tests {
             archived_at: None,
             icon: None,
             color: None,
+            status_id: taskapp_core::ProjectStatusId(1),
+            priority: 0,
+            label_ids: vec![],
+            properties: serde_json::Map::new(),
         }
     }
 

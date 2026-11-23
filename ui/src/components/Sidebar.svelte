@@ -4,7 +4,9 @@
   import { api } from '../lib/api';
   import { openExternal } from '../lib/openExternal';
   import type { Cycle, PinKind, ResolvedPin } from '../lib/bindings';
-  import { projects, refreshAll, views } from '../lib/stores.svelte';
+  import { projects, projectStatuses, refreshAll, views } from '../lib/stores.svelte';
+  import { glyphCategory } from '../lib/projectFields';
+  import StatusGlyph from '../ui/StatusGlyph.svelte';
   import Icon from '../ui/Icon.svelte';
   import RowActions from '../ui/RowActions.svelte';
   import { rowActs, rowUi } from '../lib/rowUi.svelte';
@@ -156,10 +158,11 @@
         <li class="row">{@render navLink('/projects', 'project', 'All projects', 'nav.projects', route === '/projects')}</li>
         {#each projects as p (p.id)}
           {@const href = `/project/${p.slug}`}
+          {@const st = projectStatuses.find((x) => x.id === p.status_id)}
           <li class="row">
             <RowActions label={p.name} actions={rowActs({ kind: 'project', id: p.id, name: p.name }, isPinned('Project', p.slug))}>
               <IconColorPicker label={`Icon and colour of ${p.name}`} value={{ icon: p.icon ?? 'icon:project', color: p.color }} onchange={(c) => patch({ kind: 'project', id: p.id, name: p.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `project:${p.id}`, (o) => (rowUi.picking = o ? `project:${p.id}` : null)} />
-              <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{p.name}</span>{#if sparklines}<ProjectSpark projectId={p.id} name={p.name} />{/if}</a>
+              <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{p.name}</span>{#if st}<span class="st" title={st.name}><StatusGlyph category={glyphCategory[st.category]} size={12} label={st.name} /></span>{/if}{#if sparklines}<ProjectSpark projectId={p.id} name={p.name} />{/if}</a>
             </RowActions>
           </li>
         {/each}
@@ -202,6 +205,7 @@
   .item:hover { background: var(--frame-inset); }
   .item.on { background: var(--frame-raised); font-weight: 600; }
   .item.on :global(svg) { color: var(--frame-ink); }
+  .st { margin-left: auto; display: inline-flex; }
   .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .head { display: flex; align-items: center; gap: var(--s-3); width: 100%; height: var(--ctl-h); margin-top: var(--s-4); padding: 0 var(--s-3); border: 0; border-radius: var(--r-ctl); background: transparent; color: var(--frame-muted); font: inherit; font-size: var(--fs-sm); font-weight: 600; text-align: left; }
   .head:hover { color: var(--frame-ink); }

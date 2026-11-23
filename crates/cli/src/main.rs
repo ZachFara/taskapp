@@ -279,6 +279,9 @@ enum PropertyCmd {
         /// Select option value; repeat for several.
         #[arg(long = "option")]
         options: Vec<String>,
+        /// issues (default), projects or both.
+        #[arg(long, default_value = "issues")]
+        applies_to: String,
     },
     Rename {
         key: String,
@@ -313,6 +316,24 @@ enum ProjectCmd {
         icon: Option<String>,
         #[arg(long)]
         color: Option<String>,
+    },
+    /// Project statuses.
+    Statuses,
+    /// Change a project's status, priority, labels or a custom property value.
+    Set {
+        slug: String,
+        /// Project status name.
+        #[arg(long)]
+        status: Option<String>,
+        /// 0 none, 1 urgent, 2 high, 3 medium, 4 low.
+        #[arg(long)]
+        priority: Option<u8>,
+        /// Label name; repeat for several. Replaces the project's labels.
+        #[arg(long = "label")]
+        labels: Vec<String>,
+        /// Property key and JSON value, e.g. `--property owner '"sam"'`; `null` clears.
+        #[arg(long, num_args = 2, value_names = ["KEY", "JSON"])]
+        property: Vec<String>,
     },
 }
 
