@@ -63,10 +63,10 @@
 
 <section class="plate" aria-label="Properties">
   <PropertyRow id="status" name="Status" cmd="issue.detail.status" bind:openRow>
-    {#snippet value()}{#if status}<StatusGlyph category={status.category} />{status.name}{:else}{@render none()}{/if}{/snippet}
+    {#snippet value()}{#if status}<StatusGlyph category={status.category} icon={status.icon} color={status.color} />{status.name}{:else}{@render none()}{/if}{/snippet}
     {#snippet editor(close)}
       <OptionList label="Status" value={issue.status_id} options={statuses} onpick={(id) => { close(); save({ status_id: num(id) }); }}>
-        {#snippet lead(o)}<StatusGlyph category={statuses.find((s) => s.id === o.id)!.category} />{/snippet}
+        {#snippet lead(o)}{@const st = statuses.find((s) => s.id === o.id)!}<StatusGlyph category={st.category} icon={st.icon} color={st.color} />{/snippet}
       </OptionList>
     {/snippet}
   </PropertyRow>

@@ -37,6 +37,8 @@ export type Row = {
   projectId?: number;
   critical?: boolean;
   category?: StatusCategory;
+  icon?: string | null;
+  color?: string | null;
   estimated?: boolean;
 };
 
@@ -75,11 +77,12 @@ export function buildRows({ mode, issues, bars, projects, milestones, critical, 
     const kidSpan = rollup(kids.flatMap(spans));
     const own = barOf.get(i.id);
     const span = kidSpan ?? own;
+    const st = statuses.find((s) => s.id === i.status_id);
     const row: Row[] = span
       ? [{
           id: `issue-${i.id}`, kind: kidSpan ? 'rollup' : 'bar', label: `${i.key} ${i.title}`, key: i.key, title: i.title, indent, issueId: i.id,
           start: span.start, end: span.end, critical: critical.includes(i.id), estimated: !kidSpan && own?.from_estimate,
-          category: statuses.find((s) => s.id === i.status_id)?.category,
+          category: st?.category, icon: st?.icon, color: st?.color,
         }]
       : [];
     return [...row, ...kids.flatMap((k) => issueRows(k, indent + 1))];

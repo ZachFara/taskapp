@@ -99,7 +99,7 @@
               ondrop={(e) => { e.preventDefault(); drop(s); }}
               ondragend={() => (dragId = overId = null)}
             >
-              <StatusGlyph category={s.category} />
+              <StatusGlyph category={s.category} icon={s.icon} color={s.color} />
               <IconColorPicker
                 label={`Icon and colour of ${s.name}`}
                 value={{ icon: s.icon, color: s.color }}

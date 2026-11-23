@@ -36,7 +36,7 @@
   let { view }: { view: SavedView } = $props();
 
   const storeKey = (id: number) => `cairn.list.collapsed.${id}`;
-  type Group = { key: string; kind: 'status' | 'project' | 'cycle' | 'priority' | 'label' | 'points' | 'none'; ref?: Project | Cycle | Label; name: string; category: StatusCategory; order: number; patch: IssuePatch; rows: Issue[] };
+  type Group = { key: string; kind: 'status' | 'project' | 'cycle' | 'priority' | 'label' | 'points' | 'none'; ref?: Project | Cycle | Label; name: string; category: StatusCategory; icon?: string | null; color?: string | null; order: number; patch: IssuePatch; rows: Issue[] };
   type Item = { head: Group; collapsed: boolean } | { row: Issue; depth: number; kids: number };
 
   let issues = $state.raw<Issue[]>([]);
@@ -140,7 +140,7 @@
       const base = { category: 'Unstarted' as StatusCategory, patch: {}, kind: 'none' as Group['kind'] };
       if (groupField === 'Status') {
         const s = statuses.find((x) => x.id === i.status_id);
-        put(i, { kind: 'status', key: `s${s?.id ?? 'x'}`, name: s?.name ?? 'Unknown', category: s?.category ?? 'Backlog', order: s?.position ?? Infinity, patch: s ? { status_id: s.id } : {} });
+        put(i, { kind: 'status', key: `s${s?.id ?? 'x'}`, name: s?.name ?? 'Unknown', category: s?.category ?? 'Backlog', icon: s?.icon, color: s?.color, order: s?.position ?? Infinity, patch: s ? { status_id: s.id } : {} });
       } else if (groupField === 'Project') {
         put(i, { key: `p${i.project_id}`, ...base, kind: 'project', ref: projects.find((p) => p.id === i.project_id), ...named(projects, i.project_id, 'No project', (p) => p.name), patch: { project_id: i.project_id } });
       } else if (groupField === 'Cycle') {
@@ -159,7 +159,7 @@
     if (showEmptyGroups(view.def)) {
       const empty = (g: Omit<Group, 'rows'>) => by.has(g.key) || by.set(g.key, { ...g, rows: [] });
       const base = { category: 'Unstarted' as StatusCategory, patch: {} };
-      if (groupField === 'Status') for (const s of statuses) empty({ key: `s${s.id}`, kind: 'status', name: s.name, category: s.category, order: s.position, patch: { status_id: s.id } });
+      if (groupField === 'Status') for (const s of statuses) empty({ key: `s${s.id}`, kind: 'status', name: s.name, category: s.category, icon: s.icon, color: s.color, order: s.position, patch: { status_id: s.id } });
       if (groupField === 'Project') for (const p of projects) empty({ key: `p${p.id}`, ...base, kind: 'project', ref: p, name: p.name, order: projects.indexOf(p), patch: { project_id: p.id } });
       if (groupField === 'Cycle') for (const c of cycles) empty({ key: `c${c.id}`, ...base, kind: 'cycle', name: c.name ?? `Cycle ${c.number}`, order: cycles.indexOf(c), patch: { cycle_id: c.id } });
     }
@@ -335,6 +335,8 @@
               count={item.head.rows.length}
               total={pointsTotal(item.head.rows, shown(view.def, LIST_DEFAULT), ctx)}
               category={item.head.kind === 'status' ? item.head.category : undefined}
+              icon={item.head.icon}
+              color={item.head.color}
               tone={item.head.kind === 'priority' ? (Math.min(4, Math.max(1, item.head.order)) as 1 | 2 | 3 | 4) : 1}
               collapsed={item.collapsed}
               ontoggle={() => toggleGroup(item.head.key)}
@@ -384,7 +386,7 @@
                   openMenu(i.id, r.left, r.bottom);
                 }}
               >
-                <StatusGlyph category={st?.category ?? 'Backlog'} label={st?.name ?? 'Unknown'} />
+                <StatusGlyph category={st?.category ?? 'Backlog'} icon={st?.icon} color={st?.color} label={st?.name ?? 'Unknown'} />
               </button>
             {/snippet}
             <!-- shortcut: only the hovered or focused row carries a Tooltip (one per row costs ~30% at 1000 rows), upgrade to one delegated tooltip -->

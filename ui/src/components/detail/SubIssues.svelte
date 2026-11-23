@@ -17,7 +17,8 @@
     rev;
     Promise.all([api.issues.children(issue.id), api.statuses.list()]).then(([c, s]) => ([children, statuses] = [c, s]));
   });
-  const cat = (i: Issue) => statuses.find((s) => s.id === i.status_id)?.category ?? 'Backlog';
+  const st = (i: Issue) => statuses.find((s) => s.id === i.status_id);
+  const cat = (i: Issue) => st(i)?.category ?? 'Backlog';
   const done = $derived(children.filter((c) => cat(c) === 'Completed').length);
   const attach = (child: Issue) => child.id !== issue.id && act(api.issues.update(child.id, { parent_id: issue.id }));
   const create = (t: string) => act(api.issues.create({ title: t, parent_id: issue.id, project_id: issue.project_id }));
@@ -40,7 +41,7 @@
       </div>
       <ul>
         {#each children as c (c.id)}
-          <li><button type="button" onclick={() => open(c.key)}><StatusGlyph category={cat(c)} /><span class="key">{c.key}</span>{c.title}</button></li>
+          <li><button type="button" onclick={() => open(c.key)}><StatusGlyph category={cat(c)} icon={st(c)?.icon} color={st(c)?.color} /><span class="key">{c.key}</span>{c.title}</button></li>
         {/each}
       </ul>
     {:else}

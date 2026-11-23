@@ -50,7 +50,8 @@
   const hasBars = $derived(rows.some((r) => r.start));
   const ticks = $derived(Array.from({ length: Math.ceil(days / TICK_DAYS[zoom]) }, (_, k) => addDays(span.start, k * TICK_DAYS[zoom])));
   const weekends = $derived(zoom === 'Day' || zoom === 'Week' ? saturdays(span.start, days) : []);
-  const categoryOf = (i: Issue) => statusList.find((s) => s.id === i.status_id)?.category;
+  const statusOf = (i: Issue) => statusList.find((s) => s.id === i.status_id);
+  const categoryOf = (i: Issue) => statusOf(i)?.category;
   let ctx = $state.raw<Ctx>(emptyCtx);
   // Up to 3 displayed fields follow the title; a view without its own list keeps the plain label.
   const extra = $derived((view?.def.columns ?? []).slice(0, 3));
@@ -240,7 +241,7 @@
             <div class="line" data-kind={r.kind} role="listitem" data-issue={r.issueId}>
               <div class="label" data-kind={r.kind} data-label={r.id} style="padding-left:calc(var(--s-6) + {r.indent} * var(--s-7))">
                 {#if r.kind === 'group' && p}<EntityIcon icon={p.icon} color={p.color} size={14} />
-                {:else if r.category}<StatusGlyph category={r.category} size={14} />
+                {:else if r.category}<StatusGlyph category={r.category} icon={r.icon} color={r.color} size={14} />
                 {:else if r.kind === 'milestone'}<span class="stone" aria-hidden="true"></span>{/if}
                 {#if r.key}<span class="k">{r.key}</span>{/if}
                 <span class="text">{r.title ?? r.label}</span>
@@ -280,7 +281,7 @@
             {#each lane as i (i.id)}
               <div class="line todo" role="listitem" draggable="true" data-issue={i.id} ondragstart={() => (dragIssue = i.id)}>
                 <div class="label" data-label="un-{i.id}">
-                  {#if categoryOf(i)}<StatusGlyph category={categoryOf(i)!} size={14} />{/if}
+                  {#if categoryOf(i)}<StatusGlyph category={categoryOf(i)!} icon={statusOf(i)?.icon} color={statusOf(i)?.color} size={14} />{/if}
                   <span class="k">{i.key}</span><span class="text">{i.title}</span>
                 </div>
                 <div class="cell"><span class="slot">drag to schedule</span></div>

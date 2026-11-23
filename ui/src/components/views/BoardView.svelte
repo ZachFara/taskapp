@@ -61,7 +61,7 @@
     }
     return [...statuses]
       .sort((a, b) => a.position - b.position)
-      .map((s) => ({ name: s.name, category: s.category, holds: (i) => i.status_id === s.id, patch: () => ({ status_id: s.id }) }));
+      .map((s) => ({ name: s.name, category: s.category, icon: s.icon, color: s.color, holds: (i) => i.status_id === s.id, patch: () => ({ status_id: s.id }) }));
   });
 
   // Per-viewer layout memory. Storage can be blocked (private window), so every access is guarded.
@@ -208,6 +208,8 @@
         count={cards.length}
         total={pointsTotal(cards, fields, ctx)}
         category={col.category}
+        icon={col.icon}
+        color={col.color}
         {collapsed}
         ontoggle={() => toggleCollapsed(col)}
         onadd={() => dispatchEvent(new CustomEvent('command:issue.create'))}
