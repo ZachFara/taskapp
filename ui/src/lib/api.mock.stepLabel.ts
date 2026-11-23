@@ -23,7 +23,7 @@ function bulk(ids: unknown, patch: Obj): string {
 export function stepLabel(name: string, args: unknown[], out: unknown): string {
   const key = String((out as Obj | null)?.key ?? 'issue');
   switch (name) {
-    case 'issues_create': return `Created ${key}`;
+    case 'issues_create': case 'issues_create_from_quickadd': return `Created ${key}`;
     case 'issues_update': return `Edited ${key}`;
     case 'issues_bulk_update': return bulk(args[0], (args[1] ?? {}) as Obj);
     case 'issues_duplicate': return `Duplicated ${count(len(args[0]), 'issue')}`;

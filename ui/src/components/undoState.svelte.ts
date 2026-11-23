@@ -46,8 +46,16 @@ const quiet = (label: string) => QUIET.has(label) || label.startsWith('Changed d
 /** An undoable change the app names itself. */
 export const announce = (label: string) => show({ label, tone: 'success', action: { run: 'undo', text: 'Undo' } });
 
+// The step already on top when the page loaded. A write that leaves it unchanged (a page saving its own state on load)
+// added no step, so it is not announced; the first real change, or any undo/redo, ends the guard.
+// shortcut: a first write whose label equals that old step is not announced, when history ids exist compare those.
+let baseline: string | null | undefined;
+export const markLoaded = () => api.history.undoStatus().then((s) => (baseline = s.undo), () => {});
+
 export async function onWrote() {
   const { undo } = await api.history.undoStatus();
+  if (baseline !== undefined && undo === baseline) return;
+  baseline = undefined;
   if (undo && !quiet(undo)) show({ label: stepLabel(undo), tone: 'success', action: { run: 'undo', text: 'Undo' } });
 }
 
@@ -56,6 +64,7 @@ const message = (e: unknown, fallback: string) => (e as Partial<ErrorPayload>)?.
 export async function runUndo(a: Api) {
   try {
     await a.history.undo();
+    baseline = undefined;
     await refreshAll();
     show({ label: 'Undone', tone: 'success', action: { run: 'redo', text: 'Redo' } });
   } catch (e) {
@@ -66,6 +75,7 @@ export async function runUndo(a: Api) {
 export async function runRedo(a: Api) {
   try {
     await a.history.redo();
+    baseline = undefined;
     await refreshAll();
     show({ label: 'Redone', tone: 'success', action: { run: 'undo', text: 'Undo' } });
   } catch (e) {

@@ -12,10 +12,13 @@
   const KEY = /^[A-Z]{2,5}$/;
   const systemZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const zoneNames = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? [];
-  const zoneItems = [systemZone, ...zoneNames.filter((z) => z !== systemZone)].map((z) => ({
-    value: z,
-    label: z === systemZone ? `${z} (system)` : z,
-  }));
+  // A stored zone the browser's list lacks (the backend's default, "UTC", is one) is still offered, so it shows.
+  const zoneItems = $derived(
+    [systemZone, ...new Set([zone, ...zoneNames].filter((z) => z && z !== systemZone))].map((z) => ({
+      value: z,
+      label: z === systemZone ? `${z} (system)` : z,
+    })),
+  );
   const themeItems = [
     { value: 'system', label: 'System' },
     { value: 'light', label: 'Light' },
@@ -44,7 +47,7 @@
   onMount(async () => {
     name = (await read('workspace_name')) ?? '';
     key = (await read('issue_prefix')) ?? '';
-    zone = (await read('timezone')) ?? systemZone;
+    zone = (await read('timezone')) || systemZone;
     week = (await read('week_start')) ?? 'sunday';
     estimation = (await read('estimation')) ?? 'both';
     scale = (await read('point_scale')) ?? 'fibonacci';

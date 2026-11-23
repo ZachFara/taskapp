@@ -65,7 +65,7 @@ pub fn step_label(name: &str, args: &Value, out: Option<&Value>) -> String {
             .to_owned()
     };
     match name {
-        "issues_create" => format!("Created {}", key()),
+        "issues_create" | "issues_create_from_quickadd" => format!("Created {}", key()),
         "issues_update" => format!("Edited {}", key()),
         "issues_bulk_update" => bulk(args),
         "issues_duplicate" => format!("Duplicated {}", count(ids(args), "issue")),
@@ -94,5 +94,20 @@ pub fn step_label(name: &str, args: &Value, out: Option<&Value>) -> String {
             }
         }
         _ => generic(name),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn no_label_reads_like_a_command_name() {
+        // Reads never make a step, so a parse fallback is not a label anyone sees.
+        for n in crate::names().filter(|n| !n.contains("parse")) {
+            let l = step_label(n, &json!({}), None);
+            assert!(!l.contains('_') && !l.contains("quickadd"), "{n} => {l}");
+        }
     }
 }

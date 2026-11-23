@@ -4,10 +4,11 @@
   import { shortcutFor } from '../lib/commands';
   import Button from '../ui/Button.svelte';
   import Toast from '../ui/Toast.svelte';
-  import { dismiss, onWrote, runRedo, runUndo, undoToast } from './undoState.svelte';
+  import { dismiss, markLoaded, onWrote, runRedo, runUndo, undoToast } from './undoState.svelte';
 
   // The app dispatches `history:wrote` after a write; the toast then names the step it can undo.
   $effect(() => {
+    void markLoaded();
     const wrote = () => void onWrote();
     window.addEventListener('history:wrote', wrote);
     return () => window.removeEventListener('history:wrote', wrote);
