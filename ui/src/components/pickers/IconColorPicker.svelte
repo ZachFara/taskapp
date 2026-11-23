@@ -23,9 +23,9 @@
     onchange,
     label = 'Icon and colour',
     colorOnly = false,
-  }: { value: IconColor; onchange: (v: IconColor) => void; label?: string; colorOnly?: boolean } = $props();
+    open = $bindable(false),
+  }: { value: IconColor; onchange: (v: IconColor) => void; label?: string; colorOnly?: boolean; open?: boolean } = $props();
 
-  let open = $state(false);
   let tab = $state<'icons' | 'emoji'>('icons');
   let query = $state('');
   let pasted = $state('');

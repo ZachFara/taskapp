@@ -11,6 +11,8 @@
   import GroupHeader from '../../ui/GroupHeader.svelte';
   import CommandButton from '../CommandButton.svelte';
   import IssueMenu from './IssueMenu.svelte';
+  import IconButton from '../../ui/IconButton.svelte';
+  import { listCommands } from '../../lib/commands';
   import Menu from '../../ui/Menu.svelte';
   import MenuItem from '../../ui/MenuItem.svelte';
   import Pill from '../../ui/Pill.svelte';
@@ -288,6 +290,12 @@
     return () => on.forEach(([n, f]) => removeEventListener(`command:${n}`, f));
   });
 
+  // Hover actions run the same registry commands the menus run; a page command opens its page.
+  function runIssue(id: string, issue: number) {
+    const ctx = { route: location.pathname, layout: selection.layout, selection: selection.selected, focusedIssueId: issue, openIssueId: null, api, navigate };
+    const c = listCommands(ctx, { all: true }).find((x) => x.id === id);
+    if (c) (c.run ? c.run(ctx) : dispatchEvent(new CustomEvent('command:palette.open', { detail: { page: c.id } })));
+  }
   function openMenu(id: number, x: number, y: number) {
     menu = { id, x, y };
     menuOpen = true;
@@ -409,6 +417,15 @@
                 <FieldValue field={f} issue={i} {ctx} />
               </span>
             {/each}
+            <!-- shortcut: only the hovered or focused row renders its actions (a tooltip per row costs the 1000-row budget) -->
+            {#if hovered === i.id || selection.focused === i.id}
+              <span class="hover-acts">
+                <IconButton icon="arrow-right" label={`Open ${i.key}`} onclick={(e) => (e.stopPropagation(), navigate(`/issue/${i.key}`))} />
+                <IconButton icon="flag" label={`Priority of ${i.key}`} onclick={(e) => (e.stopPropagation(), runIssue('issue.priority', i.id))} />
+                <IconButton icon="pin" label={`Pin ${i.key}`} onclick={(e) => (e.stopPropagation(), runIssue('issue.pin', i.id))} />
+                <IconButton icon="archive" label={`Delete ${i.key}`} onclick={(e) => (e.stopPropagation(), runIssue('issue.delete', i.id))} />
+              </span>
+            {/if}
           </li>
         {/if}
       {/each}
@@ -448,6 +465,8 @@
     transition: background var(--dur-1) var(--ease);
   }
   .row:hover { background: var(--raised); }
+  /* Overlays the row's right end, so nothing shifts when it appears. */
+  .hover-acts { position: absolute; right: var(--s-7); display: flex; gap: var(--s-1); background: var(--raised); }
   .row[data-selected] { background: var(--selection); }
   .row[aria-current='true'] { box-shadow: inset 3px 0 0 var(--signal); background: var(--active); }
   .row[aria-current='true'][data-selected] { background: var(--selection); }

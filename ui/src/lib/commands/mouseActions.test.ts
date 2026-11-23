@@ -12,7 +12,7 @@ const IDS: [string, string][] = [
   ['issue.description.edit', '/issue/ABC-1'], ['issue.comment.focus', '/issue/ABC-1'], ['issue.subissue.add', '/issue/ABC-1'],
   ['issue.relation.add', '/issue/ABC-1'],
   ['project.rename', '/project/web'], ['project.description.edit', '/project/web'], ['milestone.new', '/project/web'],
-  ['cycle.move_unfinished', '/cycles'], ['settings.save', '/settings/general'],
+  ['icon.change', '/view/1'], ['icon.change', '/project/web'], ['cycle.move_unfinished', '/cycles'], ['settings.save', '/settings/general'],
 ];
 
 describe('a command for every mouse action', () => {

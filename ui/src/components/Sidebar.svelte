@@ -3,13 +3,15 @@
   import { navigate } from '../app/routes';
   import { api } from '../lib/api';
   import { openExternal } from '../lib/openExternal';
-  import type { Cycle, PinKind, ResolvedPin } from '../lib/bindings';
+  import type { Cycle, PinKind, ResolvedPin, SavedView } from '../lib/bindings';
   import { projects, refreshAll, views } from '../lib/stores.svelte';
-  import EntityIcon from '../ui/EntityIcon.svelte';
   import Icon from '../ui/Icon.svelte';
+  import RowActions, { type RowAction } from '../ui/RowActions.svelte';
   import Tooltip from '../ui/Tooltip.svelte';
   import { shortcutFor } from '../lib/commands';
   import ProjectSpark from './insights/ProjectSpark.svelte';
+  import IconColorPicker from './pickers/IconColorPicker.svelte';
+  import RowDialog from './RowDialog.svelte';
 
   // The app passes its live route; standalone the sidebar reads the address once.
   let { route = location.pathname }: { route?: string } = $props();
@@ -19,6 +21,12 @@
   let cycles = $state<Cycle[]>([]);
   let error = $state('');
   let sparklines = $state(false);
+  type Kind = 'view' | 'project' | 'cycle';
+  type Target = { kind: Kind; id: number; name: string };
+  // The row whose rename or delete dialog is open, and the `kind:id` whose icon picker is open.
+  let renaming = $state<Target | null>(null);
+  let removing = $state<Target | null>(null);
+  let picking = $state<string | null>(null);
 
   onMount(async () => {
     const [, p, c, sp] = await Promise.all([refreshAll(), api.pins.listResolved(), api.cycles.list(), api.settings.get('sidebar_sparklines').catch(() => null)]);
@@ -46,6 +54,69 @@
   function open(route: string) {
     if (!external(route)) return navigate(route);
     void openExternal(route);
+  }
+
+  // Saves a row's name, icon or colour, then refreshes the stores the sidebar reads.
+  async function patch(kind: Kind, id: number, change: { name?: string; icon?: string | null; color?: string | null }) {
+    try {
+      if (kind === 'view') {
+        const v = views.find((x) => x.id === id)!;
+        await api.views.save(id, change.name ?? v.name, v.def, change.icon !== undefined ? change.icon : v.icon, change.color !== undefined ? change.color : v.color);
+      } else if (kind === 'project') {
+        await api.projects.update({ ...projects.find((x) => x.id === id)!, ...change });
+      } else {
+        await api.cycles.update({ ...cycles.find((x) => x.id === id)!, ...change });
+        cycles = await api.cycles.list();
+      }
+      await refreshAll();
+    } catch (e) {
+      fail(e);
+    }
+  }
+  const rename = (name: string) => {
+    const r = renaming;
+    renaming = null;
+    if (r) void patch(r.kind, r.id, { name });
+  };
+  async function remove() {
+    const r = removing;
+    removing = null;
+    if (!r) return;
+    try {
+      if (r.kind === 'view') await api.views.delete(r.id);
+      else if (r.kind === 'project') await api.projects.delete(r.id);
+      else await api.cycles.delete(r.id);
+      if (r.kind === 'cycle') cycles = await api.cycles.list();
+      pins = await api.pins.listResolved();
+      await refreshAll();
+    } catch (e) {
+      fail(e);
+    }
+  }
+  async function duplicate(v: SavedView) {
+    try {
+      await api.views.save(null, `${v.name} copy`, v.def, v.icon, v.color);
+      await refreshAll();
+    } catch (e) {
+      fail(e);
+    }
+  }
+  const removeText: Record<Kind, string> = {
+    view: 'Its issues stay.',
+    project: 'Its milestones go with it. Issues in it stay but lose the project.',
+    cycle: 'Issues in it stay but leave the cycle.',
+  };
+
+  // The actions a row offers on hover and in its right-click menu.
+  function actsFor(kind: Kind, id: number, name: string, pinKind: PinKind, target: string, duplicateView?: () => void): RowAction[] {
+    const on = isPinned(pinKind, target);
+    return [
+      { id: 'rename', label: `Rename ${name}`, icon: 'edit', run: () => (renaming = { kind, id, name }) },
+      ...(duplicateView ? [{ id: 'duplicate', label: `Duplicate ${name}`, icon: 'copy', run: duplicateView }] : []),
+      { id: 'pin', label: `${on ? 'Unpin' : 'Pin'} ${name}`, icon: 'pin', run: () => toggle(pinKind, target, name) },
+      { id: 'icon', label: `Change icon of ${name}`, icon: 'circle', run: () => (picking = `${kind}:${id}`) },
+      { id: 'delete', label: `Delete ${name}`, icon: 'trash', danger: true, run: () => (removing = { kind, id, name }) },
+    ];
   }
 
   const moved = <T,>(ids: T[], from: T, to: T) => {
@@ -105,15 +176,6 @@
   </Tooltip>
 {/snippet}
 
-{#snippet pinBtn(kind: PinKind, target: string, title: string)}
-  {@const on = isPinned(kind, target)}
-  <Tooltip label={`${on ? 'Unpin' : 'Pin'} ${title}`}>
-    {#snippet children(props)}
-      <button {...props} class="aff" class:on type="button" aria-label={`${on ? 'Unpin' : 'Pin'} ${title}`} aria-pressed={on} onclick={() => toggle(kind, target, title)}><Icon name="pin" size={12} /></button>
-    {/snippet}
-  </Tooltip>
-{/snippet}
-
 <nav aria-label="Sidebar" data-on-frame>
   {#if error}<p role="alert" class="error">{error}</p>{/if}
 
@@ -146,8 +208,10 @@
         {#each views as v (v.id)}
           {@const href = `/view/${v.id}`}
           <li class="row" {...drag(v.id)} ondrop={() => dropView(v.id)}>
-            <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><EntityIcon icon={v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`} color={v.color} /><span class="t">{v.name}</span></a>
-            {@render pinBtn('View', String(v.id), v.name)}
+            <RowActions label={v.name} actions={actsFor('view', v.id, v.name, 'View', String(v.id), () => duplicate(v))}>
+              <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`, color: v.color }} onchange={(c) => patch('view', v.id, { icon: c.icon, color: c.color })} bind:open={() => picking === `view:${v.id}`, (o) => (picking = o ? `view:${v.id}` : null)} />
+              <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{v.name}</span></a>
+            </RowActions>
           </li>
         {/each}
       </ul>
@@ -162,8 +226,10 @@
         {#each projects as p (p.id)}
           {@const href = `/project/${p.slug}`}
           <li class="row">
-            <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><EntityIcon icon={p.icon ?? 'icon:project'} color={p.color} /><span class="t">{p.name}</span>{#if sparklines}<ProjectSpark projectId={p.id} name={p.name} />{/if}</a>
-            {@render pinBtn('Project', p.slug, p.name)}
+            <RowActions label={p.name} actions={actsFor('project', p.id, p.name, 'Project', p.slug)}>
+              <IconColorPicker label={`Icon and colour of ${p.name}`} value={{ icon: p.icon ?? 'icon:project', color: p.color }} onchange={(c) => patch('project', p.id, { icon: c.icon, color: c.color })} bind:open={() => picking === `project:${p.id}`, (o) => (picking = o ? `project:${p.id}` : null)} />
+              <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{p.name}</span>{#if sparklines}<ProjectSpark projectId={p.id} name={p.name} />{/if}</a>
+            </RowActions>
           </li>
         {/each}
       </ul>
@@ -177,13 +243,18 @@
         <li class="row">{@render navLink('/cycles', 'cycle', 'All cycles', 'nav.cycles', route === '/cycles')}</li>
         {#each cycles as c (c.id)}
           <li class="row">
-            <a class="item" href="/cycles" onclick={(e) => (e.preventDefault(), navigate('/cycles'))}><Icon name="cycle" /><span class="t">{label(c)}</span></a>
-            {@render pinBtn('Cycle', String(c.id), label(c))}
+            <RowActions label={label(c)} actions={actsFor('cycle', c.id, label(c), 'Cycle', String(c.id))}>
+              <IconColorPicker label={`Icon and colour of ${label(c)}`} value={{ icon: c.icon ?? 'icon:cycle', color: c.color }} onchange={(x) => patch('cycle', c.id, { icon: x.icon, color: x.color })} bind:open={() => picking === `cycle:${c.id}`, (o) => (picking = o ? `cycle:${c.id}` : null)} />
+              <a class="item" href="/cycles" onclick={(e) => (e.preventDefault(), navigate('/cycles'))}><span class="t">{label(c)}</span></a>
+            </RowActions>
           </li>
         {/each}
       </ul>
     {/if}
   </section>
+
+  <RowDialog bind:open={() => renaming !== null, (o) => { if (!o) renaming = null; }} mode="rename" title={`Rename ${renaming?.name ?? ''}`} value={renaming?.name ?? ''} onconfirm={rename} />
+  <RowDialog bind:open={() => removing !== null, (o) => { if (!o) removing = null; }} mode="delete" title={`Delete ${removing?.name ?? ''}?`} description={removing ? `"${removing.name}" goes away. ${removeText[removing.kind]}` : undefined} onconfirm={remove} />
 
   <ul class="bottom">
     <li>{@render navLink('/settings/general', 'settings', 'Settings', 'nav.settings', route.startsWith('/settings'))}</li>

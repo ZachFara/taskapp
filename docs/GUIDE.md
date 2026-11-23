@@ -251,10 +251,20 @@ value).
   pink. A `#rrggbb` value sent by CLI or MCP maps to the nearest key.
 - **Icons**: `icon:<id>` from the built-in set or `emoji:<emoji>` (any 1 to 8 non-ASCII characters). Today the
   icon and colour picker exists only in Settings: the "icon and colour" button next to the name field when you add a
-  status, label, project, cycle, template or property. There is no way yet to change an icon by clicking it on a
-  project page, view header or sidebar row, and no "Change icon" command. Views have an icon and colour in the data
-  (the sidebar shows them) but no screen sets them. CLI and MCP can set icons when creating projects, labels, cycles,
-  statuses and templates.
+  status, label, project, cycle, template or property. Click the icon of a view, project or cycle in the sidebar, of a
+  view or project in its page header, or pick "Change icon" in the command menu on a view or project page: the same
+  picker opens and saves. CLI and MCP can set icons when creating projects, labels, cycles, statuses and templates.
+
+## Hover actions and right-click menus
+
+- Point at a sidebar row (view, project, cycle), a view on the Views page, or an issue row in a list, and its actions
+  appear at the row's right edge. Tab to a row to show them from the keyboard. They do not move the row's contents.
+- Right-click a sidebar row or a Views page row, or press Shift+F10 or the menu key on it, for the same actions as a
+  menu. Views: rename, duplicate, pin or unpin, change icon, delete (delete asks first and keeps the issues).
+  Projects and cycles: rename, pin or unpin, change icon, delete (the same confirm as Settings).
+- Issue rows in a list: open, set priority, pin or unpin, delete (archives, as the command is named). Set status with
+  the status glyph. Right-click still opens the issue menu.
+- Projects, cycles and labels on their own index pages, and templates in Settings, have no hover actions yet.
 
 ## Issue templates
 

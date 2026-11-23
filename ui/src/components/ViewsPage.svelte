@@ -10,6 +10,9 @@
   import EmptyState from '../ui/EmptyState.svelte';
   import EntityIcon from '../ui/EntityIcon.svelte';
   import ListRow from '../ui/ListRow.svelte';
+  import RowActions, { type RowAction } from '../ui/RowActions.svelte';
+  import IconColorPicker from './pickers/IconColorPicker.svelte';
+  import RowDialog from './RowDialog.svelte';
   import IconButton from '../ui/IconButton.svelte';
   import PageHeader from '../ui/PageHeader.svelte';
   import Pill from '../ui/Pill.svelte';
@@ -27,6 +30,9 @@
   let pinned = $state<Set<string>>(new Set());
   let loaded = $state(false);
   let doomed = $state<SavedView | null>(null);
+  // The row being renamed and the view whose icon picker is open.
+  let renaming = $state<SavedView | null>(null);
+  let picking = $state<number | null>(null);
   let confirming = $state(false);
   let creating = $state(false);
 
@@ -55,6 +61,23 @@
     confirming = false;
     await load();
   }
+  async function saveView(v: SavedView, change: { name?: string; icon?: string | null; color?: string | null }) {
+    await api.views.save(v.id, change.name ?? v.name, v.def, change.icon !== undefined ? change.icon : v.icon, change.color !== undefined ? change.color : v.color);
+    await load();
+  }
+  async function togglePin(v: SavedView) {
+    const have = (await api.pins.listResolved()).find((p) => p.route === `/view/${v.id}`);
+    if (have) await api.pins.unpin(have.pin.id);
+    else await api.pins.pin('View', String(v.id), v.name);
+    await load();
+  }
+  const actsFor = (v: SavedView): RowAction[] => [
+    { id: 'rename', label: `Rename ${v.name}`, icon: 'edit', run: () => (renaming = v) },
+    { id: 'duplicate', label: `Duplicate ${v.name}`, icon: 'copy', run: () => api.views.save(null, `${v.name} copy`, v.def, v.icon, v.color).then(load) },
+    { id: 'pin', label: `${pinned.has(`/view/${v.id}`) ? 'Unpin' : 'Pin'} ${v.name}`, icon: 'pin', run: () => togglePin(v) },
+    { id: 'icon', label: `Change icon of ${v.name}`, icon: 'circle', run: () => (picking = v.id) },
+    { id: 'delete', label: `Delete ${v.name}`, icon: 'trash', danger: true, run: () => ((doomed = v), (confirming = true)) },
+  ];
 
   function openEdit(t: ViewTemplate, withLayout: boolean) {
     editing = t;
@@ -106,13 +129,16 @@
     <ul class="rows">
       {#each views as v (v.id)}
         <li class="row" data-view-id={v.id}>
-          <ListRow onpick={() => navigate(`/view/${v.id}`)}>
-            <EntityIcon icon={v.icon ?? 'icon:layers'} color={v.color} />
-            <span class="name">{v.name}</span>
-            <Pill>{layoutName(v.def.layout)}</Pill>
-            {#if pinned.has(`/view/${v.id}`)}<Pill>Pinned</Pill>{/if}
-          </ListRow>
-          <div class="tools"><IconButton icon="trash" label={`Delete ${v.name}`} onclick={() => ((doomed = v), (confirming = true))} /></div>
+          <RowActions label={v.name} actions={actsFor(v)}>
+            <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? 'icon:layers', color: v.color }} onchange={(c) => saveView(v, { icon: c.icon, color: c.color })} bind:open={() => picking === v.id, (o) => (picking = o ? v.id : null)} />
+            <span class="grow">
+              <ListRow onpick={() => navigate(`/view/${v.id}`)}>
+                <span class="name">{v.name}</span>
+                <Pill>{layoutName(v.def.layout)}</Pill>
+                {#if pinned.has(`/view/${v.id}`)}<Pill>Pinned</Pill>{/if}
+              </ListRow>
+            </span>
+          </RowActions>
         </li>
       {/each}
     </ul>
@@ -146,6 +172,8 @@
 </main>
 
 <NewViewDialog bind:open={creating} />
+
+<RowDialog bind:open={() => renaming !== null, (o) => { if (!o) renaming = null; }} mode="rename" title="Rename view" value={renaming?.name ?? ''} onconfirm={(n) => { const v = renaming; renaming = null; if (v) void saveView(v, { name: n }); }} />
 
 <Dialog bind:open={confirming} title="Delete view?" description={doomed ? `"${doomed.name}" goes away. Its issues stay.` : undefined}>
   {#snippet actions()}

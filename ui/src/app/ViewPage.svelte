@@ -17,6 +17,7 @@
   import Dialog from '../ui/Dialog.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import IconButton from '../ui/IconButton.svelte';
+  import IconColorPicker from '../components/pickers/IconColorPicker.svelte';
   import Menu from '../ui/Menu.svelte';
   import MenuItem from '../ui/MenuItem.svelte';
   import PageHeader from '../ui/PageHeader.svelte';
@@ -53,8 +54,15 @@
   let draft = $state('');
   let confirmDelete = $state(false);
   let insights = $state(false);
+  let iconOpen = $state(false);
   let creating = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
+
+  async function changeLook(c: { icon: string | null; color: string | null }) {
+    if (!view || !def) return;
+    await api.views.save(view.id, name, def, c.icon, c.color);
+    await load();
+  }
 
   async function load() {
     const found = (await api.views.list()).find((v) => String(v.id) === params.id) ?? null;
@@ -164,6 +172,7 @@
       on('command:view.saveAsTemplate', saveAsTemplate),
       on('command:view.resetToTemplate', resetToTemplate),
       on('command:insights.toggle', () => (insights = !insights)),
+      on('command:icon.change', () => (iconOpen = true)),
     ];
     return () => {
       offs.forEach((f) => f());
@@ -190,6 +199,7 @@
   {#key params.id}
     <div class="page">
     <PageHeader title={name} icon={view?.icon ?? 'icon:layers'} color={view?.color ?? undefined}>
+      {#snippet iconEdit()}<IconColorPicker label={`Icon and colour of ${name}`} value={{ icon: view?.icon ?? 'icon:layers', color: view?.color ?? null }} onchange={changeLook} bind:open={iconOpen} />{/snippet}
       {#snippet tabs()}<Tabs tabs={layoutTabs} bind:value={() => layout, setLayout} />{/snippet}
       {#snippet filters()}<ViewEditor def={live.def} onchange={change} {clearSignal} />{/snippet}
       {#snippet actions()}
