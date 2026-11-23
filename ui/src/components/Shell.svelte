@@ -154,6 +154,7 @@
 <style>
   .app {
     display: grid;
+    zoom: var(--ui-zoom, 1);
     height: calc(100vh / var(--ui-zoom, 1));
     grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
     grid-template-rows: var(--topbar-h) minmax(0, 1fr);

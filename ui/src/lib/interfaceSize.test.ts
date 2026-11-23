@@ -19,9 +19,8 @@ describe('interfaceSize', () => {
     expect(interfaceSize.size).toBe(100);
   });
 
-  it('applies the zoom to the document root and remembers it', () => {
+  it('publishes the zoom factor on the root and remembers it', () => {
     setInterfaceSize(125);
-    expect(document.documentElement.style.zoom).toBe('1.25');
     expect(document.documentElement.style.getPropertyValue('--ui-zoom')).toBe('1.25');
     expect(localStorage.getItem('cairn.interfaceSize')).toBe('125');
   });

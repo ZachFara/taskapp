@@ -1,4 +1,4 @@
-// Interface size scales the whole app with CSS zoom on the root, so the px tokens scale with it. Per device, like
+// Interface size scales the app with CSS zoom on the app root, so the px tokens scale with it. Per device, like
 // the pane widths: a screen's size is a property of the screen.
 export const SIZES = [100, 110, 115, 125] as const;
 export const DEFAULT = 110;
@@ -15,10 +15,9 @@ export function readSize(): number {
 
 export const interfaceSize = $state<{ size: number }>({ size: readSize() });
 
+// The app root applies `zoom: var(--ui-zoom)`. Zooming the document itself would shift floating popovers and tooltips.
 function apply() {
-  const root = document.documentElement;
-  root.style.zoom = String(interfaceSize.size / 100);
-  root.style.setProperty('--ui-zoom', String(interfaceSize.size / 100));
+  document.documentElement.style.setProperty('--ui-zoom', String(interfaceSize.size / 100));
 }
 apply();
 
