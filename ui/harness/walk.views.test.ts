@@ -292,4 +292,13 @@ describe('walk project', { timeout: 25_000 }, () => {
     const box = (await page.locator('.cx-popover').last().boundingBox())!;
     expect(1440 - (box.x + box.width)).toBeGreaterThanOrEqual(8);
   });
+
+  it('R4-23 the comment box has no resize grip and a disabled primary button is plainly disabled', async () => {
+    await open('/issue/ABC-2');
+    const box = page.getByLabel('Leave a comment (markdown)').or(page.locator('textarea').last());
+    expect(await box.evaluate((e) => getComputedStyle(e).resize)).toBe('none');
+    const send = page.getByRole('button', { name: 'Comment', exact: true });
+    expect(await send.isDisabled()).toBe(true);
+    expect(await send.evaluate((e) => getComputedStyle(e).opacity)).toBe('1');
+  });
 });

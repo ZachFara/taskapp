@@ -217,7 +217,7 @@
 <style>
   .detail { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--sheet); }
   .scroll { flex: 1; overflow-y: auto; }
-  .hero { display: grid; gap: var(--s-4); padding: var(--s-8) var(--s-8) var(--s-7); background: var(--tone); color: var(--band-ink); border-bottom: 2px solid var(--stone); }
+  .hero { display: grid; gap: var(--s-4); padding: var(--s-7) var(--s-8) var(--s-6); background: var(--tone); color: var(--band-ink); border-bottom: 2px solid var(--stone); }
   .st { display: inline-flex; align-items: center; gap: var(--s-4); font-size: var(--fs-sm); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--band-count); }
   .crumb { font-size: var(--fs-lg); font-weight: 600; color: var(--muted); }
   .sep { margin: 0 var(--s-2); }
@@ -228,7 +228,7 @@
   h2 button:hover { text-decoration: underline dotted; text-underline-offset: var(--s-2); }
   .arch { font-weight: 700; color: var(--signal); }
   .cols { display: grid; grid-template-columns: minmax(0, 1fr) calc(var(--panel-w) - var(--s-4)); }
-  main { display: grid; align-content: start; gap: var(--s-8); padding: var(--s-7) var(--s-8) var(--s-10); min-width: 0; }
+  main { display: grid; align-content: start; gap: var(--s-6); padding: var(--s-7) var(--s-8) var(--s-10); min-width: 0; }
   aside { padding: var(--s-7); background: var(--card); border-left: 1px solid var(--border); position: relative; overflow: hidden; }
   aside h3 { font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--stone); padding-bottom: var(--s-3); border-bottom: 2px solid var(--stone); }
   .meta { margin-top: var(--s-7); font-size: var(--fs-sm); color: var(--muted); }

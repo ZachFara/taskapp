@@ -48,7 +48,7 @@
 <style>
   section { display: grid; gap: var(--s-4); }
   .modes, .acts { display: flex; gap: var(--s-3); }
-  .view { display: block; width: 100%; min-height: var(--s-10); padding: var(--s-4) var(--s-5); border: 1px dashed transparent; border-radius: var(--r-ctl); background: transparent; text-align: left; font-weight: 400; }
+  .view { display: block; width: 100%; min-height: var(--s-8); padding: var(--s-4) var(--s-5); border: 1px dashed transparent; border-radius: var(--r-ctl); background: transparent; text-align: left; font-weight: 400; }
   .view:hover { border-color: var(--control); }
   .hint { color: var(--muted); }
   .md { line-height: var(--lh-body); }

@@ -49,7 +49,7 @@
     white-space: nowrap;
     transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
   }
-  .btn:disabled { opacity: 0.45; cursor: default; }
+  .btn:disabled { opacity: 1; background: var(--active); color: var(--muted); border-color: transparent; cursor: default; }
   [data-variant='primary'] { background: var(--accent); color: var(--accent-ink); }
   [data-variant='primary']:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 86%, var(--ink)); }
   [data-variant='quiet'] { background: transparent; color: var(--ink); border-color: var(--control); font-weight: 500; }
