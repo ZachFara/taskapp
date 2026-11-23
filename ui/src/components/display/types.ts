@@ -35,8 +35,9 @@ export const showWeekends = (d: ViewDef) => (d as DisplayDef).show_weekends ?? t
 export const showEmptyGroups = (d: ViewDef) => (d as DisplayDef).show_empty_groups ?? false;
 export const subIssues = (d: ViewDef): SubIssues => (d as DisplayDef).show_sub_issues ?? 'nest';
 /** Fields a layout shows: the view's own list, else the layout default. */
+export const stored = (d: ViewDef, card = false): FieldRef[] => (card && (d as DisplayDef).card_fields?.length ? (d as DisplayDef).card_fields : d.columns) ?? [];
 export const shown = (d: ViewDef, fallback: FieldRef[], card = false): FieldRef[] => {
-  const own = (card && (d as DisplayDef).card_fields?.length ? (d as DisplayDef).card_fields : d.columns) ?? [];
+  const own = stored(d, card);
   return (own.length ? own : fallback).filter((f) => fixedOn(f.Fixed));
 };
 export const sameField = (a: FieldRef, b: FieldRef) => a.Property !== undefined ? a.Property === b.Property : a.Fixed === b.Fixed;

@@ -12,7 +12,7 @@
   import Switch from '../../ui/Switch.svelte';
   import TextInput from '../../ui/TextInput.svelte';
   import { fixedOn } from '../../lib/fields.svelte';
-  import { BUILT_IN, KIND_ICON, defaultFor, density, sameField, showEmptyGroups, showWeekends, shown, subIssues, type DisplayDef, type SubIssues } from './types';
+  import { BUILT_IN, KIND_ICON, defaultFor, density, sameField, showEmptyGroups, showWeekends, shown, stored, subIssues, type DisplayDef, type SubIssues } from './types';
 
   let { def, onchange }: { def: ViewDef; onchange: (patch: Partial<DisplayDef>) => void } = $props();
 
@@ -27,7 +27,11 @@
 
   // The board draws its cards from card_fields when set; every other layout from columns.
   const card = $derived(def.layout === 'Board');
-  const edit = (list: FieldRef[]): Partial<DisplayDef> => (card ? { card_fields: list } : { columns: list });
+  // A field switched off in Settings is not shown but stays in the saved list, so it is back when the field is on again.
+  const edit = (list: FieldRef[], reset = false): Partial<DisplayDef> => {
+    const kept = reset ? list : [...list, ...stored(def, card).filter((f) => !fixedOn(f.Fixed))];
+    return card ? { card_fields: kept } : { columns: kept };
+  };
   const universe = $derived<Entry[]>([...BUILT_IN.filter((b) => fixedOn(b.field.Fixed)), ...defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name, kind: p.kind }))]);
   const on = $derived(shown(def, defaultFor(def.layout), card));
   const match = (e: Entry) => e.name && e.name.toLowerCase().includes(query.trim().toLowerCase());
@@ -110,7 +114,7 @@
       <p class="none">No field matches "{query}".</p>
     {/each}
   </div>
-  <Button icon="undo" onclick={() => onchange(edit([]))}>Reset to default</Button>
+  <Button icon="undo" onclick={() => onchange(edit([], true))}>Reset to default</Button>
   <div class="opts">
     {#if L !== 'Gantt' && L !== 'Calendar'}
       <div class="opt"><span>Compact rows</span><Switch label="Compact rows" bind:checked={() => density(def) === 'compact', (v) => onchange({ density: v ? 'compact' : 'comfortable' })} /></div>
