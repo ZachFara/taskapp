@@ -299,6 +299,19 @@ describe('walk project', { timeout: 25_000 }, () => {
     expect(1440 - (box.x + box.width)).toBeGreaterThanOrEqual(8);
   });
 
+  it('the app fills the window at every interface size (no empty band under it)', async () => {
+    await open();
+    for (const zoom of ['1', '1.1', '1.25']) {
+      await page.evaluate((z) => document.documentElement.style.setProperty('--ui-zoom', z), zoom);
+      const gap = await page.evaluate(() => {
+        const r = document.querySelector('.app')!.getBoundingClientRect();
+        return [Math.round(r.top), Math.round(window.innerHeight - r.bottom), Math.round(window.innerWidth - r.right)];
+      });
+      expect(gap, `zoom ${zoom}`).toEqual([0, 0, 0]);
+    }
+    await page.evaluate(() => document.documentElement.style.removeProperty('--ui-zoom'));
+  });
+
   it('R4-23 the comment box has no resize grip and a disabled primary button is plainly disabled', async () => {
     await open('/issue/ABC-2');
     const box = page.getByLabel('Leave a comment (markdown)').or(page.locator('textarea').last());
