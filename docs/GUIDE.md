@@ -181,6 +181,10 @@ saved automatically (after a short pause). Filter changes show an "Undo" toast.
   Status, StatusCategory, Priority, Project, Milestone, Cycle, Label, Parent, StartDate, DueDate, Estimate, Points,
   CreatedAt, UpdatedAt, CompletedAt, Archived, Key, SubIssueProgress, RelationCount, CommentCount, and any custom
   property.
+- **Quick filter.** The filter icon in the header (`shift+f`) opens a bar of temporary filters: a text box that matches
+  titles, and chips for Status, Priority, Project, Label and Due. They narrow the view while the bar is open and are not
+  saved with it; the bar says "Temporary". "Save to view" keeps them as part of the saved filter. Esc, the x, or
+  leaving the view clears them.
 - **Group.** "Group" button (not on the calendar): choose any of Status, Status category, Priority, Project, Cycle,
   Due, Title, Points (if on) or a custom property. Group headers collapse; the list adds an issue to a group.
 - **Sort.** One sort field plus a Descending switch.
@@ -328,6 +332,9 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 | Point scale | Fibonacci, Linear, Powers, T-shirt | Disabled when points are off. |
 | Progress charts | on or off | Burn-ups and sparklines on projects and cycles. |
 | Sidebar sparklines | on or off | A small progress line per project. |
+| Interface size | 100%, 110%, 115%, 125% | Scales the whole app on this device (not saved in the workspace). Default 110%. Applies at once. |
+
+Sidebar and issue panel widths are remembered per device. Drag an edge to resize; double-click it to reset.
 
 Other stored settings (not all with a screen): backup folder, Reminders list, Google Calendar choice and switch, export
 folder, remote and switch, the default view template.
@@ -378,6 +385,14 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 |---|---|---|---|
 | `palette.open` | Open command menu | `mod+k` or `mod+p` | Open the command menu. Works inside text fields. |
 | `nav.search` | Search | `/` | Open the command menu for search. |
+| `sidebar.toggle` | Show or hide sidebar | `mod+\` | Collapse or show the sidebar. |
+| `pane.sidebar.wider` | Make sidebar wider | `alt+arrowright` | Widen the sidebar by 16 px. |
+| `pane.sidebar.narrower` | Make sidebar narrower | `alt+arrowleft` | Narrow the sidebar by 16 px. |
+| `pane.panel.wider` | Make issue panel wider | `alt+shift+arrowleft` | Widen the issue panel by 16 px. |
+| `pane.panel.narrower` | Make issue panel narrower | `alt+shift+arrowright` | Narrow the issue panel by 16 px. |
+| `size.up` | Increase interface size | `mod+=` | Next interface size step (100, 110, 115, 125%). |
+| `size.down` | Decrease interface size | `mod+-` | Previous interface size step. |
+| `size.reset` | Reset interface size | `mod+0` | Back to 110%. |
 | `help.shortcuts` | Keyboard shortcuts | `?` | Open the keyboard shortcuts sheet (grouped, with a filter box). |
 | `issue.create` | New issue | `c` | Open the quick-add dialog. |
 | `history.undo` | Undo | `mod+z` or `u` | Undo the newest step. Inside a text field mod+z stays the field's own undo. |
@@ -440,6 +455,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 
 | Command id | Name | Keys | What it does |
 |---|---|---|---|
+| `view.quickFilter` | Show or hide quick filter | `shift+f` | Temporary filters that are not saved with the view. |
 | `view.layout.list` | List layout | `v l` | Switch the view to List. |
 | `view.layout.board` | Board layout | `v b` | Switch the view to Board. |
 | `view.layout.table` | Table layout | `v t` | Switch the view to Table. |
@@ -499,6 +515,8 @@ These appear in the command menu (when they apply) and have no shortcut.
 | Command id | Name | Keys | What it does |
 |---|---|---|---|
 | `app.reload` | Reload | (none) | Reload the window. |
+| `pane.sidebar.reset` | Reset sidebar width | (none) | Back to the default sidebar width. |
+| `pane.panel.reset` | Reset issue panel width | (none) | Back to the default issue panel width. |
 | `cycle.move_unfinished` | Move unfinished issues to the next cycle | (none) | Move unfinished issues of the cycle to the next cycle (Cycles page). |
 | `cycle.new` | New cycle | (none) | New cycle. |
 | `group.add` | Add issue to this group | (none) | Add an issue to this group. |

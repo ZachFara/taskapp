@@ -6,6 +6,7 @@
   import Select from '../../ui/Select.svelte';
   import TextInput from '../../ui/TextInput.svelte';
   import { SKINS, setSkin, setTheme, theme } from '../../lib/theme.svelte';
+  import { interfaceSize, setInterfaceSize, SIZES } from '../../lib/interfaceSize.svelte';
   import Switch from '../../ui/Switch.svelte';
   import { estimationItems, scaleItems } from '../insights/estimation';
 
@@ -24,6 +25,7 @@
     { value: 'light', label: 'Light' },
     { value: 'dark', label: 'Dark' },
   ];
+  const sizeItems = SIZES.map((n) => ({ value: String(n), label: `${n}%` }));
   const weekItems = [
     { value: 'sunday', label: 'Sunday' },
     { value: 'monday', label: 'Monday' },
@@ -113,6 +115,9 @@
       <Select label="Theme" items={themeItems} bind:value={themeChoice} />
     </div>
     <div class="st-field">
+      <span>Interface size</span>
+      <Select label="Interface size" items={sizeItems} bind:value={() => String(interfaceSize.size), (v) => setInterfaceSize(Number(v))} />
+      <span class="st-hint">Scales the whole app on this device. Applies at once; no need to save.</span>
       <span>Look</span>
       <div class="skins" role="group" aria-label="Look">
         {#each SKINS as s (s.id)}

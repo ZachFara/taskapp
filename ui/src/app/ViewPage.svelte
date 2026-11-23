@@ -25,6 +25,9 @@
   import Tabs from '../ui/Tabs.svelte';
   import TextInput from '../ui/TextInput.svelte';
   import { navigate } from './routes';
+  import QuickFilter from '../components/filters/QuickFilter.svelte';
+  import { combineFilters } from '../components/filters/ephemeral';
+  import { buildFilter, newChip, type Chip } from '../components/filters/model';
   import { shortcutFor } from '../lib/commands/registry';
   import NewViewDialog from '../components/display/NewViewDialog.svelte';
   import { templates } from '../components/display/templatesApi';
@@ -54,6 +57,10 @@
   let confirmDelete = $state(false);
   let insights = $state(false);
   let creating = $state(false);
+  // Quick filters narrow what this page shows. They are never saved unless "Save to view" keeps them.
+  let quickOpen = $state(false);
+  let quickText = $state('');
+  let quickChips = $state<Chip[]>([]);
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   async function load() {
@@ -62,6 +69,9 @@
     def = found ? structuredClone($state.snapshot(found.def)) : null;
     name = found?.name ?? '';
     override = params.layout ?? null;
+    quickOpen = false;
+    quickText = '';
+    quickChips = [];
     missing = found === null;
     pinId = (await api.pins.listResolved()).find((p) => p.pin.kind === 'View' && p.pin.target === params.id)?.pin.id ?? null;
   }
@@ -75,7 +85,21 @@
   // Commands scope their keys by layout; the timeline does not announce itself, and tabs can change without a route change.
   $effect(() => selection.setLayout(({ List: 'list', Table: 'table', Board: 'board', Gantt: 'timeline', Calendar: 'calendar' } as const)[layout]));
   const live = $derived(view && def ? { ...view, name, def: { ...def, layout } } : null);
-  const filtered = $derived(def?.filter != null);
+  const quickFilter = $derived(combineFilters(quickText.trim() ? { Cond: { field: { Fixed: 'Title' }, op: 'Contains', value: quickText.trim() } } : null, buildFilter(null, quickChips)));
+  // What the layouts get: the saved view plus the quick filter. Only the saved part is ever written.
+  const shown = $derived(live && { ...live, def: { ...live.def, filter: combineFilters(live.def.filter, quickFilter) } });
+  const filtered = $derived(shown?.def.filter != null);
+  function closeQuick() {
+    quickOpen = false;
+    quickText = '';
+    quickChips = [];
+  }
+  // Keeps the quick filter as part of the saved view, through the same save as a chip edit.
+  function saveQuick() {
+    if (!def || quickFilter === null) return;
+    change({ filter: combineFilters(def.filter, quickFilter) });
+    closeQuick();
+  }
 
   // Debounced: a burst of chip edits is one save.
   // A filter change changes what the user sees, so its save is announced with an Undo; display toggles are not.
@@ -145,7 +169,7 @@
 
   // Count for the empty state; the layout components run the same query for their own rows.
   $effect(() => {
-    const d = live?.def;
+    const d = shown?.def;
     if (d) api.views.query(d).then((r) => (rows = r.length));
   });
 
@@ -164,6 +188,7 @@
       on('command:view.saveAsTemplate', saveAsTemplate),
       on('command:view.resetToTemplate', resetToTemplate),
       on('command:insights.toggle', () => (insights = !insights)),
+      on('command:view.quickFilter', () => (quickOpen ? closeQuick() : (quickOpen = true))),
     ];
     return () => {
       offs.forEach((f) => f());
@@ -181,6 +206,7 @@
   }
   function clearFilters() {
     clearSignal++;
+    closeQuick();
     change({ filter: null });
   }
   const Shown = $derived(byLayout[layout]);
@@ -200,6 +226,7 @@
             <div class="row"><Button variant="primary" type="submit">Rename</Button></div>
           </form>
         </Popover>
+        <IconButton icon="filter" label="Quick filter" shortcut={shortcutFor('view.quickFilter')} pressed={quickOpen} onclick={() => (quickOpen ? closeQuick() : (quickOpen = true))} />
         <IconButton icon="target" label="Insights" shortcut="shift+i" pressed={insights} onclick={() => (insights = !insights)} />
         <IconButton icon="pin" label={pinId === null ? 'Pin view' : 'Unpin view'} shortcut={shortcutFor('view.pin')} pressed={pinId !== null} onclick={togglePin} />
         <Menu>
@@ -215,6 +242,9 @@
         <CommandButton command="issue.create" variant="primary" />
       {/snippet}
     </PageHeader>
+    {#if quickOpen}
+      <QuickFilter bind:text={quickText} bind:chips={quickChips} saveable={quickFilter !== null} onsave={saveQuick} onclose={closeQuick} />
+    {/if}
     <div class="cols">
     <main class="body">
       {#if rows === 0 && filtered}
@@ -222,7 +252,7 @@
           {#snippet action()}<Button onclick={clearFilters}>Clear filters</Button>{/snippet}
         </EmptyState>
       {:else}
-        <div class="pane" role="presentation" onclick={pick}><Shown view={live} embedded /></div>
+        <div class="pane" role="presentation" onclick={pick}><Shown view={shown} embedded /></div>
       {/if}
     </main>
     {#if insights && view}<InsightsPanel kind="view" id={view.id} title={name} onclose={() => (insights = false)} />{/if}

@@ -81,6 +81,26 @@ describe('ViewPage', () => {
     await waitFor(async () => expect((await saved()).def.filter).toBeNull(), { timeout: 2000 });
   });
 
+  it('quick_filter_narrows_without_saving_until_saved', async () => {
+    const user = userEvent.setup();
+    await open();
+    await screen.findByText('Beta task');
+    await user.click(screen.getByRole('button', { name: 'Quick filter' }));
+    await user.type(await screen.findByLabelText('Quick filter text'), 'Alpha');
+    await waitFor(() => expect(screen.queryByText('Beta task')).toBeNull());
+    expect(screen.getByText('Temporary')).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 600));
+    expect((await saved()).def.filter).toBeNull();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.getByText('Beta task')).toBeTruthy());
+    await user.click(screen.getByRole('button', { name: 'Quick filter' }));
+    await user.type(await screen.findByLabelText('Quick filter text'), 'Alpha');
+    await user.click(await screen.findByRole('button', { name: 'Save to view' }));
+    await waitFor(async () => expect((await saved()).def.filter).toEqual({
+      Cond: { field: { Fixed: 'Title' }, op: 'Contains', value: 'Alpha' },
+    }), { timeout: 2000 });
+  });
+
   it('empty_result_offers_clear_filters', async () => {
     const user = userEvent.setup();
     await open({ filter: { Cond: { field: { Fixed: 'Title' }, op: 'Contains', value: 'no such title' } } });

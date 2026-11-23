@@ -51,12 +51,12 @@
 
 <style>
   .page-header { flex: none; }
-  .top { height: var(--topbar-h); display: flex; align-items: center; gap: var(--s-8); padding: 0 var(--s-7); }
+  .top { height: var(--topbar-h); display: flex; align-items: center; gap: var(--s-8); padding: 0 var(--s-7); min-width: 0; }
   h1 { font-size: var(--fs-title); font-weight: 700; letter-spacing: -0.02em; line-height: var(--lh-tight); }
   .name { border: 0; background: transparent; padding: 0; font: inherit; letter-spacing: inherit; color: inherit; cursor: text; }
   .edit { display: inline-block; min-width: 240px; font-size: var(--fs-md); }
-  .tabs { align-self: stretch; display: flex; }
+  .tabs { align-self: stretch; display: flex; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   .grow { flex: 1; }
-  .actions { display: flex; align-items: center; gap: var(--s-4); }
+  .actions { display: flex; align-items: center; gap: var(--s-4); flex: none; }
   .filters { height: 36px; display: flex; align-items: center; gap: var(--s-4); padding: 0 var(--s-7); }
 </style>
