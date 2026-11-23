@@ -8,11 +8,12 @@
     value = $bindable(''),
     tabs,
     label = 'Layout',
-  }: { value?: string; tabs: { id: string; label: string; icon?: string; shortcut?: string }[]; label?: string } = $props();
+    segmented = false,
+  }: { segmented?: boolean; value?: string; tabs: { id: string; label: string; icon?: string; shortcut?: string }[]; label?: string } = $props();
 </script>
 
 <Tabs.Root bind:value>
-  <Tabs.List class="cx-tabs" aria-label={label}>
+  <Tabs.List class={segmented ? 'cx-tabs cx-seg' : 'cx-tabs'} aria-label={label}>
     {#each tabs as t (t.id)}
       <Tooltip label={t.label} shortcut={t.shortcut}>
         {#snippet children(tp)}
@@ -44,6 +45,11 @@
     font-weight: 500;
     transition: color var(--dur-1) var(--ease);
   }
+  /* A segmented control: one outlined group, the chosen segment filled. Names always show. */
+  :global(.cx-seg) { height: auto; gap: 0; padding: var(--s-1); border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--raised); }
+  :global(.cx-seg .cx-tab) { margin: 0; height: var(--ctl-h); border: 0; border-radius: var(--r-sm); }
+  :global(.cx-seg .cx-tab[data-state='active']) { background: var(--sheet); box-shadow: 0 0 0 1px var(--border); }
+  :global(.cx-seg .cx-tab-label) { display: inline !important; }
   :global(.cx-tab:hover) { color: var(--ink); }
   :global(.cx-tab[data-state='active']) { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
   /* Tabs with an icon drop their text on narrow windows; the title and aria-label keep the name. */

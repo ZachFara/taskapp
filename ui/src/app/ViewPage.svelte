@@ -177,6 +177,7 @@
 
 {#if live}
   {#key params.id}
+    <div class="page">
     <PageHeader title={name} icon={view?.icon ?? 'icon:layers'} color={view?.color ?? undefined}>
       {#snippet tabs()}<Tabs tabs={layoutTabs} bind:value={() => layout, setLayout} />{/snippet}
       {#snippet filters()}<ViewEditor def={live.def} onchange={change} {clearSignal} />{/snippet}
@@ -210,10 +211,11 @@
           {#snippet action()}<Button onclick={clearFilters}>Clear filters</Button>{/snippet}
         </EmptyState>
       {:else}
-        <div role="presentation" onclick={pick}><Shown view={live} embedded /></div>
+        <div class="pane" role="presentation" onclick={pick}><Shown view={live} embedded /></div>
       {/if}
     </main>
     {#if insights && view}<InsightsPanel kind="view" id={view.id} title={name} onclose={() => (insights = false)} />{/if}
+    </div>
     </div>
   {/key}
   <NewViewDialog bind:open={creating} current={live} />
@@ -227,8 +229,11 @@
 {/if}
 
 <style>
+  /* The page is as tall as the sheet, so a view can fill it and scroll inside itself. */
+  .page { display: flex; flex-direction: column; height: 100%; }
   .cols { flex: 1; min-height: 0; display: flex; }
   .body { flex: 1; min-height: 0; overflow: auto; border-top: 1px solid var(--border); }
+  .pane { height: 100%; }
   .trig { display: inline-flex; }
   .row { display: flex; justify-content: flex-end; margin-top: var(--s-4); }
   .load { display: grid; gap: var(--s-4); padding: var(--s-7); }

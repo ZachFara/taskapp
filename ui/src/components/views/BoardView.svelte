@@ -10,7 +10,7 @@
   import Contour from '../../ui/Contour.svelte';
   import EntityIcon from '../../ui/EntityIcon.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
-  import IconButton from '../../ui/IconButton.svelte';
+  import Button from '../../ui/Button.svelte';
   import FieldValue from '../display/FieldValue.svelte';
   import { BOARD_DEFAULT, density, emptyCtx, loadCtx, pointsName, pointsTotal, shown, type Ctx } from '../display/types';
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
@@ -178,10 +178,11 @@
   </EmptyState>
 {:else}
 
+<div class="view">
 <div class="bar">
   <span class="count">{issues.length} issues</span>
   <div class="grow"></div>
-  <IconButton icon="filter" label="Hide empty columns" pressed={hideEmpty} onclick={toggleHideEmpty} />
+  <Button icon="filter" aria-label="Hide empty columns" aria-pressed={hideEmpty} onclick={toggleHideEmpty}>{hideEmpty ? 'Show empty columns' : 'Hide empty columns'}</Button>
 </div>
 
 <IssueMenu>
@@ -255,6 +256,7 @@
   {/each}
 </div>
 </IssueMenu>
+</div>
 {/if}
 
 <style>
@@ -263,7 +265,10 @@
     font-size: var(--fs-md);
     margin: var(--s-4) var(--s-6);
   }
+  .view { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  .view :global(.fill) { flex: 1; height: auto; min-height: 0; display: flex; flex-direction: column; }
   .bar {
+    flex: none;
     height: var(--row-h);
     display: flex;
     align-items: center;
@@ -278,7 +283,7 @@
     gap: var(--s-4);
     padding: var(--s-4) var(--s-6) var(--s-6);
     overflow-x: auto;
-    height: 100%;
+    flex: 1;
     min-height: 0;
   }
   .column {

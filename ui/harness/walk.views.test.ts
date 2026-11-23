@@ -254,4 +254,28 @@ describe('walk project', { timeout: 25_000 }, () => {
     expect(await page.getByRole('tab', { name: 'Board' }).getAttribute('data-state')).toBe('inactive');
     expect(await page.getByRole('tab', { name: 'List' }).getAttribute('data-state')).toBe('active');
   });
+
+  it('R4-12 calendar: month grid fills the sheet; week opens at working hours; Week and Month show their names at 1024', async () => {
+    await open('/view/1/Calendar');
+    const grid = (await page.locator('.calendar .body').boundingBox())!;
+    const last = (await page.locator('.grid[data-calendar] .ec-day').last().boundingBox())!;
+    expect(last.y + last.height).toBeGreaterThan(grid.y + grid.height - 80);
+    await page.getByRole('tab', { name: 'Week' }).click();
+    await page.waitForTimeout(300);
+    expect(await page.locator('.grid[data-calendar] .ec-main').evaluate((e) => e.scrollTop)).toBeGreaterThan(0);
+    await open('/view/1/Calendar', { width: 1024, height: 768 });
+    expect(await page.getByRole('tab', { name: 'Week' }).innerText()).toContain('Week');
+    const g = (await page.locator('.grid[data-calendar]').boundingBox())!;
+    const side = (await page.locator('aside.side').boundingBox())!;
+    expect(side.y).toBeGreaterThanOrEqual(g.y + g.height - 1);
+  });
+
+  it('R4-13 board: the toggle in the count row is labelled and the board ends inside the sheet', async () => {
+    await open('/view/2');
+    await page.locator('[data-column]').first().waitFor();
+    expect((await page.locator('.count').filter({ hasText: /issues/ }).locator('..').locator('button').first().innerText()).trim()).not.toBe('');
+    const body = (await page.locator('main.body').boundingBox())!;
+    const board = (await page.locator('.board').boundingBox())!;
+    expect(board.y + board.height).toBeLessThanOrEqual(body.y + body.height + 1);
+  });
 });
