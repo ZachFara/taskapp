@@ -3,25 +3,8 @@ use sqlx::SqliteConnection;
 use crate::{
     ChangeSource, Db, Error, IssueId, Relation, RelationKind, Result,
     history::{self, Edit},
-    rows,
+    relation_kinds, rows,
 };
-
-fn kind_str(k: RelationKind) -> &'static str {
-    match k {
-        RelationKind::Blocks => "blocks",
-        RelationKind::Related => "related",
-        RelationKind::Duplicate => "duplicate",
-    }
-}
-
-fn parse_kind(s: &str) -> Result<RelationKind> {
-    match s {
-        "blocks" => Ok(RelationKind::Blocks),
-        "related" => Ok(RelationKind::Related),
-        "duplicate" => Ok(RelationKind::Duplicate),
-        other => Err(Error::Invalid(format!("unknown relation kind {other}"))),
-    }
-}
 
 fn to_json(rel: &Relation) -> Result<serde_json::Value> {
     serde_json::to_value(rel).map_err(|e| Error::Invalid(e.to_string()))
@@ -49,7 +32,11 @@ pub(crate) async fn add_in(
     if rel.from == rel.to {
         return Err(Error::Invalid("an issue cannot relate to itself".into()));
     }
-    let (from, to, kind) = (rel.from.0, rel.to.0, kind_str(rel.kind));
+    let rel = Relation {
+        kind: relation_kinds::resolve(tx, &rel.kind).await?,
+        ..rel
+    };
+    let (from, to, kind) = (rel.from.0, rel.to.0, rel.kind.0.as_str());
     // The cycle check and the insert are one statement, so a concurrent writer cannot slip an edge between them.
     let done = sqlx::query!(
         "WITH RECURSIVE reach(id) AS (
@@ -107,8 +94,12 @@ async fn exists(tx: &mut sqlx::SqliteConnection, from: i64, to: i64, kind: &str)
 ///
 /// Fails on a database error.
 pub async fn remove(db: &Db, rel: Relation, src: ChangeSource) -> Result<()> {
-    let (from, to, kind) = (rel.from.0, rel.to.0, kind_str(rel.kind));
     let mut tx = db.pool.begin().await?;
+    let rel = Relation {
+        kind: relation_kinds::resolve(&mut tx, &rel.kind).await?,
+        ..rel
+    };
+    let (from, to, kind) = (rel.from.0, rel.to.0, rel.kind.0.as_str());
     let id: Option<i64> =
         sqlx::query_scalar("SELECT id FROM relations WHERE from_id = ? AND to_id = ? AND kind = ?")
             .bind(from)
@@ -152,15 +143,14 @@ pub async fn for_issue(db: &Db, id: IssueId) -> Result<Vec<Relation>> {
     )
     .fetch_all(&db.pool)
     .await?;
-    rows.into_iter()
-        .map(|r| {
-            Ok(Relation {
-                from: IssueId(r.from_id),
-                to: IssueId(r.to_id),
-                kind: parse_kind(&r.kind)?,
-            })
+    Ok(rows
+        .into_iter()
+        .map(|r| Relation {
+            from: IssueId(r.from_id),
+            to: IssueId(r.to_id),
+            kind: RelationKind(r.kind),
         })
-        .collect()
+        .collect())
 }
 
 /// Every `Blocks` edge, for scheduling.
@@ -179,7 +169,7 @@ pub async fn all_blocking(db: &Db) -> Result<Vec<Relation>> {
         .map(|r| Relation {
             from: IssueId(r.from_id),
             to: IssueId(r.to_id),
-            kind: RelationKind::Blocks,
+            kind: RelationKind::new("blocks"),
         })
         .collect())
 }

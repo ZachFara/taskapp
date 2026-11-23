@@ -444,7 +444,7 @@ async fn link(
         let rel = crate::Relation {
             from: crate::IssueId(from),
             to: crate::IssueId(to),
-            kind: r.kind,
+            kind: r.kind.clone(),
         };
         if let Err(e) = relations::add_in(tx, rel, ChangeSource::Migration).await {
             warnings.push(format!("relation {} -> {} skipped: {e}", r.from, r.to));

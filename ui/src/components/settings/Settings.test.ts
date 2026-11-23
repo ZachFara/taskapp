@@ -17,7 +17,7 @@ describe('Settings', () => {
   });
 
   it('each section names itself once, in the page header', async () => {
-    for (const id of ['general', 'statuses', 'labels', 'projects', 'cycles', 'properties', 'templates', 'import', 'reminders', 'calendar', 'export', 'backups']) {
+    for (const id of ['general', 'statuses', 'labels', 'projects', 'cycles', 'properties', 'relations', 'templates', 'import', 'reminders', 'calendar', 'export', 'backups']) {
       history.pushState(null, '', `/settings/${id}`);
       const { target } = await mountSettings(Settings);
       const label = target.querySelector('nav a[aria-current="page"]')!.textContent!.trim();
@@ -33,7 +33,7 @@ describe('Settings', () => {
     const { target } = await mountSettings(Settings);
     const names = [...target.querySelectorAll('nav a')].map((a) => a.textContent?.trim());
     expect(names).toEqual([
-      'General', 'Statuses', 'Labels', 'Projects', 'Cycles', 'Fields', 'Properties', 'Templates', 'Import',
+      'General', 'Statuses', 'Labels', 'Projects', 'Cycles', 'Fields', 'Properties', 'Relations', 'Templates', 'Import',
       'Reminders', 'Calendar', 'Export', 'Backups', 'Keyboard shortcuts',
     ]);
     expect(target.textContent).toContain('Keyboard shortcuts');

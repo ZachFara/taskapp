@@ -10,7 +10,7 @@ use serde_json::json;
 use taskapp_core::{
     ChangeSource, Db, Due, IssueId, Layout, NewIssue, PinKind, PropertyDef, PropertyKind, Relation,
     RelationKind, StatusCategory, ViewDef, comments, cycles, issues, labels, pins, projects,
-    properties, relations, settings, views,
+    properties, relation_kinds, relations, settings, views,
 };
 use taskapp_export::{git, rebuild, write};
 
@@ -91,7 +91,7 @@ async fn link_and_comment(db: &Db, docs: IssueId, ship: IssueId) -> R {
         Relation {
             from: docs,
             to: ship,
-            kind: RelationKind::Blocks,
+            kind: RelationKind::new("blocks"),
         },
         SRC,
     )
@@ -522,6 +522,7 @@ async fn dump(
         "property_defs",
         "pins",
         "import_log",
+        "relation_kinds",
     ] {
         let cols: Vec<String> = sqlx::query_scalar(
             "SELECT name FROM pragma_table_info(?1) WHERE (name != 'id' OR ?1 = 'view_templates')
@@ -600,6 +601,38 @@ async fn a_hand_edited_slug_or_prefix_still_cannot_become_a_file_name() -> R {
         let result = write::write_snapshot(&db, dir.path()).await;
         assert!(result.is_err(), "a hand-edited {what} was written");
         assert_eq!(fs::read_dir(dir.path())?.count(), 0, "nothing is written");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn custom_relation_kinds_and_their_relations_survive_export_and_rebuild() -> R {
+    let db = seeded().await?;
+    let k = relation_kinds::create(&db, "Mentors", "mentors", "mentored by", false, SRC).await?;
+    for (from, to, kind) in [(1, 2, k.id.0.as_str()), (2, 1, "follows")] {
+        relations::add(
+            &db,
+            Relation {
+                from: IssueId(from),
+                to: IssueId(to),
+                kind: RelationKind::new(kind),
+            },
+            SRC,
+        )
+        .await?;
+    }
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    assert_eq!(
+        relation_kinds::list(&rebuilt).await?,
+        relation_kinds::list(&db).await?
+    );
+    for id in [1, 2] {
+        assert_eq!(
+            relations::for_issue(&rebuilt, IssueId(id)).await?,
+            relations::for_issue(&db, IssueId(id)).await?
+        );
     }
     Ok(())
 }

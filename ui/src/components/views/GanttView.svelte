@@ -74,7 +74,7 @@
     allIssues = issues;
     projectList = projects;
     // Each relation comes back from both of its issues.
-    relations = [...new Map(rels.filter((r) => r.kind === 'Blocks').map((r) => [`${r.from}-${r.to}`, r])).values()];
+    relations = [...new Map(rels.filter((r) => r.kind === 'blocks').map((r) => [`${r.from}-${r.to}`, r])).values()];
     statusList = statuses;
     rows = buildRows({ mode, issues, bars, projects, milestones, critical, statuses });
     lane = mode === 'issues' ? unscheduled(issues, rows) : [];

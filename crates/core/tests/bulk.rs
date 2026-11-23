@@ -52,7 +52,7 @@ async fn a_bulk_update_adds_a_relation_from_each_issue() -> R {
         seed(&db, "ABC c").await?,
     );
     let patch = BulkPatch {
-        add_relation: Some((RelationKind::Related, c)),
+        add_relation: Some((RelationKind::new("related"), c)),
         ..BulkPatch::default()
     };
     bulk::update(&db, &[a, b], patch, UI).await?;
@@ -69,7 +69,7 @@ async fn a_failing_item_applies_nothing() -> R {
             priority: Some(2),
             ..IssuePatch::default()
         },
-        add_relation: Some((RelationKind::Related, a)),
+        add_relation: Some((RelationKind::new("related"), a)),
         ..BulkPatch::default()
     };
     let b = seed(&db, "ABC b").await?;

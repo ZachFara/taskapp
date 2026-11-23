@@ -11,7 +11,8 @@ use taskapp_core::{Db, Error, IssueId, Result, ViewDef, search};
 
 use crate::files::{
     CommentText, CycleRow, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow, PinRow,
-    ProjectFile, PropertyFile, StatusRow, ViewFile, ViewTemplateFile, invalid, parse_issue,
+    ProjectFile, PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewTemplateFile, invalid,
+    parse_issue,
 };
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -47,6 +48,7 @@ async fn restore_tables(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     restore_settings(tx, dir).await?;
     restore_statuses(tx, dir).await?;
     restore_labels(tx, dir).await?;
+    restore_relation_kinds(tx, dir).await?;
     restore_cycles(tx, dir).await?;
     restore_projects(tx, dir).await?;
     restore_properties(tx, dir).await?;
@@ -150,6 +152,25 @@ async fn restore_labels(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
             .bind(l.icon)
             .execute(&mut **tx)
             .await?;
+    }
+    Ok(())
+}
+
+async fn restore_relation_kinds(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let kinds: Vec<RelationKindRow> = read_list(&dir.join("relation_kinds.yaml"))?;
+    for k in kinds {
+        sqlx::query(
+            "INSERT INTO relation_kinds (id, name, forward, reverse, symmetric, built_in, position)
+             VALUES (?, ?, ?, ?, ?, 0, ?)",
+        )
+        .bind(k.id)
+        .bind(k.name)
+        .bind(k.forward)
+        .bind(k.reverse)
+        .bind(k.symmetric)
+        .bind(k.position)
+        .execute(&mut **tx)
+        .await?;
     }
     Ok(())
 }
@@ -404,11 +425,13 @@ async fn link_issue(
         .execute(&mut **tx)
         .await?;
     }
-    for (kind, targets) in [
+    let legacy = [
         ("blocks", &f.blocks),
         ("related", &f.related),
         ("duplicate", &f.duplicate),
-    ] {
+    ];
+    let others = f.relations.iter().map(|(k, v)| (k.as_str(), v));
+    for (kind, targets) in legacy.into_iter().chain(others) {
         for target in targets {
             sqlx::query(
                 "INSERT INTO relations (from_id, to_id, kind) VALUES (

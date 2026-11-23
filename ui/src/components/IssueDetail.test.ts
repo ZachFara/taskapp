@@ -195,7 +195,7 @@ describe('IssueDetail', () => {
     const other = await api.issues.create({ title: 'Rel other' });
     await type('Find issue', 'Rel other');
     await click(button(other.key));
-    expect(await api.relations.forIssue(i.id)).toEqual([{ from: i.id, to: other.id, kind: 'Blocks' }]);
+    expect(await api.relations.forIssue(i.id)).toEqual([{ from: i.id, to: other.id, kind: 'blocks' }]);
     expect(q('[aria-label=Relations]').textContent).toContain(`blocks ${other.key}`);
     await click(byLabel(`Remove relation to ${other.key}`));
     expect(await api.relations.forIssue(i.id)).toEqual([]);
@@ -323,7 +323,27 @@ describe('IssueDetail', () => {
     await click(blockedBy);
     await type('Find issue', 'Kind other');
     await click(button(other.key));
-    expect(await api.relations.forIssue(i.id)).toEqual([{ from: other.id, to: i.id, kind: 'Blocks' }]);
+    expect(await api.relations.forIssue(i.id)).toEqual([{ from: other.id, to: i.id, kind: 'blocks' }]);
+  });
+
+  it('a custom relation kind is offered with the right label on each side', async () => {
+    const i = await open({ title: 'Mentor subject' }, {}, (a) => (void a.relation.kindsCreate('Mentors', 'mentors', 'mentored by', false), a));
+    const other = await api.issues.create({ title: 'Mentor other' });
+    Element.prototype.hasPointerCapture ??= () => false;
+    Element.prototype.releasePointerCapture ??= () => {};
+    Element.prototype.scrollIntoView ??= () => {};
+    byLabel('Relation kind').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }));
+    await settle();
+    const options = [...document.querySelectorAll('[role=option]')].map((o) => o.textContent!.trim());
+    expect(options).toEqual(expect.arrayContaining(['mentors', 'mentored by', 'follows', 'precedes', 'caused by', 'causes', 'part of', 'contains']));
+    expect(options.filter((o) => o === 'related to')).toHaveLength(1);
+    const reverse = [...document.querySelectorAll('[role=option]')].find((o) => o.textContent!.trim() === 'mentored by')!;
+    reverse.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerType: 'mouse' }));
+    await click(reverse);
+    await type('Find issue', 'Mentor other');
+    await click(button(other.key));
+    expect(await api.relations.forIssue(i.id)).toEqual([{ from: other.id, to: i.id, kind: 'mentors' }]);
+    expect(q('[aria-label=Relations]').textContent).toContain(`mentored by ${other.key}`);
   });
 
   describe('through the real key registry', () => {

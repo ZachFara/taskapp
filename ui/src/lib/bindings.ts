@@ -410,6 +410,34 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	relationKindsList: (options?: InvokeOptions) => __TAURI_INVOKE<RelationKindDef[]>("relation_kinds_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	relationKindsCreate: (name: string, forward: string, reverse: string, symmetric: boolean, options?: InvokeOptions) => __TAURI_INVOKE<RelationKindDef>("relation_kinds_create", { name, forward, reverse, symmetric }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	relationKindsUpdate: (kind: RelationKindDef, options?: InvokeOptions) => __TAURI_INVOKE<RelationKindDef>("relation_kinds_update", { kind }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	relationKindsDelete: (id: RelationKind, options?: InvokeOptions) => __TAURI_INVOKE<null>("relation_kinds_delete", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	scheduleBars: (viewId: ViewId, options?: InvokeOptions) => __TAURI_INVOKE<Bar[]>("schedule_bars", { viewId }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -806,7 +834,9 @@ export type Filter = ({ And: Filter[] }) & { Cond?: never; Not?: never; Or?: nev
 	value: Value,
 } }) & { And?: never; Not?: never; Or?: never };
 
-export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "Points" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount";
+export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "Points" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount" | 
+/**  Filter only: the issue has a relation of the given kind id(s), on either end. */
+"RelationKind";
 
 /**
  *  Everything an import would create. The lists of statuses, labels, projects, cycles and property
@@ -1050,7 +1080,19 @@ export type Relation = {
 	kind: RelationKind,
 };
 
-export type RelationKind = "Blocks" | "Related" | "Duplicate";
+/**  The id of a row in `relation_kinds`: "blocks", "related", "duplicate", or any other kind's slug. */
+export type RelationKind = string;
+
+/**  A kind of relation: `forward` reads from the `from` issue ("blocks"), `reverse` from the `to` issue ("blocked by"). */
+export type RelationKindDef = {
+	id: RelationKind,
+	name: string,
+	forward: string,
+	reverse: string,
+	symmetric: boolean,
+	built_in: boolean,
+	position: number,
+};
 
 export type Reschedule = {
 	issue_id: IssueId,

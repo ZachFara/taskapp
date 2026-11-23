@@ -25,7 +25,7 @@
   const start = untrack(() => splitFilter(def.filter));
   let chips = $state<Chip[]>(start.chips);
   let advanced = $state(start.advanced);
-  let data = $state<Data>({ statuses: [], projects: [], defs: [], cycles: [], labels: [] });
+  let data = $state<Data>({ statuses: [], projects: [], defs: [], cycles: [], labels: [], relationKinds: [] });
   let openId = $state<number | null>(null);
   let groupOpen = $state(false);
   let sortOpen = $state(false);
@@ -41,10 +41,10 @@
     return () => on.forEach(([n, f]) => removeEventListener(`command:${n}`, f));
   });
   onMount(async () => {
-    const [statuses, projects, defs, cycles, labels] = await Promise.all([
-      api.statuses.list(), api.projects.list(), api.properties.listDefs(), api.cycles.list(), api.labels.list(),
+    const [statuses, projects, defs, cycles, labels, relationKinds] = await Promise.all([
+      api.statuses.list(), api.projects.list(), api.properties.listDefs(), api.cycles.list(), api.labels.list(), api.relation.kindsList(),
     ]);
-    data = { statuses, projects, defs, cycles, labels };
+    data = { statuses, projects, defs, cycles, labels, relationKinds };
   });
   const lookup = $derived(makeLookup(data));
 
@@ -58,7 +58,7 @@
   });
 
   const commit = () => onchange({ filter: buildFilter($state.snapshot(advanced), $state.snapshot(chips)) });
-  const quick: FixedField[] = ['Status', 'StatusCategory', 'Project', 'Label', 'Priority', 'DueDate'];
+  const quick: FixedField[] = ['Status', 'StatusCategory', 'Project', 'Label', 'Priority', 'DueDate', 'RelationKind'];
   const addable = $derived<{ field: FieldRef; name: string }[]>([
     ...quick.filter(fixedOn).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
     ...data.defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name })),

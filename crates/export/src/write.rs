@@ -8,8 +8,8 @@ use taskapp_core::{Db, Result, settings};
 
 use crate::files::{
     CommentText, CycleRow, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow, MilestoneRow,
-    PinRow, ProjectFile, PropertyFile, StatusRow, ViewFile, ViewTemplateFile, invalid, key,
-    render_issue, safe_name,
+    PinRow, ProjectFile, PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewTemplateFile,
+    invalid, key, render_issue, safe_name,
 };
 
 pub struct ExportStats {
@@ -79,6 +79,10 @@ async fn render(db: &Db) -> Result<BTreeMap<String, String>> {
     files.insert("settings.yaml".to_string(), yaml(&settings_map(db).await?)?);
     files.insert("statuses.yaml".to_string(), yaml(&statuses(db).await?)?);
     files.insert("labels.yaml".to_string(), yaml(&labels(db).await?)?);
+    files.insert(
+        "relation_kinds.yaml".to_string(),
+        yaml(&relation_kinds(db).await?)?,
+    );
     files.insert("cycles.yaml".to_string(), yaml(&cycles(db).await?)?);
     files.insert("properties.yaml".to_string(), yaml(&properties(db).await?)?);
     files.insert("views.yaml".to_string(), yaml(&views(db).await?)?);
@@ -146,6 +150,15 @@ async fn labels(db: &Db) -> Result<Vec<LabelRow>> {
     let rows = sqlx::query_as("SELECT name, color, icon FROM labels ORDER BY name")
         .fetch_all(&db.pool)
         .await?;
+    Ok(rows)
+}
+
+async fn relation_kinds(db: &Db) -> Result<Vec<RelationKindRow>> {
+    let rows = sqlx::query_as(
+        "SELECT id, name, forward, reverse, symmetric, position FROM relation_kinds WHERE built_in = 0 ORDER BY position, id",
+    )
+    .fetch_all(&db.pool)
+    .await?;
     Ok(rows)
 }
 
@@ -467,9 +480,20 @@ fn front_of(
         blocks: keys_of(rels, "blocks", prefix),
         related: keys_of(rels, "related", prefix),
         duplicate: keys_of(rels, "duplicate", prefix),
+        relations: other_kinds(rels, prefix),
         properties: serde_json::from_str(&properties).map_err(invalid)?,
     };
     Ok((front, description))
+}
+
+fn other_kinds(rels: &[(String, i64)], prefix: &str) -> BTreeMap<String, Vec<String>> {
+    let mut map: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (kind, to) in rels {
+        if !["blocks", "related", "duplicate"].contains(&kind.as_str()) {
+            map.entry(kind.clone()).or_default().push(key(prefix, *to));
+        }
+    }
+    map
 }
 
 fn keys_of(rels: &[(String, i64)], kind: &str, prefix: &str) -> Vec<String> {

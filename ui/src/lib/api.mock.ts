@@ -5,6 +5,7 @@ import { FIELDS } from './issueFields';
 import { parseQuickadd } from './api.mock.quickadd';
 import * as insights from './api.mock.insights';
 import { stepLabel } from './api.mock.stepLabel';
+import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
 import { scrubDef, seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
   AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
@@ -95,6 +96,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const milestones: Milestone[] = s.milestones ?? [];
   const comments: Comment[] = [];
   const relations: Relation[] = s.relations ?? [];
+  const relationKinds = builtInKinds();
+  const kinds = relationKindsApi(relationKinds, relations, fail);
   const pins: Pin[] = s.pins ?? [];
   const blocks: WorkBlock[] = [];
   const changes: Change[] = [...(s.history ?? [])];
@@ -102,7 +105,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, templates, relations, comments, views, milestones, pins, viewTemplates, importLog] as unknown[][];
+  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, importLog] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -199,6 +202,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       Archived: i.archived_at !== null, Key: i.id,
       SubIssueProgress: s.issues.filter((c) => c.parent_id === i.id && !c.archived_at).length,
       RelationCount: relations.filter((r) => r.from === i.id || r.to === i.id).length,
+      RelationKind: relations.filter((r) => r.from === i.id || r.to === i.id).map((r) => r.kind),
       CommentCount: comments.filter((c) => c.issue_id === i.id).length,
     };
     return by[f.Fixed!];
@@ -374,7 +378,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   };
   const blockedBy = () => {
     const m = new Map<number, number[]>();
-    for (const r of relations) if (r.kind === 'Blocks') m.set(r.from, [...(m.get(r.from) ?? []), r.to]);
+    for (const r of relations) if (r.kind === 'blocks') m.set(r.from, [...(m.get(r.from) ?? []), r.to]);
     return m;
   };
   const shiftDependents = (moved: Reschedule): Reschedule[] => {
@@ -764,26 +768,31 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       delete: async (id) => nothing(remove(comments, id, 'comment')),
     },
     relations: {
-      add: async (rel) => {
-        if (rel.from === rel.to) fail('Invalid', 'an issue cannot relate to itself');
+      add: async (given) => {
+        if (given.from === given.to) fail('Invalid', 'an issue cannot relate to itself');
+        const rel = { ...given, kind: kinds.resolve(given.kind) };
         if (!s.issues.some((i) => i.id === rel.from) || !s.issues.some((i) => i.id === rel.to)) fail('NotFound', `issue ${rel.from} or ${rel.to}`);
         const same = (r: Relation) => r.from === rel.from && r.to === rel.to && r.kind === rel.kind;
         if (relations.some(same)) return null;
-        if (rel.kind === 'Blocks') {
+        if (rel.kind === 'blocks') {
           // Adding from -> to must not let `to` reach `from` through blocking edges.
           const seen = new Set<number>();
-          const reach = (id: number): boolean => id === rel.from || (!seen.has(id) && seen.add(id) && relations.some((r) => r.kind === 'Blocks' && r.from === id && reach(r.to)));
+          const reach = (id: number): boolean => id === rel.from || (!seen.has(id) && seen.add(id) && relations.some((r) => r.kind === 'blocks' && r.from === id && reach(r.to)));
           if (reach(rel.to)) fail('Conflict', 'would create a dependency cycle');
         }
         relations.push(rel);
         return null;
       },
-      remove: async (rel) => {
+      remove: async (given) => {
+        const rel = { ...given, kind: kinds.resolve(given.kind) };
         const at = relations.findIndex((r) => r.from === rel.from && r.to === rel.to && r.kind === rel.kind);
         if (at >= 0) relations.splice(at, 1);
         return null;
       },
       forIssue: async (id) => relations.filter((r) => r.from === id || r.to === id),
+    },
+    relation: {
+      kindsList: kinds.list, kindsCreate: kinds.create, kindsUpdate: kinds.update, kindsDelete: kinds.delete,
     },
     schedule: {
       bars: async (viewId) => viewIssues(viewId).flatMap((i) => barFor(i) ?? []),
@@ -1049,7 +1058,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         for (const r of plan.relations ?? []) {
           const [from, to] = [known(r.from), known(r.to)];
           if (from === undefined || to === undefined) warnings.push(`relation ${r.from} -> ${r.to} skipped: an issue was not imported`);
-          else if (!relations.some((x) => x.from === from && x.to === to && x.kind === r.kind)) relations.push({ from, to, kind: r.kind });
+          else if (!relations.some((x) => x.from === from && x.to === to && x.kind === kinds.resolve(r.kind))) relations.push({ from, to, kind: kinds.resolve(r.kind) });
         }
         return { created: ids.size, warnings };
       },
@@ -1066,7 +1075,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     'projects.create projects.update projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete templates.create templates.update templates.delete templates.apply ' +
     'labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
-    'relations.add relations.remove views.save views.delete views.reorder views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
+    'relations.add relations.remove relation.kindsCreate relation.kindsUpdate relation.kindsDelete views.save views.delete views.reorder views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
     'view.templatesCreate view.templatesUpdate view.templatesDelete pins.pin pins.unpin pins.reorder pins.set import.apply'
   ).split(' ');
   for (const name of mutating) {
@@ -1177,7 +1186,7 @@ const issues: Issue[] = rows.map((r, k) => {
   };
 });
 const relations: Relation[] = [
-  { from: 4, to: 6, kind: 'Blocks' }, { from: 16, to: 18, kind: 'Blocks' }, { from: 10, to: 11, kind: 'Related' },
+  { from: 4, to: 6, kind: 'blocks' }, { from: 16, to: 18, kind: 'blocks' }, { from: 10, to: 11, kind: 'related' },
 ];
 const templates: IssueTemplate[] = [
   {

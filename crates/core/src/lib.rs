@@ -20,6 +20,7 @@ pub mod pins;
 pub mod projects;
 pub mod properties;
 pub mod quickadd;
+pub mod relation_kinds;
 pub mod relations;
 pub mod rows;
 pub mod schedule;
