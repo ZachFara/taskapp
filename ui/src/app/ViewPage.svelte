@@ -103,10 +103,12 @@
     quickChips = [];
   }
   // Keeps the quick filter as part of the saved view, through the same save as a chip edit.
+  let editorKey = $state(0); // the editor reads the saved filter once, so it is remounted to show the kept chips
   function saveQuick() {
     if (!def || quickFilter === null) return;
     change({ filter: combineFilters(def.filter, quickFilter) });
     closeQuick();
+    editorKey++;
   }
 
   // Debounced: a burst of chip edits is one save.
@@ -227,7 +229,7 @@
     <PageHeader title={name} icon={view?.icon ?? 'icon:layers'} color={view?.color ?? undefined}>
       {#snippet iconEdit()}<IconColorPicker label={`Icon and colour of ${name}`} value={{ icon: view?.icon ?? 'icon:layers', color: view?.color ?? null }} onchange={changeLook} bind:open={iconOpen} />{/snippet}
       {#snippet tabs()}<Tabs tabs={layoutTabs} bind:value={() => layout, setLayout} />{/snippet}
-      {#snippet filters()}<ViewEditor def={live.def} onchange={change} {clearSignal} />{/snippet}
+      {#snippet filters()}{#key editorKey}<ViewEditor def={live.def} onchange={change} {clearSignal} />{/key}{/snippet}
       {#snippet actions()}
         <Popover bind:open={renaming}>
           {#snippet trigger(props)}<span {...props} class="trig"><IconButton icon="edit" label="Rename view" shortcut={shortcutFor('view.rename')} onclick={() => (draft = name)} /></span>{/snippet}
