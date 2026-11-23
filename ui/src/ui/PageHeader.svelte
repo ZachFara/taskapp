@@ -12,7 +12,8 @@
     tabs,
     filters,
     actions,
-  }: { title: string | Snippet; editable?: boolean; onrename?: (value: string) => void; icon?: string; color?: string; tabs?: Snippet; filters?: Snippet; actions?: Snippet } = $props();
+    iconEdit,
+  }: { title: string | Snippet; editable?: boolean; onrename?: (value: string) => void; icon?: string; color?: string; tabs?: Snippet; filters?: Snippet; actions?: Snippet; iconEdit?: Snippet } = $props();
   // `title` may be a snippet for a custom heading. Editing: click saves on Enter or blur, cancels on Esc.
   let editing = $state(false);
   let draft = $state('');
@@ -32,7 +33,7 @@
 
 <header class="page-header">
   <div class="top">
-    {#if icon}<EntityIcon {icon} {color} />{/if}
+    {#if iconEdit}{@render iconEdit()}{:else if icon}<EntityIcon {icon} {color} />{/if}
     <h1>
       {#if typeof title !== 'string'}{@render title()}
       {:else if editable && editing}

@@ -5,11 +5,14 @@
   import { openExternal } from '../lib/openExternal';
   import type { Cycle, PinKind, ResolvedPin } from '../lib/bindings';
   import { projects, refreshAll, views } from '../lib/stores.svelte';
-  import EntityIcon from '../ui/EntityIcon.svelte';
   import Icon from '../ui/Icon.svelte';
+  import RowActions from '../ui/RowActions.svelte';
+  import { rowActs, rowUi } from '../lib/rowUi.svelte';
+  import { patch } from '../lib/rowActions';
   import Tooltip from '../ui/Tooltip.svelte';
   import { shortcutFor } from '../lib/commands';
   import ProjectSpark from './insights/ProjectSpark.svelte';
+  import IconColorPicker from './pickers/IconColorPicker.svelte';
 
   // The app passes its live route; standalone the sidebar reads the address once.
   let { route = location.pathname }: { route?: string } = $props();
@@ -19,6 +22,7 @@
   let cycles = $state<Cycle[]>([]);
   let error = $state('');
   let sparklines = $state(false);
+  let picking = $state<string | null>(null);
 
   onMount(async () => {
     const [, p, c, sp] = await Promise.all([refreshAll(), api.pins.listResolved(), api.cycles.list(), api.settings.get('sidebar_sparklines').catch(() => null)]);
@@ -27,19 +31,17 @@
     sparklines = sp === true;
   });
 
+  // Row actions (pin, rename, delete) change pins and cycles; reload them when one lands.
+  $effect(() => {
+    const reload = async () => {
+      pins = await api.pins.listResolved();
+      cycles = await api.cycles.list();
+    };
+    addEventListener('rows:changed', reload);
+    return () => removeEventListener('rows:changed', reload);
+  });
   const fail = (e: unknown) => (error = (e as { message?: string }).message ?? String(e));
   const isPinned = (kind: PinKind, target: string) => pins.some((r) => r.pin.kind === kind && r.pin.target === target);
-
-  async function toggle(kind: PinKind, target: string, title: string) {
-    try {
-      const have = pins.find((r) => r.pin.kind === kind && r.pin.target === target);
-      if (have) await api.pins.unpin(have.pin.id);
-      else await api.pins.pin(kind, target, title);
-      pins = await api.pins.listResolved();
-    } catch (e) {
-      fail(e);
-    }
-  }
 
   // Any scheme other than the openExternal allow-list (script, file) is refused there, so a pin never runs code.
   const external = (route: string) => /^[a-z][a-z0-9+.-]*:/i.test(route);
@@ -105,15 +107,6 @@
   </Tooltip>
 {/snippet}
 
-{#snippet pinBtn(kind: PinKind, target: string, title: string)}
-  {@const on = isPinned(kind, target)}
-  <Tooltip label={`${on ? 'Unpin' : 'Pin'} ${title}`}>
-    {#snippet children(props)}
-      <button {...props} class="aff" class:on type="button" aria-label={`${on ? 'Unpin' : 'Pin'} ${title}`} aria-pressed={on} onclick={() => toggle(kind, target, title)}><Icon name="pin" size={12} /></button>
-    {/snippet}
-  </Tooltip>
-{/snippet}
-
 <nav aria-label="Sidebar" data-on-frame>
   {#if error}<p role="alert" class="error">{error}</p>{/if}
 
@@ -146,8 +139,10 @@
         {#each views as v (v.id)}
           {@const href = `/view/${v.id}`}
           <li class="row" {...drag(v.id)} ondrop={() => dropView(v.id)}>
-            <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><EntityIcon icon={v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`} color={v.color} /><span class="t">{v.name}</span></a>
-            {@render pinBtn('View', String(v.id), v.name)}
+            <RowActions label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, isPinned('View', String(v.id)))}>
+              <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`, color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
+              <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{v.name}</span></a>
+            </RowActions>
           </li>
         {/each}
       </ul>
@@ -162,8 +157,10 @@
         {#each projects as p (p.id)}
           {@const href = `/project/${p.slug}`}
           <li class="row">
-            <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><EntityIcon icon={p.icon ?? 'icon:project'} color={p.color} /><span class="t">{p.name}</span>{#if sparklines}<ProjectSpark projectId={p.id} name={p.name} />{/if}</a>
-            {@render pinBtn('Project', p.slug, p.name)}
+            <RowActions label={p.name} actions={rowActs({ kind: 'project', id: p.id, name: p.name }, isPinned('Project', p.slug))}>
+              <IconColorPicker label={`Icon and colour of ${p.name}`} value={{ icon: p.icon ?? 'icon:project', color: p.color }} onchange={(c) => patch({ kind: 'project', id: p.id, name: p.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `project:${p.id}`, (o) => (rowUi.picking = o ? `project:${p.id}` : null)} />
+              <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{p.name}</span>{#if sparklines}<ProjectSpark projectId={p.id} name={p.name} />{/if}</a>
+            </RowActions>
           </li>
         {/each}
       </ul>
@@ -177,8 +174,10 @@
         <li class="row">{@render navLink('/cycles', 'cycle', 'All cycles', 'nav.cycles', route === '/cycles')}</li>
         {#each cycles as c (c.id)}
           <li class="row">
-            <a class="item" href="/cycles" onclick={(e) => (e.preventDefault(), navigate('/cycles'))}><Icon name="cycle" /><span class="t">{label(c)}</span></a>
-            {@render pinBtn('Cycle', String(c.id), label(c))}
+            <RowActions label={label(c)} actions={rowActs({ kind: 'cycle', id: c.id, name: label(c) }, isPinned('Cycle', String(c.id)))}>
+              <IconColorPicker label={`Icon and colour of ${label(c)}`} value={{ icon: c.icon ?? 'icon:cycle', color: c.color }} onchange={(x) => patch({ kind: 'cycle', id: c.id, name: label(c) }, { icon: x.icon, color: x.color })} bind:open={() => rowUi.picking === `cycle:${c.id}`, (o) => (rowUi.picking = o ? `cycle:${c.id}` : null)} />
+              <a class="item" href="/cycles" onclick={(e) => (e.preventDefault(), navigate('/cycles'))}><span class="t">{label(c)}</span></a>
+            </RowActions>
           </li>
         {/each}
       </ul>

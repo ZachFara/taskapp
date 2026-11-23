@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { mount } from 'svelte';
 import Labels from './Labels.svelte';
+import RowDialogHost from '../RowDialogHost.svelte';
+import '../../lib/commands';
 import { clickLabel, field, mountSettings, press, setField } from './testing';
 
 async function add(target: Element, name: string) {
@@ -35,9 +38,10 @@ describe('Labels', () => {
   it('delete asks first, then calls once', async () => {
     const { target, calls } = await mountSettings(Labels);
     await add(target, 'urgent');
+    mount(RowDialogHost, { target: document.body });
     await clickLabel('Delete urgent');
     expect(calls).not.toContain('labels.delete');
-    await press(document.body, 'Delete label');
+    await press(document.body, 'Delete');
     expect(calls.filter((c) => c === 'labels.delete')).toHaveLength(1);
   });
 

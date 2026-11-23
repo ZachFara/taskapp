@@ -51,7 +51,8 @@ export type Command = {
   scope?: Scope;
   when?: (ctx: Ctx) => boolean;
   /** `count` is the number typed before the key (`5 j`), 1 when none. */
-  run?: (ctx: Ctx, count?: number) => void | Promise<void>;
+  /** `target` is the row or entity a row action acts on (see rowUi.runRow); absent from the menus and keys. */
+  run?: (ctx: Ctx, count?: number, target?: unknown) => void | Promise<void>;
   page?: (ctx: Ctx) => CommandPage;
   keywords?: string[];
   /** false keeps it out of the command menu and the right-click menu (movement keys and the like). */
@@ -90,6 +91,7 @@ export function listCommands(ctx: Ctx, opts: { all?: boolean } = {}) {
 }
 
 export const labelFor = (id: string) => commands.get(id)?.label;
+export const commandById = (id: string) => commands.get(id);
 export const shortcutFor = (id: string) => keysOf(commands.get(id) ?? { id, shortcut: [] })[0];
 
 /** Commands that have a key, grouped for the cheat sheet. */
