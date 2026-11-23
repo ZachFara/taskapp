@@ -176,6 +176,12 @@ saved automatically (after a short pause). Filter changes show an "Undo" toast.
 
 - **Make one.** Views page > New view, or the view menu > "New view..." (choose Blank, a copy of the current view, or
   a template), or "Save as new view" (copies the current one).
+- **Folders.** The sidebar's Views menu (the "..." beside the heading) or the command menu has "New folder"; name it
+  in the dialog. A folder is a row you click to collapse; which folders are collapsed is remembered on this device
+  only. Rename or delete a folder from its row actions: deleting only moves its views to the top level. Drag a view
+  onto a folder to move it in, or onto a view outside any folder to take it out; from the keyboard, open a view and
+  use the command "Move view to folder...". Drag a folder onto another to reorder. The Views page groups by folder
+  too. Each move is one undo step.
 - **Layouts.** Tabs in the header, or `v l` list, `v b` board, `v t` table, `v g` timeline, `v c` calendar.
 - **Filter.** "Add filter" (`f`) lists Status, Status category, Project, Label, Priority, Due and every custom property.
   Each filter is a chip: click it to change the operator and values; the x removes it. Operators: is, is not, is any

@@ -3,13 +3,17 @@
   import { navigate } from '../app/routes';
   import { api } from '../lib/api';
   import { openExternal } from '../lib/openExternal';
-  import type { Cycle, PinKind, ResolvedPin } from '../lib/bindings';
-  import { projects, refreshAll, views } from '../lib/stores.svelte';
+  import type { Cycle, PinKind, ResolvedPin, SavedView } from '../lib/bindings';
+  import { folders, projects, refreshAll, views } from '../lib/stores.svelte';
   import Icon from '../ui/Icon.svelte';
   import RowActions from '../ui/RowActions.svelte';
   import { rowActs, rowUi } from '../lib/rowUi.svelte';
   import { patch } from '../lib/rowActions';
   import Tooltip from '../ui/Tooltip.svelte';
+  import Menu from '../ui/Menu.svelte';
+  import MenuItem from '../ui/MenuItem.svelte';
+  import { runRow } from '../lib/rowUi.svelte';
+  import { labelFor } from '../lib/commands';
   import { shortcutFor } from '../lib/commands';
   import ProjectSpark from './insights/ProjectSpark.svelte';
   import IconColorPicker from './pickers/IconColorPicker.svelte';
@@ -56,10 +60,31 @@
     return rest;
   };
   let dragging: number | null = null;
-  const drag = (id: number) => ({ draggable: true, ondragstart: () => (dragging = id), ondragover: (e: Event) => e.preventDefault() });
+  let dragKind = '';
+  const drag = (id: number, kind: string) => ({ draggable: true, ondragstart: () => ([dragging, dragKind] = [id, kind]), ondragover: (e: Event) => e.preventDefault() });
+
+  // Folders stay open or closed per device: the choice is kept in this browser only.
+  const FOLDERS_KEY = 'folders.closed';
+  const read = (): Record<number, boolean> => {
+    try {
+      return JSON.parse(localStorage.getItem(FOLDERS_KEY) ?? '{}');
+    } catch {
+      return {};
+    }
+  };
+  let shut = $state<Record<number, boolean>>(read());
+  function toggle(id: number) {
+    shut[id] = !shut[id];
+    try {
+      localStorage.setItem(FOLDERS_KEY, JSON.stringify(shut));
+    } catch {
+      /* private window: the folder still opens, it just is not remembered */
+    }
+  }
+  const inFolder = (id: number | null) => views.filter((v) => (v.folder_id ?? null) === id);
 
   async function dropPin(target: number) {
-    if (dragging === null || dragging === target) return;
+    if (dragKind !== 'pin' || dragging === null || dragging === target) return;
     const before = pins;
     const ids = moved(pins.map((r) => r.pin.id), dragging, target);
     pins = ids.map((id) => before.find((r) => r.pin.id === id)!);
@@ -71,10 +96,26 @@
     }
   }
   async function dropView(target: number) {
-    if (dragging === null || dragging === target) return;
+    if (dragKind !== 'view' || dragging === null || dragging === target) return;
     try {
+      // Dropping on a view in another folder (or the top level) moves the view there first.
+      const [from, to] = [views.find((v) => v.id === dragging)!, views.find((v) => v.id === target)!];
+      if ((from.folder_id ?? null) !== (to.folder_id ?? null)) await api.views.move(from.id, to.folder_id);
       await api.views.reorder(moved(views.map((v) => v.id), dragging, target));
       await refreshAll();
+      dispatchEvent(new CustomEvent('rows:changed'));
+    } catch (e) {
+      fail(e);
+    }
+  }
+  async function dropOnFolder(target: number) {
+    if (dragging === null) return;
+    try {
+      if (dragKind === 'view') await api.views.move(dragging, target);
+      else if (dragKind === 'folder' && dragging !== target) await api.folders.reorder(moved(folders.map((f) => f.id), dragging, target));
+      else return;
+      await refreshAll();
+      dispatchEvent(new CustomEvent('rows:changed'));
     } catch (e) {
       fail(e);
     }
@@ -107,6 +148,16 @@
   </Tooltip>
 {/snippet}
 
+{#snippet viewRow(v: SavedView, nested: boolean)}
+  {@const href = `/view/${v.id}`}
+  <li class="row" class:nested {...drag(v.id, 'view')} ondrop={() => dropView(v.id)}>
+    <RowActions label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, isPinned('View', String(v.id)))}>
+      <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`, color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
+      <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{v.name}</span></a>
+    </RowActions>
+  </li>
+{/snippet}
+
 <nav aria-label="Sidebar" data-on-frame>
   {#if error}<p role="alert" class="error">{error}</p>{/if}
 
@@ -119,7 +170,7 @@
     {#if !closed.pinned}
       <ul>
         {#each pins as r (r.pin.id)}
-          <li class="row" class:archived={r.archived} {...drag(r.pin.id)} ondrop={() => dropPin(r.pin.id)}>
+          <li class="row" class:archived={r.archived} {...drag(r.pin.id, 'pin')} ondrop={() => dropPin(r.pin.id)}>
             <a class="item" class:on={route === r.route} aria-current={route === r.route ? 'page' : undefined} href={r.route} onclick={(e) => (e.preventDefault(), open(r.route))}><Icon name="pin" /><span class="t">{r.label}</span></a>
             <Tooltip label={`Unpin ${r.label}`}>
               {#snippet children(props)}
@@ -133,17 +184,31 @@
   </section>
 
   <section aria-label="Views">
-    {@render head('views', 'Views', views.length)}
+    <div class="row">
+      {@render head('views', 'Views', views.length)}
+      <Menu>
+        {#snippet trigger(props)}
+          <button {...props} class="aff" type="button" aria-label="Views menu"><Icon name="more" size={12} /></button>
+        {/snippet}
+        <MenuItem label={labelFor('folder.new') ?? 'New folder'} icon="folder" onSelect={() => runRow('folder.new', 0)} />
+      </Menu>
+    </div>
     {#if !closed.views}
       <ul>
-        {#each views as v (v.id)}
-          {@const href = `/view/${v.id}`}
-          <li class="row" {...drag(v.id)} ondrop={() => dropView(v.id)}>
-            <RowActions label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, isPinned('View', String(v.id)))}>
-              <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`, color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
-              <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{v.name}</span></a>
+        {#each folders as f (f.id)}
+          <li class="row" {...drag(f.id, 'folder')} ondrop={() => dropOnFolder(f.id)}>
+            <RowActions label={f.name} actions={rowActs({ kind: 'folder', id: f.id, name: f.name })}>
+              <button class="item folder" type="button" aria-expanded={!shut[f.id]} onclick={() => toggle(f.id)}><Icon name={shut[f.id] ? 'chevron-right' : 'chevron-down'} size={12} /><span class="t">{f.name}</span><em>{inFolder(f.id).length}</em></button>
             </RowActions>
           </li>
+          {#if !shut[f.id]}
+            {#each inFolder(f.id) as v (v.id)}
+              {@render viewRow(v, true)}
+            {/each}
+          {/if}
+        {/each}
+        {#each inFolder(null) as v (v.id)}
+          {@render viewRow(v, false)}
         {/each}
       </ul>
     {/if}
@@ -209,6 +274,9 @@
   .row { display: flex; align-items: center; position: relative; }
   .aff { position: absolute; right: var(--s-2); display: grid; place-items: center; width: var(--ctl-h-sm); height: var(--ctl-h-sm); padding: 0; border: 0; border-radius: var(--r-ctl); background: var(--frame-raised); color: var(--frame-ink); opacity: 0; transition: opacity var(--dur-1) var(--ease); }
   .row:hover .aff, .aff:focus-visible, .aff.on { opacity: 1; }
+  .nested { padding-left: var(--s-7); }
+  .folder { border: 0; background: transparent; font: inherit; text-align: left; cursor: default; }
+  .folder em { margin-left: auto; font-style: normal; color: var(--frame-muted); }
   .archived .t { opacity: 0.5; }
   .error { margin: 0; color: var(--signal); }
 </style>

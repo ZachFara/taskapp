@@ -33,6 +33,17 @@ describe('ViewsPage', () => {
     expect(first.textContent).toContain(fixtures.views![0].def.layout);
   });
 
+  it('groups_views_under_their_folder', async () => {
+    const mock = createMockApi({ ...fixtures, viewFolders: [{ id: 1, name: 'Work', position: 0 }] });
+    const id = fixtures.views![1].id;
+    await mock.views.move(id, 1);
+    const { target } = await open(mock);
+    const heading = target.querySelector('[data-folder-id="1"]')!;
+    expect(heading.textContent).toBe('Work');
+    expect(heading.nextElementSibling!.querySelector(`[data-view-id="${id}"]`)).not.toBeNull();
+    expect(target.textContent).toContain('No folder');
+  });
+
   it('delete_view_asks_before_removing', async () => {
     const { mock, target } = await open();
     const del = vi.spyOn(mock.views, 'delete');

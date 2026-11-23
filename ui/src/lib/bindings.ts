@@ -543,6 +543,48 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	viewsMove: (id: ViewId, folderId: ViewFolderId | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("views_move", { id, folderId }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	foldersList: (options?: InvokeOptions) => __TAURI_INVOKE<ViewFolder[]>("folders_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	foldersCreate: (name: string, options?: InvokeOptions) => __TAURI_INVOKE<ViewFolder>("folders_create", { name }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	foldersRename: (id: ViewFolderId, name: string, options?: InvokeOptions) => __TAURI_INVOKE<ViewFolder>("folders_rename", { id, name }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	foldersDelete: (id: ViewFolderId, options?: InvokeOptions) => __TAURI_INVOKE<null>("folders_delete", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	foldersReorder: (ids: ViewFolderId[], options?: InvokeOptions) => __TAURI_INVOKE<null>("folders_reorder", { ids }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	viewsStats: (def: ViewDef, options?: InvokeOptions) => __TAURI_INVOKE<IssueStats[]>("views_stats", { def }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1205,6 +1247,8 @@ export type SavedView = {
 	color: string | null,
 	/**  The template the view was made from, for "Reset to template". */
 	template_id: ViewTemplateId | null,
+	/**  The sidebar folder the view sits in; `None` is the top level. */
+	folder_id: ViewFolderId | null,
 };
 
 export type SelectOption = {
@@ -1325,6 +1369,15 @@ export type ViewDef = {
 	card_fields?: FieldRef[],
 	show_weekends?: boolean,
 };
+
+/**  A sidebar folder of views. */
+export type ViewFolder = {
+	id: ViewFolderId,
+	name: string,
+	position: number,
+};
+
+export type ViewFolderId = number;
 
 export type ViewId = number;
 

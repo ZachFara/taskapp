@@ -11,8 +11,8 @@ use taskapp_core::{Db, Error, IssueId, Result, ViewDef, search};
 
 use crate::files::{
     CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow,
-    PinRow, ProjectFile, PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewTemplateFile,
-    invalid, parse_issue, plain_dir, read_plain,
+    PinRow, ProjectFile, PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewFolderFile,
+    ViewTemplateFile, invalid, parse_issue, plain_dir, read_plain,
 };
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -53,6 +53,7 @@ async fn restore_tables(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     restore_projects(tx, dir).await?;
     restore_properties(tx, dir).await?;
     restore_view_templates(tx, dir).await?;
+    restore_view_folders(tx, dir).await?;
     restore_views(tx, dir).await?;
     restore_pins(tx, dir).await?;
     restore_issue_templates(tx, dir).await?;
@@ -296,7 +297,7 @@ async fn restore_views(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         // Parsing here rejects a definition the app could not run.
         serde_json::from_value::<ViewDef>(v.definition.clone()).map_err(invalid)?;
         sqlx::query(
-            "INSERT INTO views (name, definition, position, icon, color, template_id) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO views (name, definition, position, icon, color, template_id, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(v.name)
         .bind(v.definition.to_string())
@@ -304,8 +305,22 @@ async fn restore_views(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         .bind(v.icon)
         .bind(v.color)
         .bind(v.template_id)
+        .bind(v.folder_id)
         .execute(&mut **tx)
         .await?;
+    }
+    Ok(())
+}
+
+async fn restore_view_folders(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let folders: Vec<ViewFolderFile> = read_list(&dir.join("view_folders.yaml"))?;
+    for f in folders {
+        sqlx::query("INSERT INTO view_folders (id, name, position) VALUES (?, ?, ?)")
+            .bind(f.id)
+            .bind(f.name)
+            .bind(f.position)
+            .execute(&mut **tx)
+            .await?;
     }
     Ok(())
 }

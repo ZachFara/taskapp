@@ -2,6 +2,8 @@ import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setApi, type Api } from '../lib/api';
 import { createMockApi, fixtures } from '../lib/api.mock';
+import { remove } from '../lib/rowActions';
+import { rowUi } from '../lib/rowUi.svelte';
 import Sidebar from './Sidebar.svelte';
 
 const def = { filter: null, sorts: [], group_by: null, layout: 'List' as const, columns: [], include_archived: false };
@@ -137,6 +139,54 @@ describe('Sidebar', () => {
     expect(location.pathname).toBe('/my');
     link('Settings').click();
     expect(location.pathname).toBe('/settings/general');
+  });
+});
+
+describe('Sidebar folders', () => {
+  const withFolder = async () => {
+    const api = createMockApi({ ...seed, viewFolders: [{ id: 1, name: 'Work', position: 0 }], views: seed.views.map((v) => ({ ...v, folder_id: v.id === 2 ? 1 : null, template_id: null })) });
+    await open(api);
+    return api;
+  };
+  afterEach(() => localStorage.clear());
+
+  it('shows a folder with its views indented, loose views after it', async () => {
+    await withFolder();
+    expect(row('Work').textContent).toContain('1');
+    expect(row('Beta').classList.contains('nested')).toBe(true);
+    expect(row('Alpha').classList.contains('nested')).toBe(false);
+  });
+
+  it('collapses a folder and remembers it on this device', async () => {
+    await withFolder();
+    row('Work').querySelector<HTMLButtonElement>('button.folder')!.click();
+    await settle();
+    expect(document.body.textContent).not.toContain('Beta');
+    expect(JSON.parse(localStorage.getItem('folders.closed')!)).toEqual({ 1: true });
+    unmount(app);
+    await open(mock);
+    expect(document.body.textContent).not.toContain('Beta');
+  });
+
+  it('dropping a view on a folder moves it in, dropping on a loose view moves it out', async () => {
+    const api = await withFolder();
+    dragOnto('Alpha', 'Work');
+    await settle();
+    expect((await api.views.list()).find((v) => v.name === 'Alpha')!.folder_id).toBe(1);
+    dragOnto('Beta', 'Gamma');
+    await settle();
+    expect((await api.views.list()).find((v) => v.name === 'Beta')!.folder_id).toBeNull();
+  });
+
+  it('deleting a folder keeps its views at the top level', async () => {
+    const api = await withFolder();
+    document.querySelector<HTMLButtonElement>('[aria-label="Delete Work"]')!.click();
+    await settle();
+    // The shell owns the confirm dialog; the row only asks for it.
+    expect(rowUi.dialog).toMatchObject({ mode: 'delete', target: { kind: 'folder', id: 1 } });
+    await remove(rowUi.dialog!.target);
+    expect(await api.folders.list()).toEqual([]);
+    expect((await api.views.list()).every((v) => v.folder_id === null)).toBe(true);
   });
 });
 

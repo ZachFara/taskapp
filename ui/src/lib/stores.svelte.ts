@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { Issue, IssueId, ProjectId, PropertyDef, SavedView, Status, ViewId } from './bindings';
+import type { Issue, IssueId, ProjectId, PropertyDef, SavedView, Status, ViewFolder, ViewId } from './bindings';
 
 // Runes cannot be reassigned across modules, so lists are replaced in place and scalars live in a box.
 export const issues = $state<Issue[]>([]);
@@ -7,6 +7,7 @@ export const statuses = $state<Status[]>([]);
 export const projects = $state<{ id: ProjectId; slug: string; name: string }[]>([]);
 export const propertyDefs = $state<PropertyDef[]>([]);
 export const views = $state<SavedView[]>([]);
+export const folders = $state<ViewFolder[]>([]);
 export const currentViewId = $state<{ value: ViewId | null }>({ value: null });
 export const selectedIssueId = $state<{ value: IssueId | null }>({ value: null });
 
@@ -16,19 +17,21 @@ const replace = <T>(list: T[], next: T[]) => void list.splice(0, list.length, ..
 export async function refreshAll(): Promise<void> {
   const savedViews = await api.views.list();
   const current = savedViews.find((v) => v.id === currentViewId.value);
-  const [i, st, p, d] = await Promise.all([
+  const [i, st, p, d, f] = await Promise.all([
     api.views.query(
       current?.def ?? { filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false },
     ),
     api.statuses.list(),
     api.projects.list(),
     api.properties.listDefs(),
+    api.folders.list(),
   ]);
   replace(issues, i);
   replace(statuses, st);
   replace(projects, p);
   replace(propertyDefs, d);
   replace(views, savedViews);
+  replace(folders, f);
 }
 
 /** In the desktop app the backend says when another process wrote (`db-changed`) or a link was opened. */

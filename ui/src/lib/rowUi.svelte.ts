@@ -38,6 +38,7 @@ const ACTIONS: Record<Kind, string[]> = {
   cycle: ['cycle.rename', 'cycle.pin', 'icon.change', 'cycle.delete'],
   label: ['label.rename', 'icon.change', 'label.delete'],
   template: ['template.rename', 'icon.change', 'template.delete'],
+  folder: ['folder.rename', 'folder.delete'],
 };
 
 /** The actions a row of this entity offers, each one a registry command run with the row as its target. */

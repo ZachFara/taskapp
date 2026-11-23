@@ -19,6 +19,7 @@ pub(crate) const TABLES: &[&str] = &[
     "relations",
     "views",
     "view_templates",
+    "view_folders",
     "pins",
     "issue_templates",
     "work_blocks",

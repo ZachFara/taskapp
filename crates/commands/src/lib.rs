@@ -17,11 +17,11 @@ use taskapp_core::{
     ParsedQuickAdd, Pin, PinId, PinKind, ProgressScope, ProgressSeries, Project, ProjectId,
     PropertyDef, PropertyKind, Relation, RelationKind, RelationKindDef, Reschedule, ResolvedPin,
     Result, SavedView, SelectOption, Status, StatusCategory, StatusId, SyncState, SyncStatus,
-    TemplateId, TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewId, ViewTemplate,
-    ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks, bulk, comments,
-    cycles, events, history, import, insights, issues, labels, pins, projects, properties,
-    quickadd, relation_kinds, relations, schedule, search, settings, statuses, templates, undo,
-    view_templates, views, workspace,
+    TemplateId, TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewFolder, ViewFolderId,
+    ViewId, ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks,
+    bulk, comments, cycles, events, history, import, insights, issues, labels, pins, projects,
+    properties, quickadd, relation_kinds, relations, schedule, search, settings, statuses,
+    templates, undo, view_folders, view_templates, views, workspace,
 };
 
 pub struct AppState {
@@ -283,6 +283,16 @@ macro_rules! with_commands {
             }
             views_delete(s, id: ViewId) -> () { views::delete(&s.db, id).await }
             views_reorder(s, ids: Vec<ViewId>) -> () { views::reorder(&s.db, &ids).await }
+            views_move(s, id: ViewId, folder_id: Option<ViewFolderId>) -> () {
+                view_folders::move_view(&s.db, id, folder_id, ChangeSource::Ui).await
+            }
+            folders_list(s) -> Vec<ViewFolder> { view_folders::list(&s.db).await }
+            folders_create(s, name: String) -> ViewFolder { view_folders::create(&s.db, &name, ChangeSource::Ui).await }
+            folders_rename(s, id: ViewFolderId, name: String) -> ViewFolder {
+                view_folders::rename(&s.db, id, &name, ChangeSource::Ui).await
+            }
+            folders_delete(s, id: ViewFolderId) -> () { view_folders::delete(&s.db, id, ChangeSource::Ui).await }
+            folders_reorder(s, ids: Vec<ViewFolderId>) -> () { view_folders::reorder(&s.db, &ids, ChangeSource::Ui).await }
             views_stats(s, def: ViewDef) -> Vec<IssueStats> { views::stats(&s.db, &def).await }
             views_create_from_template(s, template_id: ViewTemplateId, name: Option<String>) -> SavedView {
                 view_templates::create_view(&s.db, template_id, name.as_deref(), ChangeSource::Ui).await

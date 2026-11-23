@@ -209,3 +209,23 @@ describe('mock points and progress', () => {
     expect(s.days.map((d) => d.scope)).toEqual([34, ...Array(5).fill(39), ...Array(8).fill(36)]);
   });
 });
+
+describe('mock view folders', () => {
+  it('create, rename, move, reorder and delete keep views and undo restores them', async () => {
+    const api = createMockApi(fixtures, 'UTC');
+    const a = await api.folders.create(' A ');
+    const b = await api.folders.create('B');
+    expect(a.name).toBe('A');
+    await expect(api.folders.create(' ')).rejects.toMatchObject({ kind: 'Invalid' });
+    await expect(api.folders.rename(99, 'x')).rejects.toMatchObject({ kind: 'NotFound' });
+    await expect(api.folders.reorder([a.id])).rejects.toMatchObject({ kind: 'Invalid' });
+    await api.folders.reorder([b.id, a.id]);
+    expect((await api.folders.list()).map((f) => f.name)).toEqual(['B', 'A']);
+    await expect(api.views.move(1, 99)).rejects.toMatchObject({ kind: 'NotFound' });
+    await api.views.move(1, a.id);
+    await api.folders.delete(a.id);
+    expect((await api.views.list()).find((v) => v.id === 1)!.folder_id).toBeNull();
+    await api.history.undo();
+    expect((await api.views.list()).find((v) => v.id === 1)!.folder_id).toBe(a.id);
+  });
+});
