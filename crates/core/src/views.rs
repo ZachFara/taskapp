@@ -3,7 +3,8 @@ use sqlx::{Row, SqliteConnection, query::Query, sqlite::SqliteArguments, sqlite:
 
 use crate::{
     ChangeSource, Db, Error, FieldRef, Filter, FixedField, Issue, IssueId, IssueStats, Op,
-    PropertyDef, PropertyKind, Result, SavedView, Sort, ViewDef, ViewId, ViewTemplateId,
+    PropertyDef, PropertyKind, Result, SavedView, Sort, ViewDef, ViewFolderId, ViewId,
+    ViewTemplateId,
     history::{self, Edit},
     issues,
     palette::{self, Look},
@@ -471,6 +472,7 @@ fn view_from_row(r: &SqliteRow) -> Result<SavedView> {
         template_id: r
             .try_get::<Option<i64>, _>("template_id")?
             .map(ViewTemplateId),
+        folder_id: r.try_get::<Option<i64>, _>("folder_id")?.map(ViewFolderId),
     })
 }
 
@@ -479,7 +481,7 @@ fn view_from_row(r: &SqliteRow) -> Result<SavedView> {
 /// Fails on a database error or a stored definition that no longer parses.
 pub async fn list(db: &Db) -> Result<Vec<SavedView>> {
     sqlx::query(
-        "SELECT id, name, definition, position, icon, color, template_id FROM views ORDER BY position, id",
+        "SELECT id, name, definition, position, icon, color, template_id, folder_id FROM views ORDER BY position, id",
     )
     .fetch_all(&db.pool)
     .await?
@@ -522,7 +524,7 @@ pub async fn save(
         None => insert_view(&mut tx, src, name, &json, &look).await?,
     };
     let row = sqlx::query(
-        "SELECT id, name, definition, position, icon, color, template_id FROM views WHERE id = ?",
+        "SELECT id, name, definition, position, icon, color, template_id, folder_id FROM views WHERE id = ?",
     )
     .bind(id)
     .fetch_one(&mut *tx)

@@ -9,7 +9,8 @@ use taskapp_core::{Db, Result, settings};
 use crate::files::{
     CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow,
     MilestoneRow, PinRow, ProjectFile, PropertyFile, RelationKindRow, StatusRow, ViewFile,
-    ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir, read_plain, render_issue, safe_name,
+    ViewFolderFile, ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir, read_plain,
+    render_issue, safe_name,
 };
 
 pub struct ExportStats {
@@ -105,6 +106,8 @@ async fn render(db: &Db) -> Result<BTreeMap<String, String>> {
 }
 
 async fn template_files(db: &Db, files: &mut BTreeMap<String, String>) -> Result<()> {
+    let view_folders = yaml(&view_folders(db).await?)?;
+    files.insert("view_folders.yaml".to_string(), view_folders);
     let view_templates = yaml(&view_templates(db).await?)?;
     files.insert("view_templates.yaml".to_string(), view_templates);
     let issue_templates = yaml(&issue_templates(db).await?)?;
@@ -278,24 +281,40 @@ async fn views(db: &Db) -> Result<Vec<ViewFile>> {
         Option<String>,
         Option<String>,
         Option<i64>,
+        Option<i64>,
     );
     let rows = sqlx::query_as::<_, Row>(
-        "SELECT name, definition, position, icon, color, template_id FROM views ORDER BY position, id",
+        "SELECT name, definition, position, icon, color, template_id, folder_id FROM views ORDER BY position, id",
     )
     .fetch_all(&db.pool)
     .await?;
     rows.into_iter()
-        .map(|(name, definition, position, icon, color, template_id)| {
-            Ok(ViewFile {
-                name,
-                position,
-                definition: serde_json::from_str(&definition).map_err(invalid)?,
-                icon,
-                color,
-                template_id,
-            })
-        })
+        .map(
+            |(name, definition, position, icon, color, template_id, folder_id)| {
+                Ok(ViewFile {
+                    name,
+                    position,
+                    definition: serde_json::from_str(&definition).map_err(invalid)?,
+                    icon,
+                    color,
+                    template_id,
+                    folder_id,
+                })
+            },
+        )
         .collect()
+}
+
+async fn view_folders(db: &Db) -> Result<Vec<ViewFolderFile>> {
+    let rows = sqlx::query_as::<_, (i64, String, i64)>(
+        "SELECT id, name, position FROM view_folders ORDER BY position, id",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, name, position)| ViewFolderFile { id, name, position })
+        .collect())
 }
 
 async fn view_templates(db: &Db) -> Result<Vec<ViewTemplateFile>> {

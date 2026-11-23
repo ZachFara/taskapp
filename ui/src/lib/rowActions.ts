@@ -4,7 +4,7 @@ import type { PinKind } from './bindings';
 import { templates } from '../components/display/templatesApi';
 
 /** What a row action acts on. `id` is the entity's own id (a project's id, not its slug). */
-export type Kind = 'view' | 'project' | 'cycle' | 'label' | 'template';
+export type Kind = 'view' | 'project' | 'cycle' | 'label' | 'template' | 'folder';
 export type Target = { kind: Kind; id: number; name: string };
 type Change = { name?: string; icon?: string | null; color?: string | null };
 
@@ -18,7 +18,9 @@ const changed = () => {
 
 /** Saves a name, icon or colour, keeping what the change does not name. */
 export async function patch(t: Target, c: Change) {
-  if (t.kind === 'view') {
+  if (t.kind === 'folder') {
+    if (c.name) await api.folders.rename(t.id, c.name);
+  } else if (t.kind === 'view') {
     const v = (await api.views.list()).find((x) => x.id === t.id);
     if (v) await api.views.save(v.id, c.name ?? v.name, v.def, 'icon' in c ? c.icon! : v.icon, 'color' in c ? c.color! : v.color);
   } else if (t.kind === 'project') {
@@ -38,7 +40,8 @@ export async function patch(t: Target, c: Change) {
 }
 
 export async function remove(t: Target) {
-  if (t.kind === 'view') await api.views.delete(t.id);
+  if (t.kind === 'folder') await api.folders.delete(t.id);
+  else if (t.kind === 'view') await api.views.delete(t.id);
   else if (t.kind === 'project') await api.projects.delete(t.id);
   else if (t.kind === 'cycle') await api.cycles.delete(t.id);
   else if (t.kind === 'label') await api.labels.delete(t.id);
@@ -63,4 +66,11 @@ export async function togglePin(t: Target) {
   if (have) await api.pins.unpin(have.pin.id);
   else await api.pins.pin(kind, target, t.name);
   changed();
+}
+
+/** A new folder at the end of the sidebar's Views; the caller asks for its real name. */
+export async function addFolder(): Promise<Target> {
+  const f = await api.folders.create('New folder');
+  changed();
+  return { kind: 'folder', id: f.id, name: f.name };
 }

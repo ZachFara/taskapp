@@ -19,6 +19,7 @@ ids!(
     LabelId,
     ViewId,
     ViewTemplateId,
+    ViewFolderId,
     CommentId,
     WorkBlockId,
     PinId,
@@ -528,6 +529,16 @@ pub struct SavedView {
     pub color: Option<String>,
     /// The template the view was made from, for "Reset to template".
     pub template_id: Option<ViewTemplateId>,
+    /// The sidebar folder the view sits in; `None` is the top level.
+    pub folder_id: Option<ViewFolderId>,
+}
+
+/// A sidebar folder of views.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct ViewFolder {
+    pub id: ViewFolderId,
+    pub name: String,
+    pub position: i32,
 }
 
 /// A saved view definition that new views start from.

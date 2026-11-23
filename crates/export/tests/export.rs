@@ -519,6 +519,7 @@ async fn dump(
         "views",
         "issue_templates",
         "view_templates",
+        "view_folders",
         "property_defs",
         "pins",
         "import_log",
@@ -527,8 +528,8 @@ async fn dump(
         "work_blocks",
     ] {
         let cols: Vec<String> = sqlx::query_scalar(
-            "SELECT name FROM pragma_table_info(?1) WHERE (name != 'id' OR ?1 = 'view_templates')
-               AND (name NOT LIKE '%!_id' ESCAPE '!' OR name = 'template_id') ORDER BY cid",
+            "SELECT name FROM pragma_table_info(?1) WHERE (name != 'id' OR ?1 IN ('view_templates', 'view_folders'))
+               AND (name NOT LIKE '%!_id' ESCAPE '!' OR name IN ('template_id', 'folder_id')) ORDER BY cid",
         )
         .bind(t)
         .fetch_all(&db.pool)
@@ -570,7 +571,8 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
         "UPDATE cycles SET icon = 'icon:repeat', color = 'blue'",
         "INSERT INTO view_templates (id, name, definition, position, icon, color)
            VALUES (7, 'Board', '{\"filter\":null,\"sorts\":[],\"group_by\":null,\"layout\":\"Board\",\"columns\":[],\"include_archived\":false}', 0, 'icon:kanban', 'indigo')",
-        "UPDATE views SET icon = 'icon:star', color = 'yellow', template_id = 7 WHERE id = (SELECT min(id) FROM views)",
+        "INSERT INTO view_folders (id, name, position) VALUES (3, 'Work', 0)",
+        "UPDATE views SET icon = 'icon:star', color = 'yellow', template_id = 7, folder_id = 3 WHERE id = (SELECT min(id) FROM views)",
         "INSERT INTO issue_templates (name, slug, icon, color, body)
            VALUES ('Bug report', 'bug-report', 'icon:bug', 'red', '{\"title_prefix\":\"Bug: \",\"fields\":{\"priority\":2},\"sub_issues\":[]}')",
         "INSERT INTO import_log (external_id, source, issue_id, imported_at)

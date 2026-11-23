@@ -10,7 +10,7 @@ import { scrubDef, seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
   AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, Event, EventInput, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
   NewIssue, Pin, Project, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
-  TemplateInput, Value, ViewDef, ViewTemplate, WorkBlock,
+  TemplateInput, Value, ViewDef, ViewFolder, ViewTemplate, WorkBlock,
 } from './bindings';
 
 export type MockSeed = {
@@ -26,6 +26,7 @@ export type MockSeed = {
   relations?: Relation[];
   templates?: IssueTemplate[];
   viewTemplates?: ViewTemplate[];
+  viewFolders?: ViewFolder[];
   workspace?: Workspace;
   /** Changes that predate the mock, for progress charts (the real seed writes the same rows). */
   history?: Change[];
@@ -61,6 +62,7 @@ const dueDay = (i: Issue) => {
   }
 };
 const nothing = (_?: unknown) => null;
+const folderName = (name: string) => name.trim() || fail('Invalid', 'a folder needs a name');
 /** Same rule as core: 0 to 1000 with exactly the precision of one decimal (no rounding of float noise). */
 const validPoints = (p: number) => Number.isFinite(p) && p >= 0 && p <= 1000 && Number(p.toFixed(1)) === p;
 const dayDiff = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
@@ -94,6 +96,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const events: Event[] = [];
   const views = s.views ?? [];
   const viewTemplates: ViewTemplate[] = s.viewTemplates ?? [];
+  const folders: ViewFolder[] = s.viewFolders ?? [];
   const milestones: Milestone[] = s.milestones ?? [];
   const comments: Comment[] = [];
   const relations: Relation[] = s.relations ?? [];
@@ -106,7 +109,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, events, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, importLog] as unknown[][];
+  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, events, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, importLog] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -854,7 +857,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         checkIcon(icon);
         const key = colorKey(color);
         if (id === null) {
-          const v = { id: next(views), name, def: withDisplay(d), position: views.length, icon: icon ?? null, color: key, template_id: null };
+          const v = { id: next(views), name, def: withDisplay(d), position: views.length, icon: icon ?? null, color: key, template_id: null, folder_id: null };
           views.push(v);
           return v;
         }
@@ -863,7 +866,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       },
       createFromTemplate: async (templateId, name) => {
         const t = find(viewTemplates, templateId, 'view template');
-        const v = { id: next(views), name: name ?? t.name, def: withDisplay(t.def), position: views.length, icon: t.icon, color: t.color, template_id: t.id };
+        const v = { id: next(views), name: name ?? t.name, def: withDisplay(t.def), position: views.length, icon: t.icon, color: t.color, template_id: t.id, folder_id: null };
         views.push(v);
         return v;
       },
@@ -880,9 +883,35 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return v;
       },
       delete: async (id) => nothing(remove(views, id, 'view')),
+      move: async (id, folderId) => {
+        if (folderId !== null) find(folders, folderId, 'view folder');
+        const v = find(views, id, 'view');
+        Object.assign(v, { folder_id: folderId, position: Math.max(-1, ...views.map((x) => x.position)) + 1 });
+        views.sort((a, b) => a.position - b.position);
+        return null;
+      },
       reorder: async (ids) => {
         reposition(views, ids, (v) => v.id, 'view');
         views.sort((a, b) => a.position - b.position);
+        return null;
+      },
+    },
+    folders: {
+      list: async () => folders,
+      create: async (name) => {
+        const f = { id: next(folders), name: folderName(name), position: Math.max(-1, ...folders.map((x) => x.position)) + 1 };
+        folders.push(f);
+        return f;
+      },
+      rename: async (id, name) => Object.assign(find(folders, id, 'view folder'), { name: folderName(name) }),
+      delete: async (id) => {
+        remove(folders, id, 'view folder');
+        for (const v of views) if (v.folder_id === id) v.folder_id = null;
+        return null;
+      },
+      reorder: async (ids) => {
+        reposition(folders, ids, (f) => f.id, 'folder');
+        folders.sort((a, b) => a.position - b.position);
         return null;
       },
     },
@@ -1114,7 +1143,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     'projects.create projects.update projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink templates.create templates.update templates.delete templates.apply ' +
     'labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
-    'relations.add relations.remove relation.kindsCreate relation.kindsUpdate relation.kindsDelete views.save views.delete views.reorder views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
+    'relations.add relations.remove relation.kindsCreate relation.kindsUpdate relation.kindsDelete views.save views.delete views.reorder views.move folders.create folders.rename folders.delete folders.reorder views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
     'view.templatesCreate view.templatesUpdate view.templatesDelete pins.pin pins.unpin pins.reorder pins.set import.apply'
   ).split(' ');
   for (const name of mutating) {
@@ -1244,7 +1273,7 @@ const templates: IssueTemplate[] = [
 // The views the migration seeds, with icons and the groupings the screens expect, plus one for the week ahead.
 const view = (id: number, name: string, layout: Layout, group_by: FieldRef | null, filter: Filter, icon: string): SavedView => ({
   id, name, position: id - 1, icon: `icon:${icon}`, color: null,
-  def: withDisplay({ filter, group_by, layout }), template_id: null,
+  def: withDisplay({ filter, group_by, layout }), template_id: null, folder_id: null,
 });
 const category = (op: 'In' | 'Neq', value: Value): Filter => ({ Cond: { field: { Fixed: 'StatusCategory' }, op, value } });
 const views: SavedView[] = [

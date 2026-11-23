@@ -26,6 +26,7 @@ const STEPS: Record<string, string> = {
   issues_create: 'Created issue', issues_update: 'Updated issue', issues_bulk_update: 'Updated issues', issues_archive: 'Archived issue',
   issues_delete: 'Deleted issue', properties_set_value: 'Set property value', comments_add: 'Added comment', pins_pin: 'Pinned', pins_unpin: 'Unpinned',
   views_save: 'Changed view', views_delete: 'Deleted view', views_create_from_template: 'Created view from template',
+  folders_create: 'Create folder', folders_rename: 'Rename folder', folders_delete: 'Delete folder', folders_reorder: 'Reorder folder', views_move: 'Move view',
   views_save_as_template: 'Saved view as template', views_reset_to_template: 'Reset view to template',
   view_templates_create: 'Created view template', view_templates_update: 'Changed view template', view_templates_delete: 'Deleted view template',
 };

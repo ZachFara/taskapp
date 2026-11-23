@@ -182,6 +182,16 @@ pub struct ViewFile {
     pub color: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder_id: Option<i64>,
+}
+
+/// One entry of `view_folders.yaml`. The id is kept because views point at it.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct ViewFolderFile {
+    pub id: i64,
+    pub name: String,
+    pub position: i64,
 }
 
 /// One entry of `view_templates.yaml`. The id is kept because views point at it.

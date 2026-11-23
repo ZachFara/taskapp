@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../lib/api';
-  import type { Layout, SavedView } from '../lib/bindings';
+  import type { Layout, SavedView, ViewFolder } from '../lib/bindings';
   import { navigate } from '../app/routes';
   import NewViewDialog from './display/NewViewDialog.svelte';
   import { defaultTemplateId, setDefaultTemplate, templates, type ViewTemplate } from './display/templatesApi';
@@ -28,6 +28,8 @@
   }));
 
   let views = $state<SavedView[]>([]);
+  let folders = $state<ViewFolder[]>([]);
+  const inFolder = (id: number | null) => views.filter((v) => (v.folder_id ?? null) === id);
   let pinned = $state<Set<string>>(new Set());
   let loaded = $state(false);
   let creating = $state(false);
@@ -44,8 +46,9 @@
   let confirmingTpl = $state(false);
 
   async function load() {
-    const [list, pins] = await Promise.all([api.views.list(), api.pins.listResolved()]);
+    const [list, pins, fs] = await Promise.all([api.views.list(), api.pins.listResolved(), api.folders.list()]);
     views = list;
+    folders = fs;
     pinned = new Set(pins.map((p) => p.route));
     loaded = true;
     [tpls, defaultId] = await Promise.all([templates().list(), defaultTemplateId()]);
@@ -90,6 +93,21 @@
   });
 </script>
 
+{#snippet viewRow(v: SavedView)}
+  <li class="row" data-view-id={v.id}>
+    <RowActions label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, pinned.has(`/view/${v.id}`))}>
+      <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? 'icon:layers', color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
+      <span class="grow">
+        <ListRow onpick={() => navigate(`/view/${v.id}`)}>
+          <span class="name">{v.name}</span>
+          <Pill>{layoutName(v.def.layout)}</Pill>
+          {#if pinned.has(`/view/${v.id}`)}<Pill>Pinned</Pill>{/if}
+        </ListRow>
+      </span>
+    </RowActions>
+  </li>
+{/snippet}
+
 <PageHeader title="Views" icon="icon:layers">
   {#snippet actions()}
     <Button variant="primary" icon="plus" onclick={() => (creating = true)}>New view</Button>
@@ -102,21 +120,15 @@
       {#snippet action()}<Button variant="primary" icon="plus" onclick={() => (creating = true)}>New view</Button>{/snippet}
     </EmptyState>
   {:else}
+    {#each folders as f (f.id)}
+      <h2 class="section" data-folder-id={f.id}>{f.name}</h2>
+      <ul class="rows">
+        {#each inFolder(f.id) as v (v.id)}{@render viewRow(v)}{/each}
+      </ul>
+    {/each}
+    {#if folders.length && inFolder(null).length}<h2 class="section">No folder</h2>{/if}
     <ul class="rows">
-      {#each views as v (v.id)}
-        <li class="row" data-view-id={v.id}>
-          <RowActions label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, pinned.has(`/view/${v.id}`))}>
-            <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? 'icon:layers', color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
-            <span class="grow">
-              <ListRow onpick={() => navigate(`/view/${v.id}`)}>
-                <span class="name">{v.name}</span>
-                <Pill>{layoutName(v.def.layout)}</Pill>
-                {#if pinned.has(`/view/${v.id}`)}<Pill>Pinned</Pill>{/if}
-              </ListRow>
-            </span>
-          </RowActions>
-        </li>
-      {/each}
+      {#each inFolder(null) as v (v.id)}{@render viewRow(v)}{/each}
     </ul>
   {/if}
 

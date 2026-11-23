@@ -149,6 +149,7 @@ const DESCRIPTIVE: &[&str] = &[
     "status",
     "view",
     "view_template",
+    "view_folder",
     "template",
 ];
 
