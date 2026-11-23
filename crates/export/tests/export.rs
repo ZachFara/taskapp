@@ -705,6 +705,7 @@ async fn restore_replaces_a_used_workspace_keeps_a_backup_and_continues_the_hist
     let (docs, ship) = seed_issues(&used).await?;
     seed_rest(&used, docs, ship).await?;
     labels::create(&used, "stale-label", "red", None, SRC).await?;
+    taskapp_core::view_folders::create(&used, "stale-folder", SRC).await?;
     settings::set(&used, "estimation", &"points").await?;
     let backups = root.path().join("backups");
     let out = taskapp_export::restore::restore_from_dir(

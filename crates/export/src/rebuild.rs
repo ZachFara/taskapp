@@ -93,6 +93,7 @@ async fn wipe(tx: &mut Tx<'_>) -> Result<()> {
         "DELETE FROM labels",
         "DELETE FROM pins",
         "DELETE FROM views",
+        "DELETE FROM view_folders",
         "DELETE FROM view_templates",
         "DELETE FROM issue_templates",
         "DELETE FROM statuses",
