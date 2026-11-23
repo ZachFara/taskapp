@@ -864,7 +864,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       search: async (text, limit) => {
         const words = (t: string) => t.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
         const phrases = text.split(/\s+/).filter(Boolean).map(words).filter((p) => p.length);
-        const has = (hay: string[], p: string[]) => hay.some((_, i) => p.every((w, k) => hay[i + k] === w));
+        // Like the backend's "word"* phrases: the words are adjacent, and the last one may be only the start of a word.
+        const has = (hay: string[], p: string[]) => hay.some((_, i) => p.every((w, k) => (k === p.length - 1 ? hay[i + k]?.startsWith(w) : hay[i + k] === w)));
         return phrases.length
           ? s.issues.filter((i) => {
               const hay = words([i.title, i.description, ...comments.filter((c) => c.issue_id === i.id).map((c) => c.body)].join(' '));

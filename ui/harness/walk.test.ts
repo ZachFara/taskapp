@@ -174,6 +174,16 @@ describe('walk', { timeout: 20_000 }, () => {
     expect(names).not.toContain('Create issue');
   });
 
+  it('F10 / searches issues by the start of a word; Enter opens the issue', async () => {
+    await open();
+    await press('/');
+    await pw(palette().getByRole('combobox')).toHaveAttribute('aria-label', 'Search issues');
+    await page.keyboard.type('offl');
+    await pw(palette().getByRole('option').first()).toContainText('Offline mode research');
+    await press('Enter');
+    await page.waitForURL(/\/issue\/ABC-/);
+  });
+
   it('5 j moves five rows', async () => {
     await open();
     await press('5', 'j');
