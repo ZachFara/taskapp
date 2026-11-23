@@ -76,6 +76,25 @@ Added by the owner on 2026-11-22 (later, not built):
 - **Split the `test-ui` CI job.** It now runs about 1,100 unit tests, 365 contract cases against a built devserver and
   the Playwright walk tests in one job; consider separate unit, contract and walk jobs (the walk job's cold-start
   `page.goto` timed out twice and forced a rerun).
+- **Ephemeral view filters.** Quick filters at the view level that are not saved with the view, to slim down a long
+  list for the moment (by status, project, priority and the other fields), in a clickable menu or bar that collapses
+  easily when not wanted; clearing them returns to the saved view.
+- **Resizable panes by dragging.** Every pane edge can be dragged to resize, including the left sidebar (today only the
+  issue and insights panels have a grip, pointer-only); widths remembered; keyboard resize.
+- **Compact links with optional previews.** A pasted URL in a description, comment or project description (including
+  app links such as `obsidian://open?...`) shows as a short link chip with the site or app icon and a readable name
+  (page title, or the file name for an Obsidian link) instead of the raw encoded URL, the way chat apps unfurl links;
+  editing shows the raw URL again; an optional richer preview (title, summary, image) that can be switched off in
+  settings; web previews must not fetch anything unless the setting is on.
+- **Choose your own icons, where the thing is.** The owner could not find how to pick an icon: today the icon and
+  colour picker exists only inside Settings (statuses, labels, projects, cycles, templates). Make it reachable in
+  place: click the icon on the project page, the view header, a sidebar row, a label or status, and in the command
+  menu ("Change icon"); allow emoji and, later, custom uploaded icons.
+- **Interface size.** The owner finds the app most comfortable at a browser zoom between 110% and 125%: add an
+  "Interface size" setting (100, 110, 115, 125%) applied to the whole interface, with a larger default, and check
+  layouts at the effective narrower width.
+- **Guide stays honest.** A test that fails when docs/GUIDE.md's keyboard tables differ from the command registry
+  (drafted, not merged).
 
 The raw ledger of plan 2 is docs/review/plan-2/ledger.md. Decisions: docs/decisions/0010 to 0016.
 

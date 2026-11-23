@@ -7,6 +7,7 @@ Implementers also read docs/IMPLEMENTER-CONTRACT.md and their brief in .briefs/ 
 A single-user, Linear-like Mac desktop task app: custom properties, Gantt, Apple Reminders capture,
 Google Calendar notifications, optional GitHub export, an MCP server and a CLI for agents.
 Spec (what): docs/DESIGN.md. Plan (order, interfaces, tests): docs/plans/plan-1.md.
+How to use the app: docs/GUIDE.md
 Decisions (how): docs/decisions/. An idea not in the spec goes on "After this plan" in PROGRESS.md.
 
 ## Layout (enforced by scripts/layout-allowed.txt)
