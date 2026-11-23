@@ -44,7 +44,7 @@ projects).
 
 - **Sidebar (left).** Top: My issues. Then four collapsible sections with counts: Pinned, Views, Projects (with "All
   projects"), Cycles (with "All cycles"). Bottom: Settings. Drag a pin or a view to reorder it. Hover a view, project
-  or cycle and press the pin icon to pin or unpin it. With "Sidebar sparklines" on (Settings > General) each project
+  or cycle, open its "…" and choose Pin or Unpin. With "Sidebar sparklines" on (Settings > General) each project
   shows a small progress line. The sidebar has no Inbox link; `/inbox` exists but only shows "Inbox arrives in a later
   release".
 - **Top bar.** The breadcrumb, the "Search or run a command" button (mod+k), a keyboard-shortcuts button and a theme
@@ -302,8 +302,9 @@ are also off whenever Estimation (General) has no points. The list is the `issue
 
 ## Hover actions and right-click menus
 
-- Point at a sidebar row (view, project, cycle), a view on the Views page, or an issue row in a list, and its actions
-  appear at the row's right edge. Tab to a row to show them from the keyboard. They do not move the row's contents.
+- Point at a sidebar row (view, project, cycle), a view on the Views page, or an issue row in a list, and a single "…"
+  button appears at its right edge. Tab to a row to show it from the keyboard. Clicking the rest of the row opens it as
+  before. The "…" opens the row's actions menu.
 - Right-click a sidebar row or a Views page row, or press Shift+F10 or the menu key on it, for the same actions as a
   menu. Views: rename, duplicate, pin or unpin, change icon, delete (delete asks first and keeps the issues).
   Projects and cycles: rename, pin or unpin, change icon, delete (the same confirm as Settings).

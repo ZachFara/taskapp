@@ -17,21 +17,35 @@ const actions = () => {
     { id: 'delete', label: 'Delete Alpha', icon: 'trash', danger: true, run },
   ] };
 };
+const more = () => document.querySelector('button[aria-label="More actions for Alpha"]') as HTMLButtonElement;
+const items = () => [...document.querySelectorAll('[role="menuitem"]')].map((e) => e.textContent?.trim());
 
 describe('RowActions', () => {
-  it('row_actions_are_buttons_labelled_by_their_action', () => {
+  it('row_actions_show_one_more_button', () => {
     const { list } = actions();
     app = mount(RowActions, { target: document.body, props: { label: 'Alpha', actions: list, children: row() } });
     flushSync();
-    expect(document.querySelector('[role=group][aria-label=Alpha]')).not.toBeNull();
-    expect([...document.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Rename Alpha', 'Delete Alpha']);
+    expect([...document.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['More actions for Alpha']);
   });
 
-  it('clicking_an_action_runs_it', () => {
+  it('more_button_opens_the_actions_menu', async () => {
     const { list, run } = actions();
     app = mount(RowActions, { target: document.body, props: { label: 'Alpha', actions: list, children: row() } });
     flushSync();
-    (document.querySelector('button[aria-label="Rename Alpha"]') as HTMLButtonElement).click();
+    more().click();
+    flushSync();
+    await vi.waitFor(() => expect(items()).toEqual(['Rename Alpha', 'Delete Alpha']));
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('choosing_a_menu_item_runs_it', async () => {
+    const { list, run } = actions();
+    app = mount(RowActions, { target: document.body, props: { label: 'Alpha', actions: list, children: row() } });
+    flushSync();
+    more().click();
+    flushSync();
+    await vi.waitFor(() => expect(items()).toEqual(['Rename Alpha', 'Delete Alpha']));
+    (document.querySelectorAll('[role="menuitem"]')[0] as HTMLElement).click();
     expect(run).toHaveBeenCalledOnce();
   });
 
@@ -41,15 +55,6 @@ describe('RowActions', () => {
     flushSync();
     document.querySelector('[role=group]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }));
     flushSync();
-    await vi.waitFor(() => expect([...document.querySelectorAll('[role="menuitem"]')].map((e) => e.textContent?.trim())).toEqual(['Rename Alpha', 'Delete Alpha']));
-  });
-
-  it('menu_false_has_no_context_menu', () => {
-    const { list } = actions();
-    app = mount(RowActions, { target: document.body, props: { label: 'Alpha', actions: list, menu: false, children: row() } });
-    flushSync();
-    document.querySelector('[role=group]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true }));
-    flushSync();
-    expect(document.querySelector('[role="menu"]')).toBeNull();
+    await vi.waitFor(() => expect(items()).toEqual(['Rename Alpha', 'Delete Alpha']));
   });
 });

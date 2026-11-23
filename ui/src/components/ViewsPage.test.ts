@@ -38,7 +38,10 @@ describe('ViewsPage', () => {
     const del = vi.spyOn(mock.views, 'delete');
     const id = fixtures.views![0].id;
     mount(RowDialogHost, { target: document.body });
-    target.querySelector<HTMLElement>(`[data-view-id="${id}"]`)!.querySelector<HTMLButtonElement>('button[aria-label^="Delete"]')!.click();
+    target.querySelector<HTMLElement>(`[data-view-id="${id}"]`)!.querySelector<HTMLButtonElement>('button[aria-label^="More actions"]')!.click();
+    flushSync();
+    expect(del).not.toHaveBeenCalled();
+    await vi.waitFor(() => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((e) => /^Delete /.test(e.textContent?.trim() ?? ''))!.click());
     flushSync();
     expect(del).not.toHaveBeenCalled();
     [...document.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === 'Delete')!.click();

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { mount } from 'svelte';
 import Labels from './Labels.svelte';
 import RowDialogHost from '../RowDialogHost.svelte';
@@ -39,8 +39,9 @@ describe('Labels', () => {
     const { target, calls } = await mountSettings(Labels);
     await add(target, 'urgent');
     mount(RowDialogHost, { target: document.body });
-    await clickLabel('Delete urgent');
+    await clickLabel('More actions for urgent');
     expect(calls).not.toContain('labels.delete');
+    await vi.waitFor(() => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((e) => e.textContent?.trim() === 'Delete urgent')!.click());
     await press(document.body, 'Delete');
     expect(calls.filter((c) => c === 'labels.delete')).toHaveLength(1);
   });
@@ -54,9 +55,9 @@ describe('Labels', () => {
 
   it('row actions name themselves in a tooltip on hover', async () => {
     const { target } = await mountSettings(Labels);
-    const del = target.querySelector<HTMLButtonElement>('button[aria-label^="Delete "]')!;
-    del.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse' }));
+    const more = target.querySelector<HTMLButtonElement>('button[aria-label^="More actions for "]')!;
+    more.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse' }));
     await new Promise((r) => setTimeout(r, 700));
-    expect(document.querySelector('.cx-tip')?.textContent).toMatch(/^Delete /);
+    expect(document.querySelector('.cx-tip')?.textContent).toMatch(/^More actions for /);
   });
 });

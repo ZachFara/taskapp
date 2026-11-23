@@ -8,62 +8,38 @@
   import IconButton from './IconButton.svelte';
   import MenuItem from './MenuItem.svelte';
 
-  // The row's actions sit over its right edge while the row is hovered or has focus. They take no layout space,
-  // and they are not clickable while hidden. Right-click, Shift+F10 and the menu key open the same actions as a menu.
-  // `menu={false}` for rows that already have their own menu.
-  let {
-    label,
-    actions,
-    menu = true,
-    children,
-  }: { label: string; actions: RowAction[]; menu?: boolean; children: Snippet } = $props();
+  // One "…" button at the row's right end, shown while the row is hovered or has focus. It opens the same actions menu
+  // as right-click, Shift+F10 and the menu key. The name keeps the rest of the row, so a click on it opens the view.
+  let { label, actions, children }: { label: string; actions: RowAction[]; children: Snippet } = $props();
   let open = $state(false);
   const key = (e: KeyboardEvent) => {
-    if (menu && (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey))) {
+    if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
       e.preventDefault();
       open = true;
     }
   };
 </script>
 
-{#snippet bar()}
-  <div class="rowactions" role="group" aria-label={label} onkeydown={key}>
-    {@render children()}
-    <div class="acts">
-      {#each actions as a (a.id)}
-        <IconButton icon={a.icon} label={a.label} onclick={a.run} />
-      {/each}
+<ContextMenu bind:open>
+  {#snippet area()}
+    <div class="rowactions" role="group" aria-label={label} onkeydown={key}>
+      {@render children()}
+      <div class="acts">
+        <IconButton icon="more" label={`More actions for ${label}`} onclick={() => (open = true)} />
+      </div>
     </div>
-  </div>
-{/snippet}
-
-{#if menu}
-  <ContextMenu bind:open>
-    {#snippet area()}{@render bar()}{/snippet}
-    {#each actions as a (a.id)}
-      <MenuItem label={a.label} icon={a.icon} danger={a.danger} onSelect={a.run} />
-    {/each}
-  </ContextMenu>
-{:else}
-  {@render bar()}
-{/if}
+  {/snippet}
+  {#each actions as a (a.id)}
+    <MenuItem label={a.label} icon={a.icon} danger={a.danger} onSelect={a.run} />
+  {/each}
+</ContextMenu>
 
 <style>
   :global(.cx-ctx-area) { display: contents; }
   .rowactions { position: relative; display: flex; align-items: center; flex: 1; min-width: 0; }
-  /* The wide child (a link or ListRow) takes the width; the actions overlay its right edge. */
+  /* The wide child (a link or ListRow) takes the width; the button takes its own slot, so nothing shifts on hover. */
   .rowactions > :global(.grow) { flex: 1; min-width: 0; }
-  .acts {
-    position: absolute;
-    right: var(--s-2);
-    background: var(--acts-bg, var(--active)); /* hides the text the buttons sit over; the host sets its own row colour */
-    border-radius: var(--r-ctl);
-    display: flex;
-    gap: var(--s-1);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--dur-1) var(--ease);
-  }
+  .acts { flex: none; display: flex; opacity: 0; pointer-events: none; transition: opacity var(--dur-1) var(--ease); }
   .rowactions:hover .acts,
   .rowactions:focus-within .acts { opacity: 1; pointer-events: auto; }
 </style>
