@@ -56,6 +56,15 @@ describe('General', () => {
   // Opening the time zone list renders every zone; under load that takes longer than the default 5s.
   }, 30_000);
 
+  it('picking a look applies it at once', async () => {
+    const { target } = await mountSettings(General);
+    await press(target, 'Jira');
+    expect(document.documentElement.dataset.skin).toBe('jira');
+    expect(target.querySelector('button[aria-pressed="true"]')?.textContent).toContain('Jira');
+    await press(target, 'Survey map');
+    expect(document.documentElement.hasAttribute('data-skin')).toBe(false);
+  });
+
   it('blank fields say what goes in them, and a time zone change waits for a restart', async () => {
     const { target } = await mountSettings(General);
     expect(field(target, 'Workspace name').placeholder).not.toBe('');
