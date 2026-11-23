@@ -121,6 +121,8 @@ export const cases: Case[] = [
   call('search: title words', 'search_search', { text: 'migrate blog', limit: 10 }),
   call('search: limit', 'search_search', { text: 'order', limit: 1 }),
   call('search: no match', 'search_search', { text: 'zzzz', limit: 5 }),
+  call('search: start of a word', 'search_search', { text: 'migr', limit: 10 }),
+  call('search: not inside a word', 'search_search', { text: 'rate', limit: 10 }),
 
   // Pins
   call('pins: pin an issue', 'pins_pin', { kind: 'Issue', target: 'ABC-1', title: null }),

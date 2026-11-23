@@ -3,7 +3,7 @@
 How to use the app, written from the code. If you are an agent asked "how do I do X in Cairn", read the section that
 matches and answer from it. Every key, setting, CLI command and MCP tool named here exists in the code; where a
 feature is only partly built, the text says so. The keyboard tables were generated from the command
-registry (`ui/src/lib/commands/defs/**`); a test that keeps them in sync is drafted but not merged yet.
+registry (`ui/src/lib/commands/defs/**`); `ui/src/lib/commands/guide.test.ts` keeps them in sync.
 
 Contents: [What it is](#what-cairn-is) - [First run](#first-run) - [The screen](#the-screen) - [Issues](#issues) -
 [Selection and bulk edit](#selection-and-bulk-edit) - [Undo and redo](#undo-and-redo) - [Views](#views) -
@@ -119,6 +119,17 @@ Quick-add has no token for status, parent, cycle or milestone. Example: `Pay ren
 - Open the full page: `mod+enter` (route `/issue/ABC-1`). Close the panel or page: `escape`. `[` and `]` step to the
   previous or next issue.
 - Copy: `mod+c` copies the key, `mod+shift+c` the link. Pin: `.`. Duplicate: `mod+d`.
+
+### Links in descriptions and comments
+
+- A bare web link, or an `obsidian://open` link with only `vault` and `file`, in a description, comment or project description shows as a chip: an icon, the host
+  and a short path (an Obsidian link reads `Obsidian: <note name>`). Hover shows the full URL. Click opens it in your
+  browser or Obsidian. The chip is built from the URL alone: nothing is fetched. Other `obsidian://` actions (new, plugin
+  commands) and other schemes (javascript:, file:) stay plain text and never open.
+- A link you wrote with its own text (`[the spec](https://...)`) stays as that text.
+- Edit the description to see the raw URL again. Preview in the editor shows the chip.
+- Link previews (page title, summary, image) are not built: they need a network fetch from the app, and the setting
+  to switch them on is left out until that fetch is decided. Links stay chips with no fetch.
 
 ### Sub-issues, relations, comments, history
 
@@ -321,9 +332,19 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 Other stored settings (not all with a screen): backup folder, Reminders list, Google Calendar choice and switch, export
 folder, remote and switch, the default view template.
 
+### Themes
+
+Settings > General > Look picks one of six looks: Survey map (the default), Linear, Jira, Cupertino, Obsidian and
+Scholastic. Each has a light and a dark variant and also sets corner radius, row height and type face (system fonts
+only). It works with the Light, Dark or System choice above it and applies at once. The command menu has "Change
+theme..." with the same list.
+
 ## The command menu
 
 - **Open:** `mod+k` or `mod+p` (works inside text fields), the "Search or run a command" button, or `/` (search).
+- **Search issues.** Typing at the top of the menu lists matching issues first, under "Issues". Each word matches
+  from its start, so `cras` finds "Crash on launch", and a key such as `ABC-12` is listed first. `/` or the
+  "Search issues…" row opens the same search on its own, with nothing else in the list.
 - **Use:** type to filter commands, issues, views and projects. `arrowdown` / `arrowup` (or `ctrl+n` / `ctrl+p`,
   `ctrl+j` / `ctrl+k`) move, `enter` runs, `tab` completes the highlighted label, `escape` closes.
 - **Contextual actions.** With an issue focused, selected or open, an "Actions on ABC-1" (or "N issues selected")
@@ -346,7 +367,7 @@ count (`5 j`). Plain keys do nothing while you type in a field; `escape` and the
 through. While a dialog, menu or popover is open, plain keys belong to it. When two commands share a key the more
 specific scope wins (editing a list title, then issue detail, then a layout, then global).
 
-How this section can be checked (a draft test, `ui/src/lib/commands/guide.test.ts`, is not merged yet; keep the table format so it works): it reads every table row in
+How this section is checked (`ui/src/lib/commands/guide.test.ts`; keep the table format so it works): it reads every table row in
 this file whose first cell is a command id in backticks, and takes the key sequences from the third cell (each in
 backticks). It fails when a registered command that has a shortcut has no row, when a row's keys differ from the
 registry, or when a row names an unknown command. Rows whose first cell is not a backticked id are not checked.
@@ -687,14 +708,9 @@ From PROGRESS.md "After this plan" and from reading the code:
   keyboard resize of panels.
 - Later, from the owner: ephemeral view filters (today every filter chip is saved with the view); resizable panes by
   dragging (today only the issue and insights panels have a grip, mouse only, the sidebar cannot be resized); compact
-  link chips and optional previews; picking icons where the thing is (today the picker is only in Settings); an
+  link previews (title, summary, image; they need a network fetch, so none is built); picking icons where the thing is (today the picker is only in Settings); an
   Interface size setting.
 - Single user, one Mac, one writer. No signed or notarized build and no licence yet.
+- A new database seeds the issue prefix `ZF` until setup runs.
 - Not verified against real accounts: Apple Reminders import, Google Calendar sync, GitHub export, a restore from the export.
 - The CLI cannot create statuses or milestones, change settings, or unarchive; the MCP server cannot read settings.
-- Seen in the code while writing this guide: Settings > Week starts on offers Saturday, but the core accepts only Sunday or
-  Monday, so Saturday is refused when saved. The legend bar names `move.select`, which is not a registered command (the
-  select command is `select.toggle`), so its "select" hint never shows. The issue page asks for tooltips of
-  `issue.detail.pin` and `issue.detail.archive`, which do not exist. README.md says the first-run screen is not
-  finished, but `Setup.svelte` is wired in. docs/linear-migration.md mentions `taskapp backup`, but the CLI has only
-  `backup list` and `backup restore`. A new database seeds the issue prefix `ZF` until setup runs.

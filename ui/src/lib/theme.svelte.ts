@@ -15,13 +15,37 @@ function cached(): ThemeMode {
   }
 }
 
-export const theme = $state<{ mode: ThemeMode }>({ mode: cached() });
+export const SKINS = [
+  { id: 'survey', label: 'Survey map' },
+  { id: 'linear', label: 'Linear' },
+  { id: 'jira', label: 'Jira' },
+  { id: 'cupertino', label: 'Cupertino' },
+  { id: 'obsidian', label: 'Obsidian' },
+  { id: 'scholastic', label: 'Scholastic' },
+] as const;
+export type Skin = (typeof SKINS)[number]['id'];
+const SKIN_KEY = 'cairn.skin';
+const isSkin = (v: unknown): v is Skin => SKINS.some((s) => s.id === v);
+
+function cachedSkin(): Skin {
+  try {
+    const v = localStorage.getItem(SKIN_KEY);
+    return isSkin(v) ? v : 'survey';
+  } catch {
+    return 'survey';
+  }
+}
+
+export const theme = $state<{ mode: ThemeMode; skin: Skin }>({ mode: cached(), skin: cachedSkin() });
 
 // `system` leaves data-theme off so tokens.css follows prefers-color-scheme.
 export function applyTheme() {
   const root = document.documentElement;
   if (theme.mode === 'system') root.removeAttribute('data-theme');
   else root.setAttribute('data-theme', theme.mode);
+  // The first skin is tokens.css itself, so it carries no attribute.
+  if (theme.skin === 'survey') root.removeAttribute('data-skin');
+  else root.setAttribute('data-skin', theme.skin);
 }
 applyTheme();
 
@@ -36,6 +60,12 @@ export function initTheme(api: Pick<Api, 'settings'>) {
       if (order.includes(v as ThemeMode) && v !== theme.mode) setTheme(v as ThemeMode, false);
     })
     .catch(() => {});
+  void api.settings
+    .get('skin')
+    .then((v) => {
+      if (isSkin(v) && v !== theme.skin) setSkin(v, false);
+    })
+    .catch(() => {});
 }
 
 export function setTheme(mode: ThemeMode, persist = true) {
@@ -47,6 +77,17 @@ export function setTheme(mode: ThemeMode, persist = true) {
   }
   applyTheme();
   if (persist) void backend?.settings.set('theme', mode).catch(() => {});
+}
+
+export function setSkin(skin: Skin, persist = true) {
+  theme.skin = skin;
+  try {
+    localStorage.setItem(SKIN_KEY, skin);
+  } catch {
+    // Storage blocked: the cache is skipped, the saved setting still holds.
+  }
+  applyTheme();
+  if (persist) void backend?.settings.set('skin', skin).catch(() => {});
 }
 
 export const cycleTheme = () => setTheme(order[(order.indexOf(theme.mode) + 1) % order.length]);

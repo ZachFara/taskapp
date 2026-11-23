@@ -406,3 +406,14 @@ async fn get_by_key_takes_only_the_forms_the_app_shows() -> R {
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn search_matches_the_start_of_any_word() -> R {
+    let db = Db::open_in_memory().await?;
+    issues::create(&db, new("Crash on save"), ChangeSource::Ui).await?;
+    assert_eq!(search::search(&db, "cras", 10).await?.len(), 1);
+    assert_eq!(search::search(&db, "sav", 10).await?.len(), 1);
+    assert_eq!(search::search(&db, "cra sav", 10).await?.len(), 1);
+    assert_eq!(search::search(&db, "rash", 10).await?.len(), 0);
+    Ok(())
+}
