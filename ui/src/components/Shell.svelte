@@ -157,7 +157,10 @@
   .app {
     display: grid;
     zoom: var(--ui-zoom, 1);
-    height: calc(100vh / var(--ui-zoom, 1));
+    /* Fill the window by its edges, not by a height: Chromium multiplies a height by the zoom and WebKit (the Mac
+       app) does not, so any height here is wrong in one of them. */
+    position: fixed;
+    inset: 0;
     grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
     grid-template-rows: var(--topbar-h) minmax(0, 1fr);
     grid-template-areas: 'brand top' 'side sheet';
