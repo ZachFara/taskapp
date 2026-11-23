@@ -15,6 +15,12 @@ type R = Result<(), Box<dyn std::error::Error>>;
 
 const SRC: ChangeSource = ChangeSource::Ui;
 
+/// Commits made by the code under test need an identity; CI has none.
+fn identify(dir: &Path) {
+    git_in(dir, &["config", "user.name", "t"]);
+    git_in(dir, &["config", "user.email", "t@example.com"]);
+}
+
 fn git_in(dir: &Path, args: &[&str]) {
     let out = std::process::Command::new("git")
         .arg("-C")
@@ -88,6 +94,7 @@ impl Pair {
         );
         std::fs::create_dir(&dir_a)?;
         git_in(&dir_a, &["init", "-q", "-b", "main"]);
+        identify(&dir_a);
         let a = Db::open_in_memory().await?;
         labels::create(&a, "bug", "red", None, SRC).await?;
         let one = issue(&a, "One").await?;
@@ -99,6 +106,7 @@ impl Pair {
             root.path(),
             &["clone", "-q", remote, dir_b.to_str().expect("utf8")],
         );
+        identify(&dir_b);
         let b = rebuild::rebuild(&dir_b, &root.path().join("b.db")).await?;
         Ok(Pair {
             root,
