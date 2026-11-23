@@ -1,6 +1,7 @@
 import type { Api } from './api';
 import { hexOf, iconOk, keyFor } from './api.mock.palette';
 import { planCsv, projectSlug } from './api.mock.import';
+import { FIELDS } from './issueFields';
 import { parseQuickadd } from './api.mock.quickadd';
 import * as insights from './api.mock.insights';
 import { stepLabel } from './api.mock.stepLabel';
@@ -156,6 +157,17 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     return status();
   };
   const settings = new Map<string, Value>([['issue_prefix', workspace.key], ['estimation', 'both'], ['point_scale', 'fibonacci']]);
+  // The same checks and words as the real backend (crates/core/src/settings.rs), so the contract cases agree.
+  const checkIssueFields = (v: unknown) => {
+    const bad = (why: string) => fail('Invalid', `setting issue_fields: ${why}`);
+    if (!Array.isArray(v)) return bad('must be a list of {field, on}');
+    const seen = new Set<string>();
+    for (const i of v) {
+      if (typeof i?.field !== 'string' || typeof i.on !== 'boolean') return bad('each entry needs a field name and a true or false `on`');
+      if (!(FIELDS as readonly string[]).includes(i.field) || seen.has(i.field)) return bad(`unknown or repeated field \`${i.field}\``);
+      seen.add(i.field);
+    }
+  };
   const choices: Record<string, string[]> = { estimation: ['none', 'points', 'time', 'both'], point_scale: ['fibonacci', 'linear', 'powers', 'tshirt'] };
   const now = () => new Date().toISOString();
   // Issue history only, in the order the backend records it; other entities' history is not shown by any screen.
@@ -320,7 +332,12 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     return { id, name: input.name, slug: input.slug, icon: input.icon ?? null, color: colorKey(input.color), body };
   };
   const today = () => new Date().toLocaleDateString('sv', { timeZone: tz });
-  const parse = (input: string) => parseQuickadd(input, today(), tz, !['none', 'time'].includes(String(settings.get('estimation'))));
+  // Fields the quick add must not read: switched off in `issue_fields`, and points when estimation has none.
+  const fieldsOff = () => [
+    ...((settings.get('issue_fields') as { field: string; on: boolean }[] | undefined) ?? []).filter((f) => !f.on).map((f) => f.field),
+    ...(['none', 'time'].includes(String(settings.get('estimation'))) ? ['points'] : []),
+  ];
+  const parse = (input: string) => parseQuickadd(input, today(), tz, fieldsOff());
   // Ports of schedule.rs: a bar is start..due, or one end derived from the estimate (1 day = 480 minutes, at least 1).
   const barFor = (i: Issue): Bar | null => {
     const due = dueDay(i);
@@ -965,6 +982,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     settings: {
       get: async (key) => settings.get(key) ?? null,
       set: async (key, value) => {
+        if (key === 'issue_fields') checkIssueFields(value);
         const allowed = choices[key];
         if (allowed && !(typeof value === 'string' && allowed.includes(value))) fail('Invalid', `setting ${key} must be one of ${allowed.join(', ')}`);
         return nothing(settings.set(key, value));

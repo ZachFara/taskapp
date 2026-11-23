@@ -253,6 +253,15 @@ Checkbox only), or CLI `property set`. Show a property in views through the Disp
 it. Changing a property's kind or deleting it takes a database snapshot first (and deleting removes every issue's
 value).
 
+## Choosing which fields issues have
+
+Settings > Fields lists the built-in fields: priority, project, milestone, cycle, labels, start, due, estimate, points
+and parent. Each has a switch, and the arrows (or dragging a row) set the order the issue panel lists them in. A field
+that is off is hidden from the issue panel, quick-add tokens (the token stays in the title), filter, group and sort
+choices, the Display panel, table columns, list and board fields, its issue commands and their rows in the shortcut
+sheet. Issues keep their values, so switching a field back on brings them back. Status and title are always on. Points
+are also off whenever Estimation (General) has no points. The list is the `issue_fields` setting.
+
 ## Statuses, labels, icons and colours
 
 - **Statuses** (Settings > Statuses): grouped by category; add a name with an icon and colour; delete asks which status to
@@ -305,7 +314,7 @@ quick-add, `taskapp template apply <id> [title]`, or MCP `apply_template`.
 
 ## Settings
 
-Settings is a list of sections: General, Statuses, Labels, Projects, Cycles, Properties, Templates, Import, Reminders,
+Settings is a list of sections: General, Statuses, Labels, Projects, Cycles, Fields, Properties, Templates, Import, Reminders,
 Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` saves the open page.
 
 | General setting | Values | Notes |

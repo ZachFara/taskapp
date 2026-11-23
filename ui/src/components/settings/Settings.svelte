@@ -5,6 +5,7 @@
   import Calendar from './Calendar.svelte';
   import Cycles from './Cycles.svelte';
   import Export from './Export.svelte';
+  import Fields from './Fields.svelte';
   import General from './General.svelte';
   import ImportPage from '../import/ImportPage.svelte';
   import Labels from './Labels.svelte';
@@ -24,6 +25,7 @@
     { id: 'labels', label: 'Labels', icon: 'tag', screen: Labels },
     { id: 'projects', label: 'Projects', icon: 'project', screen: Projects },
     { id: 'cycles', label: 'Cycles', icon: 'cycle', screen: Cycles },
+    { id: 'fields', label: 'Fields', icon: 'list', screen: Fields },
     { id: 'properties', label: 'Properties', icon: 'layers', screen: Properties },
     { id: 'templates', label: 'Templates', icon: 'bookmark', screen: Templates },
     { id: 'import', label: 'Import', icon: 'arrow-down', screen: ImportPage },

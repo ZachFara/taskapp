@@ -3,6 +3,7 @@
 import { api } from '../../lib/api';
 import type { Cycle, FieldRef, FixedField, IssueStats, Label, Milestone, Project, PropertyDef, PropertyKind, Status, ViewDef } from '../../lib/bindings';
 import { workspaceZone } from '../views/dates';
+import { fixedOn } from '../../lib/fields.svelte';
 import { pointsOn, readEstimation } from '../insights/estimation';
 
 export type Density = 'comfortable' | 'compact';
@@ -36,7 +37,7 @@ export const subIssues = (d: ViewDef): SubIssues => (d as DisplayDef).show_sub_i
 /** Fields a layout shows: the view's own list, else the layout default. */
 export const shown = (d: ViewDef, fallback: FieldRef[], card = false): FieldRef[] => {
   const own = (card && (d as DisplayDef).card_fields?.length ? (d as DisplayDef).card_fields : d.columns) ?? [];
-  return own.length ? own : fallback;
+  return (own.length ? own : fallback).filter((f) => fixedOn(f.Fixed));
 };
 export const sameField = (a: FieldRef, b: FieldRef) => a.Property !== undefined ? a.Property === b.Property : a.Fixed === b.Fixed;
 

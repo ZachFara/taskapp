@@ -1,8 +1,10 @@
 import { defineCommand } from '../../registry';
+import { fieldOn } from '../../../fields.svelte';
 import { choices, pageOf, patchOf, targets } from './_issue';
 
 defineCommand({
   id: 'issue.parent', label: 'Set parent', icon: 'sub-issue', group: 'Issue', shortcut: 'shift+p',
+  when: () => fieldOn('parent'),
   page: (ctx) => {
     const own = targets(ctx);
     return pageOf(ctx, 'Parent', () => [

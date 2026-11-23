@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fieldOn } from '../lib/fields.svelte';
   import { untrack } from 'svelte';
   import { api } from '../lib/api';
   import type { Issue, IssueTemplate, ParsedQuickAdd } from '../lib/bindings';
@@ -60,6 +61,8 @@
 
   // Each chip is a Menu trigger: Tab reaches it in order, Enter or Space opens its menu, and the menu rewrites
   // that token in the text, so the field stays the one source of truth.
+  // Only the tokens of fields that are switched on.
+  const hint = $derived([['priority', 'p2'], ['project', '#project'], ['labels', '@label'], ['estimate', '~30m'], ['due', 'tomorrow']].flatMap(([f, t]) => (fieldOn(f as 'due') ? [t] : [])).map((t) => ` ${t}`).join(''));
   const chips = $derived(
     [
       template && { key: 'template', label: `/${template.slug}` },
@@ -173,7 +176,7 @@
       data-quickadd
       class="title"
       aria-label="Title, with quick-add tokens"
-      placeholder="Describe the issue. p2 #project @label ~30m tomorrow"
+      placeholder={`Describe the issue.${hint}`}
       bind:value={text}
       oninput={oninput}
       onkeydown={onkeydown}
