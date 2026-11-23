@@ -12,15 +12,15 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::Value;
 use taskapp_core::{
     Applied, AppliedTemplate, Bar, BulkPatch, Change, ChangeSource, Comment, CommentId, Cycle,
-    CycleId, Db, Error, ImportPlan, Issue, IssueId, IssuePatch, IssueStats, IssueTemplate, Label,
-    LabelId, Measure, Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId, PinKind,
-    ProgressScope, ProgressSeries, Project, ProjectId, PropertyDef, PropertyKind, Relation,
-    Reschedule, ResolvedPin, Result, SavedView, SelectOption, Status, StatusCategory, StatusId,
-    SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewId,
-    ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks, bulk,
-    comments, cycles, history, import, insights, issues, labels, pins, projects, properties,
-    quickadd, relations, schedule, search, settings, statuses, templates, undo, view_templates,
-    views, workspace,
+    CycleId, Db, Error, Event, EventId, EventInput, ImportPlan, Issue, IssueId, IssuePatch,
+    IssueStats, IssueTemplate, Label, LabelId, Measure, Milestone, MilestoneId, NewIssue,
+    ParsedQuickAdd, Pin, PinId, PinKind, ProgressScope, ProgressSeries, Project, ProjectId,
+    PropertyDef, PropertyKind, Relation, Reschedule, ResolvedPin, Result, SavedView, SelectOption,
+    Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus,
+    VelocityPeriod, ViewDef, ViewId, ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId,
+    WorkspaceStatus, backup, blocks, bulk, comments, cycles, events, history, import, insights,
+    issues, labels, pins, projects, properties, quickadd, relations, schedule, search, settings,
+    statuses, templates, undo, view_templates, views, workspace,
 };
 
 pub struct AppState {
@@ -201,6 +201,22 @@ macro_rules! with_commands {
             }
             cycles_update(s, cycle: Cycle) -> Cycle { cycles::update(&s.db, cycle, ChangeSource::Ui).await }
             cycles_delete(s, id: CycleId) -> () { cycles::delete(&s.db, id, ChangeSource::Ui).await }
+
+            events_list(s, from: Option<NaiveDate>, to: Option<NaiveDate>) -> Vec<Event> {
+                events::list(&s.db, from, to).await
+            }
+            events_get(s, id: EventId) -> Event { events::get(&s.db, id).await }
+            events_create(s, input: EventInput) -> Event { events::create(&s.db, input, ChangeSource::Ui).await }
+            events_update(s, id: EventId, input: EventInput) -> Event {
+                events::update(&s.db, id, input, ChangeSource::Ui).await
+            }
+            events_delete(s, id: EventId) -> () { events::delete(&s.db, id, ChangeSource::Ui).await }
+            events_link(s, event: EventId, issue: IssueId) -> () {
+                events::link(&s.db, event, issue, ChangeSource::Ui).await
+            }
+            events_unlink(s, event: EventId, issue: IssueId) -> () {
+                events::unlink(&s.db, event, issue, ChangeSource::Ui).await
+            }
 
             labels_list(s) -> Vec<Label> { labels::list(&s.db).await }
             labels_create(s, name: String, color: String, icon: Option<String>) -> Label {

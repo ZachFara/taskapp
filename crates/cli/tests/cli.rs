@@ -476,3 +476,38 @@ fn points_flags_and_insights() {
             .success()
     );
 }
+
+#[test]
+fn events_are_created_linked_and_listed() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Parent"]);
+    let made = run_json(
+        &db,
+        &[
+            "event",
+            "create",
+            "Demo",
+            "--start",
+            "2026-12-10T09:30",
+            "--place",
+            "Room 4",
+        ],
+    );
+    assert_eq!(made["starts_at"], "2026-12-10T09:30:00");
+    let id = made["id"].to_string();
+    run(&db, &["event", "link", &id, "ABC-1"]);
+    let day = run_json(
+        &db,
+        &[
+            "event",
+            "list",
+            "--from",
+            "2026-12-10",
+            "--to",
+            "2026-12-10",
+        ],
+    );
+    assert_eq!(day[0]["issue_ids"].as_array().map(Vec::len), Some(1));
+    let later = run_json(&db, &["event", "list", "--from", "2026-12-11"]);
+    assert_eq!(later.as_array().map(Vec::len), Some(0));
+}

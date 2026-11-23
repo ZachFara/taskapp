@@ -284,6 +284,55 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	eventsList: (from: string | null, to: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Event[]>("events_list", { from, to }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	eventsGet: (id: EventId, options?: InvokeOptions) => __TAURI_INVOKE<Event>("events_get", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	eventsCreate: (input: EventInput, options?: InvokeOptions) => __TAURI_INVOKE<Event>("events_create", { input }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	eventsUpdate: (id: EventId, input: EventInput, options?: InvokeOptions) => __TAURI_INVOKE<Event>("events_update", { id, input }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	eventsDelete: (id: EventId, options?: InvokeOptions) => __TAURI_INVOKE<null>("events_delete", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	eventsLink: (event: EventId, issue: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<null>("events_link", { event, issue }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	eventsUnlink: (event: EventId, issue: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<null>("events_unlink", { event, issue }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	labelsList: (options?: InvokeOptions) => __TAURI_INVOKE<Label[]>("labels_list", undefined, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -796,6 +845,36 @@ export type Due = ({ Date: string }) & { DateTime?: never } |
 export type ErrorPayload = {
 	kind: string,
 	message: string,
+};
+
+/**  Times are local wall-clock (no zone); an all-day event keeps midnight and the UI ignores the time. */
+export type Event = {
+	id: EventId,
+	title: string,
+	starts_at: string,
+	ends_at: string | null,
+	all_day: boolean,
+	place: string | null,
+	notes: string,
+	icon: string | null,
+	color: string | null,
+	archived: boolean,
+	issue_ids: IssueId[],
+};
+
+export type EventId = number;
+
+/**  What create and update take: everything on [`Event`] except the id and the links. */
+export type EventInput = {
+	title: string,
+	starts_at: string,
+	ends_at: string | null,
+	all_day: boolean,
+	place: string | null,
+	notes: string,
+	icon: string | null,
+	color: string | null,
+	archived: boolean,
 };
 
 export type FieldRef = ({ Fixed: FixedField }) & { Property?: never } | ({ Property: string }) & { Fixed?: never };

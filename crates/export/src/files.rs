@@ -61,6 +61,27 @@ pub struct CycleRow {
     pub color: Option<String>,
 }
 
+/// `events/<id>.yaml`. Times are local wall-clock text; `issues` are keys.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct EventFile {
+    pub id: i64,
+    pub title: String,
+    pub starts_at: String,
+    pub ends_at: Option<String>,
+    pub all_day: bool,
+    pub place: Option<String>,
+    pub notes: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    pub archived: bool,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub issues: Vec<String>,
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
 pub struct PinRow {
     pub kind: String,

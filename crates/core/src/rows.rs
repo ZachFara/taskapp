@@ -23,6 +23,8 @@ pub(crate) const TABLES: &[&str] = &[
     "work_blocks",
     "settings",
     "import_log",
+    "events",
+    "event_issues",
 ];
 
 pub(crate) const ENTITY_PREFIX: &str = "row:";
