@@ -178,7 +178,7 @@
 
     <div class="scroll">
       <div class="hero" style:--tone={`var(--band-${tone})`}>
-        {#if status}<span class="st"><StatusGlyph category={status.category} size={20} />{status.name}</span>{/if}
+        {#if status}<span class="st"><StatusGlyph category={status.category} icon={status.icon} color={status.color} size={20} />{status.name}</span>{/if}
         {#if editingTitle}
           <form onsubmit={commitTitle} onfocusout={commitTitle} use:focusInput>
             <TextInput label="Title" bind:value={titleDraft} />

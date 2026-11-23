@@ -2,6 +2,7 @@
   import { Dialog } from 'bits-ui';
   import { getContext, onMount, tick, untrack } from 'svelte';
   import { navigate } from '../app/routes';
+  import type { Status } from '../lib/bindings';
   import { api } from '../lib/api';
   import type { Cycle, Issue, Label } from '../lib/bindings';
   import { listCommands, sectionOf, shortcutFor, type Command, type CommandPage, type Ctx } from '../lib/commands';
@@ -34,7 +35,7 @@
     keywords?: string[];
     icon?: string;
     entity?: { icon: string | null | undefined; color: string | null | undefined };
-    category?: string;
+    status?: Status;
     keys?: string | string[];
     more?: boolean;
     checked?: boolean;
@@ -154,7 +155,7 @@
 
   const targetRows = $derived.by((): Row[] => [
     ...found.map((i) => ({
-      id: `issue:${i.id}`, label: `${i.key} ${i.title}`, group: 'Issues', category: statuses.find((s) => s.id === i.status_id)?.category,
+      id: `issue:${i.id}`, label: `${i.key} ${i.title}`, group: 'Issues', status: statuses.find((s) => s.id === i.status_id),
       path: `/issue/${i.key}`, run: nav(`/issue/${i.key}`),
     })),
     ...views.map((v) => ({ id: `view:${v.id}`, label: v.name, group: 'Views', entity: { icon: v.icon ?? 'icon:view', color: v.color }, icon: v.icon ? undefined : 'layers', path: `/view/${v.id}`, run: nav(`/view/${v.id}`) })),
@@ -325,7 +326,7 @@
                 onkeydown={() => {}}
               >
                 <span class="ico">
-                  {#if r.category}<StatusGlyph category={r.category as never} />
+                  {#if r.status}<StatusGlyph category={r.status.category} icon={r.status.icon} color={r.status.color} />
                   {:else if r.entity}<EntityIcon icon={r.entity.icon} color={r.entity.color} />
                   {:else if r.icon}<Icon name={r.icon} />{/if}
                 </span>

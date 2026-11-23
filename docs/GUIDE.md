@@ -290,7 +290,10 @@ are also off whenever Estimation (General) has no points. The list is the `issue
 ## Statuses, labels, icons and colours
 
 - **Statuses** (Settings > Statuses): grouped by category; add a name with an icon and colour; delete asks which status to
-  move that status's issues to.
+  move that status's issues to. Each status shows its own icon and colour (from the same picker) wherever its glyph appears;
+  without one it shows the default circle for its category: backlog dashed, unstarted empty, started half-filled, completed
+  filled with a check, canceled with a cross.
+- **Priority** shows as three bars of rising height: none faint, low one bar, medium two, high three, urgent three in red.
 - **Labels** (Settings > Labels): name, icon, colour. Add to issues with `l`, the panel, or `@name` in quick-add.
 - **Colours** are a fixed palette of 12 keys: gray, red, orange, amber, yellow, green, teal, cyan, blue, indigo, purple,
   pink. A `#rrggbb` value sent by CLI or MCP maps to the nearest key.
