@@ -28,7 +28,7 @@ async fn dispatch_routes_by_name_with_named_args() -> R {
         json!({"key": "issue_prefix"}),
     )
     .await?;
-    assert_eq!(out, json!("ZF"));
+    assert_eq!(out, json!("ABC"));
     Ok(())
 }
 #[tokio::test]
@@ -87,5 +87,160 @@ async fn backup_snapshot_then_list_finds_it() -> R {
     let listed = dispatch(&st, "backup_list", json!({"dir": dir})).await?;
     assert_eq!(listed, json!([snap]));
     std::fs::remove_dir_all(&dir)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_ui_edit_is_one_undoable_step() -> R {
+    let st = state().await;
+    let made = dispatch(&st, "issues_create", json!({"input": {"title": "ABC one"}})).await?;
+    let id = made["id"].clone();
+    dispatch(
+        &st,
+        "issues_update",
+        json!({"id": id, "patch": {"title": "ABC two"}}),
+    )
+    .await?;
+    let status = dispatch(&st, "history_undo_status", json!({})).await?;
+    assert_eq!(status["undo"], "Edited ABC-1");
+    dispatch(&st, "history_undo", json!({})).await?;
+    let back = dispatch(&st, "issues_get", json!({"id": id})).await?;
+    assert_eq!(back["title"], "ABC one");
+    dispatch(&st, "history_redo", json!({})).await?;
+    let again = dispatch(&st, "issues_get", json!({"id": id})).await?;
+    assert_eq!(again["title"], "ABC two");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_bulk_edit_through_dispatch_is_one_undoable_step() -> R {
+    let st = state().await;
+    let mut ids = Vec::new();
+    for t in ["ABC a", "ABC b", "ABC c"] {
+        ids.push(
+            dispatch(&st, "issues_create", json!({"input": {"title": t}})).await?["id"].clone(),
+        );
+    }
+    dispatch(&st, "history_undo", json!({})).await?; // drop the last create so only the bulk step is under test
+    ids.pop();
+    let list = json!(ids);
+    dispatch(
+        &st,
+        "issues_bulk_update",
+        json!({"ids": list, "patch": {"patch": {"priority": 2}}}),
+    )
+    .await?;
+    assert_eq!(
+        dispatch(&st, "history_undo_status", json!({})).await?["undo"],
+        "Set priority on 2 issues"
+    );
+    dispatch(&st, "history_undo", json!({})).await?;
+    for id in &ids {
+        assert_eq!(
+            dispatch(&st, "issues_get", json!({"id": id})).await?["priority"],
+            0
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn reorder_statuses_and_pin_many_are_one_undo_step_each() -> R {
+    let s = state().await;
+    let mut ids = vec![];
+    for name in ["ABC one", "ABC two"] {
+        let made = dispatch(
+            &s,
+            "statuses_create",
+            json!({"name": name, "category": "Started", "color": "blue", "icon": null}),
+        )
+        .await?;
+        ids.push(made["id"].clone());
+    }
+    dispatch(
+        &s,
+        "statuses_reorder",
+        json!({"ids_in_order": [ids[1], ids[0]]}),
+    )
+    .await?;
+    let status = dispatch(&s, "history_undo_status", json!({})).await?;
+    assert_eq!(status["undo"], "Reorder status");
+    dispatch(&s, "history_undo", json!({})).await?;
+    let list = dispatch(&s, "statuses_list", json!({})).await?;
+    let started: Vec<_> = list
+        .as_array()
+        .expect("list")
+        .iter()
+        .filter(|x| x["category"] == "Started")
+        .map(|x| x["id"].clone())
+        .collect();
+    assert_eq!(started[started.len() - 2..], ids[..]);
+
+    let urls = json!(["https://a.example", "https://b.example"]);
+    dispatch(
+        &s,
+        "pins_set",
+        json!({"kind": "Url", "targets": urls, "pinned": true}),
+    )
+    .await?;
+    assert_eq!(
+        dispatch(&s, "pins_list_resolved", json!({}))
+            .await?
+            .as_array()
+            .map(Vec::len),
+        Some(2)
+    );
+    let status = dispatch(&s, "history_undo_status", json!({})).await?;
+    assert_eq!(status["undo"], "Pinned 2 items");
+    dispatch(&s, "history_undo", json!({})).await?;
+    assert_eq!(
+        dispatch(&s, "pins_list_resolved", json!({}))
+            .await?
+            .as_array()
+            .map(Vec::len),
+        Some(0)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn insights_commands_take_the_wire_shapes() -> R {
+    let s = state().await;
+    let p = dispatch(
+        &s,
+        "projects_create",
+        json!({"slug": "alpha", "name": "Alpha", "icon": null, "color": null}),
+    )
+    .await?;
+    let scope = json!({"Project": p["id"]});
+    let args =
+        json!({"scope": scope, "measure": "points", "from": "2026-01-01", "to": "2026-01-02"});
+    let out = dispatch(&s, "insights_progress", args).await?;
+    assert_eq!(out["measure"], "points");
+    assert_eq!(
+        out["days"][0],
+        json!({"date": "2026-01-01", "scope": 0.0, "started": 0.0, "completed": 0.0})
+    );
+    let v = dispatch(
+        &s,
+        "insights_velocity",
+        json!({"scope": scope, "measure": "count", "periods": 2}),
+    )
+    .await?;
+    assert_eq!(v.as_array().map(Vec::len), Some(2));
+    let issue = dispatch(
+        &s,
+        "issues_create",
+        json!({"input": {"title": "ABC a", "points": 3.0}}),
+    )
+    .await?;
+    assert_eq!(issue["points"], 3.0);
+    let issue = dispatch(
+        &s,
+        "issues_update",
+        json!({"id": issue["id"], "patch": {"points": null}}),
+    )
+    .await?;
+    assert_eq!(issue["points"], json!(null));
     Ok(())
 }

@@ -1,218 +1,466 @@
 <script lang="ts">
   import { api } from '../../lib/api';
-  import type { FieldRef, Issue, Label, PropertyDef, SavedView, Status, ViewDef } from '../../lib/bindings';
-  import { registerShortcut } from '../../lib/keymap';
+  import type { Cycle, FieldRef, Issue, IssuePatch, Label, Project, SavedView, Status, StatusCategory } from '../../lib/bindings';
+  import { listState } from '../../lib/listState.svelte';
+  import { selection } from '../../lib/selection.svelte';
   import { navigate } from '../../app/routes';
+  import Checkbox from '../../ui/Checkbox.svelte';
+  import EmptyState from '../../ui/EmptyState.svelte';
+  import EntityIcon from '../../ui/EntityIcon.svelte';
+  import Icon from '../../ui/Icon.svelte';
+  import GroupHeader from '../../ui/GroupHeader.svelte';
+  import CommandButton from '../CommandButton.svelte';
+  import IssueMenu from './IssueMenu.svelte';
+  import Menu from '../../ui/Menu.svelte';
+  import MenuItem from '../../ui/MenuItem.svelte';
+  import Pill from '../../ui/Pill.svelte';
+  import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
+  import { priorityGlyph, priorityName, priorityOrder } from '../../lib/priority';
+  import Skeleton from '../../ui/Skeleton.svelte';
+  import StatusGlyph from '../../ui/StatusGlyph.svelte';
+  import Tooltip from '../../ui/Tooltip.svelte';
+  import { shortcutFor } from '../../lib/commands/registry';
+  import TextInput from '../../ui/TextInput.svelte';
+  import { dueDay as dueDayIn, isOverdue } from './dates';
+  import FieldValue from '../display/FieldValue.svelte';
+  import { LEADING, LIST_DEFAULT, density, emptyCtx, fieldName, loadCtx, pointsName, pointsTotal, shown, showEmptyGroups, subIssues, type Ctx } from '../display/types';
 
-  const ROW = 32;
-  // shortcut: fixed 800px viewport fallback when the list is not laid out (tests), upgrade if rows vary in height
-  const FALLBACK_VIEWPORT = 800;
+  // shortcut: row and band heights default to the token values when the CSS is not loaded (tests), upgrade if rows vary in height
+  const BAND = 30;
   const OVERSCAN = 10;
-  const VIRTUALIZE_ABOVE = 200;
-  // Linear's order: no priority first, then urgent to low
-  const PRIORITY = ['No priority', 'Urgent', 'High', 'Medium', 'Low'];
-  const BARS = [0, 4, 3, 2, 1];
+  const WINDOW_ABOVE = 300;
+  const FALLBACK_VIEWPORT = 800;
 
   let { view }: { view: SavedView } = $props();
 
-  type Item = { head: string } | { row: Issue; group: string };
+  const storeKey = (id: number) => `cairn.list.collapsed.${id}`;
+  type Group = { key: string; kind: 'status' | 'project' | 'cycle' | 'priority' | 'label' | 'points' | 'none'; ref?: Project | Cycle | Label; name: string; category: StatusCategory; order: number; patch: IssuePatch; rows: Issue[] };
+  type Item = { head: Group; collapsed: boolean } | { row: Issue; depth: number; kids: number };
 
-  let issues = $state<Issue[]>([]);
-  let statuses = $state<Status[]>([]);
-  let defs = $state<PropertyDef[]>([]);
+  let issues = $state.raw<Issue[]>([]);
+  let statuses = $state.raw<Status[]>([]);
+  let projects = $state.raw<Project[]>([]);
+  let cycles = $state.raw<Cycle[]>([]);
+  let labels = $state.raw<Label[]>([]);
   let loaded = $state(false);
-  let selectedId = $state<number | null>(null);
-  let picker = $state<'status' | 'priority' | 'labels' | null>(null);
-  let labels = $state<Label[]>([]);
+  let collapsed = $state<string[]>(readCollapsed(view.id));
+  let hovered = $state<number | null>(null);
   let scrollTop = $state(0);
   let height = $state(0);
   let scroller = $state<HTMLElement>();
+  let wrapW = $state(0);
+  // Not a bind:clientWidth: the page's own tests run where ResizeObserver does not exist.
+  function watchWidth(node: HTMLElement) {
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => (wrapW = node.clientWidth));
+    ro.observe(node);
+    return { destroy: () => ro.disconnect() };
+  }
+  let ctx = $state.raw<Ctx>(emptyCtx);
+  const tz = $derived(ctx.tz);
+  const compact = $derived(density(view.def) === 'compact');
+  // shortcut: compact height follows the --row-h-compact token value (28), upgrade if the token changes
+  const ROW = $derived(compact ? 28 : 32);
+  // Key, priority and status have their own leading columns, so they are not repeated.
+  const allFields = $derived(shown(view.def, LIST_DEFAULT).filter((f) => !LEADING.includes(f.Fixed!) && (ctx.points || f.Fixed !== 'Points')));
+  let closedParents = $state<number[]>([]);
+  const WIDTH: Record<string, string> = { Label: '150px', Project: '140px', DueDate: '56px', Estimate: '72px', Key: '64px', Priority: 'var(--s-8)', Status: '120px', Cycle: '100px', StartDate: '56px', CreatedAt: '56px', UpdatedAt: '56px' };
+  const widthOf = (f: FieldRef) => (f.Property === undefined ? (WIDTH[f.Fixed!] ?? '100px') : ({ Select: '120px', MultiSelect: '150px', Checkbox: '56px', Url: '56px', Number: '72px', Date: '72px' } as Record<string, string>)[ctx.defs.find((d) => d.key === f.Property)?.kind ?? ''] ?? '140px');
+  const rightAligned = (f: FieldRef) => f.Property === undefined ? ['DueDate', 'StartDate', 'Estimate', 'Points', 'CreatedAt', 'UpdatedAt'].includes(f.Fixed!) : ['Number', 'Date'].includes(ctx.defs.find((d) => d.key === f.Property)?.kind ?? '');
+  // Metadata columns drop from the right (lowest priority) once the title would get less than TITLE_MIN.
+  const TITLE_MIN = 220;
+  const LEAD_W = 32 + 32 + 64 + 32 + 4 * 8 + 2 * 24;
+  const px = (f: FieldRef) => parseInt(widthOf(f), 10) || 32;
+  const fields = $derived.by(() => {
+    if (!wrapW) return allFields;
+    let room = wrapW - LEAD_W - TITLE_MIN;
+    const keep: FieldRef[] = [];
+    for (const f of allFields) {
+      room -= px(f) + 8;
+      if (room < 0) break;
+      keep.push(f);
+    }
+    return keep;
+  });
+  // Per-column facts, worked out once rather than for every cell of every row.
+  const cells = $derived(fields.map((f) => ({ f, key: f.Property !== undefined ? `P:${f.Property}` : `F:${f.Fixed}`, right: rightAligned(f) })));
+  const columns = $derived(`var(--s-8) var(--s-8) 64px var(--s-8) minmax(0, 1fr) ${fields.map(widthOf).join(' ')}`);
+  let menu = $state<{ id: number; x: number; y: number } | null>(null);
+  let menuOpen = $state(false);
+  let draft = $state('');
 
-  const def = $derived<ViewDef>(view.def);
-
-  async function load(v: SavedView) {
-    const [st, dd, rows] = await Promise.all([api.statuses.list(), api.properties.listDefs(), api.views.query(v.def)]);
-    statuses = st;
-    defs = dd;
-    labels = await api.labels.list();
-    issues = rows;
-    loaded = true;
+  function readCollapsed(id: number): string[] {
+    try {
+      return JSON.parse(localStorage.getItem(storeKey(id)) ?? '[]');
+    } catch {
+      return [];
+    }
+  }
+  function toggleGroup(key: string) {
+    collapsed = collapsed.includes(key) ? collapsed.filter((k) => k !== key) : [...collapsed, key];
+    try {
+      localStorage.setItem(storeKey(view.id), JSON.stringify(collapsed));
+    } catch {
+      // storage unavailable: collapse still works for this session
+    }
   }
 
+  async function load() {
+    const [st, pr, cy, lb, rows, c] = await Promise.all([
+      api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.views.query(view.def), loadCtx(view.def),
+    ]);
+    ctx = c;
+    statuses = st;
+    projects = pr;
+    cycles = cy;
+    labels = lb;
+    issues = subIssues(view.def) === 'hide' ? rows.filter((i) => i.parent_id === null) : rows;
+    loaded = true;
+  }
   $effect(() => {
-    load(view);
+    view;
+    load();
   });
 
-  // Groups keep the order the view's query returned; status groups follow the status positions.
-  const groupOf = (i: Issue): { label: string; order: number } => {
-    const field: FieldRef | null = def.group_by;
-    if (field?.Fixed === 'Status') {
-      const st = statuses.find((s) => s.id === i.status_id);
-      return st ? { label: st.name, order: st.position } : { label: 'Unknown', order: Infinity };
-    }
-    if (field?.Fixed === 'Priority') return { label: PRIORITY[i.priority] ?? 'Unknown', order: i.priority };
-    if (field?.Property !== undefined) {
-      const v = i.properties[field.Property];
-      return { label: v == null ? 'None' : String(v), order: 0 };
-    }
-    return { label: '', order: 0 };
-  };
-
-  const items = $derived.by(() => {
-    const groups = new Map<string, { order: number; rows: Issue[] }>();
+  const groupField = $derived(view.def.group_by?.Fixed === 'Points' && !ctx.points ? null : (view.def.group_by?.Fixed ?? null));
+  const groups = $derived.by<Group[]>(() => {
+    const by = new Map<string, Group>();
+    const put = (i: Issue, g: Omit<Group, 'rows'>) => {
+      const hit = by.get(g.key) ?? { ...g, rows: [] };
+      hit.rows.push(i);
+      by.set(g.key, hit);
+    };
+    const named = <T extends { id: number }>(list: T[], id: number | null, none: string, name: (x: T) => string) => {
+      const x = list.find((e) => e.id === id);
+      return { name: x ? name(x) : none, order: x ? list.indexOf(x) : Infinity };
+    };
     for (const i of issues) {
-      const g = groupOf(i);
-      const entry = groups.get(g.label) ?? { order: g.order, rows: [] };
-      entry.rows.push(i);
-      groups.set(g.label, entry);
+      const base = { category: 'Unstarted' as StatusCategory, patch: {}, kind: 'none' as Group['kind'] };
+      if (groupField === 'Status') {
+        const s = statuses.find((x) => x.id === i.status_id);
+        put(i, { kind: 'status', key: `s${s?.id ?? 'x'}`, name: s?.name ?? 'Unknown', category: s?.category ?? 'Backlog', order: s?.position ?? Infinity, patch: s ? { status_id: s.id } : {} });
+      } else if (groupField === 'Project') {
+        put(i, { key: `p${i.project_id}`, ...base, kind: 'project', ref: projects.find((p) => p.id === i.project_id), ...named(projects, i.project_id, 'No project', (p) => p.name), patch: { project_id: i.project_id } });
+      } else if (groupField === 'Cycle') {
+        put(i, { key: `c${i.cycle_id}`, ...base, kind: 'cycle', ...named(cycles, i.cycle_id, 'No cycle', (c) => c.name ?? `Cycle ${c.number}`), patch: { cycle_id: i.cycle_id } });
+      } else if (groupField === 'Priority') {
+        put(i, { key: `r${i.priority}`, ...base, kind: 'priority', name: priorityName(i.priority), order: priorityOrder(i.priority), patch: { priority: i.priority } });
+      } else if (groupField === 'Points') {
+        put(i, { key: `pt${i.points}`, ...base, kind: 'points', name: pointsName(i.points), order: i.points ?? Infinity, patch: { points: i.points } });
+      } else if (groupField === 'Label') {
+        for (const id of i.label_ids.length ? i.label_ids : [null])
+          put(i, { key: `l${id}`, ...base, kind: 'label', ref: labels.find((l) => l.id === id), ...named(labels, id, 'No label', (l) => l.name), patch: { label_ids: id === null ? [] : [id] } });
+      } else {
+        put(i, { key: 'all', ...base, name: '', order: 0 });
+      }
     }
-    const sorted = [...groups].sort((a, b) => a[1].order - b[1].order);
+    if (showEmptyGroups(view.def)) {
+      const empty = (g: Omit<Group, 'rows'>) => by.has(g.key) || by.set(g.key, { ...g, rows: [] });
+      const base = { category: 'Unstarted' as StatusCategory, patch: {} };
+      if (groupField === 'Status') for (const s of statuses) empty({ key: `s${s.id}`, kind: 'status', name: s.name, category: s.category, order: s.position, patch: { status_id: s.id } });
+      if (groupField === 'Project') for (const p of projects) empty({ key: `p${p.id}`, ...base, kind: 'project', ref: p, name: p.name, order: projects.indexOf(p), patch: { project_id: p.id } });
+      if (groupField === 'Cycle') for (const c of cycles) empty({ key: `c${c.id}`, ...base, kind: 'cycle', name: c.name ?? `Cycle ${c.number}`, order: cycles.indexOf(c), patch: { cycle_id: c.id } });
+    }
+    return [...by.values()].sort((a, b) => a.order - b.order);
+  });
+
+  // Nested: a child follows its parent when both are in the group; a collapsed parent hides its children.
+  function ordered(rows: Issue[]): Item[] {
+    if (subIssues(view.def) !== 'nest') return rows.map((row) => ({ row, depth: 0, kids: 0 }));
+    const ids = new Set(rows.map((r) => r.id));
+    const byParent = new Map<number, Issue[]>();
+    for (const r of rows) if (r.parent_id !== null) byParent.set(r.parent_id, [...(byParent.get(r.parent_id) ?? []), r]);
+    const kidsOf = (id: number) => byParent.get(id) ?? [];
     const out: Item[] = [];
-    for (const [label, g] of sorted) {
-      if (label !== '') out.push({ head: label });
-      for (const row of g.rows) out.push({ row, group: label });
+    const walk = (row: Issue, depth: number) => {
+      const kids = kidsOf(row.id);
+      out.push({ row, depth, kids: kids.length });
+      if (!closedParents.includes(row.id)) kids.forEach((k) => walk(k, depth + 1));
+    };
+    rows.filter((r) => r.parent_id === null || !ids.has(r.parent_id)).forEach((r) => walk(r, 0));
+    return out;
+  }
+  const toggleParent = (id: number) => (closedParents = closedParents.includes(id) ? closedParents.filter((x) => x !== id) : [...closedParents, id]);
+
+  const items = $derived.by<Item[]>(() => {
+    const out: Item[] = [];
+    for (const g of groups) {
+      const closed = collapsed.includes(g.key);
+      if (g.key !== 'all') out.push({ head: g, collapsed: closed });
+      if (!closed) out.push(...ordered(g.rows));
     }
     return out;
   });
+  const heightOf = (it: Item) => ('head' in it ? BAND : ROW);
+  const tops = $derived.by(() => {
+    let y = 0;
+    return items.map((it) => ((y += heightOf(it)), y - heightOf(it)));
+  });
+  const total = $derived(tops.length ? tops[tops.length - 1] + heightOf(items[items.length - 1]) : 0);
+  const visibleRows = $derived(items.flatMap((it) => ('row' in it ? [it.row] : [])));
+  // Published for the movement commands: the rows the user can see, in order.
+  $effect(() => {
+    const ids = visibleRows.map((r) => r.id);
+    listState.ids = ids;
+    selection.setLayout('list');
+    selection.setColumns([ids]);
+    return () => {
+      listState.ids = [];
+      selection.setColumns([]);
+    };
+  });
 
-  const rowItems = $derived(items.filter((x): x is { row: Issue; group: string } => 'row' in x));
-  const current = $derived(rowItems.find((x) => x.row.id === selectedId)?.row ?? rowItems[0]?.row ?? null);
   const viewport = $derived(height || FALLBACK_VIEWPORT);
-  const virtual = $derived(items.length > VIRTUALIZE_ABOVE);
-  const first = $derived(virtual ? Math.max(0, Math.floor(scrollTop / ROW) - OVERSCAN) : 0);
-  const last = $derived(virtual ? Math.min(items.length, Math.ceil((scrollTop + viewport) / ROW) + OVERSCAN) : items.length);
-  const visible = $derived(items.slice(first, last).map((item, k) => ({ item, top: (first + k) * ROW })));
-
-  const due = (i: Issue) => i.due?.Date ?? i.due?.DateTime?.utc.slice(0, 10) ?? '';
-  const chips = (i: Issue) =>
-    def.columns.flatMap((c) => {
-      if (c.Property === undefined || i.properties[c.Property] == null) return [];
-      const name = defs.find((d) => d.key === c.Property)?.name ?? c.Property;
-      return [{ name, value: String(i.properties[c.Property]) }];
-    });
-
-  function measure() {
-    height = scroller?.clientHeight ?? 0;
-  }
-
-  $effect(() => {
-    if (scroller) measure();
+  const windowed = $derived(items.length > WINDOW_ABOVE);
+  const slice = $derived.by(() => {
+    if (!windowed) return items.map((item, k) => ({ item, top: tops[k] }));
+    const from = Math.max(0, tops.findIndex((t) => t + ROW > scrollTop) - OVERSCAN);
+    const to = Math.min(items.length, (tops.findIndex((t) => t >= scrollTop + viewport) + 1 || items.length) + OVERSCAN);
+    return items.slice(from, to).map((item, k) => ({ item, top: tops[from + k] }));
   });
 
-  function move(delta: number) {
-    if (!rowItems.length) return;
-    const at = rowItems.findIndex((x) => x.row.id === current?.id);
-    const next = Math.max(0, Math.min(rowItems.length - 1, at + delta));
-    selectedId = rowItems[next].row.id;
-    const top = items.indexOf(rowItems[next]) * ROW;
-    if (!scroller) return;
-    if (top < scroller.scrollTop) scroller.scrollTop = top;
-    else if (top + ROW > scroller.scrollTop + viewport) scroller.scrollTop = top + ROW - viewport;
-  }
-
-  function open() {
-    if (current && !picker) navigate(`/issue/${current.key}`);
-  }
-
-  async function set(patch: Record<string, number | number[]>) {
-    if (!current) return;
-    await api.issues.update(current.id, patch);
-    picker = null;
-    await load(view);
-  }
-
-  async function toggleLabel(id: number) {
-    if (!current) return;
-    const ids = current.label_ids;
-    await set({ label_ids: ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id] });
-  }
-
   $effect(() => {
-    const offs = [
-      registerShortcut('j', 'list.next', () => move(1)),
-      registerShortcut('k', 'list.previous', () => move(-1)),
-      registerShortcut('enter', 'list.open', open),
-      registerShortcut('s', 'list.status', () => (picker = current ? 'status' : null)),
-      registerShortcut('p', 'list.priority', () => (picker = current ? 'priority' : null)),
-      registerShortcut('l', 'list.labels', () => (picker = current ? 'labels' : null)),
-      registerShortcut('esc', 'list.close', () => (picker = null)),
+    if (scroller) height = scroller.clientHeight;
+  });
+
+  // Keeps the focused row visible, however focus moved.
+  $effect(() => {
+    const at = items.findIndex((it) => 'row' in it && it.row.id === selection.focused);
+    if (at < 0 || !scroller) return;
+    if (tops[at] < scroller.scrollTop) scroller.scrollTop = tops[at];
+    else if (tops[at] + ROW > scroller.scrollTop + viewport) scroller.scrollTop = tops[at] + ROW - viewport;
+  });
+
+  const statusOf = (i: Issue) => statuses.find((s) => s.id === i.status_id);
+  const dueDay = (i: Issue) => dueDayIn(i, tz);
+  const overdue = (i: Issue) => isOverdue(i, statusOf(i)?.category, tz);
+
+  function pick(e: MouseEvent, id: number) {
+    if (e.metaKey || e.ctrlKey) {
+      selection.toggle(id);
+    } else if (e.shiftKey && selection.focused !== null) {
+      const ids = visibleRows.map((r) => r.id);
+      const [a, b] = [ids.indexOf(selection.focused), ids.indexOf(id)].sort((x, y) => x - y);
+      selection.selectAll(ids.slice(a, b + 1));
+    } else {
+      selection.clear();
+    }
+    selection.focus(id);
+  }
+
+  async function patch(id: number, p: IssuePatch) {
+    await api.issues.update(id, p);
+    await load();
+  }
+  async function add(g: Group) {
+    const made = await api.issues.create({ title: 'Untitled', ...g.patch });
+    await load();
+    selection.focus(made.id);
+    draft = made.title;
+    listState.editing = made.id;
+  }
+  async function save(id: number) {
+    const title = draft.trim();
+    listState.editing = null;
+    if (title && title !== issues.find((i) => i.id === id)?.title) await patch(id, { title });
+  }
+  $effect(() => {
+    if (listState.editing !== null) draft = issues.find((i) => i.id === listState.editing)?.title ?? '';
+  });
+  function focusInput(box: HTMLElement) {
+    const el = box.querySelector('input');
+    el?.focus();
+    el?.select();
+  }
+
+  // The command menu runs the same handlers as the group header buttons.
+  const focusedGroup = () => groups.find((g) => g.rows.some((r) => r.id === selection.focused));
+  $effect(() => {
+    const on: [string, () => void][] = [
+      ['group.collapse', () => { const g = focusedGroup(); if (g && g.key !== 'all') toggleGroup(g.key); }],
+      ['group.collapse.all', () => {
+        const keys = groups.filter((g) => g.key !== 'all').map((g) => g.key);
+        collapsed = keys.every((k) => collapsed.includes(k)) ? [] : keys;
+      }],
+      ['group.add', () => { const g = focusedGroup() ?? groups[0]; if (g) void add(g); }],
     ];
-    return () => offs.forEach((off) => off());
+    for (const [n, f] of on) addEventListener(`command:${n}`, f);
+    return () => on.forEach(([n, f]) => removeEventListener(`command:${n}`, f));
   });
+
+  function openMenu(id: number, x: number, y: number) {
+    menu = { id, x, y };
+    menuOpen = true;
+  }
 </script>
 
-<svelte:window onresize={measure} />
-
-{#if loaded && issues.length === 0}
-  <p class="empty">No issues in this view.</p>
-{:else}
-  {#if picker === 'status'}
-    <div class="picker" role="menu" aria-label="Status">
-      {#each statuses as st (st.id)}
-        <button role="menuitem" onclick={() => set({ status_id: st.id })}>{st.name}</button>
-      {/each}
-    </div>
-  {:else if picker === 'priority'}
-    <div class="picker" role="menu" aria-label="Priority">
-      {#each PRIORITY as label, p (p)}
-        <button role="menuitem" onclick={() => set({ priority: p })}>{label}</button>
-      {/each}
-    </div>
-  {:else if picker === 'labels'}
-    <div class="picker" role="menu" aria-label="Labels">
-      {#each labels as l (l.id)}
-        <button role="menuitem" aria-checked={current?.label_ids.includes(l.id)} onclick={() => toggleLabel(l.id)}>{l.name}</button>
-      {/each}
-    </div>
+{#snippet lead(g: Group)}
+  {#if g.kind === 'priority'}
+    <PriorityGlyph level={g.rows[0] ? priorityGlyph(g.rows[0].priority) : 0} />
+  {:else if g.kind === 'project' || g.kind === 'label'}
+    {@const r = g.ref as Project | Label | undefined}
+    <EntityIcon icon={(r as Project | undefined)?.icon ?? (g.kind === 'label' ? 'icon:tag' : 'icon:project')} color={r?.color} size={14} />
+  {:else}
+    <EntityIcon icon="icon:cycle" size={14} />
   {/if}
+{/snippet}
+{#snippet anchor(props: Record<string, unknown>)}
+  <span {...props} class="anchor" style:left="{menu?.x ?? 0}px" style:top="{menu?.y ?? 0}px" aria-hidden="true"></span>
+{/snippet}
 
+{#if !loaded}
+  <div class="loading" aria-busy="true">
+    {#each [0, 1, 2, 3, 4, 5, 6, 7] as k (k)}<Skeleton height="var(--s-7)" width={`${90 - k * 4}%`} />{/each}
+  </div>
+{:else if issues.length === 0}
+  <div class="empty"><EmptyState title="No issues in this view" hint="Issues that match this view will show up here.">
+      {#snippet action()}<CommandButton command="issue.create" variant="primary" />{/snippet}
+    </EmptyState></div>
+{:else}
+  <IssueMenu>
+  <div class="wrap" use:watchWidth>
+  <div class="heads" style:grid-template-columns={columns} aria-hidden="true">
+    <span></span><span></span><span></span><span></span><span>Title</span>
+    {#each fields as f (f.Property ?? f.Fixed)}<span data-right={rightAligned(f) ? '' : undefined}>{fieldName(f, ctx.defs)}</span>{/each}
+  </div>
   <div class="scroller" role="presentation" bind:this={scroller} onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}>
-    <ul role="listbox" class="list" style:height="{items.length * ROW}px">
-      {#each visible as { item, top } (top)}
+    <ul class="list" role="grid" aria-multiselectable="true" data-density={compact ? 'compact' : undefined} aria-label={view.name} style:height="{total}px">
+      {#each slice as { item, top } (top)}
         {#if 'head' in item}
-          <li role="presentation" class="group-head" style:top="{top}px">{item.head}</li>
+          <li class="head" role="presentation" style:top="{top}px">
+            <GroupHeader
+              name={item.head.name}
+              count={item.head.rows.length}
+              total={pointsTotal(item.head.rows, shown(view.def, LIST_DEFAULT), ctx)}
+              category={item.head.kind === 'status' ? item.head.category : undefined}
+              tone={item.head.kind === 'priority' ? (Math.min(4, Math.max(1, item.head.order)) as 1 | 2 | 3 | 4) : 1}
+              collapsed={item.collapsed}
+              ontoggle={() => toggleGroup(item.head.key)}
+              onadd={() => add(item.head)}
+            >
+              {#snippet leading()}{@render lead(item.head)}{/snippet}
+            </GroupHeader>
+          </li>
         {:else}
           {@const i = item.row}
+          {@const st = statusOf(i)}
+          {@const chosen = selection.selected.includes(i.id)}
           <li
-            role="option"
             class="row"
+            role="row"
+            aria-selected={chosen}
             data-key={i.key}
-            aria-selected={i.id === current?.id}
+            data-id={i.id}
+            data-depth={item.depth ? item.depth : undefined}
+            data-selected={chosen ? '' : undefined}
+            aria-current={selection.focused === i.id ? 'true' : undefined}
             style:top="{top}px"
+            style:grid-template-columns={columns}
+            style:height={compact ? 'var(--row-h-compact)' : undefined}
+            onclick={(e) => pick(e, i.id)}
+            ondblclick={() => navigate(`/issue/${i.key}`)}
+            onmouseenter={() => (hovered = i.id)}
+            onmouseleave={() => (hovered = null)}
           >
-            <span class="prio" aria-label={PRIORITY[i.priority]} title={PRIORITY[i.priority]}>
-              {#each BARS.slice(1) as bar, k (k)}<i class:on={i.priority > 0 && 4 - i.priority >= k}></i>{/each}
+            <span class="check" role="presentation" onclick={(e) => (e.stopPropagation(), selection.toggle(i.id))}>
+              {#if chosen || hovered === i.id}
+                <Checkbox checked={chosen} label={`Select ${i.key}`} />
+              {/if}
             </span>
+            <span class="prio"><PriorityGlyph level={priorityGlyph(i.priority)} /></span>
             <span class="key">{i.key}</span>
-            <span class="title">{i.title}</span>
-            {#each chips(i) as chip (chip.name)}
-              <span class="chip">{chip.name}: {chip.value}</span>
-            {/each}
-            <span class="status" style:color={statuses.find((s) => s.id === i.status_id)?.color}>
-              {statuses.find((s) => s.id === i.status_id)?.name ?? 'Unknown'}
+            {#snippet statusBtn(tp: Record<string, unknown>)}
+              <button
+                {...tp}
+                class="status"
+                type="button"
+                aria-label={`Status ${st?.name ?? 'Unknown'}, change`}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  selection.focus(i.id);
+                  const r = e.currentTarget.getBoundingClientRect();
+                  openMenu(i.id, r.left, r.bottom);
+                }}
+              >
+                <StatusGlyph category={st?.category ?? 'Backlog'} label={st?.name ?? 'Unknown'} />
+              </button>
+            {/snippet}
+            <!-- shortcut: only the hovered or focused row carries a Tooltip (one per row costs ~30% at 1000 rows), upgrade to one delegated tooltip -->
+            {#if hovered === i.id || selection.focused === i.id}
+              <Tooltip label="Status" shortcut={shortcutFor('issue.status')}>{#snippet children(tp)}{@render statusBtn(tp)}{/snippet}</Tooltip>
+            {:else}
+              {@render statusBtn({})}
+            {/if}
+            <span class="title" style:padding-left={item.depth ? `calc(${item.depth} * var(--s-6))` : undefined}>
+              {#if item.kids}
+                {@const open = !closedParents.includes(i.id)}
+                <button type="button" class="disc" data-open={open ? '' : undefined} aria-label={open ? 'Collapse sub-issues' : 'Expand sub-issues'} onclick={(e) => (e.stopPropagation(), toggleParent(i.id))}><Icon name="chevron-right" size={14} /></button>
+              {/if}
+              {#if listState.editing === i.id}
+                <form onsubmit={(e) => (e.preventDefault(), save(i.id))} onfocusout={() => listState.editing === i.id && save(i.id)}>
+                  <span use:focusInput><TextInput bind:value={draft} label={`Title of ${i.key}`} /></span>
+                </form>
+              {:else}
+                <span class="text">{i.title}</span>
+              {/if}
             </span>
-            <span class="due">{due(i)}</span>
+            {#each cells as { f, key, right } (key)}
+              <span class="cell" data-field={key} data-right={right ? '' : undefined} data-overdue={f.Fixed === 'DueDate' && overdue(i) ? '' : undefined}>
+                <FieldValue field={f} issue={i} {ctx} />
+              </span>
+            {/each}
           </li>
         {/if}
       {/each}
     </ul>
   </div>
+  </div>
+  </IssueMenu>
+
+  <Menu trigger={anchor} bind:open={menuOpen}>
+    {#each statuses as s (s.id)}
+      <MenuItem label={s.name} icon={s.id === issues.find((x) => x.id === menu?.id)?.status_id ? 'check' : undefined} onSelect={() => patch(menu!.id, { status_id: s.id })} />
+    {/each}
+  </Menu>
 {/if}
 
 <style>
-  .scroller { overflow-y: auto; max-height: 100%; height: 100%; position: relative; font-size: 13px; }
+  .loading { display: grid; gap: var(--s-5); padding: var(--s-6) var(--s-7); }
+  .empty { padding-top: var(--s-10); }
+  .wrap { display: flex; flex-direction: column; height: 100%; }
+  .heads {
+    display: grid; align-items: center; column-gap: var(--s-4); flex: none; height: var(--row-h-compact); padding: 0 var(--s-7) 0 var(--s-4);
+    border-bottom: 1px solid var(--border); color: var(--muted); font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .heads span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .heads [data-right] { text-align: right; }
+  .scroller { overflow-y: auto; flex: 1; min-height: 0; position: relative; font-size: var(--fs-md); font-variant-numeric: tabular-nums; }
   .list { list-style: none; margin: 0; padding: 0; position: relative; }
-  .group-head, .row { position: absolute; left: 0; right: 0; height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 0 16px; }
-  .group-head { font-weight: 600; color: #666; text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; }
-  .row { border-bottom: 1px solid #eee; }
-  .row[aria-selected='true'] { background: #eef3ff; }
-  .key { color: #888; font-variant-numeric: tabular-nums; min-width: 64px; }
-  .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .chip { border: 1px solid #ddd; border-radius: 4px; padding: 0 6px; color: #555; }
-  .status, .due { color: #666; min-width: 90px; }
-  .prio { display: inline-flex; gap: 2px; width: 22px; }
-  .prio i { width: 3px; height: 10px; background: #ccc; border-radius: 1px; }
-  .prio i.on { background: #444; }
-  .picker { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px; border-bottom: 1px solid #ddd; }
-  .empty { padding: 24px 16px; color: #666; }
+  .head, .row { position: absolute; left: 0; right: 0; }
+  .row {
+    height: var(--row-h);
+    display: grid;
+    align-items: center;
+    column-gap: var(--s-4);
+    padding: 0 var(--s-7) 0 var(--s-4);
+    border-bottom: 1px solid var(--border);
+    box-shadow: inset 3px 0 0 transparent;
+    transition: background var(--dur-1) var(--ease);
+  }
+  .row:hover { background: var(--raised); }
+  .row[data-selected] { background: var(--selection); }
+  .row[aria-current='true'] { box-shadow: inset 3px 0 0 var(--signal); background: var(--active); }
+  .row[aria-current='true'][data-selected] { background: var(--selection); }
+  .check, .prio { display: grid; place-items: center; }
+  .key { color: var(--muted); font-weight: 500; }
+  .status { border: 0; background: transparent; padding: 0; display: grid; place-items: center; border-radius: var(--r-ctl); }
+  .status:hover { background: var(--active); }
+  .title { min-width: 0; font-weight: 500; display: flex; align-items: center; gap: var(--s-2); }
+  .disc { display: grid; place-items: center; border: 0; background: transparent; padding: 0; color: var(--muted); border-radius: var(--r-ctl); transition: transform var(--dur-1) var(--ease); }
+  .disc[data-open] { transform: rotate(90deg); }
+  .text { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cell { min-width: 0; display: flex; align-items: center; color: var(--muted); overflow: hidden; }
+  .cell[data-right] { justify-content: flex-end; }
+  .cell[data-overdue] { color: var(--signal); font-weight: 700; }
+  .anchor { position: fixed; width: 0; height: 0; }
 </style>

@@ -7,7 +7,7 @@ import type { Issue, SavedView, ViewDef } from '../../lib/bindings';
 import GanttView from './GanttView.svelte';
 
 const def: ViewDef = { filter: null, sorts: [], group_by: null, layout: 'Gantt', columns: [], include_archived: false };
-const issue = (id: number, o: Partial<Issue> = {}): Issue => ({ ...fixtures.issues[0], id, key: `ZF-${id}`, title: `t${id}`, parent_id: null, project_id: 1, start_date: null, due: null, estimate_minutes: null, ...o });
+const issue = (id: number, o: Partial<Issue> = {}): Issue => ({ ...fixtures.issues[0], id, key: `ABC-${id}`, title: `t${id}`, parent_id: null, project_id: 1, start_date: null, due: null, estimate_minutes: null, ...o });
 const dated = (id: number, start: string, end: string, o: Partial<Issue> = {}) => issue(id, { start_date: start, due: { Date: end }, ...o });
 
 let view: ReturnType<typeof mount> | undefined;
@@ -17,10 +17,10 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-async function show(issues: Issue[], props: { mode?: 'issues' | 'projects'; view?: SavedView } = {}, seed: Partial<MockSeed> = {}) {
+async function show(issues: Issue[], props: { mode?: 'issues' | 'projects'; view?: SavedView; today?: string } = {}, seed: Partial<MockSeed> = {}) {
   setApi(createMockApi({ ...fixtures, issues, views: [{ id: 1, name: 'All', def, position: 0 }], ...seed }));
   if (seed.issues) throw new Error('pass issues as the first argument');
-  view = mount(GanttView, { target: document.body, props: { view: { id: 1, name: 'All', def, position: 0 }, ...props } });
+  view = mount(GanttView, { target: document.body, props: { view: { id: 1, name: 'All', def, position: 0 }, today: '2026-12-02', ...props } });
   await vi.waitFor(() => expect(document.querySelector('.timeline')).not.toBeNull());
   await vi.waitFor(() => expect(api.views.list).toBeDefined());
   await new Promise((r) => setTimeout(r, 20));
@@ -43,7 +43,7 @@ describe('GanttView', () => {
     await block();
     const update = vi.spyOn(api.issues, 'update');
     dragBy(bar('issue-1'), 28);
-    await vi.waitFor(() => expect(document.querySelector('.toast')?.textContent).toContain('Also moves ZF-2'));
+    await vi.waitFor(() => expect(document.querySelector('.toast')?.textContent).toContain('Also moves ABC-2'));
     expect(update).not.toHaveBeenCalled();
     (document.querySelectorAll('.toast button')[0] as HTMLElement).click();
     await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(2));
@@ -67,7 +67,7 @@ describe('GanttView', () => {
     await block();
     // the view loaded before the relation existed; remount to reload
     unmount(view!);
-    view = mount(GanttView, { target: document.body, props: { view: { id: 1, name: 'All', def, position: 0 } } });
+    view = mount(GanttView, { target: document.body, props: { view: { id: 1, name: 'All', def, position: 0 }, today: '2026-12-02' } });
     await vi.waitFor(() => expect(bar('issue-1')?.classList.contains('critical')).toBe(true));
     expect(bar('issue-2').classList.contains('critical')).toBe(true);
     expect(bar('issue-3').classList.contains('critical')).toBe(false);
@@ -87,7 +87,7 @@ describe('GanttView', () => {
     const width = () => parseFloat(document.querySelector<HTMLElement>('.canvas')!.style.width);
     const widths: number[] = [];
     for (const z of ['Day', 'Week', 'Month', 'Quarter']) {
-      [...document.querySelectorAll('header button')].find((b) => b.textContent === z)!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      ([...document.querySelectorAll('[role=tab]')].find((b) => b.textContent?.trim() === z) as HTMLElement).focus();
       flushSync();
       expect(document.querySelector('.gantt')!.getAttribute('data-zoom')).toBe(z);
       widths.push(width());
@@ -98,8 +98,8 @@ describe('GanttView', () => {
 
   it('multi_project_timeline_groups_by_project', async () => {
     await show([dated(1, '2026-12-01', '2026-12-03'), dated(2, '2026-12-05', '2026-12-07', { project_id: 2 })]);
-    const labels = [...document.querySelectorAll('.label.group')].map((l) => l.textContent);
-    expect(labels).toEqual(['Home', 'Work']);
+    const labels = [...document.querySelectorAll('.label[data-kind="group"] .text')].map((l) => l.textContent);
+    expect(labels).toEqual([fixtures.projects[0].name, fixtures.projects[1].name]);
     expect(bar('group-1')).not.toBeNull();
     expect(bar('group-2')).not.toBeNull();
   });
@@ -113,9 +113,9 @@ describe('GanttView', () => {
   });
 
   it('empty_view_shows_empty_state_and_unscheduled_lane', async () => {
-    await show([issue(9, { estimate_minutes: 480 })]);
+    await show([issue(9, { estimate_minutes: 480 })], {}, { cycles: [], milestones: [] });
     expect(document.querySelector('.empty')?.textContent).toContain('Nothing scheduled');
-    expect(document.querySelector('.lane')?.textContent).toContain('ZF-9');
+    expect(document.querySelector('.todo')?.textContent).toContain('ABC-9');
   });
 
   it('parent_without_dated_children_has_no_rollup_bar', async () => {
@@ -125,21 +125,21 @@ describe('GanttView', () => {
   });
 
   it('drag_keeps_datetime_due_time_and_zone', async () => {
-    const due = { DateTime: { utc: '2026-12-03T15:00:00Z', tz: 'America/New_York' } };
+    const due = { DateTime: { utc: '2026-12-03T15:00:00Z', tz: 'US/Eastern' } };
     await show([issue(1, { start_date: '2026-12-01', due })]);
     const update = vi.spyOn(api.issues, 'update');
     dragBy(bar('issue-1'), 28);
     await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-    expect(update).toHaveBeenCalledWith(1, { start_date: '2026-12-03', due: { DateTime: { utc: '2026-12-05T15:00:00Z', tz: 'America/New_York' } } });
+    expect(update).toHaveBeenCalledWith(1, { start_date: '2026-12-03', due: { DateTime: { utc: '2026-12-05T15:00:00Z', tz: 'US/Eastern' } } });
   });
 
   it('drag_across_dst_keeps_local_wall_clock', async () => {
-    const due = { DateTime: { utc: '2026-03-06T14:00:00Z', tz: 'America/New_York' } };
+    const due = { DateTime: { utc: '2026-03-06T14:00:00Z', tz: 'US/Eastern' } };
     await show([issue(1, { start_date: '2026-03-06', due })]);
     const update = vi.spyOn(api.issues, 'update');
     dragBy(bar('issue-1'), 42);
     await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-    expect(update.mock.calls[0][1]).toEqual({ start_date: '2026-03-09', due: { DateTime: { utc: '2026-03-09T13:00:00Z', tz: 'America/New_York' } } });
+    expect(update.mock.calls[0][1]).toEqual({ start_date: '2026-03-09', due: { DateTime: { utc: '2026-03-09T13:00:00Z', tz: 'US/Eastern' } } });
   });
 
   it('drag_estimate_only_bar_does_not_invent_due', async () => {
@@ -177,5 +177,86 @@ describe('GanttView', () => {
     flushSync();
     expect(update).not.toHaveBeenCalled();
     expect(bar('issue-7').style.left).toBe(before);
+  });
+
+  it('resize_end_edge_changes_only_due', async () => {
+    await show([dated(1, '2026-12-01', '2026-12-03')]);
+    const update = vi.spyOn(api.issues, 'update');
+    dragBy(bar('issue-1').querySelector('[data-handle="end"]')!, 28);
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(update).toHaveBeenCalledWith(1, { start_date: '2026-12-01', due: { Date: '2026-12-05' } });
+  });
+
+  it('resize_start_edge_changes_only_start', async () => {
+    await show([dated(1, '2026-12-01', '2026-12-03')]);
+    const update = vi.spyOn(api.issues, 'update');
+    dragBy(bar('issue-1').querySelector('[data-handle="start"]')!, -14);
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(update).toHaveBeenCalledWith(1, { start_date: '2026-11-30', due: { Date: '2026-12-03' } });
+  });
+
+  it('zoom_commands_step_the_scale', async () => {
+    await show(chain());
+    const zoom = () => document.querySelector('.gantt')!.getAttribute('data-zoom');
+    window.dispatchEvent(new CustomEvent('command:timeline.zoom-in'));
+    flushSync();
+    expect(zoom()).toBe('Day');
+    window.dispatchEvent(new CustomEvent('command:timeline.zoom-out'));
+    window.dispatchEvent(new CustomEvent('command:timeline.zoom-out'));
+    flushSync();
+    expect(zoom()).toBe('Month');
+  });
+
+  it('axis_labels_stay_clear_of_the_today_flag', async () => {
+    await show(chain(), { today: '2026-12-04' });
+    const today = parseFloat(document.querySelector<HTMLElement>('[data-testid="today"]')!.style.left);
+    const ticks = [...document.querySelectorAll<HTMLElement>('.axis .tick')];
+    const near = ticks.filter((t) => { const d = parseFloat(t.style.left) - today; return d > -56 && d < 28; });
+    expect(near.length).toBeGreaterThan(0);
+    for (const t of near) expect(t.textContent?.trim(), t.style.left).toBe('');
+    expect(ticks.some((t) => t.textContent?.trim())).toBe(true);
+  });
+
+  it('today_marker_sits_on_its_day', async () => {
+    await show(chain());
+    // the axis starts 2026-11-28 (three days before the first bar), 14px a day: 4 days to 12-02
+    expect(document.querySelector<HTMLElement>('[data-testid="today"]')!.style.left).toBe('56px');
+  });
+
+  it('bars_carry_the_status_category', async () => {
+    await show([dated(1, '2026-12-01', '2026-12-03')]);
+    const want = (await api.statuses.list()).find((s) => s.id === fixtures.issues[0].status_id)!.category;
+    expect(bar('issue-1').getAttribute('data-category')).toBe(want);
+  });
+
+  it('every_issue_has_a_row_in_the_left_pane', async () => {
+    await show([dated(1, '2026-12-01', '2026-12-03'), issue(2), issue(3, { estimate_minutes: 60 })]);
+    const keys = [...document.querySelectorAll('.label .k')].map((k) => k.textContent);
+    expect(keys).toEqual(['ABC-1', 'ABC-2', 'ABC-3']);
+    expect(document.querySelector('.band.unscheduled')?.textContent).toContain('Unscheduled');
+    expect(document.querySelector('[data-issue="2"]')?.textContent).toContain('drag to schedule');
+  });
+
+  it('a_bar_sits_in_the_same_line_as_its_label', async () => {
+    await show([dated(1, '2026-12-01', '2026-12-03'), dated(2, '2026-12-05', '2026-12-07', { project_id: 2 })]);
+    const lines = [...document.querySelectorAll('.line')];
+    for (const b of document.querySelectorAll('[data-row]')) {
+      const line = b.closest('.line')!;
+      expect(line.querySelector(`.label[data-label="${b.getAttribute('data-row')}"]`)).not.toBeNull();
+      expect(lines.indexOf(line)).toBeGreaterThanOrEqual(0);
+    }
+    expect(document.querySelectorAll('.label').length).toBe(lines.length);
+    // a line must never pick up the bar styles
+    expect(document.querySelector('.line.bar, .line.rollup, .line.milestone, .label.bar')).toBeNull();
+  });
+
+  it('embedded_has_no_title_and_standalone_has_one', async () => {
+    await show([dated(1, '2026-12-01', '2026-12-03')]);
+    expect(document.querySelector('h1')).toBeNull();
+    expect(document.querySelector('[role=tab]')).not.toBeNull();
+    unmount(view!);
+    document.body.innerHTML = '';
+    await show([], { mode: 'projects', view: undefined });
+    expect(document.querySelector('h1')?.textContent).toContain('Project timeline');
   });
 });

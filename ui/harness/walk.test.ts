@@ -1,0 +1,271 @@
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
+import { createServer } from 'node:net';
+import { resolve } from 'node:path';
+import { chromium, expect as pw, type Browser, type Page } from '@playwright/test';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+// The first-minute flows, driven as a user would in the mock app, asserting on what is on screen.
+const uiDir = resolve(import.meta.dirname, '..');
+let vite: ChildProcess;
+let browser: Browser;
+let base = '';
+let page: Page;
+
+const freePort = () =>
+  new Promise<number>((ok, fail) => {
+    const s = createServer().once('error', fail).listen(0, '127.0.0.1', () => {
+      const { port } = s.address() as { port: number };
+      s.close(() => ok(port));
+    });
+  });
+
+beforeAll(async () => {
+  execFileSync('pnpm', ['exec', 'playwright', 'install', 'chromium'], { cwd: uiDir });
+  const port = await freePort();
+  base = `http://localhost:${port}`;
+  vite = spawn('pnpm', ['exec', 'vite', '--host', 'localhost', '--port', String(port), '--strictPort'], {
+    cwd: uiDir, env: { ...process.env, VITE_API_MODE: 'mock' }, stdio: 'ignore', detached: true,
+  });
+  for (let i = 0; i < 300; i++) {
+    if (await fetch(base).then(() => true, () => false)) break;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  browser = await chromium.launch();
+}, 120_000);
+
+afterAll(async () => {
+  await browser?.close();
+  if (vite?.pid) try { process.kill(-vite.pid); } catch { /* already gone */ }
+});
+
+async function open(path = '/view/1', viewport = { width: 1440, height: 900 }) {
+  await page?.close();
+  page = await browser.newPage({ viewport });
+  page.setDefaultTimeout(5_000);
+  await page.goto(base + path);
+  await page.locator('[data-key], aside.sidebar').first().waitFor();
+  if (path.startsWith('/view/')) await page.locator('li[data-key], li[data-issue]').first().waitFor();
+}
+const press = async (...keys: string[]) => {
+  for (const k of keys) await page.keyboard.press(k);
+};
+const rows = () => page.locator('li[data-key]');
+const focusedKey = () => page.locator('li[data-key][aria-current=true], [data-focused]').first().getAttribute('data-key');
+const palette = () => page.getByRole('dialog', { name: 'Command menu' });
+const statusOf = (key: string) => rows().filter({ has: page.locator(`.key:text-is("${key}")`) }).getByRole('button', { name: /^Status/ }).getAttribute('aria-label');
+
+describe('walk', { timeout: 20_000 }, () => {
+  it('F1 Esc with nothing open stays in the app', async () => {
+    await open();
+    await press('Escape', 'Escape', 'Escape');
+    await page.waitForTimeout(300);
+    expect(new URL(page.url()).pathname).toBe('/view/1');
+    expect(await rows().count()).toBeGreaterThan(0);
+  });
+
+  it('F1 Esc on an issue page returns to the list it came from', async () => {
+    await open();
+    await press('j', 'Meta+Enter');
+    await page.waitForURL(/\/issue\/ABC-/);
+    await page.waitForTimeout(250);
+    await press('Escape');
+    await page.waitForURL(/\/view\/1$/);
+  });
+
+  it('F2 s opens the status page; typing prog sets the whole selection; u undoes both', async () => {
+    await open();
+    const [a, b] = await rows().evaluateAll((l) => l.slice(0, 2).map((x) => x.getAttribute('data-key')!));
+    const before = [await statusOf(a), await statusOf(b)];
+    await press('j', 'x', 'j', 'x', 's');
+    await pw(palette().getByText('Status', { exact: true }).first()).toBeVisible();
+    await pw(palette().getByRole('option', { name: 'In Progress' })).toBeVisible();
+    expect(await palette().getByRole('combobox').inputValue()).toBe('');
+    await page.keyboard.type('prog');
+    await press('Enter');
+    await pw(palette()).toHaveCount(0);
+    await expect.poll(() => statusOf(a)).toContain('In Progress');
+    await expect.poll(() => statusOf(b)).toContain('In Progress');
+    await press('u');
+    await expect.poll(() => statusOf(a)).toBe(before[0]);
+    await expect.poll(() => statusOf(b)).toBe(before[1]);
+  });
+
+  it('F2 d then "next fri" shows the parsed date first and Enter sets it', async () => {
+    await open();
+    await press('j', 'j', 'd'); // ABC-6, due Nov 26
+    await pw(palette().getByRole('option', { name: 'Today' })).toBeVisible();
+    await page.keyboard.type('next fri');
+    const first = palette().getByRole('option').first();
+    await pw(first).toContainText(/Set the due date to/);
+    const day = /(?:Nov|Dec|Jan) \d+/.exec((await first.innerText()))![0];
+    await press('Enter');
+    await pw(palette()).toHaveCount(0);
+    await pw(rows().filter({ hasText: 'ABC-6' })).toContainText(day);
+  });
+
+  it('F3 palette root and right-click menu show only what applies here', async () => {
+    await open();
+    await press('Meta+k');
+    const labels = await palette().getByRole('option').allTextContents();
+    expect(labels.length).toBeGreaterThan(5);
+    expect(labels.join('|')).not.toMatch(/Month view|Edit cell|Week view|Zoom/);
+    await press('Escape');
+    await rows().nth(2).click({ button: 'right' });
+    const items = page.getByRole('menuitem');
+    await items.first().waitFor();
+    expect(await items.count()).toBeLessThanOrEqual(18);
+    const top = await page.getByRole('menu').evaluate((m) => m.getBoundingClientRect().top);
+    expect(top).toBeGreaterThanOrEqual(0);
+  });
+
+  it('F4 on the board j then l moves to the next column', async () => {
+    await open('/view/2');
+        await press('j');
+    const col = () => page.locator('[data-focused]').first().evaluate((c) => [...document.querySelectorAll('ul.cards')].indexOf(c.closest('ul.cards')!));
+    const before = await col();
+    await press('l');
+    await pw(palette()).toHaveCount(0);
+    expect(await col()).toBeGreaterThan(before);
+  });
+
+  it('F5 Enter opens the side panel and keeps the list; j follows; Esc closes it', async () => {
+    await open();
+    await press('j', 'Enter');
+    await page.waitForTimeout(300);
+    expect(new URL(page.url()).pathname).toBe('/view/1');
+    const panel = page.locator('aside.panel');
+    await pw(panel).toBeVisible();
+    const first = await focusedKey();
+    await pw(panel).toContainText(first!);
+    await press('j');
+    const next = await focusedKey();
+    expect(next).not.toBe(first);
+    await pw(panel).toContainText(next!);
+    await page.waitForTimeout(250); // the panel ignores an Esc that lands within 60ms of a reload
+    await press('Escape');
+    await pw(panel).toHaveCount(0);
+  });
+
+  it('F6 the created toast has a readable Undo; u with nothing to undo is quiet', async () => {
+    await open();
+    await press('c');
+    await page.keyboard.type('Walk issue');
+    await press('Enter');
+    const undo = page.getByRole('status').getByRole('button', { name: /Undo/ });
+    await pw(undo).toBeVisible();
+    const [fg, bg] = await undo.evaluate((b) => [getComputedStyle(b).color, getComputedStyle(b.closest('[role=status]')!).backgroundColor]);
+    expect(fg).not.toBe(bg);
+    await open();
+    await press('u');
+    const toast = page.getByRole('status');
+    await pw(toast).toContainText('Nothing to undo');
+    await pw(toast).not.toContainText('invalid');
+  });
+
+  it('F8/F9 the cheat sheet has no duplicates and the command is New issue', async () => {
+    await open();
+    await press('?');
+    const sheet = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    const names = await sheet.locator('li[data-row] .name').allTextContents();
+    expect(names.filter((n, i) => names.indexOf(n) !== i)).toEqual([]);
+    const heads = await sheet.locator('h3').allTextContents();
+    expect(heads.filter((h) => /^Navigat/.test(h)).length).toBe(1);
+    expect(names).toContain('New issue');
+    expect(names).not.toContain('Create issue');
+  });
+
+  it('5 j moves five rows', async () => {
+    await open();
+    await press('5', 'j');
+    expect(await rows().evaluateAll((l) => l.findIndex((x) => x.getAttribute('aria-current') === 'true'))).toBe(4);
+  });
+
+  it('W1 a custom property switched on in Display shows in the list, board and table', async () => {
+    await open();
+    await page.getByRole('button', { name: 'Display' }).click();
+    const panel = page.getByRole('group', { name: 'Display options' });
+    await pw(panel.getByRole('switch', { name: 'Show Area' })).toBeVisible();
+    await panel.getByRole('switch', { name: 'Show Area' }).click();
+    await pw(page.locator('li[data-key="ABC-1"] [data-field="P:area"]')).toContainText('work');
+    await press('Escape');
+    await page.waitForTimeout(600); // the debounced save
+    await page.getByRole('tab', { name: 'Board' }).click();
+    await pw(page.locator('[data-issue="ABC-1"]')).toContainText('work');
+    await page.getByRole('tab', { name: 'Table' }).click();
+    await pw(page.locator('tr[data-key="ABC-1"]')).toContainText('work');
+  });
+
+  it('W2 the Views page lists the seeded templates; New view from one; Save as template; Reset', async () => {
+    await open('/views');
+    for (const n of ['Status board', 'Planning table', 'This week']) await pw(page.getByText(n, { exact: true }).first()).toBeVisible();
+    await page.getByRole('button', { name: 'New view' }).click();
+    const dialog = page.getByRole('dialog', { name: 'New view' });
+    await dialog.getByRole('button', { name: /Status board/ }).click();
+    await dialog.getByRole('button', { name: 'Create view' }).click();
+    await page.waitForURL(/\/view\/\d+$/);
+    await pw(page.getByRole('tab', { name: 'Board' })).toHaveAttribute('aria-selected', 'true');
+    // Away from the template and back.
+    await page.getByRole('tab', { name: 'List' }).click();
+    await page.waitForTimeout(600);
+    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitem', { name: 'Reset to template' }).click();
+    await pw(page.getByRole('tab', { name: 'Board' })).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitem', { name: 'New view...' }).click();
+    await pw(page.getByRole('dialog', { name: 'New view' }).getByRole('button', { name: /Copy of current view/ })).toBeVisible();
+    await press('Escape');
+    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitem', { name: 'Save as template' }).click();
+    // In-app navigation: a reload would reset the mock.
+    await page.evaluate(() => { history.pushState(null, '', '/views'); dispatchEvent(new PopStateEvent('popstate')); });
+    await pw(page.getByRole('main').getByText('Status board', { exact: true })).toHaveCount(3); // the new view and two templates
+  });
+
+  it('W8 at 1024 wide the layout tabs are icons and New issue is not clipped', async () => {
+    await open('/view/1', { width: 1024, height: 768 });
+    await pw(page.locator('.cx-tab-label').first()).toBeHidden();
+    await pw(page.getByRole('tab', { name: 'Board' })).toBeVisible();
+    const box = await page.getByRole('button', { name: 'New issue' }).first().boundingBox();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(1024);
+  });
+
+  it('X1 shift+i opens the insights panel with a chart and headline numbers; Measure to issues; close', async () => {
+    await open();
+    await press('Shift+I');
+    const panel = page.getByRole('complementary', { name: 'Insights' });
+    await pw(panel).toBeVisible();
+    await pw(panel.locator('path.scope').first()).toHaveAttribute('d', /^M/);
+    expect(await panel.locator('[data-headline] dd').allTextContents()).toSatisfy((n: string[]) => n.length >= 3 && n.every((t) => t.trim() !== ''));
+    await pw(panel.locator('svg[role=img]').first()).toHaveAttribute('aria-label', /points/);
+    await panel.getByRole('combobox', { name: 'Measure' }).click();
+    await page.getByRole('option', { name: 'Issues' }).click();
+    await pw(panel.locator('svg[role=img]').first()).toHaveAttribute('aria-label', /issues/);
+    await panel.getByRole('button', { name: 'Close insights' }).click();
+    await pw(panel).toBeHidden();
+  });
+
+  it('FX2 the cheat sheet fits the window, scrolls inside, and shows keys as glyphs', async () => {
+    await open('/view/1', { width: 1024, height: 768 });
+    await press('?');
+    const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    await pw(dialog).toBeVisible();
+    const box = (await dialog.boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(768);
+    const scroll = dialog.locator('.scroll');
+    expect(await scroll.evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true);
+    await scroll.evaluate((e) => e.scrollTo(0, e.scrollHeight));
+    await pw(dialog.getByRole('searchbox', { name: 'Filter shortcuts' })).toBeInViewport();
+    const text = (await dialog.textContent())!;
+    expect(text).toMatch(/⌘|Ctrl\+/); // the browser's own platform decides
+    expect(text).not.toMatch(/mod\+|arrowdown|escape/);
+  });
+
+  it('FX2 shortcuts do not fire behind an open menu', async () => {
+    await open();
+    await page.getByRole('button', { name: 'Add filter' }).click();
+    await pw(page.getByRole('menu')).toBeVisible();
+    await press('s');
+    await page.waitForTimeout(300);
+    await pw(palette()).toBeHidden();
+  });
+});

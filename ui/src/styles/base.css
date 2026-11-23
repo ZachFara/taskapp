@@ -1,0 +1,71 @@
+/* Reset, fonts, focus, selection, scrollbars, reduced motion. Role tokens only. */
+
+@font-face {
+  font-family: "Bricolage Grotesque";
+  font-style: normal;
+  font-weight: 200 800;
+  font-stretch: 75% 100%;
+  font-display: swap;
+  src: url("./fonts/bricolage-grotesque-latin-ext.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Bricolage Grotesque";
+  font-style: normal;
+  font-weight: 200 800;
+  font-stretch: 75% 100%;
+  font-display: swap;
+  src: url("./fonts/bricolage-grotesque-latin.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html, body { height: 100%; margin: 0; }
+
+/* The body carries the app face and colours so no screen can fall back to the browser's serif. */
+body {
+  background: var(--frame);
+  color: var(--ink);
+  font: 400 var(--fs-md) / var(--lh-body) var(--font);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Kept for roots that mount inside a page with other colours (the setup and design screens). */
+.cairn-root {
+  background: var(--frame);
+  color: var(--ink);
+  font: 400 var(--fs-md) / var(--lh-body) var(--font);
+  font-variant-numeric: tabular-nums;
+  height: 100%;
+}
+
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+h1, h2, h3, h4, h5, h6, p { margin: 0; }
+
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+/* The frame is dark in both themes; the ring there is the frame ink. */
+[data-on-frame] :focus-visible,
+[data-on-frame]:focus-visible { outline-color: var(--focus-frame); }
+
+::selection { background: var(--selection); color: var(--ink); }
+
+* { scrollbar-width: thin; scrollbar-color: var(--control) transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

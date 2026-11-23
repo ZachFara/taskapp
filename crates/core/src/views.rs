@@ -1,9 +1,13 @@
-use serde_json::Value;
-use sqlx::{Row, query::Query, sqlite::SqliteArguments, sqlite::SqliteRow};
+use serde_json::{Value, json};
+use sqlx::{Row, SqliteConnection, query::Query, sqlite::SqliteArguments, sqlite::SqliteRow};
 
 use crate::{
-    Db, Error, FieldRef, Filter, FixedField, Issue, Op, PropertyDef, PropertyKind, Result,
-    SavedView, Sort, ViewDef, ViewId, issues,
+    ChangeSource, Db, Error, FieldRef, Filter, FixedField, Issue, IssueId, IssueStats, Op,
+    PropertyDef, PropertyKind, Result, SavedView, Sort, ViewDef, ViewId, ViewTemplateId,
+    history::{self, Edit},
+    issues,
+    palette::{self, Look},
+    rows,
 };
 
 /// Filters come from saved JSON; a limit keeps a hostile one from overflowing the stack.
@@ -62,9 +66,6 @@ impl Ctx<'_> {
             .iter()
             .find(|d| &d.key == key)
             .ok_or_else(|| Error::Invalid("unknown property".into()))?;
-        if key.contains('"') {
-            return Err(Error::Invalid("invalid property key".into()));
-        }
         Ok(Col {
             sql: "json_extract(issues.properties, ?)".into(),
             bind: Some(Value::String(format!("$.\"{key}\""))),
@@ -229,10 +230,24 @@ fn fixed_col(x: FixedField) -> Result<Col> {
         FixedField::StartDate => ("issues.start_date", false),
         FixedField::DueDate => ("issues.due_date", false),
         FixedField::Estimate => ("issues.estimate_minutes", false),
+        FixedField::Points => ("issues.points", false),
         FixedField::CreatedAt => ("issues.created_at", false),
         FixedField::UpdatedAt => ("issues.updated_at", false),
         FixedField::CompletedAt => ("issues.completed_at", false),
         FixedField::Archived => ("issues.archived_at", false),
+        FixedField::Key => ("issues.number", false),
+        FixedField::SubIssueProgress => (
+            "(SELECT COUNT(*) FROM issues c WHERE c.parent_id = issues.id AND c.archived_at IS NULL)",
+            false,
+        ),
+        FixedField::RelationCount => (
+            "(SELECT COUNT(*) FROM relations r WHERE r.from_id = issues.id OR r.to_id = issues.id)",
+            false,
+        ),
+        FixedField::CommentCount => (
+            "(SELECT COUNT(*) FROM comments c WHERE c.issue_id = issues.id)",
+            false,
+        ),
         FixedField::Label => return Err(Error::Invalid("cannot sort by label".into())),
     };
     Ok(Col::fixed(sql, text))
@@ -254,13 +269,49 @@ fn archived(op: Op, value: &Value) -> Result<String> {
     ))
 }
 
+fn strip_filter(f: Filter, gone: &dyn Fn(&str) -> bool) -> Option<Filter> {
+    let list = |v: Vec<Filter>| {
+        Some(
+            v.into_iter()
+                .filter_map(|f| strip_filter(f, gone))
+                .collect::<Vec<_>>(),
+        )
+        .filter(|v| !v.is_empty())
+    };
+    match f {
+        Filter::Cond {
+            field: FieldRef::Property(ref k),
+            ..
+        } if gone(k) => None,
+        Filter::And(v) => list(v).map(Filter::And),
+        Filter::Or(v) => list(v).map(Filter::Or),
+        Filter::Not(b) => strip_filter(*b, gone).map(|f| Filter::Not(Box::new(f))),
+        other @ Filter::Cond { .. } => Some(other),
+    }
+}
+
+/// Removes every reference to the properties `gone` names: filter conditions, sorts, columns, card fields, grouping.
+pub(crate) fn scrub(def: &mut ViewDef, gone: &dyn Fn(&str) -> bool) {
+    let hit = |f: &FieldRef| matches!(f, FieldRef::Property(k) if gone(k));
+    def.filter = def.filter.take().and_then(|f| strip_filter(f, gone));
+    def.sorts.retain(|s| !hit(&s.field));
+    def.columns.retain(|c| !hit(c));
+    def.card_fields.retain(|c| !hit(c));
+    if def.group_by.as_ref().is_some_and(hit) {
+        def.group_by = None;
+    }
+}
+
 /// Compiles a view definition to SQL plus bind values. Property keys are checked against `defs` and
 /// only ever travel as bind values.
 ///
 /// # Errors
 ///
-/// Fails with `Invalid` on an unknown property, a bad operator or value, or a filter nested too deeply.
+/// Fails with `Invalid` on a bad operator or value, or a filter nested too deeply.
 pub fn compile(def: &ViewDef, defs: &[PropertyDef]) -> Result<(String, Vec<Value>)> {
+    // A reference to a property that no longer exists is dropped, not an error: the view would stay broken.
+    let mut def = def.clone();
+    scrub(&mut def, &|k| !defs.iter().any(|d| d.key == k));
     let mut ctx = Ctx {
         defs,
         binds: vec![],
@@ -339,6 +390,43 @@ pub async fn query(db: &Db, def: &ViewDef) -> Result<Vec<Issue>> {
     issues::issues_from_rows(&mut *db.pool.acquire().await?, &rows).await
 }
 
+/// Sub-issue, relation and comment counts for the issues `def` shows, in the same order as [`query`].
+///
+/// # Errors
+///
+/// As [`query`].
+pub async fn stats(db: &Db, def: &ViewDef) -> Result<Vec<IssueStats>> {
+    let (sql, binds) = compile(def, &property_defs(db).await?)?;
+    let sql = sql.replacen(
+        &format!("SELECT {} FROM", issues::ISSUE_COLS),
+        "SELECT issues.id,
+           (SELECT COUNT(*) FROM issues c WHERE c.parent_id = issues.id AND c.archived_at IS NULL),
+           (SELECT COUNT(*) FROM issues c JOIN statuses st ON st.id = c.status_id
+              WHERE c.parent_id = issues.id AND c.archived_at IS NULL AND st.category = 'completed'),
+           (SELECT COUNT(*) FROM relations r WHERE r.from_id = issues.id OR r.to_id = issues.id),
+           (SELECT COUNT(*) FROM comments c WHERE c.issue_id = issues.id)
+         FROM",
+        1,
+    );
+    let mut q = sqlx::query(&sql);
+    for b in &binds {
+        q = bind_value(q, b);
+    }
+    q.fetch_all(&db.pool)
+        .await?
+        .iter()
+        .map(|r| {
+            Ok(IssueStats {
+                issue_id: IssueId(r.try_get(0)?),
+                sub_total: r.try_get(1)?,
+                sub_done: r.try_get(2)?,
+                relations: r.try_get(3)?,
+                comments: r.try_get(4)?,
+            })
+        })
+        .collect()
+}
+
 fn view_from_row(r: &SqliteRow) -> Result<SavedView> {
     let def: String = r.try_get("definition")?;
     Ok(SavedView {
@@ -346,6 +434,11 @@ fn view_from_row(r: &SqliteRow) -> Result<SavedView> {
         name: r.try_get("name")?,
         def: serde_json::from_str(&def).map_err(|e| Error::Invalid(format!("saved view: {e}")))?,
         position: r.try_get("position")?,
+        icon: r.try_get("icon")?,
+        color: r.try_get("color")?,
+        template_id: r
+            .try_get::<Option<i64>, _>("template_id")?
+            .map(ViewTemplateId),
     })
 }
 
@@ -353,61 +446,151 @@ fn view_from_row(r: &SqliteRow) -> Result<SavedView> {
 ///
 /// Fails on a database error or a stored definition that no longer parses.
 pub async fn list(db: &Db) -> Result<Vec<SavedView>> {
-    sqlx::query("SELECT id, name, definition, position FROM views ORDER BY position, id")
-        .fetch_all(&db.pool)
-        .await?
-        .iter()
-        .map(view_from_row)
-        .collect()
+    sqlx::query(
+        "SELECT id, name, definition, position, icon, color, template_id FROM views ORDER BY position, id",
+    )
+    .fetch_all(&db.pool)
+    .await?
+    .iter()
+    .map(view_from_row)
+    .collect()
 }
 
-/// Creates a view (at the end) when `id` is `None`, otherwise replaces name and definition.
+/// Creates a view (at the end) when `id` is `None`, otherwise replaces name, definition, icon and color.
+/// On update an unset icon or color keeps the current one.
 ///
 /// # Errors
 ///
-/// Fails with `NotFound` for an unknown id, or on a database error.
-pub async fn save(db: &Db, id: Option<ViewId>, name: &str, def: ViewDef) -> Result<SavedView> {
+/// Fails with `NotFound` for an unknown id, `Invalid` for a bad icon or color, or on a database error.
+pub async fn save(
+    db: &Db,
+    id: Option<ViewId>,
+    name: &str,
+    def: ViewDef,
+    look: Look,
+    src: ChangeSource,
+) -> Result<SavedView> {
     let json = serde_json::to_string(&def).map_err(|e| Error::Invalid(e.to_string()))?;
-    let id = if let Some(id) = id {
-        let done = sqlx::query("UPDATE views SET name = ?, definition = ? WHERE id = ?")
-            .bind(name)
-            .bind(&json)
-            .bind(id.0)
-            .execute(&db.pool)
-            .await?;
-        if done.rows_affected() == 0 {
-            return Err(Error::NotFound(format!("view {}", id.0)));
+    let Look { icon, color } = look;
+    if let Some(icon) = &icon {
+        palette::check_icon(icon)?;
+    }
+    let color = color
+        .as_deref()
+        .map(palette::key_for)
+        .transpose()?
+        .map(str::to_owned);
+    let look = Look { icon, color };
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let id = match id {
+        Some(id) => {
+            update_view(&mut tx, src, id, name, &json, &look).await?;
+            id.0
         }
-        id.0
-    } else {
-        sqlx::query(
-            "INSERT INTO views (name, definition, position)
-             VALUES (?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM views))",
-        )
-        .bind(name)
-        .bind(&json)
-        .execute(&db.pool)
-        .await?
-        .last_insert_rowid()
+        None => insert_view(&mut tx, src, name, &json, &look).await?,
     };
-    let row = sqlx::query("SELECT id, name, definition, position FROM views WHERE id = ?")
-        .bind(id)
-        .fetch_one(&db.pool)
+    let row = sqlx::query(
+        "SELECT id, name, definition, position, icon, color, template_id FROM views WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
+    let view = view_from_row(&row)?;
+    tx.commit().await?;
+    Ok(view)
+}
+
+/// Records each changed field, then writes the row. An unset icon or color keeps the stored one.
+async fn update_view(
+    tx: &mut SqliteConnection,
+    src: ChangeSource,
+    id: ViewId,
+    name: &str,
+    json: &str,
+    look: &Look,
+) -> Result<()> {
+    let old = sqlx::query("SELECT name, icon, color FROM views WHERE id = ?")
+        .bind(id.0)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| Error::NotFound(format!("view {}", id.0)))?;
+    let before = rows::by_key(tx, "views", id.0).await?;
+    let old_name: String = old.try_get("name")?;
+    let old_icon: Option<String> = old.try_get("icon")?;
+    let old_color: Option<String> = old.try_get("color")?;
+    let icon = look.icon.as_deref().or(old_icon.as_deref());
+    let color = look.color.as_deref().or(old_color.as_deref());
+    let changes = [
+        ("name", json!(old_name), json!(name)),
+        ("icon", json!(old_icon), json!(icon)),
+        ("color", json!(old_color), json!(color)),
+    ];
+    for (field, before, after) in changes {
+        if before != after {
+            let edit = Edit {
+                field,
+                old: Some(&before),
+                new: Some(&after),
+            };
+            history::record(tx, src, "view", &id.0.to_string(), &edit).await?;
+        }
+    }
+    sqlx::query("UPDATE views SET name = ?, definition = ?, icon = ?, color = ? WHERE id = ?")
+        .bind(name)
+        .bind(json)
+        .bind(icon)
+        .bind(color)
+        .bind(id.0)
+        .execute(&mut *tx)
         .await?;
-    view_from_row(&row)
+    rows::changed(tx, src, before).await?;
+    Ok(())
+}
+
+async fn insert_view(
+    tx: &mut SqliteConnection,
+    src: ChangeSource,
+    name: &str,
+    json: &str,
+    look: &Look,
+) -> Result<i64> {
+    let id = sqlx::query(
+        "INSERT INTO views (name, definition, position, icon, color)
+         VALUES (?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM views), ?, ?)",
+    )
+    .bind(name)
+    .bind(json)
+    .bind(look.icon.as_deref())
+    .bind(look.color.as_deref())
+    .execute(&mut *tx)
+    .await?
+    .last_insert_rowid();
+    rows::created(tx, src, "views", id).await?;
+    let created = json!(name);
+    let edit = Edit {
+        field: "created",
+        old: None,
+        new: Some(&created),
+    };
+    history::record(tx, src, "view", &id.to_string(), &edit).await?;
+    Ok(id)
 }
 
 /// # Errors
 ///
 /// Fails with `NotFound` for an unknown id, or on a database error.
 pub async fn delete(db: &Db, id: ViewId) -> Result<()> {
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let before = rows::by_key(&mut tx, "views", id.0).await?;
     let done = sqlx::query("DELETE FROM views WHERE id = ?")
         .bind(id.0)
-        .execute(&db.pool)
+        .execute(&mut *tx)
         .await?;
     if done.rows_affected() == 0 {
         return Err(Error::NotFound(format!("view {}", id.0)));
     }
+    rows::changed(&mut tx, ChangeSource::Ui, before).await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -429,6 +612,7 @@ pub async fn reorder(db: &Db, ids: &[ViewId]) -> Result<()> {
             "reorder must list every view exactly once".into(),
         ));
     }
+    let before = rows::all(&mut tx, "views").await?;
     for (position, id) in (0_i64..).zip(ids) {
         sqlx::query("UPDATE views SET position = ? WHERE id = ?")
             .bind(position)
@@ -436,6 +620,7 @@ pub async fn reorder(db: &Db, ids: &[ViewId]) -> Result<()> {
             .execute(&mut *tx)
             .await?;
     }
+    rows::changed(&mut tx, ChangeSource::Ui, before).await?;
     tx.commit().await?;
     Ok(())
 }

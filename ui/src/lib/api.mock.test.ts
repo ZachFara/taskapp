@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api, httpApi, setApi } from './api';
-import { createMockApi } from './api.mock';
-import type { ViewDef } from './bindings';
+import { createMockApi, fixtures } from './api.mock';
+import type { TemplateFields, ViewDef } from './bindings';
 
 const def = (filter: ViewDef['filter']): ViewDef => ({
   filter, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false,
@@ -10,10 +10,35 @@ const def = (filter: ViewDef['filter']): ViewDef => ({
 afterEach(() => vi.unstubAllGlobals());
 
 describe('mock api', () => {
+  it('ships a neutral sample workspace', async () => {
+    const mock = createMockApi();
+    const rows = await mock.views.query(def(null));
+    expect(rows).toHaveLength(24);
+    expect(rows.some((i) => /fixture/i.test(i.title))).toBe(false);
+    expect((await mock.labels.list()).every((l) => l.icon)).toBe(true);
+    expect(await mock.templates.list()).toHaveLength(2);
+    expect((await mock.views.list()).map((v) => v.name)).toContain('This week');
+    expect(rows.some((i) => i.due?.Date && i.due.Date < new Date().toISOString().slice(0, 10))).toBe(true);
+  });
+
   it('create assigns sequential keys', async () => {
     const mock = createMockApi();
-    expect((await mock.issues.create({ title: 'a' })).key).toBe('ZF-21');
-    expect((await mock.issues.create({ title: 'b' })).key).toBe('ZF-22');
+    expect((await mock.issues.create({ title: 'a' })).key).toBe('ABC-25');
+    expect((await mock.issues.create({ title: 'b' })).key).toBe('ABC-26');
+  });
+
+  it('undo and redo move an issue edit back and forth', async () => {
+    const mock = createMockApi();
+    const made = await mock.issues.create({ title: 'a' });
+    await mock.issues.update(made.id, { title: 'b' });
+    expect(await mock.history.undoStatus()).toEqual({ undo: 'Edited ABC-25', redo: null });
+    await mock.history.undo();
+    expect((await mock.issues.get(made.id)).title).toBe('a');
+    await mock.history.redo();
+    expect((await mock.issues.get(made.id)).title).toBe('b');
+    await mock.history.undo();
+    await mock.issues.update(made.id, { title: 'c' });
+    await expect(mock.history.redo()).rejects.toMatchObject({ kind: 'Invalid' });
   });
 
   it('query filters by select property', async () => {
@@ -22,9 +47,20 @@ describe('mock api', () => {
     expect(rows.every((i) => i.properties.area === 'home')).toBe(true);
   });
 
-  it('query with an unknown property rejects with Invalid', async () => {
-    const q = createMockApi().views.query(def({ Cond: { field: { Property: 'nope' }, op: 'Eq', value: 1 } }));
-    await expect(q).rejects.toMatchObject({ kind: 'Invalid' });
+  it('query with an unknown property drops the reference instead of failing', async () => {
+    const all = await createMockApi().views.query(def(null));
+    const q = await createMockApi().views.query(def({ Cond: { field: { Property: 'nope' }, op: 'Eq', value: 1 } }));
+    expect(q).toHaveLength(all.length);
+  });
+
+  it('csv import writes nothing until applied', async () => {
+    const mock = createMockApi();
+    const plan = await mock.import.csvPlan('Title,Other\nOne\nTwo\n', null);
+    expect(plan.issues).toHaveLength(2);
+    expect(plan.unmapped).toEqual(['Other']);
+    expect(await mock.issues.getByKey('ABC-25').catch(() => null)).toBeNull();
+    expect((await mock.import.apply(plan)).created).toBe(2);
+    expect((await mock.issues.getByKey('ABC-26')).title).toBe('Two');
   });
 
   it('setApi swaps implementation', async () => {
@@ -33,6 +69,36 @@ describe('mock api', () => {
     setApi(mock);
     expect(api).toBe(mock);
     setApi(before);
+  });
+});
+
+describe('mock templates', () => {
+  const fields = (over: Partial<TemplateFields> = {}): TemplateFields => ({
+    description: null, status_id: null, priority: null, project_id: null, label_ids: [], estimate_minutes: null,
+    properties: {}, ...over,
+  });
+
+  it('quick-add /slug applies the template, its sub-issues, and the text overrides', async () => {
+    const mock = createMockApi();
+    await mock.templates.create({
+      name: 'Defect', slug: 'defect', icon: null, color: null,
+      body: { title_prefix: 'Bug: ', fields: fields({ priority: 3 }), sub_issues: [{ title: 'Repro', fields: fields() }] },
+    });
+    const issue = await mock.issues.createFromQuickadd('/defect Fix login p1');
+    expect(issue.title).toBe('Bug: Fix login');
+    expect(issue.priority).toBe(1);
+    expect((await mock.issues.children(issue.id)).map((i) => i.title)).toEqual(['Repro']);
+  });
+
+  it('text with a slash after the first word is a plain title', async () => {
+    const mock = createMockApi();
+    await mock.templates.create({ name: 'Defect', slug: 'defect', icon: null, color: null, body: { title_prefix: '', fields: fields(), sub_issues: [] } });
+    expect((await mock.issues.createFromQuickadd('/usr/bin is full')).title).toBe('/usr/bin is full');
+  });
+
+  it('unknown /slug rejects Invalid and names the known slugs', async () => {
+    const mock = createMockApi();
+    await expect(mock.issues.createFromQuickadd('/nope x')).rejects.toMatchObject({ kind: 'Invalid' });
   });
 });
 
@@ -53,7 +119,93 @@ describe('http transport', () => {
   });
 
   it('turns an error body into a rejection with its kind', async () => {
-    stubFetch({ error: { kind: 'NotFound', message: 'issue ZF-99' } });
-    await expect(httpApi().issues.getByKey('ZF-99')).rejects.toEqual({ kind: 'NotFound', message: 'issue ZF-99' });
+    stubFetch({ error: { kind: 'NotFound', message: 'issue ABC-99' } });
+    await expect(httpApi().issues.getByKey('ABC-99')).rejects.toEqual({ kind: 'NotFound', message: 'issue ABC-99' });
+  });
+});
+
+describe('mock workspace and quick add', () => {
+  it('setup_on_a_fresh_mock_sets_the_prefix_and_reports_done', async () => {
+    const mock = createMockApi({ ...fixtures, workspace: undefined }, 'UTC');
+    expect(await mock.workspace.status()).toMatchObject({ setup_done: false, name: null });
+    await mock.workspace.setup("Studio", "STU", "Europe/Berlin");
+    expect(await mock.workspace.status()).toEqual({ setup_done: true, name: 'Studio', key: 'STU', timezone: 'Europe/Berlin' });
+    expect((await mock.issues.create({ title: 'x' })).key).toBe('STU-25');
+  });
+
+  it('a_time_of_day_is_read_in_the_given_zone', async () => {
+    const parsed = await createMockApi(fixtures, 'Asia/Tokyo').issues.parseQuickadd('call at 9am');
+    expect(parsed.due).toMatchObject({ DateTime: { tz: 'Asia/Tokyo' } });
+    expect(new Date(parsed.due!.DateTime!.utc).getUTCHours()).toBe(0);
+  });
+});
+
+describe('mock view templates', () => {
+  it('first-run setup seeds three templates once, the planning table listing every property', async () => {
+    const mock = createMockApi({ ...fixtures, workspace: undefined, viewTemplates: [] }, 'UTC');
+    await mock.workspace.setup('Studio', 'STU', null);
+    await mock.workspace.setup('Studio', 'STD', null);
+    const t = await mock.view.templatesList();
+    expect(t.map((x) => x.name)).toEqual(['Status board', 'Planning table', 'This week']);
+    expect(t[1].def.columns).toContainEqual({ Property: 'effort' });
+  });
+
+  it('create from a template copies its definition, and undo removes the view', async () => {
+    const mock = createMockApi();
+    const [board] = await mock.view.templatesList();
+    const v = await mock.views.createFromTemplate(board.id, null);
+    expect(v).toMatchObject({ name: 'Status board', template_id: board.id, def: board.def });
+    await mock.history.undo();
+    expect((await mock.views.list()).some((x) => x.id === v.id)).toBe(false);
+  });
+});
+
+describe('mock points and progress', () => {
+  it('seeds about two thirds of the issues with points and a three-week history', async () => {
+    const mock = createMockApi();
+    const rows = await mock.views.query(def(null));
+    expect(rows.filter((i) => i.points != null)).toHaveLength(16);
+    const s = await mock.insights.progress({ Project: 2 }, 'points', null, null);
+    const last = s.days.at(-1)!;
+    expect(s.days.length).toBeGreaterThan(14);
+    expect(s.days[0].scope).toBeGreaterThan(0);
+    expect(last.scope).toBeGreaterThan(last.completed);
+    expect(last.started).toBeGreaterThanOrEqual(last.completed);
+  });
+
+  it('velocity falls back to weeks when there are no cycles', async () => {
+    const mock = createMockApi({ ...fixtures, cycles: [] });
+    const v = await mock.insights.velocity({ View: 1 }, 'count', 3);
+    expect(v).toHaveLength(3);
+    expect(v[0].label).toMatch(/^Week of [A-Z][a-z]{2} \d+$/);
+    expect(new Date(`${v[2].start}T00:00:00Z`).getUTCDay()).toBe(1);
+  });
+
+  it('a points change is undoable and cleared with null', async () => {
+    const mock = createMockApi();
+    await mock.issues.update(2, { points: 3.5 });
+    expect((await mock.issues.get(2)).points).toBe(3.5);
+    await mock.history.undo();
+    expect((await mock.issues.get(2)).points).toBeNull();
+    await expect(mock.issues.update(2, { points: 0.25 })).rejects.toMatchObject({ kind: 'Invalid' });
+  });
+
+  // Sprint 1 holds issues 1, 4, 7, 8, 10 and 16 (5, 8, 13, 3, 5 and 5 points). Issue 10 was done from day -11 to -5, so
+  // it is the previous cycle's work on the first day (day -6) and returns when reopened; issues 4 and 7 were already
+  // revised to 8 and 13 points; issue 16 starts on day -5.
+  it('the seeded current cycle burns up from its first day, not from earlier completions', async () => {
+    const mock = createMockApi();
+    const s = await mock.insights.progress({ Cycle: 1 }, 'points', null, null);
+    const rows = s.days.map((d) => [d.scope, d.started, d.completed]);
+    expect(rows).toHaveLength(14);
+    expect(rows[0]).toEqual([34, 29, 0]);
+    expect(rows.slice(1)).toEqual(Array(13).fill([39, 39, 0]));
+  });
+
+  it('an issue that left the cycle counts until the day it left', async () => {
+    const mock = createMockApi();
+    await mock.issues.update(8, { cycle_id: null }); // 3 points, today
+    const s = await mock.insights.progress({ Cycle: 1 }, 'points', null, null);
+    expect(s.days.map((d) => d.scope)).toEqual([34, ...Array(5).fill(39), ...Array(8).fill(36)]);
   });
 });

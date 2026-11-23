@@ -7,20 +7,34 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use taskapp_core::{
-    ChangeSource, CycleId, Db, Due, Error, IssueId, IssuePatch, LabelId, NewIssue, PinId, PinKind,
-    ProjectId, PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, StatusId,
-    ViewDef, ViewId, backup, comments, cycles, history, issues, labels, pins, projects, properties,
-    quickadd, relations, search, views,
+    ChangeSource, CycleId, Db, Due, Error, IssueId, IssuePatch, LabelId, Measure, NewIssue, PinId,
+    PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind, Relation, RelationKind, Result,
+    SelectOption, StatusId, TemplateId, ViewDef, ViewId, ViewTemplateId, backup, comments, cycles,
+    history, import, insights, issues, labels, pins, projects, properties, quickadd, relations,
+    search, templates, undo, view_templates, views,
 };
 
 use crate::{
-    Cmd, CommentCmd, CycleCmd, IssueCmd, LabelCmd, PinCmd, ProjectCmd, PropertyCmd, RelationCmd,
-    ViewCmd,
+    Cmd, CommentCmd, CycleCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd, PinCmd, ProjectCmd,
+    PropertyCmd, RelationCmd, ScopeArgs, TemplateCmd, ViewCmd,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
 
 pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
+    match cmd {
+        Cmd::Undo => val(undo::undo(db).await?),
+        Cmd::Setup { name, key, tz } => {
+            val(taskapp_core::workspace::setup(db, &name, &key, tz.as_deref()).await?)
+        }
+        Cmd::Redo => val(undo::redo(db).await?),
+        Cmd::Template(cmd) => template(db, cmd).await,
+        Cmd::Insights(cmd) => insights(db, cmd).await,
+        cmd => run_group(db, dir, cmd).await,
+    }
+}
+
+async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
     match cmd {
         Cmd::Add { text, tz } => add(db, &text, tz.as_deref()).await,
         Cmd::Issue(cmd) => issue(db, cmd).await,
@@ -29,26 +43,26 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Project(cmd) => project(db, cmd).await,
         Cmd::Cycle(cmd) => cycle(db, cmd).await,
         Cmd::Label(cmd) => label(db, cmd).await,
-        Cmd::Comment(CommentCmd::Add {
-            key,
-            body,
-            created_at,
-            migration,
-        }) => {
-            let id = issue_id(db, &key).await?;
-            let at = created_at.as_deref().map(timestamp).transpose()?;
-            val(comments::add_comment(db, id, &body, at, source(migration)).await?)
-        }
+        Cmd::Comment(cmd) => comment(db, cmd).await,
         Cmd::Relation(cmd) => relation(db, cmd).await,
         Cmd::Pin(cmd) => pin(db, cmd).await,
+        Cmd::Import(cmd) => import(db, cmd).await,
         Cmd::Backup(_) => Err(Error::Invalid(
             "backup runs before the database opens".into(),
         )),
+        Cmd::Undo | Cmd::Redo | Cmd::Setup { .. } | Cmd::Template(_) | Cmd::Insights(_) => {
+            handled_in_run()
+        }
         Cmd::History { key } => {
             let id = issue_id(db, &key).await?;
             val(history::list_for(db, "issue", &id.0.to_string()).await?)
         }
     }
+}
+
+/// Undo, redo and templates are answered in [`run`] before the group commands.
+fn handled_in_run() -> Result<Value> {
+    Err(Error::Invalid("handled by run".into()))
 }
 
 async fn add(db: &Db, text: &str, tz: Option<&str>) -> Result<Value> {
@@ -75,6 +89,7 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
             project,
             due,
             estimate,
+            points,
             created_at,
             completed_at,
             properties,
@@ -101,6 +116,7 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
                 project_id: project.map(ProjectId),
                 due: due.as_deref().map(date).transpose()?.map(Due::Date),
                 estimate_minutes: estimate,
+                points,
                 ..NewIssue::default()
             };
             val(issues::create(db, new, source(migration)).await?)
@@ -125,6 +141,8 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         status,
         due,
         clear_due,
+        points,
+        clear_points,
     } = cmd
     else {
         unreachable!("issue_update is only called with Update");
@@ -144,13 +162,73 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         priority: check_priority(priority)?,
         status_id: status.map(StatusId),
         due,
+        points: if clear_points {
+            Some(None)
+        } else {
+            points.map(Some)
+        },
         ..IssuePatch::default()
     };
     val(issues::update(db, id, patch, SRC).await?)
 }
 
+fn scope(a: &ScopeArgs) -> Result<(ProgressScope, Measure)> {
+    let scope = match (a.project, a.cycle, a.view) {
+        (Some(p), None, None) => ProgressScope::Project(ProjectId(p)),
+        (None, Some(c), None) => ProgressScope::Cycle(CycleId(c)),
+        (None, None, Some(v)) => ProgressScope::View(ViewId(v)),
+        _ => {
+            return Err(Error::Invalid(
+                "pass exactly one of --project, --cycle or --view".into(),
+            ));
+        }
+    };
+    let measure = serde_json::from_value(json!(a.measure)).map_err(|_| {
+        Error::Invalid(format!(
+            "measure {} must be points, count or time",
+            a.measure
+        ))
+    })?;
+    Ok((scope, measure))
+}
+
+async fn insights(db: &Db, cmd: InsightsCmd) -> Result<Value> {
+    match cmd {
+        InsightsCmd::Progress { scope: s, from, to } => {
+            let (scope, measure) = scope(&s)?;
+            let (from, to) = (
+                from.as_deref().map(date).transpose()?,
+                to.as_deref().map(date).transpose()?,
+            );
+            val(insights::progress(db, scope, measure, from, to).await?)
+        }
+        InsightsCmd::Velocity { scope: s, periods } => {
+            let (scope, measure) = scope(&s)?;
+            val(insights::velocity(db, scope, measure, periods).await?)
+        }
+    }
+}
+
 async fn view(db: &Db, cmd: ViewCmd) -> Result<Value> {
-    let ViewCmd::Query { def, id } = cmd;
+    let (def, id) = match cmd {
+        ViewCmd::Query { def, id } => (def, id),
+        ViewCmd::Templates => return val(view_templates::list(db).await?),
+        ViewCmd::SaveAsTemplate { view_id, name } => {
+            let t = view_templates::from_view(db, ViewId(view_id), name.as_deref(), SRC);
+            return val(t.await?);
+        }
+        ViewCmd::FromTemplate { template_id, name } => {
+            let id = ViewTemplateId(template_id);
+            return val(view_templates::create_view(db, id, name.as_deref(), SRC).await?);
+        }
+        ViewCmd::Reset { view_id } => {
+            return val(view_templates::reset_view(db, ViewId(view_id), SRC).await?);
+        }
+        ViewCmd::DeleteTemplate { id } => {
+            view_templates::delete(db, ViewTemplateId(id), SRC).await?;
+            return Ok(json!({ "deleted": true }));
+        }
+    };
     let def: ViewDef = match (def, id) {
         (Some(text), None) => serde_json::from_str(&text)
             .map_err(|e| Error::Invalid(format!("view definition: {e}")))?,
@@ -216,24 +294,66 @@ async fn property(db: &Db, dir: &Path, cmd: PropertyCmd) -> Result<Value> {
 async fn project(db: &Db, cmd: ProjectCmd) -> Result<Value> {
     match cmd {
         ProjectCmd::List => val(projects::list(db).await?),
-        ProjectCmd::Create { slug, name } => val(projects::create(db, &slug, &name, SRC).await?),
+        ProjectCmd::Create {
+            slug,
+            name,
+            icon,
+            color,
+        } => val(projects::create(db, &slug, &name, icon, color, SRC).await?),
     }
 }
 
 async fn cycle(db: &Db, cmd: CycleCmd) -> Result<Value> {
     match cmd {
         CycleCmd::List => val(cycles::list(db).await?),
-        CycleCmd::Create { start, end, name } => {
+        CycleCmd::Create {
+            start,
+            end,
+            name,
+            icon,
+            color,
+        } => {
             let (start, end) = (date(&start)?, date(&end)?);
-            val(cycles::create(db, name, start, end, SRC).await?)
+            val(cycles::create(
+                db,
+                name,
+                start,
+                end,
+                taskapp_core::palette::Look { icon, color },
+                SRC,
+            )
+            .await?)
         }
     }
+}
+
+async fn template(db: &Db, cmd: TemplateCmd) -> Result<Value> {
+    Ok(match cmd {
+        TemplateCmd::List => val(templates::list(db).await?)?,
+        TemplateCmd::Create { t } => val(templates::create(db, t.input()?, SRC).await?)?,
+        TemplateCmd::Update { id, t } => {
+            val(templates::update(db, TemplateId(id), t.input()?, SRC).await?)?
+        }
+        TemplateCmd::Delete { id } => {
+            templates::delete(db, TemplateId(id), SRC).await?;
+            json!({ "deleted": id })
+        }
+        TemplateCmd::Apply { id, title } => {
+            let overrides = NewIssue {
+                title: title.unwrap_or_default(),
+                ..NewIssue::default()
+            };
+            val(templates::apply(db, TemplateId(id), overrides, SRC).await?)?
+        }
+    })
 }
 
 async fn label(db: &Db, cmd: LabelCmd) -> Result<Value> {
     match cmd {
         LabelCmd::List => val(labels::list(db).await?),
-        LabelCmd::Create { name, color } => val(labels::create(db, &name, &color, SRC).await?),
+        LabelCmd::Create { name, color, icon } => {
+            val(labels::create(db, &name, &color, icon, SRC).await?)
+        }
     }
 }
 
@@ -368,4 +488,42 @@ fn select_options(values: &[String]) -> Vec<SelectOption> {
             color: "gray".to_string(),
         })
         .collect()
+}
+
+async fn import(db: &Db, cmd: ImportCmd) -> Result<Value> {
+    let (plan, apply) = match cmd {
+        ImportCmd::Csv { file, map, apply } => {
+            let mut mapping = std::collections::BTreeMap::new();
+            for pair in &map {
+                let (col, field) = pair.split_once('=').ok_or_else(|| {
+                    Error::Invalid(format!("--map {pair}: expected COLUMN=FIELD"))
+                })?;
+                mapping.insert(col.to_owned(), field.to_owned());
+            }
+            let text = std::fs::read_to_string(file)?;
+            let mapping = (!mapping.is_empty()).then_some(mapping);
+            (import::csv::plan(db, &text, mapping.as_ref()).await?, apply)
+        }
+        ImportCmd::Linear { apply } => {
+            let api = import::linear::CurlLinear::new(import::linear::Token::from_env()?);
+            (import::linear::plan(db, &api).await?, apply)
+        }
+    };
+    if apply {
+        let done = import::apply(db, &plan).await?;
+        return Ok(json!({ "plan": plan, "applied": done }));
+    }
+    val(plan)
+}
+
+async fn comment(db: &Db, cmd: CommentCmd) -> Result<Value> {
+    let CommentCmd::Add {
+        key,
+        body,
+        created_at,
+        migration,
+    } = cmd;
+    let id = issue_id(db, &key).await?;
+    let at = created_at.as_deref().map(timestamp).transpose()?;
+    val(comments::add_comment(db, id, &body, at, source(migration)).await?)
 }

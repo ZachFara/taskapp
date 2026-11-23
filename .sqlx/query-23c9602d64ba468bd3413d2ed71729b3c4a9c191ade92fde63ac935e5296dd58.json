@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issue_templates SET name = ?, slug = ?, icon = ?, color = ?, body = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "23c9602d64ba468bd3413d2ed71729b3c4a9c191ade92fde63ac935e5296dd58"
+}

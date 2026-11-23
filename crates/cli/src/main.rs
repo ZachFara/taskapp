@@ -7,10 +7,10 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
-use taskapp_core::{Db, Error, Result, backup};
+use taskapp_core::{Db, Error, Result, backup, history};
 
 #[derive(Parser)]
-#[command(name = "taskapp", about = "Manage taskapp issues from the terminal")]
+#[command(name = "taskapp", about = "Manage Cairn issues from the terminal")]
 struct Cli {
     /// Database file. Defaults to the app's database.
     #[arg(long, global = true, value_name = "PATH")]
@@ -49,10 +49,50 @@ enum Cmd {
     Relation(RelationCmd),
     #[command(subcommand)]
     Pin(PinCmd),
+    #[command(subcommand)]
+    Template(TemplateCmd),
+    /// Progress and velocity over time, rebuilt from history.
+    #[command(subcommand)]
+    Insights(InsightsCmd),
     /// Change history of an issue.
     History { key: String },
+    /// Undo the newest step, whatever made it (UI, agent or CLI).
+    Undo,
+    /// Redo the step most recently undone.
+    Redo,
     #[command(subcommand)]
     Backup(BackupCmd),
+    #[command(subcommand)]
+    Import(ImportCmd),
+    /// First-run setup: workspace name, issue key prefix (2 to 5 capital letters) and time zone.
+    Setup {
+        name: String,
+        key: String,
+        /// IANA time zone. Defaults to the zone already stored, then the system zone.
+        #[arg(long)]
+        tz: Option<String>,
+    },
+}
+
+/// Both sources print the plan and write nothing unless `--apply` is given.
+#[derive(Subcommand)]
+enum ImportCmd {
+    /// Import issues from a CSV file with a header row.
+    Csv {
+        file: PathBuf,
+        /// Column to field, repeatable: title, description, status, priority, project, labels,
+        /// `start_date`, `due_date`, `estimate` (minutes) or `property:<name>`. Guessed from headers when absent.
+        #[arg(long = "map", value_name = "COLUMN=FIELD")]
+        map: Vec<String>,
+        /// Write the plan instead of only showing it.
+        #[arg(long)]
+        apply: bool,
+    },
+    /// Import issues from Linear, with the token in `LINEAR_API_KEY`.
+    Linear {
+        #[arg(long)]
+        apply: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -91,6 +131,9 @@ enum IssueCmd {
         /// Estimate in minutes.
         #[arg(long)]
         estimate: Option<u32>,
+        /// Points: 0 or more, one decimal.
+        #[arg(long)]
+        points: Option<f64>,
         /// Original creation time, RFC 3339.
         #[arg(long)]
         created_at: Option<String>,
@@ -130,6 +173,12 @@ enum IssueCmd {
         /// Remove the due date.
         #[arg(long)]
         clear_due: bool,
+        /// Points: 0 or more, one decimal.
+        #[arg(long, conflicts_with = "clear_points")]
+        points: Option<f64>,
+        /// Remove the points.
+        #[arg(long)]
+        clear_points: bool,
     },
     Get {
         key: String,
@@ -144,6 +193,42 @@ enum IssueCmd {
     },
 }
 
+/// What a chart covers: exactly one of the three ids.
+#[derive(clap::Args)]
+struct ScopeArgs {
+    #[arg(long, group = "scope")]
+    project: Option<i64>,
+    #[arg(long, group = "scope")]
+    cycle: Option<i64>,
+    #[arg(long, group = "scope")]
+    view: Option<i64>,
+    /// points, count or time (minutes).
+    #[arg(long, default_value = "points")]
+    measure: String,
+}
+
+#[derive(Subcommand)]
+enum InsightsCmd {
+    /// Per day scope, started and completed; the range defaults to the scope's own dates.
+    Progress {
+        #[command(flatten)]
+        scope: ScopeArgs,
+        /// First day, YYYY-MM-DD.
+        #[arg(long)]
+        from: Option<String>,
+        /// Last day, YYYY-MM-DD.
+        #[arg(long)]
+        to: Option<String>,
+    },
+    /// Completed per cycle, or per week when there are no cycles.
+    Velocity {
+        #[command(flatten)]
+        scope: ScopeArgs,
+        #[arg(long, default_value_t = 6)]
+        periods: u32,
+    },
+}
+
 #[derive(Subcommand)]
 enum ViewCmd {
     /// Run a view: an ad hoc JSON definition, or a saved view by id.
@@ -152,6 +237,27 @@ enum ViewCmd {
         def: Option<String>,
         #[arg(long)]
         id: Option<i64>,
+    },
+    /// List view templates.
+    Templates,
+    /// Make a template from a saved view.
+    SaveAsTemplate {
+        view_id: i64,
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Make a saved view from a template.
+    FromTemplate {
+        template_id: i64,
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Put a view made from a template back to the template's definition.
+    Reset {
+        view_id: i64,
+    },
+    DeleteTemplate {
+        id: i64,
     },
 }
 
@@ -193,7 +299,14 @@ enum PropertyCmd {
 #[derive(Subcommand)]
 enum ProjectCmd {
     List,
-    Create { slug: String, name: String },
+    Create {
+        slug: String,
+        name: String,
+        #[arg(long)]
+        icon: Option<String>,
+        #[arg(long)]
+        color: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -208,13 +321,74 @@ enum CycleCmd {
         end: String,
         #[arg(long)]
         name: Option<String>,
+        /// Palette key or #rrggbb.
+        #[arg(long)]
+        color: Option<String>,
+        /// icon:<id> or emoji:<emoji>.
+        #[arg(long)]
+        icon: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+enum TemplateCmd {
+    List,
+    Create {
+        #[command(flatten)]
+        t: TemplateArgs,
+    },
+    Update {
+        id: i64,
+        #[command(flatten)]
+        t: TemplateArgs,
+    },
+    Delete {
+        id: i64,
+    },
+    /// Creates the issue and its sub-issues. TITLE is added to the template's title prefix.
+    Apply {
+        id: i64,
+        title: Option<String>,
+    },
+}
+
+#[derive(clap::Args)]
+struct TemplateArgs {
+    name: String,
+    /// Used as /slug in quick-add.
+    slug: String,
+    #[arg(long)]
+    icon: Option<String>,
+    #[arg(long)]
+    color: Option<String>,
+    /// JSON: `{"title_prefix", "fields": {...}, "sub_issues": [{"title", "fields"}]}`.
+    #[arg(long, default_value = "{}")]
+    body: String,
+}
+
+impl TemplateArgs {
+    fn input(self) -> Result<taskapp_core::TemplateInput> {
+        let body =
+            serde_json::from_str(&self.body).map_err(|e| Error::Invalid(format!("--body: {e}")))?;
+        Ok(taskapp_core::TemplateInput {
+            name: self.name,
+            slug: self.slug,
+            icon: self.icon,
+            color: self.color,
+            body,
+        })
+    }
 }
 
 #[derive(Subcommand)]
 enum LabelCmd {
     List,
-    Create { name: String, color: String },
+    Create {
+        name: String,
+        color: String,
+        #[arg(long)]
+        icon: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -291,7 +465,18 @@ async fn run(cli: Cli) -> Result<()> {
     std::fs::create_dir_all(&dir)?;
     let db = Db::open(&path).await?;
     // Same folder the MCP server and the app list and prune.
-    let value = commands::run(&db, &dir.join("backups"), cli.cmd).await?;
+    // One invocation is one undoable step, labelled with the command line minus the global flags.
+    let mut args = std::env::args().skip(1);
+    let mut words = Vec::new();
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--db" => drop(args.next()),
+            "--json" => {}
+            _ => words.push(a),
+        }
+    }
+    let label = words.join(" ");
+    let value = history::step(&label, commands::run(&db, &dir.join("backups"), cli.cmd)).await?;
     print_value(&value, cli.json);
     Ok(())
 }

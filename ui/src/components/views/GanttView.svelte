@@ -1,27 +1,47 @@
 <script lang="ts">
+  import FieldValue from '../display/FieldValue.svelte';
+  import { emptyCtx, loadCtx, type Ctx } from '../display/types';
   import { untrack } from 'svelte';
   import { api } from '../../lib/api';
-  import type { Issue, IssuePatch, Milestone, Project, Relation, Reschedule, SavedView, ViewDef } from '../../lib/bindings';
-  import { TICK_DAYS, ZOOMS, addDays, buildRows, dayDiff, range, shiftLocalDays, unscheduled, type Row, type Zoom } from '../../lib/gantt';
+  import type { Issue, IssuePatch, Milestone, Project, Relation, Reschedule, SavedView, Status, ViewDef } from '../../lib/bindings';
+  import { shortcutFor } from '../../lib/commands/registry';
+  import { TICK_DAYS, ZOOMS, addDays, buildRows, dayDiff, dragDates, localDay, range, saturdays, shiftLocalDays, tickLabel, unscheduled, zoomBy, type Row, type Zoom } from '../../lib/gantt';
+  import Button from '../../ui/Button.svelte';
+  import EmptyState from '../../ui/EmptyState.svelte';
+  import EntityIcon from '../../ui/EntityIcon.svelte';
+  import PageHeader from '../../ui/PageHeader.svelte';
+  import Skeleton from '../../ui/Skeleton.svelte';
+  import StatusGlyph from '../../ui/StatusGlyph.svelte';
+  import Tabs from '../../ui/Tabs.svelte';
+  import Toast from '../../ui/Toast.svelte';
 
-  // The projects route mounts this without a view, which selects projects mode.
-  let { view = null, mode = view ? 'issues' : 'projects' }: { view?: SavedView | null; mode?: 'issues' | 'projects' } = $props();
+  // The projects route mounts this without a view, which selects projects mode. `today` is a prop so tests are not clock-bound.
+  let {
+    view = null,
+    mode = view ? 'issues' : 'projects',
+    today = localDay(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone),
+    embedded = view !== null,
+  }: { view?: SavedView | null; mode?: 'issues' | 'projects'; today?: string; embedded?: boolean } = $props();
 
   const ALL: ViewDef = { filter: null, sorts: [], group_by: null, layout: 'Gantt', columns: [], include_archived: false };
+  // Must equal --row-h-compact: arrows and bar tops are computed in JS.
   const ROW = 28;
-  const today = new Date().toISOString().slice(0, 10);
 
-  let zoom = $state<Zoom>('Week');
+  let zoomId = $state('Week');
+  const zoom = $derived(zoomId as Zoom);
   let rows = $state<Row[]>([]);
   let lane = $state<Issue[]>([]);
   let relations = $state<Relation[]>([]);
   let allIssues = $state<Issue[]>([]);
   let projectList = $state<Project[]>([]);
+  let statusList = $state<Status[]>([]);
+  let loaded = $state(false);
   let toast = $state<{ text: string; apply: () => Promise<void> } | null>(null);
   let error = $state('');
-  let drag = $state<{ id: string; x0: number; dx: number } | null>(null);
+  let drag = $state<{ id: string; mode: 'move' | 'start' | 'end'; x0: number; dx: number } | null>(null);
   let dragIssue: number | null = null;
   let timeline: HTMLElement | undefined = $state();
+  let canvas: HTMLElement | undefined = $state();
 
   const dw = $derived(ZOOMS[zoom]);
   const span = $derived(range(rows, today));
@@ -29,10 +49,16 @@
   const xOf = (date: string) => dayDiff(span.start, date) * dw;
   const hasBars = $derived(rows.some((r) => r.start));
   const ticks = $derived(Array.from({ length: Math.ceil(days / TICK_DAYS[zoom]) }, (_, k) => addDays(span.start, k * TICK_DAYS[zoom])));
+  const weekends = $derived(zoom === 'Day' || zoom === 'Week' ? saturdays(span.start, days) : []);
+  const categoryOf = (i: Issue) => statusList.find((s) => s.id === i.status_id)?.category;
+  let ctx = $state.raw<Ctx>(emptyCtx);
+  // Up to 3 displayed fields follow the title; a view without its own list keeps the plain label.
+  const extra = $derived((view?.def.columns ?? []).slice(0, 3));
+  const projectOf = (id?: number) => projectList.find((p) => p.id === id);
 
   async function load() {
     const id = view?.id ?? null;
-    const [issues, projects] = await Promise.all([api.views.query(mode === 'issues' && view ? view.def : ALL), api.projects.list()]);
+    const [issues, projects, statuses] = await Promise.all([api.views.query(mode === 'issues' && view ? view.def : ALL), api.projects.list(), api.statuses.list()]);
     const live = mode === 'issues' && id !== null;
     const [bars, critical, rels] = live
       ? await Promise.all([
@@ -44,30 +70,49 @@
       : [[], [], []];
     const shown = mode === 'issues' ? new Set(issues.map((i) => i.project_id)) : new Set(projects.map((p) => p.id));
     const milestones: Milestone[] = (await Promise.all(projects.filter((p) => shown.has(p.id)).map((p) => api.projects.listMilestones(p.id)))).flat();
+    ctx = await loadCtx(view?.def);
     allIssues = issues;
     projectList = projects;
     // Each relation comes back from both of its issues.
     relations = [...new Map(rels.filter((r) => r.kind === 'Blocks').map((r) => [`${r.from}-${r.to}`, r])).values()];
-    lane = unscheduled(issues);
-    rows = buildRows({ mode, issues, bars, projects, milestones, critical });
+    statusList = statuses;
+    rows = buildRows({ mode, issues, bars, projects, milestones, critical, statuses });
+    lane = mode === 'issues' ? unscheduled(issues, rows) : [];
+    if (!loaded) {
+      loaded = true;
+      queueMicrotask(toToday);
+    }
   }
   $effect(() => {
     void [mode, view];
     untrack(load);
   });
 
+  // The Today flag sits on the axis; a label it would cover is left out (the tick line stays).
+  const flagCovers = (x: number) => x - xOf(today) > -56 && x - xOf(today) < 28;
+  const toToday = () => {
+    if (timeline) timeline.scrollLeft = Math.max(0, xOf(today) - timeline.clientWidth / 3);
+  };
+  // The commands (keys, palette) fire window events; this screen does the work.
+  $effect(() => {
+    const on: Record<string, () => void> = {
+      'timeline.zoom-in': () => (zoomId = zoomBy(zoom, 1)),
+      'timeline.zoom-out': () => (zoomId = zoomBy(zoom, -1)),
+      'timeline.today': toToday,
+    };
+    for (const [k, f] of Object.entries(on)) addEventListener(`command:${k}`, f);
+    return () => Object.entries(on).forEach(([k, f]) => removeEventListener(`command:${k}`, f));
+  });
+
   const key = (id: number) => allIssues.find((i) => i.id === id)?.key ?? `#${id}`;
   const rowOf = (issueId: number) => rows.findIndex((r) => r.issueId === issueId && r.start);
-  const shifted = (r: Row, d: number) => ({ start: addDays(r.start!, d), end: addDays(r.end!, d) });
 
   // Keeps a timed due's time and zone, and never invents a due for an estimate-derived bar.
   function patch(m: Reschedule): IssuePatch {
-    const old = allIssues.find((i) => i.id === m.issue_id);
-    const due = old?.due;
+    const due = allIssues.find((i) => i.id === m.issue_id)?.due;
     if (!due) return { start_date: m.start_date };
     if ('Date' in due) return { start_date: m.start_date, due: { Date: m.due_date } };
-    const day = due.DateTime.utc.slice(0, 10);
-    const d = dayDiff(old!.start_date ?? day, old!.start_date ? m.start_date : m.due_date);
+    const d = dayDiff(due.DateTime.utc.slice(0, 10), m.due_date);
     return { start_date: m.start_date, due: { DateTime: { ...due.DateTime, utc: shiftLocalDays(due.DateTime.utc, due.DateTime.tz, d) } } };
   }
   // All or nothing from the user's view: on any failure show it and reload what is really stored.
@@ -81,9 +126,10 @@
     await load();
   }
 
-  function down(e: MouseEvent, r: Row) {
+  function down(e: MouseEvent, r: Row, mode: 'move' | 'start' | 'end' = 'move') {
     if (r.kind === 'group' || r.kind === 'milestone' || r.kind === 'rollup') return;
-    drag = { id: r.id, x0: e.clientX, dx: 0 };
+    e.stopPropagation();
+    drag = { id: r.id, mode, x0: e.clientX, dx: 0 };
   }
   function move(e: MouseEvent) {
     if (drag) drag.dx = e.clientX - drag.x0;
@@ -93,9 +139,11 @@
     if (!drag) return;
     const r = rows.find((x) => x.id === drag!.id)!;
     const d = Math.round(drag.dx / dw);
+    const mode = drag.mode;
     drag = null;
     if (!d) return;
-    const to = shifted(r, d);
+    const to = dragDates({ start: r.start!, end: r.end! }, mode, d);
+    if (to.start === r.start && to.end === r.end) return;
     if (r.projectId !== undefined) {
       const p = projectList.find((x) => x.id === r.projectId)!;
       await api.projects.update({ ...p, start_date: to.start, target_date: to.end });
@@ -116,15 +164,17 @@
   async function drop(e: DragEvent) {
     e.preventDefault();
     if (dragIssue === null) return;
-    const x = e.clientX - (timeline?.getBoundingClientRect().left ?? 0) + (timeline?.scrollLeft ?? 0);
+    const x = e.clientX - (canvas?.getBoundingClientRect().left ?? 0);
     const id = dragIssue;
     dragIssue = null;
     await guarded(() => api.issues.update(id, { start_date: addDays(span.start, Math.floor(x / dw)) }));
   }
 
+  // The bar as drawn: while dragging it follows the pointer in whole days.
+  const live = (r: Row) => (drag?.id === r.id ? dragDates({ start: r.start!, end: r.end! }, drag.mode, Math.round(drag.dx / dw)) : { start: r.start!, end: r.end! });
   const barStyle = (r: Row) => {
-    const dx = drag?.id === r.id ? Math.round(drag.dx / dw) * dw : 0;
-    return `left:${xOf(r.start!) + dx}px;width:${Math.max((dayDiff(r.start!, r.end!) + 1) * dw, 4)}px`;
+    const s = live(r);
+    return `left:${xOf(s.start)}px;width:${Math.max((dayDiff(s.start, s.end) + 1) * dw, 4)}px`;
   };
   // Blocker's end to the blocked bar's start.
   const arrows = $derived(
@@ -136,106 +186,192 @@
       const x2 = xOf(rows[b].start!);
       const y1 = a * ROW + ROW / 2;
       const y2 = b * ROW + ROW / 2;
-      return [{ id: `${rel.from}-${rel.to}`, d: `M${x1},${y1} H${x1 + 6} V${y2} H${Math.max(x2, x1 + 6)}` }];
+      return [{ id: `${rel.from}-${rel.to}`, critical: !!(rows[a].critical && rows[b].critical), d: `M${x1},${y1} H${x1 + 6} V${y2} H${Math.max(x2, x1 + 6)}` }];
     }),
   );
 </script>
 
 <svelte:window onpointermove={move} onpointerup={up} />
 
-<section class="gantt" data-zoom={zoom}>
-  <header>
-    <strong>{mode === 'projects' ? 'Project timeline' : 'Gantt'}</strong>
-    <div role="group" aria-label="Zoom">
-      {#each Object.keys(ZOOMS) as z (z)}
-        <button type="button" aria-pressed={zoom === z} onclick={() => (zoom = z as Zoom)}>{z}</button>
-      {/each}
-    </div>
-  </header>
+{#snippet controls()}
+  <Button icon="target" tooltip={{ label: 'Go to today', shortcut: shortcutFor('timeline.today') }} onclick={toToday}>Today</Button>
+  <Tabs bind:value={zoomId} label="Zoom" tabs={Object.keys(ZOOMS).map((z) => ({ id: z, label: z }))} />
+{/snippet}
 
-  <div class="body">
-    <div class="chart">
-      {#if !hasBars}<p class="empty">Nothing scheduled in this view yet.</p>{/if}
-      <div class="labels">
-        <div class="axis-pad"></div>
-        {#each rows as r (r.id)}
-          <div class="label" class:group={r.kind === 'group'} style="padding-left:{8 + r.indent * 14}px">{r.label}</div>
-        {/each}
-      </div>
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="timeline" bind:this={timeline} data-testid="timeline" ondragover={(e) => e.preventDefault()} ondrop={drop}>
-        <div class="canvas" style="width:{days * dw}px;height:{ROW * (rows.length + 1)}px">
+<section class="gantt" data-timeline data-zoom={zoom}>
+  {#if embedded}
+    <div class="bar-controls">{@render controls()}</div>
+  {:else}
+    <PageHeader title="Project timeline" icon="icon:timeline" color="gray">
+      {#snippet actions()}{@render controls()}{/snippet}
+    </PageHeader>
+  {/if}
+
+  <div class="chart">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="timeline" bind:this={timeline} data-testid="timeline" ondragover={(e) => e.preventDefault()} ondrop={drop}>
+      <div class="sheet" style="--plane-w:{days * dw}px">
+        <div class="axisrow">
+          <div class="corner">{mode === 'projects' ? 'Projects' : 'Issues'}</div>
           <div class="axis">
-            {#each ticks as t (t)}<span style="left:{xOf(t)}px">{t.slice(5)}</span>{/each}
+            {#each ticks as t (t)}<span class="tick" style="left:{xOf(t)}px">{flagCovers(xOf(t)) ? '' : tickLabel(t, zoom)}</span>{/each}
+            <span class="today-chip" style="left:{xOf(today)}px">Today</span>
           </div>
-          <svg class="arrows" width={days * dw} height={ROW * rows.length}>
-            {#each arrows as a (a.id)}<path d={a.d} />{/each}
-          </svg>
-          {#each rows as r, n (r.id)}
-            {#if r.start}
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div
-                class="bar {r.kind}"
-                class:critical={r.critical}
-                class:estimated={r.estimated}
-                data-row={r.id}
-                style="top:{(n + 1) * ROW + 5}px;{r.kind === 'milestone' ? `left:${xOf(r.start)}px` : barStyle(r)}"
-                onpointerdown={(e) => down(e, r)}
-              ></div>
-            {/if}
+        </div>
+
+        <div class="lines" role="list" aria-label="Issues">
+          <!-- One element per line holds its label and its bar, so they cannot drift apart. -->
+          <div class="canvas" bind:this={canvas} style="width:{days * dw}px" aria-hidden="true">
+            {#each weekends as k (k)}<div class="weekend" style="left:{k * dw}px;width:{2 * dw}px"></div>{/each}
+            <div class="today" data-testid="today" style="left:{xOf(today)}px"></div>
+            <svg class="arrows" width={days * dw} height={ROW * rows.length}>
+              <defs>
+                <marker id="cx-arrow" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="currentColor" /></marker>
+              </defs>
+              {#each arrows as a (a.id)}<path class:critical={a.critical} d={a.d} marker-end="url(#cx-arrow)" />{/each}
+            </svg>
+          </div>
+
+          {#if !loaded}
+            {#each [0, 1, 2, 3, 4, 5] as n (n)}<div class="line"><div class="label"><Skeleton width="{70 - n * 6}%" height="var(--s-5)" /></div></div>{/each}
+          {/if}
+          {#each rows as r (r.id)}
+            {@const p = projectOf(r.projectId)}
+            <div class="line" data-kind={r.kind} role="listitem" data-issue={r.issueId}>
+              <div class="label" data-kind={r.kind} data-label={r.id} style="padding-left:calc(var(--s-6) + {r.indent} * var(--s-7))">
+                {#if r.kind === 'group' && p}<EntityIcon icon={p.icon} color={p.color} size={14} />
+                {:else if r.category}<StatusGlyph category={r.category} size={14} />
+                {:else if r.kind === 'milestone'}<span class="stone" aria-hidden="true"></span>{/if}
+                {#if r.key}<span class="k">{r.key}</span>{/if}
+                <span class="text">{r.title ?? r.label}</span>
+                {#if r.issueId !== undefined && allIssues.find((i) => i.id === r.issueId)}
+                  {@const iss = allIssues.find((i) => i.id === r.issueId)!}
+                  {#each extra as f (f.Property ?? f.Fixed)}<span class="fv"><FieldValue field={f} issue={iss} {ctx} /></span>{/each}
+                {/if}
+              </div>
+              <div class="cell">
+                {#if r.start}
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <div
+                    class="bar {r.kind}"
+                    class:critical={r.critical}
+                    class:estimated={r.estimated}
+                    class:dragging={drag?.id === r.id}
+                    data-row={r.id}
+                    data-category={r.category}
+                    style={r.kind === 'milestone' ? `left:${xOf(r.start)}px` : barStyle(r)}
+                    onpointerdown={(e) => down(e, r)}
+                  >
+                    {#if r.kind === 'bar'}
+                      <span class="handle start" data-handle="start" onpointerdown={(e) => down(e, r, 'start')}></span>
+                      {#if !r.estimated}<span class="handle end" data-handle="end" onpointerdown={(e) => down(e, r, 'end')}></span>{/if}
+                    {/if}
+                  </div>
+                {/if}
+              </div>
+            </div>
           {/each}
+
+          {#if lane.length}
+            <div class="line band unscheduled" role="listitem">
+              <div class="label" data-kind="group"><span class="text">Unscheduled</span><span class="count">{lane.length}</span></div>
+              <div class="cell"></div>
+            </div>
+            {#each lane as i (i.id)}
+              <div class="line todo" role="listitem" draggable="true" data-issue={i.id} ondragstart={() => (dragIssue = i.id)}>
+                <div class="label" data-label="un-{i.id}">
+                  {#if categoryOf(i)}<StatusGlyph category={categoryOf(i)!} size={14} />{/if}
+                  <span class="k">{i.key}</span><span class="text">{i.title}</span>
+                </div>
+                <div class="cell"><span class="slot">drag to schedule</span></div>
+              </div>
+            {/each}
+          {/if}
         </div>
       </div>
     </div>
-
-    <aside class="lane" aria-label="Unscheduled">
-      <h3>Unscheduled</h3>
-      {#each lane as i (i.id)}
-        <div class="item" draggable="true" data-issue={i.id} ondragstart={() => (dragIssue = i.id)} role="listitem">{i.key} {i.title}</div>
-      {:else}
-        <p class="muted">Nothing to schedule.</p>
-      {/each}
-    </aside>
+    {#if loaded && !hasBars}
+      <div class="empty-layer"><EmptyState title="Nothing scheduled" hint="Give issues a start date and a due date, or drag one from the Unscheduled band onto a day." /></div>
+    {/if}
   </div>
 
   {#if error}<p class="error" role="alert">{error}</p>{/if}
 
   {#if toast}
-    <div class="toast" role="alertdialog">
-      <span>{toast.text}</span>
-      <button type="button" onclick={toast.apply}>Apply</button>
-      <button type="button" onclick={() => (toast = null)}>Cancel</button>
+    <div class="toast-slot">
+      <Toast>
+        {toast.text}
+        {#snippet action()}
+          <Button variant="primary" onclick={toast!.apply}>Apply</Button>
+          <Button onclick={() => (toast = null)}>Cancel</Button>
+        {/snippet}
+      </Toast>
     </div>
   {/if}
 </section>
 
 <style>
-  .gantt { display: flex; flex-direction: column; height: 100vh; font: 13px system-ui, sans-serif; color: #222; }
-  header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid #ddd; }
-  header button { border: 1px solid #ccc; background: #fff; padding: 2px 8px; }
-  header button[aria-pressed='true'] { background: #222; color: #fff; }
-  .body { display: flex; flex: 1; min-height: 0; }
-  .chart { display: flex; flex: 1; min-width: 0; position: relative; }
-  .empty { position: absolute; top: 48px; left: 220px; color: #888; }
-  .labels { width: 200px; flex: none; border-right: 1px solid #ddd; }
-  .axis-pad { height: 28px; }
-  .label { height: 28px; line-height: 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .label.group { font-weight: 600; }
+  .gantt { --left: 320px; display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--sheet); color: var(--ink); }
+  .bar-controls { flex: none; height: var(--topbar-h); display: flex; align-items: center; justify-content: flex-end; gap: var(--s-4); padding: 0 var(--s-7); border-bottom: 1px solid var(--border); }
+  .chart { flex: 1; min-width: 0; min-height: 0; position: relative; display: flex; }
   .timeline { flex: 1; overflow: auto; }
-  .canvas { position: relative; }
-  .axis { position: relative; height: 28px; border-bottom: 1px solid #eee; }
-  .axis span { position: absolute; top: 6px; font-size: 11px; color: #888; }
-  .arrows { position: absolute; top: 28px; left: 0; pointer-events: none; }
-  .arrows path { fill: none; stroke: #888; stroke-width: 1; }
-  .bar { position: absolute; height: 18px; border-radius: 4px; background: #6b7cff; cursor: grab; }
-  .bar.rollup { background: #444; height: 8px; margin-top: 5px; cursor: default; }
-  .bar.estimated { opacity: 0.6; }
-  .bar.critical { background: #d9534f; }
-  .bar.milestone { width: 12px; height: 12px; margin-top: 3px; background: #e5a50a; transform: rotate(45deg); cursor: default; }
-  .lane { width: 220px; flex: none; border-left: 1px solid #ddd; padding: 8px; overflow: auto; }
-  .lane h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; color: #666; }
-  .item { padding: 4px 6px; border: 1px solid #e2e2e2; border-radius: 4px; margin-bottom: 4px; cursor: grab; }
-  .error { margin: 0; padding: 6px 12px; color: #b00020; }
-  .muted { color: #888; }
-  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #222; color: #fff; padding: 8px 12px; border-radius: 6px; display: flex; gap: 8px; align-items: center; }
+  .sheet { width: max-content; min-width: 100%; }
+
+  .axisrow { position: sticky; top: 0; z-index: calc(var(--z-sticky) + 2); display: grid; grid-template-columns: var(--left) var(--plane-w); height: var(--row-h); }
+  .corner, .axis { height: var(--row-h); background: var(--frame); color: var(--frame-muted); border-bottom: 1px solid var(--frame-inset); }
+  .corner { position: sticky; left: 0; z-index: 1; display: flex; align-items: center; padding: 0 var(--s-7); font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+  .axis { position: relative; overflow: hidden; }
+  .tick { position: absolute; top: 0; height: 100%; display: flex; align-items: center; padding-left: var(--s-3); border-left: 1px solid var(--frame-raised); font-size: var(--fs-xs); font-weight: 500; white-space: nowrap; }
+  .today-chip { position: absolute; bottom: 0; transform: translateX(-50%); padding: 0 var(--s-3); background: var(--signal); color: var(--signal-ink); font-size: var(--fs-xs); font-weight: 700; border-radius: var(--r-sm) var(--r-sm) 0 0; }
+
+  .lines { position: relative; }
+  .line { position: relative; display: grid; grid-template-columns: var(--left) var(--plane-w); height: var(--row-h-compact); border-bottom: 1px solid var(--border); }
+  .line[data-kind='group'] { background: var(--band-1); }
+  .line.band { background: var(--band-2); }
+  .line.todo { cursor: grab; }
+  .line.todo:hover { background: var(--active); }
+  .label { position: sticky; left: 0; z-index: calc(var(--z-sticky) + 1); display: flex; align-items: center; gap: var(--s-4); padding: 0 var(--s-5) 0 var(--s-6); white-space: nowrap; overflow: hidden; background: var(--sheet); border-right: 1px solid var(--border); }
+  .line[data-kind='group'] .label, .line.band .label { background: inherit; color: var(--band-ink); font-weight: 700; }
+  .line.band .label { text-transform: uppercase; font-size: var(--fs-sm); letter-spacing: 0.04em; }
+  .line.todo:hover .label { background: var(--active); }
+  .label .text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .label .fv { flex: none; max-width: 96px; display: inline-flex; color: var(--muted); font-size: var(--fs-sm); }
+  .label .k { flex: none; color: var(--muted); font-weight: 600; font-size: var(--fs-sm); }
+  .label[data-kind='milestone'] { color: var(--muted); }
+  .label[data-kind='rollup'] { font-weight: 600; }
+  .count { color: var(--band-count); }
+  .stone { width: var(--s-5); height: var(--s-5); background: var(--stone); transform: rotate(45deg); flex: none; }
+  .cell { position: relative; }
+  .slot { position: absolute; left: var(--s-6); top: var(--s-2); bottom: var(--s-2); display: flex; align-items: center; padding: 0 var(--s-5); border: 1.5px dashed var(--control); border-radius: var(--r-sm); color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+
+  .canvas { position: absolute; top: 0; bottom: 0; left: var(--left); pointer-events: none; }
+  .weekend { position: absolute; top: 0; bottom: 0; background: var(--raised); }
+  .today { position: absolute; top: 0; bottom: 0; width: var(--s-1); margin-left: calc(var(--s-1) / -2); background: var(--signal); z-index: 2; }
+  .arrows { position: absolute; top: 0; left: 0; color: var(--muted); z-index: 3; }
+  .arrows path { fill: none; stroke: currentColor; stroke-width: 1.5; }
+  .arrows path.critical { color: var(--signal); }
+  .arrows :global(marker path) { fill: currentColor; stroke: none; }
+
+  .bar { position: absolute; top: var(--s-2); z-index: 1; height: calc(var(--row-h-compact) - 2 * var(--s-2) - 1px); border-radius: var(--r-sm); background: var(--control); color: var(--ink); cursor: grab; transition: filter var(--dur-1) var(--ease); }
+  .bar:hover { filter: brightness(0.94); }
+  .bar.dragging { cursor: grabbing; outline: 2px solid var(--focus); }
+  .bar[data-category='Backlog'] { background: var(--sheet); outline: 1.5px dashed var(--control); outline-offset: -1.5px; }
+  .bar[data-category='Unstarted'] { background: var(--control); }
+  .bar[data-category='Started'] { background: var(--accent); }
+  .bar[data-category='Completed'] { background: var(--stone); }
+  .bar[data-category='Canceled'] { background: var(--border); opacity: 0.7; }
+  /* An estimated bar keeps its category colour; thin sheet-coloured stripes mark it, so a one-day bar still reads. */
+  .bar.estimated { background-image: repeating-linear-gradient(135deg, transparent 0 var(--s-3), var(--sheet) var(--s-3) calc(var(--s-3) + 1px)); outline: 1px solid var(--control); outline-offset: -1px; }
+  .bar.critical { background: var(--signal); }
+  .bar.rollup { height: var(--s-4); top: var(--s-6); background: var(--ink); cursor: default; border-radius: 0; }
+  .bar.group { height: var(--s-2); top: calc(var(--row-h-compact) - var(--s-4)); background: var(--band-count); cursor: default; border-radius: 0; }
+  .bar.milestone { width: var(--s-6); height: var(--s-6); top: var(--s-4); margin-left: calc(var(--s-6) / -2); background: var(--stone); transform: rotate(45deg); cursor: default; border-radius: var(--r-sm); }
+  .handle { position: absolute; top: 0; bottom: 0; width: var(--s-3); cursor: ew-resize; }
+  .handle.start { left: 0; }
+  .handle.end { right: 0; }
+  .handle:hover { background: var(--overlay); }
+
+  .empty-layer { position: absolute; inset: var(--row-h) 0 0 var(--left); display: grid; place-items: center; pointer-events: none; }
+  .error { margin: 0; padding: var(--s-4) var(--s-7); background: var(--signal); color: var(--signal-ink); font-weight: 600; }
+  .toast-slot { position: fixed; bottom: var(--s-8); left: 50%; transform: translateX(-50%); z-index: var(--z-toast); }
 </style>

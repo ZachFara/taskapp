@@ -1,0 +1,221 @@
+/* Design tokens, direction "Survey map". Components reference ROLE tokens only (never a hex, never a
+   palette step directly except through EntityIcon and Pill). A theme is one block of values: copy the
+   [data-theme="light"] block, give it a new selector, change the values. Keep the two dark blocks
+   identical (a test enforces it). The 12 --c-* keys are the backend palette keys (crates/core/src/palette.rs). */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --frame: #3a5a2a;
+  --frame-raised: #4a6d3a;
+  --frame-inset: #2d4721;
+  --frame-ink: #f0f5e4;
+  --frame-muted: #bccdaa;
+  --sheet: #f5f8f8;
+  --raised: #ecf1f0;
+  --active: #e0e8e4;
+  --selection: #dde8cf;
+  --card: #fbfcfc;
+  --border: #dde5e1;
+  --control: #b2beb7;
+  --ink: #121c16;
+  --muted: #55625a;
+  --accent: #3a5a2a;
+  --accent-ink: #f0f5e4;
+  --stone: #2f4a22;
+  --signal: #c8390f;
+  --signal-ink: #ffffff;
+  --positive: #2e7d32;
+  --warning: #9a5b00;
+  --focus: #1b64c4;
+  --focus-frame: #f0f5e4;
+  --band-1: #e4ebd8;
+  --band-2: #d3dfc0;
+  --band-3: #bfd0a4;
+  --band-4: #a8be86;
+  --band-ink: #14231a;
+  --band-count: #2b3f27;
+  --tip-bg: #121c16;
+  --tip-ink: #f0f5e4;
+  --overlay: rgb(14 26 17 / 0.38);
+  --shadow-float: 0 8px 28px rgb(0 0 0 / 0.22), 0 1px 3px rgb(0 0 0 / 0.12);
+  --c-gray: #6e7c75;
+  --c-red: #dd3c31;
+  --c-orange: #c55616;
+  --c-amber: #a56d0d;
+  --c-yellow: #8e780b;
+  --c-green: #2e8a43;
+  --c-teal: #22877d;
+  --c-cyan: #1c829c;
+  --c-blue: #2b76da;
+  --c-indigo: #6d6dd5;
+  --c-purple: #985ccc;
+  --c-pink: #d2418a;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --frame: #0e1a11;
+  --frame-raised: #1b2d1f;
+  --frame-inset: #08120a;
+  --frame-ink: #dfead9;
+  --frame-muted: #8fa593;
+  --sheet: #17231b;
+  --raised: #1d2b21;
+  --active: #263829;
+  --selection: #2a3d2a;
+  --card: #1c2a20;
+  --border: #2a3b2f;
+  --control: #46604b;
+  --ink: #e4eee3;
+  --muted: #96a99a;
+  --accent: #7fb35c;
+  --accent-ink: #0b150e;
+  --stone: #a9d68a;
+  --signal: #ff6b3d;
+  --signal-ink: #1a0a04;
+  --positive: #6fcf7a;
+  --warning: #f0b445;
+  --focus: #7cb6ff;
+  --focus-frame: #dfead9;
+  --band-1: #1f2e23;
+  --band-2: #283b2c;
+  --band-3: #324a37;
+  --band-4: #3e5c43;
+  --band-ink: #e4eee3;
+  --band-count: #cfdfd1;
+  --tip-bg: #e4eee3;
+  --tip-ink: #0e1a11;
+  --overlay: rgb(3 8 4 / 0.6);
+  --shadow-float: 0 8px 28px rgb(0 0 0 / 0.55), 0 1px 3px rgb(0 0 0 / 0.4);
+  --c-gray: #a0aba6;
+  --c-red: #f38e86;
+  --c-orange: #f68d51;
+  --c-amber: #ea9606;
+  --c-yellow: #c7a705;
+  --c-green: #30c051;
+  --c-teal: #22bfaf;
+  --c-cyan: #19b9e1;
+  --c-blue: #75aaf0;
+  --c-indigo: #a2a2eb;
+  --c-purple: #c298e7;
+  --c-pink: #ec89ba;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --frame: #0e1a11;
+    --frame-raised: #1b2d1f;
+    --frame-inset: #08120a;
+    --frame-ink: #dfead9;
+    --frame-muted: #8fa593;
+    --sheet: #17231b;
+    --raised: #1d2b21;
+    --active: #263829;
+    --selection: #2a3d2a;
+    --card: #1c2a20;
+    --border: #2a3b2f;
+    --control: #46604b;
+    --ink: #e4eee3;
+    --muted: #96a99a;
+    --accent: #7fb35c;
+    --accent-ink: #0b150e;
+    --stone: #a9d68a;
+    --signal: #ff6b3d;
+    --signal-ink: #1a0a04;
+    --positive: #6fcf7a;
+    --warning: #f0b445;
+    --focus: #7cb6ff;
+    --focus-frame: #dfead9;
+    --band-1: #1f2e23;
+    --band-2: #283b2c;
+    --band-3: #324a37;
+    --band-4: #3e5c43;
+    --band-ink: #e4eee3;
+    --band-count: #cfdfd1;
+    --tip-bg: #e4eee3;
+    --tip-ink: #0e1a11;
+    --overlay: rgb(3 8 4 / 0.6);
+    --shadow-float: 0 8px 28px rgb(0 0 0 / 0.55), 0 1px 3px rgb(0 0 0 / 0.4);
+    --c-gray: #a0aba6;
+    --c-red: #f38e86;
+    --c-orange: #f68d51;
+    --c-amber: #ea9606;
+    --c-yellow: #c7a705;
+    --c-green: #30c051;
+    --c-teal: #22bfaf;
+    --c-cyan: #19b9e1;
+    --c-blue: #75aaf0;
+    --c-indigo: #a2a2eb;
+    --c-purple: #c298e7;
+    --c-pink: #ec89ba;
+  }
+}
+
+/* Theme-independent scales. */
+:root {
+  --font: "Bricolage Grotesque", system-ui, sans-serif;
+
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+  --fs-title: 20px;
+  --fs-display: 28px;
+  --fs-wordmark: 19px;
+  --lh-tight: 1.2;
+  --lh-body: 1.4;
+
+  --s-1: 2px;
+  --s-2: 4px;
+  --s-3: 6px;
+  --s-4: 8px;
+  --s-5: 10px;
+  --s-6: 12px;
+  --s-7: 16px;
+  --s-8: 24px;
+  --s-9: 32px;
+  --s-10: 48px;
+
+  --r-sm: 3px;
+  --r-ctl: 4px;
+  --r-pop: 6px;
+  --r-sheet: 16px;
+  --r-round: 999px;
+
+  --dur-1: 80ms;
+  --dur-2: 140ms;
+  --dur-3: 220ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --delay-tooltip: 500ms;
+  --dur-spin: 900ms;
+  --dur-shimmer: 1400ms;
+
+  --z-sticky: 10;
+  --z-popover: 40;
+  --z-dialog: 50;
+  --z-toast: 60;
+  --z-tooltip: 70;
+
+  --icon: 16px;
+  --row-h: 32px;
+  --row-h-compact: 28px;
+  --band-h: 30px;
+  --ctl-h: 28px;
+  --ctl-h-sm: 24px;
+  --topbar-h: 48px;
+  --sidebar-w: 232px;
+  --panel-w: 380px;
+  --dialog-sm: 480px;
+  --dialog-md: 640px;
+  --dialog-lg: 880px;
+  --sheet-inset: 8px;
+}
+
+@media (max-width: 1279px) {
+  :root { --panel-w: 340px; }
+}
+@media (max-width: 1100px) {
+  :root { --panel-w: 300px; --sidebar-w: 200px; }
+}

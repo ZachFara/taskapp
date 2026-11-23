@@ -1,4 +1,4 @@
-use taskapp_core::{Db, Error, PinId, PinKind, pins};
+use taskapp_core::{Db, Error, PinId, PinKind, history, pins};
 
 type R = Result<(), Box<dyn std::error::Error>>;
 
@@ -57,11 +57,11 @@ async fn resolved_labels_and_routes() -> R {
         .fetch_one(&db.pool)
         .await?;
 
-    pins::pin(&db, PinKind::Issue, "ZF-3", None).await?;
+    pins::pin(&db, PinKind::Issue, "ABC-3", None).await?;
     pins::pin(&db, PinKind::Project, "home", None).await?;
     pins::pin(&db, PinKind::View, &view.to_string(), None).await?;
     pins::pin(&db, PinKind::Cycle, "2", None).await?;
-    pins::pin(&db, PinKind::Note, "obsidian://open?vault=v&file=a", None).await?;
+    pins::pin(&db, PinKind::Note, "obsidian://open?file=a", None).await?;
     pins::pin(&db, PinKind::Url, "https://x.example", Some("Docs".into())).await?;
 
     let resolved = pins::list_resolved(&db).await?;
@@ -72,7 +72,7 @@ async fn resolved_labels_and_routes() -> R {
     assert_eq!(
         got,
         vec![
-            ("Fix lease", "/issue/ZF-3", "ZF-3"),
+            ("Fix lease", "/issue/ABC-3", "ABC-3"),
             ("Home", "/project/home", "home"),
             (
                 view_name.as_str(),
@@ -81,9 +81,9 @@ async fn resolved_labels_and_routes() -> R {
             ),
             ("Cycle 2", "/cycles#2", "2"),
             (
-                "obsidian://open?vault=v&file=a",
-                "obsidian://open?vault=v&file=a",
-                "obsidian://open?vault=v&file=a"
+                "obsidian://open?file=a",
+                "obsidian://open?file=a",
+                "obsidian://open?file=a"
             ),
             ("Docs", "https://x.example", "https://x.example"),
         ]
@@ -97,8 +97,8 @@ async fn archived_issue_pin_kept_and_flagged() -> R {
     let db = Db::open_in_memory().await?;
     add_issue(&db, 4, "Old work", true).await?;
     add_issue(&db, 5, "Live work", false).await?;
-    pins::pin(&db, PinKind::Issue, "ZF-4", None).await?;
-    pins::pin(&db, PinKind::Issue, "ZF-5", None).await?;
+    pins::pin(&db, PinKind::Issue, "ABC-4", None).await?;
+    pins::pin(&db, PinKind::Issue, "ABC-5", None).await?;
 
     let resolved = pins::list_resolved(&db).await?;
     assert_eq!(resolved.len(), 2);
@@ -112,8 +112,8 @@ async fn archived_issue_pin_kept_and_flagged() -> R {
 async fn deleted_target_pin_removed() -> R {
     let db = Db::open_in_memory().await?;
     add_issue(&db, 9, "Soon gone", false).await?;
-    pins::pin(&db, PinKind::Issue, "ZF-9", None).await?;
-    pins::pin(&db, PinKind::Issue, "ZF-99", None).await?;
+    pins::pin(&db, PinKind::Issue, "ABC-9", None).await?;
+    pins::pin(&db, PinKind::Issue, "ABC-99", None).await?;
     sqlx::query("DELETE FROM issues WHERE number = 9")
         .execute(&db.pool)
         .await?;
@@ -192,7 +192,7 @@ async fn url_scheme_must_be_http_or_obsidian() -> R {
         );
     }
     pins::pin(&db, PinKind::Url, "HTTPS://x.example", None).await?;
-    pins::pin(&db, PinKind::Url, "obsidian://open?vault=v", None).await?;
+    pins::pin(&db, PinKind::Url, "obsidian://open?file=a", None).await?;
     assert_eq!(pins::list_resolved(&db).await?.len(), 2);
     Ok(())
 }
@@ -224,10 +224,10 @@ async fn unpin_missing_is_not_found() -> R {
 async fn pins_survive_project_slug_rename_and_prefix_change() -> R {
     use taskapp_core::{ChangeSource, projects, settings};
     let db = Db::open_in_memory().await?;
-    let mut p = projects::create(&db, "home", "Home", ChangeSource::Ui).await?;
+    let mut p = projects::create(&db, "home", "Home", None, None, ChangeSource::Ui).await?;
     add_issue(&db, 1, "Fix roof", false).await?;
     pins::pin(&db, PinKind::Project, "home", None).await?;
-    pins::pin(&db, PinKind::Issue, "ZF-1", None).await?;
+    pins::pin(&db, PinKind::Issue, "ABC-1", None).await?;
     p.slug = "house".into();
     projects::update(&db, p, ChangeSource::Ui).await?;
     settings::set(&db, "issue_prefix", &"AB").await?;
@@ -237,5 +237,72 @@ async fn pins_survive_project_slug_rename_and_prefix_change() -> R {
         .map(|p| p.route)
         .collect();
     assert_eq!(routes, ["/project/house", "/issue/AB-1"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn reorder_undo_restores_positions() -> R {
+    let db = Db::open_in_memory().await?;
+    let a = pins::pin(&db, PinKind::Url, "https://a.example", None).await?;
+    let b = pins::pin(&db, PinKind::Url, "https://b.example", None).await?;
+    history::step("Reorder", pins::reorder(&db, &[b.id, a.id])).await?;
+    taskapp_core::undo::undo(&db).await?;
+    let ids: Vec<_> = pins::list_resolved(&db)
+        .await?
+        .into_iter()
+        .map(|r| r.pin.id)
+        .collect();
+    assert_eq!(ids, vec![a.id, b.id]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn set_pins_and_unpins_many_targets_in_one_undo_step() -> R {
+    let db = Db::open_in_memory().await?;
+    let urls = [
+        "https://a.example".to_owned(),
+        "https://b.example".to_owned(),
+    ];
+    history::step("Pin", pins::set(&db, PinKind::Url, &urls, true)).await?;
+    assert_eq!(pins::list_resolved(&db).await?.len(), 2);
+    // Pinning again is a no-op, not a second pin.
+    pins::set(&db, PinKind::Url, &urls, true).await?;
+    assert_eq!(pins::list_resolved(&db).await?.len(), 2);
+
+    history::step("Unpin", pins::set(&db, PinKind::Url, &urls, false)).await?;
+    assert_eq!(pins::list_resolved(&db).await?.len(), 0);
+    taskapp_core::undo::undo(&db).await?;
+    assert_eq!(pins::list_resolved(&db).await?.len(), 2);
+    taskapp_core::undo::undo(&db).await?;
+    assert_eq!(pins::list_resolved(&db).await?.len(), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn set_with_one_invalid_target_changes_nothing() -> R {
+    let db = Db::open_in_memory().await?;
+    let mixed = ["https://a.example".to_owned(), "ftp://nope".to_owned()];
+    assert!(matches!(
+        pins::set(&db, PinKind::Url, &mixed, true).await,
+        Err(Error::Invalid(_))
+    ));
+    assert_eq!(pins::list_resolved(&db).await?.len(), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_pin_records_the_source_that_made_it() -> R {
+    let db = Db::open_in_memory().await?;
+    let p = pins::pin_as(
+        &db,
+        taskapp_core::ChangeSource::Agent,
+        PinKind::Url,
+        "https://a.example",
+        None,
+    )
+    .await?;
+    let log = history::list_for(&db, "row:pins", &p.id.0.to_string()).await?;
+    assert_eq!(log.len(), 1);
+    assert_eq!(log[0].source, taskapp_core::ChangeSource::Agent);
     Ok(())
 }

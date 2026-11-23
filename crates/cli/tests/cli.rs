@@ -43,35 +43,47 @@ fn add_quickadd_prints_key() {
         String::from_utf8_lossy(&out.stderr)
     );
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("ZF-1"), "stdout was: {stdout}");
+    assert!(stdout.contains("ABC-1"), "stdout was: {stdout}");
 }
 
 #[test]
 fn json_output_parses() {
     let (_d, db) = fresh();
     run(&db, &["add", "Write report"]);
-    let issue = run_json(&db, &["issue", "get", "ZF-1"]);
-    assert_eq!(issue["key"], "ZF-1");
+    let issue = run_json(&db, &["issue", "get", "ABC-1"]);
+    assert_eq!(issue["key"], "ABC-1");
 }
 
 #[test]
 fn issue_update_by_key() {
     let (_d, db) = fresh();
     run(&db, &["add", "Write report"]);
-    let out = run(&db, &["issue", "update", "ZF-1", "--priority", "2"]);
+    let out = run(&db, &["issue", "update", "ABC-1", "--priority", "2"]);
     assert!(
         out.status.success(),
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let issue = run_json(&db, &["issue", "get", "ZF-1"]);
+    let issue = run_json(&db, &["issue", "get", "ABC-1"]);
     assert_eq!(issue["priority"], 2);
+}
+
+#[test]
+fn undo_and_redo_revert_a_cli_edit() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Write report"]);
+    run(&db, &["issue", "update", "ABC-1", "--priority", "2"]);
+    let s = run_json(&db, &["undo"]);
+    assert_eq!(s["redo"], "issue update ABC-1 --priority 2");
+    assert_eq!(run_json(&db, &["issue", "get", "ABC-1"])["priority"], 0);
+    run_json(&db, &["redo"]);
+    assert_eq!(run_json(&db, &["issue", "get", "ABC-1"])["priority"], 2);
 }
 
 #[test]
 fn unknown_key_exits_nonzero_with_message() {
     let (_d, db) = fresh();
-    let out = run(&db, &["issue", "get", "ZF-999"]);
+    let out = run(&db, &["issue", "get", "ABC-999"]);
     assert_ne!(out.status.code(), Some(0));
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("not found"), "stderr was: {stderr}");
@@ -107,7 +119,7 @@ fn add_empty_text_exits_nonzero() {
 #[test]
 fn json_error_is_json_on_stderr() {
     let (_d, db) = fresh();
-    let out = run(&db, &["--json", "issue", "get", "ZF-999"]);
+    let out = run(&db, &["--json", "issue", "get", "ABC-999"]);
     assert_ne!(out.status.code(), Some(0));
     let err: Value = serde_json::from_slice(&out.stderr).expect("stderr is JSON");
     assert_eq!(err["kind"], "NotFound");
@@ -170,7 +182,7 @@ fn backup_restore_replaces_db() {
     let (_dst, dst_db) = fresh();
     run(&dst_db, &["add", "Only one"]);
     assert_ne!(
-        run(&dst_db, &["issue", "get", "ZF-3"]).status.code(),
+        run(&dst_db, &["issue", "get", "ABC-3"]).status.code(),
         Some(0)
     );
 
@@ -188,8 +200,8 @@ fn backup_restore_replaces_db() {
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let issue = run_json(&dst_db, &["issue", "get", "ZF-3"]);
-    assert_eq!(issue["key"], "ZF-3");
+    let issue = run_json(&dst_db, &["issue", "get", "ABC-3"]);
+    assert_eq!(issue["key"], "ABC-3");
 }
 
 #[test]
@@ -251,7 +263,7 @@ fn history_sources(db: &Path, key: &str) -> Vec<Value> {
 fn cli_writes_record_cli_source() {
     let (_d, db) = fresh();
     run(&db, &["add", "Write report"]);
-    let sources = history_sources(&db, "ZF-1");
+    let sources = history_sources(&db, "ABC-1");
     assert_eq!(sources[0], "Cli");
     assert!(sources.iter().all(|s| s == "Cli"), "{sources:?}");
 }
@@ -325,7 +337,7 @@ fn issue_create_accepts_migration_fields() {
             "--property",
             "linear_id=ENG-7",
             "--parent",
-            "ZF-1",
+            "ABC-1",
             "--cycle",
             &cycle_id,
             "--label",
@@ -339,7 +351,7 @@ fn issue_create_accepts_migration_fields() {
     assert_eq!(made["cycle_id"], cycle["id"]);
     assert!(made["parent_id"].is_number(), "{made}");
     assert!(
-        history_sources(&db, "ZF-2")
+        history_sources(&db, "ABC-2")
             .iter()
             .all(|s| s == "Migration")
     );
@@ -354,7 +366,7 @@ fn comment_add_accepts_created_at_and_migration() {
         &[
             "comment",
             "add",
-            "ZF-1",
+            "ABC-1",
             "hi",
             "--created-at",
             "2023-05-06T07:08:09Z",
@@ -362,4 +374,105 @@ fn comment_add_accepts_created_at_and_migration() {
         ],
     );
     assert_eq!(c["created_at"], "2023-05-06T07:08:09Z");
+}
+
+#[test]
+fn import_csv_shows_plan_then_applies() {
+    let (dir, db) = fresh();
+    let file = dir.path().join("in.csv");
+    std::fs::write(&file, "Title,Tags\nOne,a\nTwo,b\n").expect("write csv");
+    let path = file.to_str().expect("utf8 path");
+    let plan = run_json(&db, &["import", "csv", path]);
+    assert_eq!(plan["issues"].as_array().map(Vec::len), Some(2));
+    assert!(!run(&db, &["issue", "get", "ABC-1"]).status.success());
+    let done = run_json(&db, &["import", "csv", path, "--apply"]);
+    assert_eq!(done["applied"]["created"], 2);
+    assert_eq!(run_json(&db, &["issue", "get", "ABC-2"])["title"], "Two");
+}
+
+#[test]
+fn setup_sets_the_key_for_new_issues() {
+    let (_d, db) = fresh();
+    let out = run_json(&db, &["setup", "Cairn", "XY", "--tz", "Europe/Berlin"]);
+    assert_eq!(out["setup_done"], true);
+    assert_eq!(out["key"], "XY");
+    run(&db, &["add", "Buy milk"]);
+    assert_eq!(run_json(&db, &["issue", "get", "XY-1"])["key"], "XY-1");
+}
+
+#[test]
+fn view_templates_from_the_command_line() {
+    let (_d, db) = fresh();
+    let t = run_json(&db, &["view", "save-as-template", "1", "--name", "ABC t"]);
+    assert_eq!(t["name"], "ABC t");
+    let v = run_json(&db, &["view", "from-template", "1"]);
+    assert_eq!(v["template_id"], 1);
+    run_json(&db, &["view", "reset", &v["id"].to_string()]);
+    assert_eq!(
+        run_json(&db, &["view", "templates"])
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
+    run_json(&db, &["view", "delete-template", "1"]);
+    assert_eq!(
+        run_json(&db, &["view", "templates"])
+            .as_array()
+            .map(Vec::len),
+        Some(0)
+    );
+}
+
+#[test]
+fn points_flags_and_insights() {
+    let (_d, db) = fresh();
+    run_json(&db, &["project", "create", "p", "P"]);
+    let made = run_json(
+        &db,
+        &[
+            "issue",
+            "create",
+            "ABC a",
+            "--project",
+            "1",
+            "--points",
+            "3",
+        ],
+    );
+    assert_eq!(made["points"], 3.0);
+    let set = run_json(&db, &["issue", "update", "ABC-1", "--points", "0.5"]);
+    assert_eq!(set["points"], 0.5);
+    assert!(
+        !run(&db, &["issue", "update", "ABC-1", "--points", "0.25"])
+            .status
+            .success()
+    );
+    let cleared = run_json(&db, &["issue", "update", "ABC-1", "--clear-points"]);
+    assert_eq!(cleared["points"], Value::Null);
+    let p = run_json(
+        &db,
+        &[
+            "insights",
+            "progress",
+            "--project",
+            "1",
+            "--measure",
+            "count",
+            "--from",
+            "2026-01-01",
+            "--to",
+            "2026-01-02",
+        ],
+    );
+    assert_eq!(p["days"].as_array().map(Vec::len), Some(2));
+    let v = run_json(
+        &db,
+        &["insights", "velocity", "--project", "1", "--periods", "3"],
+    );
+    assert_eq!(v.as_array().map(Vec::len), Some(3));
+    assert!(
+        !run(&db, &["insights", "progress", "--measure", "count"])
+            .status
+            .success()
+    );
 }

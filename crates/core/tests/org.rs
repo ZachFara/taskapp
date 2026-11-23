@@ -46,7 +46,7 @@ async fn issue(
 #[tokio::test]
 async fn project_without_description_or_link() -> R {
     let db = Db::open_in_memory().await?;
-    let p = projects::create(&db, "alpha", "Alpha", ChangeSource::Ui).await?;
+    let p = projects::create(&db, "alpha", "Alpha", None, None, ChangeSource::Ui).await?;
     assert_eq!(p.description, None);
     assert_eq!(p.doc_link, None);
     let all = projects::list(&db).await?;
@@ -58,9 +58,9 @@ async fn project_without_description_or_link() -> R {
 #[tokio::test]
 async fn doc_link_validation() -> R {
     let db = Db::open_in_memory().await?;
-    let p = projects::create(&db, "alpha", "Alpha", ChangeSource::Ui).await?;
+    let p = projects::create(&db, "alpha", "Alpha", None, None, ChangeSource::Ui).await?;
     for ok in [
-        "obsidian://open?vault=v&file=plan",
+        "obsidian://open?file=plan",
         "https://example.com/spec",
         "notes/plan.md",
     ] {
@@ -90,7 +90,7 @@ async fn project_slug_validation() -> R {
     let db = Db::open_in_memory().await?;
     let long = "a".repeat(40);
     for ok in ["a", "abc-123", "0x", long.as_str()] {
-        projects::create(&db, ok, "Name", ChangeSource::Ui).await?;
+        projects::create(&db, ok, "Name", None, None, ChangeSource::Ui).await?;
     }
     let too_long = "a".repeat(41);
     for bad in [
@@ -102,7 +102,7 @@ async fn project_slug_validation() -> R {
         "abc/def",
         too_long.as_str(),
     ] {
-        let err = projects::create(&db, bad, "Name", ChangeSource::Ui).await;
+        let err = projects::create(&db, bad, "Name", None, None, ChangeSource::Ui).await;
         assert!(matches!(err, Err(Error::Invalid(_))), "accepted {bad:?}");
     }
     Ok(())
@@ -111,8 +111,8 @@ async fn project_slug_validation() -> R {
 #[tokio::test]
 async fn project_progress_counts_completed() -> R {
     let db = Db::open_in_memory().await?;
-    let p = projects::create(&db, "alpha", "Alpha", ChangeSource::Ui).await?;
-    let other = projects::create(&db, "beta", "Beta", ChangeSource::Ui).await?;
+    let p = projects::create(&db, "alpha", "Alpha", None, None, ChangeSource::Ui).await?;
+    let other = projects::create(&db, "beta", "Beta", None, None, ChangeSource::Ui).await?;
     issue(&db, Some(p.id), 1, false).await?; // Backlog
     issue(&db, Some(p.id), 1, false).await?; // Backlog
     issue(&db, Some(p.id), 4, false).await?; // Done
@@ -126,7 +126,7 @@ async fn project_progress_counts_completed() -> R {
 #[tokio::test]
 async fn project_delete_unassigns_issues() -> R {
     let db = Db::open_in_memory().await?;
-    let p = projects::create(&db, "alpha", "Alpha", ChangeSource::Ui).await?;
+    let p = projects::create(&db, "alpha", "Alpha", None, None, ChangeSource::Ui).await?;
     let m = projects::create_milestone(&db, p.id, "v1", None, ChangeSource::Ui).await?;
     let i = issue(&db, Some(p.id), 1, false).await?;
     sqlx::query("UPDATE issues SET milestone_id = ? WHERE id = ?")
@@ -153,6 +153,7 @@ async fn overlapping_cycles_rejected() -> R {
         None,
         date("2026-01-01"),
         date("2026-01-14"),
+        taskapp_core::palette::Look::default(),
         ChangeSource::Ui,
     )
     .await?;
@@ -163,6 +164,7 @@ async fn overlapping_cycles_rejected() -> R {
         None,
         date("2026-01-14"),
         date("2026-01-20"),
+        taskapp_core::palette::Look::default(),
         ChangeSource::Ui,
     )
     .await;
@@ -172,6 +174,7 @@ async fn overlapping_cycles_rejected() -> R {
         None,
         date("2026-01-05"),
         date("2026-01-06"),
+        taskapp_core::palette::Look::default(),
         ChangeSource::Ui,
     )
     .await;
@@ -181,6 +184,7 @@ async fn overlapping_cycles_rejected() -> R {
         None,
         date("2026-01-20"),
         date("2026-01-19"),
+        taskapp_core::palette::Look::default(),
         ChangeSource::Ui,
     )
     .await;
@@ -190,6 +194,7 @@ async fn overlapping_cycles_rejected() -> R {
         Some("next".into()),
         date("2026-01-15"),
         date("2026-01-28"),
+        taskapp_core::palette::Look::default(),
         ChangeSource::Ui,
     )
     .await?;
@@ -208,7 +213,7 @@ async fn overlapping_cycles_rejected() -> R {
 #[tokio::test]
 async fn label_add_remove_records_history() -> R {
     let db = Db::open_in_memory().await?;
-    let label = labels::create(&db, "bug", "#ff0000", ChangeSource::Ui).await?;
+    let label = labels::create(&db, "bug", "#ff0000", None, ChangeSource::Ui).await?;
     let i = issue(&db, None, 1, false).await?;
     let entity_id = i.0.to_string();
     labels::add_label(&db, i, label.id, ChangeSource::Agent).await?;
@@ -309,7 +314,7 @@ async fn blocks_between_returns_overlapping_only() -> R {
 #[tokio::test]
 async fn project_delete_refuses_while_scoped_defs_exist() -> R {
     let db = Db::open_in_memory().await?;
-    let p = projects::create(&db, "alpha", "Alpha", ChangeSource::Ui).await?;
+    let p = projects::create(&db, "alpha", "Alpha", None, None, ChangeSource::Ui).await?;
     let def = taskapp_core::PropertyDef {
         key: "area".into(),
         name: "Area".into(),

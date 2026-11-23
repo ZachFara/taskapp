@@ -5,7 +5,19 @@ use sqlx::SqliteConnection;
 use crate::{
     ChangeSource, Cycle, CycleId, Db, Error, Result,
     history::{self, Edit},
+    palette::{self, Look},
+    rows,
 };
+
+/// Icon and color are checked the same way on create and update.
+fn check_look(icon: Option<&str>, color: Option<&str>) -> Result<Option<String>> {
+    if let Some(icon) = icon {
+        palette::check_icon(icon)?;
+    }
+    color
+        .map(|c| palette::key_for(c).map(str::to_owned))
+        .transpose()
+}
 
 /// Cycles share days at both ends (a cycle ending on the 14th overlaps one starting on the 14th).
 const OVERLAPS: &str =
@@ -68,7 +80,8 @@ async fn edit(
 pub async fn list(db: &Db) -> Result<Vec<Cycle>> {
     let rows = sqlx::query!(
         r#"SELECT id AS "id!: i64", number AS "number!: i64", name,
-                  start_date AS "start_date!: NaiveDate", end_date AS "end_date!: NaiveDate"
+                  start_date AS "start_date!: NaiveDate", end_date AS "end_date!: NaiveDate",
+                  icon, color
            FROM cycles ORDER BY number"#
     )
     .fetch_all(&db.pool)
@@ -81,6 +94,8 @@ pub async fn list(db: &Db) -> Result<Vec<Cycle>> {
                 name: r.name,
                 start_date: r.start_date,
                 end_date: r.end_date,
+                icon: r.icon,
+                color: r.color,
             })
         })
         .collect()
@@ -94,22 +109,28 @@ pub async fn create(
     name: Option<String>,
     start_date: NaiveDate,
     end_date: NaiveDate,
+    look: Look,
     src: ChangeSource,
 ) -> Result<Cycle> {
     check_dates(start_date, end_date)?;
+    let Look { icon, color } = look;
+    let color = check_look(icon.as_deref(), color.as_deref())?;
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     // The number is taken in the same statement as the insert, so it cannot repeat.
     let id = sqlx::query!(
-        "INSERT INTO cycles (number, name, start_date, end_date)
-         VALUES ((SELECT coalesce(max(number), 0) + 1 FROM cycles), ?, ?, ?)",
+        "INSERT INTO cycles (number, name, start_date, end_date, icon, color)
+         VALUES ((SELECT coalesce(max(number), 0) + 1 FROM cycles), ?, ?, ?, ?, ?)",
         name,
         start_date,
-        end_date
+        end_date,
+        icon,
+        color
     )
     .execute(&mut *tx)
     .await?
     .last_insert_rowid();
     ensure_no_overlap(&mut tx, id, start_date, end_date).await?;
+    rows::created(&mut tx, src, "cycles", id).await?;
     let number = sqlx::query_scalar!(
         r#"SELECT number AS "number!: i64" FROM cycles WHERE id = ?"#,
         id
@@ -130,18 +151,23 @@ pub async fn create(
         name,
         start_date,
         end_date,
+        icon,
+        color,
     })
 }
 
 /// # Errors
 ///
 /// Fails on a database error or invalid arguments.
-pub async fn update(db: &Db, cycle: Cycle, src: ChangeSource) -> Result<Cycle> {
+pub async fn update(db: &Db, mut cycle: Cycle, src: ChangeSource) -> Result<Cycle> {
     check_dates(cycle.start_date, cycle.end_date)?;
+    cycle.color = check_look(cycle.icon.as_deref(), cycle.color.as_deref())?;
     let id = cycle.id.0;
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let before = rows::by_key(&mut tx, "cycles", id).await?;
     let old = sqlx::query!(
-        r#"SELECT name, start_date AS "start_date!: NaiveDate", end_date AS "end_date!: NaiveDate"
+        r#"SELECT name, start_date AS "start_date!: NaiveDate", end_date AS "end_date!: NaiveDate",
+                  icon, color
            FROM cycles WHERE id = ?"#,
         id
     )
@@ -149,6 +175,16 @@ pub async fn update(db: &Db, cycle: Cycle, src: ChangeSource) -> Result<Cycle> {
     .await?
     .ok_or_else(|| Error::NotFound(format!("cycle {id}")))?;
     edit(&mut tx, src, id, "name", json!(old.name), json!(cycle.name)).await?;
+    edit(&mut tx, src, id, "icon", json!(old.icon), json!(cycle.icon)).await?;
+    edit(
+        &mut tx,
+        src,
+        id,
+        "color",
+        json!(old.color),
+        json!(cycle.color),
+    )
+    .await?;
     edit(
         &mut tx,
         src,
@@ -168,15 +204,18 @@ pub async fn update(db: &Db, cycle: Cycle, src: ChangeSource) -> Result<Cycle> {
     )
     .await?;
     sqlx::query!(
-        "UPDATE cycles SET name = ?, start_date = ?, end_date = ? WHERE id = ?",
+        "UPDATE cycles SET name = ?, start_date = ?, end_date = ?, icon = ?, color = ? WHERE id = ?",
         cycle.name,
         cycle.start_date,
         cycle.end_date,
+        cycle.icon,
+        cycle.color,
         id
     )
     .execute(&mut *tx)
     .await?;
     ensure_no_overlap(&mut tx, id, cycle.start_date, cycle.end_date).await?;
+    rows::changed(&mut tx, src, before).await?;
     tx.commit().await?;
     Ok(cycle)
 }
@@ -213,9 +252,11 @@ pub async fn delete(db: &Db, id: CycleId, src: ChangeSource) -> Result<()> {
     sqlx::query!("UPDATE issues SET cycle_id = NULL WHERE cycle_id = ?", cid)
         .execute(&mut *tx)
         .await?;
+    let before = rows::by_key(&mut tx, "cycles", cid).await?;
     sqlx::query!("DELETE FROM cycles WHERE id = ?", cid)
         .execute(&mut *tx)
         .await?;
+    rows::changed(&mut tx, src, before).await?;
     tx.commit().await?;
     Ok(())
 }

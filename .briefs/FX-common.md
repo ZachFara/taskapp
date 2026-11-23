@@ -1,0 +1,13 @@
+# Fix wave for plan 2 (the ONE fix wave after the final review). Four fixers by file ownership, in parallel.
+Read AGENTS.md, docs/IMPLEMENTER-CONTRACT.md, .briefs/I-common.md (load rules, no local merge of plan-2, tests first), then this file and your brief.
+The review reports: <workspace>/taskapp/.scratch/review2/R1.md (core), R2.md (agents, import, export), R3.md (flows and keys; shots R3-*.png beside it), R4.md (visual; shots in R4-shots/). Your brief lists finding ids: READ each finding's full text and reproduction in the report (and open its screenshot) before fixing it.
+Worktree: `git -C <workspace>/taskapp fetch && git -C <workspace>/taskapp worktree add ../taskapp-wt/<ID> -b task/<ID> origin/plan-2`.
+Rules for this wave:
+- Every Important finding in your list gets a FAILING TEST FIRST (unit, contract, or a flow in ui/harness/walk.test.ts for cross-component behaviour), watched failing, then the fix. Say the failure message per finding. Minor findings: fix them too if they are in your files and cheap (under ~15 minutes each); otherwise list them as deferred with one line why.
+- Visual findings: after the fix take one mock capture of that screen/state (`pnpm -C ui shot <route> --mode mock --theme light --size 1440x900`, or 1024x768 / dark when the finding is about that), OPEN it, and only then call it fixed.
+- Edit only files you own. Seams between fixers are fixed by the event names below; anything else you need in another fixer's file: report the exact lines.
+- One PR into plan-2, CI once (one rerun allowed only when the sole failure is `App.test.ts > esc_closes_an_open_editor_first...`, which is being fixed in this wave by FX2). Report per finding id: fixed (test name + failure seen) / deferred (why), max 25 lines. Do not merge.
+
+## Command events shared by FX2 (defines the commands) and FX3/FX4 (screens listen)
+A command runs by dispatching `window.dispatchEvent(new CustomEvent('command:<id>', { detail }))`; the screen that owns the action listens while mounted. New ids in this wave:
+`view.group.open`, `view.sort.open`, `view.display.open`, `view.filter.add`, `view.rename`, `view.duplicate` (save as new view), `view.delete`, `view.pin`, `group.collapse` (toggle the group of the focused row), `group.collapse.all`, `group.add` (new issue in the focused row's group), `issue.description.edit`, `issue.comment.focus`, `issue.subissue.add`, `issue.relation.add`, `project.rename`, `project.description.edit`, `milestone.new`, `cycle.move_unfinished`, `settings.save`. FX2 creates the command files (label, icon, shortcut or reason, scope); FX3/FX4 make the matching control call the same handler and add the listener.

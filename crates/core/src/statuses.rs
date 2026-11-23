@@ -1,6 +1,11 @@
+use serde_json::json;
 use sqlx::SqliteConnection;
 
-use crate::{ChangeSource, Db, Error, Result, Status, StatusCategory, StatusId, history};
+use crate::{
+    ChangeSource, Db, Error, Result, Status, StatusCategory, StatusId, history,
+    palette::{self, Look},
+    rows,
+};
 
 pub(crate) fn category_str(c: StatusCategory) -> &'static str {
     match c {
@@ -30,14 +35,6 @@ fn check_name(name: &str) -> Result<()> {
     Ok(())
 }
 
-fn check_color(color: &str) -> Result<()> {
-    let hex = color.strip_prefix('#').unwrap_or("");
-    if hex.len() == 6 && hex.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Ok(());
-    }
-    Err(Error::Invalid(format!("color {color} is not #rrggbb")))
-}
-
 fn unique_to_conflict(e: sqlx::Error, name: &str) -> Error {
     if e.as_database_error()
         .is_some_and(sqlx::error::DatabaseError::is_unique_violation)
@@ -49,7 +46,7 @@ fn unique_to_conflict(e: sqlx::Error, name: &str) -> Error {
 
 async fn fetch(conn: &mut SqliteConnection, id: StatusId) -> Result<Status> {
     let r = sqlx::query!(
-        r#"SELECT id AS "id!: i64", name, category, position, color FROM statuses WHERE id = ?"#,
+        r#"SELECT id AS "id!: i64", name, category, position, color, icon FROM statuses WHERE id = ?"#,
         id.0
     )
     .fetch_optional(conn)
@@ -60,7 +57,9 @@ async fn fetch(conn: &mut SqliteConnection, id: StatusId) -> Result<Status> {
         name: r.name,
         category: parse_category(&r.category)?,
         position: i32::try_from(r.position).map_err(|e| Error::Invalid(e.to_string()))?,
+        color_hex: palette::resolve(&r.color),
         color: r.color,
+        icon: r.icon,
     })
 }
 
@@ -82,57 +81,103 @@ pub async fn list(db: &Db) -> Result<Vec<Status>> {
 /// # Errors
 ///
 /// `Invalid` for an empty name or a color that is not `#rrggbb`, `Conflict` for a duplicate name.
-pub async fn create(db: &Db, name: &str, category: StatusCategory, color: &str) -> Result<Status> {
+pub async fn create(
+    db: &Db,
+    name: &str,
+    category: StatusCategory,
+    color: &str,
+    icon: Option<String>,
+    src: ChangeSource,
+) -> Result<Status> {
     check_name(name)?;
-    check_color(color)?;
+    let color = palette::key_for(color)?;
+    if let Some(icon) = &icon {
+        palette::check_icon(icon)?;
+    }
     let cat = category_str(category);
-    let mut conn = db.pool.acquire().await?;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let id = sqlx::query!(
-        "INSERT INTO statuses (name, category, position, color)
-         VALUES (?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM statuses), ?)",
+        "INSERT INTO statuses (name, category, position, color, icon)
+         VALUES (?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM statuses), ?, ?)",
         name,
         cat,
-        color
+        color,
+        icon
     )
-    .execute(&mut *conn)
+    .execute(&mut *tx)
     .await
     .map_err(|e| unique_to_conflict(e, name))?
     .last_insert_rowid();
-    fetch(&mut conn, StatusId(id)).await
+    let created = json!(name);
+    let edit = history::Edit {
+        field: "created",
+        old: None,
+        new: Some(&created),
+    };
+    history::record(&mut tx, src, "status", &id.to_string(), &edit).await?;
+    rows::created(&mut tx, src, "statuses", id).await?;
+    let status = fetch(&mut tx, StatusId(id)).await?;
+    tx.commit().await?;
+    Ok(status)
 }
 
 /// # Errors
 ///
-/// `NotFound` for an unknown id, `Invalid` for an empty name or bad color, `Conflict` for a duplicate name.
+/// `NotFound` for an unknown id, `Invalid` for an empty name or bad color or icon, `Conflict` for a duplicate
+/// name. A `None` field keeps its current value.
 pub async fn update(
     db: &Db,
     id: StatusId,
     name: Option<String>,
-    color: Option<String>,
     position: Option<i32>,
+    look: Look,
+    src: ChangeSource,
 ) -> Result<Status> {
-    let mut conn = db.pool.acquire().await?;
-    let old = fetch(&mut conn, id).await?;
+    let Look { icon, color } = look;
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let old = fetch(&mut tx, id).await?;
+    let before = rows::by_key(&mut tx, "statuses", id.0).await?;
     if let Some(n) = &name {
         check_name(n)?;
     }
-    if let Some(c) = &color {
-        check_color(c)?;
+    let color = match color {
+        Some(c) => palette::key_for(&c)?.to_owned(),
+        None => old.color.clone(),
+    };
+    if let Some(i) = &icon {
+        palette::check_icon(i)?;
     }
     let name = name.unwrap_or(old.name);
-    let color = color.unwrap_or(old.color);
     let position = position.unwrap_or(old.position);
+    let icon = icon.or_else(|| old.icon.clone());
     sqlx::query!(
-        "UPDATE statuses SET name = ?, color = ?, position = ? WHERE id = ?",
+        "UPDATE statuses SET name = ?, color = ?, position = ?, icon = ? WHERE id = ?",
         name,
         color,
         position,
+        icon,
         id.0
     )
-    .execute(&mut *conn)
+    .execute(&mut *tx)
     .await
     .map_err(|e| unique_to_conflict(e, &name))?;
-    fetch(&mut conn, id).await
+    rows::changed(&mut tx, src, before).await?;
+    for (field, before, after) in [
+        ("color", json!(old.color), json!(color)),
+        ("icon", json!(old.icon), json!(icon)),
+    ] {
+        if before != after {
+            let edit = history::Edit {
+                field,
+                old: Some(&before),
+                new: Some(&after),
+            };
+            history::record(&mut tx, src, "status", &id.0.to_string(), &edit).await?;
+        }
+    }
+    let status = fetch(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(status)
 }
 
 /// Issues in the deleted status move to `move_issues_to`.
@@ -150,8 +195,19 @@ pub async fn delete(db: &Db, id: StatusId, move_issues_to: StatusId) -> Result<(
         ));
     }
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
-    fetch(&mut tx, id).await?;
+    let gone = fetch(&mut tx, id).await?;
     fetch(&mut tx, move_issues_to).await?;
+    // Every category keeps a status: the Completed one stamps completed_at, and a category with none has no home.
+    let same: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM statuses WHERE category = ?")
+        .bind(category_str(gone.category))
+        .fetch_one(&mut *tx)
+        .await?;
+    if same <= 1 {
+        return Err(Error::Invalid(format!(
+            "cannot delete the last {} status",
+            category_str(gone.category)
+        )));
+    }
     let moved = sqlx::query_scalar!(
         r#"SELECT id AS "id!: i64" FROM issues WHERE status_id = ?"#,
         id.0
@@ -181,9 +237,50 @@ pub async fn delete(db: &Db, id: StatusId, move_issues_to: StatusId) -> Result<(
         )
         .await?;
     }
+    let before = rows::by_key(&mut tx, "statuses", id.0).await?;
     sqlx::query!("DELETE FROM statuses WHERE id = ?", id.0)
         .execute(&mut *tx)
         .await?;
+    rows::changed(&mut tx, ChangeSource::System, before).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Hands the positions the listed statuses already hold to the new order, so other categories keep theirs.
+/// One call is one history step; undo restores the old order.
+///
+/// # Errors
+///
+/// `Invalid` for an empty list, a duplicate id or ids from more than one category, `NotFound` for an unknown id.
+pub async fn reorder(db: &Db, ids_in_order: &[StatusId], src: ChangeSource) -> Result<()> {
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let mut slots = Vec::with_capacity(ids_in_order.len());
+    let mut category = None;
+    for id in ids_in_order {
+        let s = fetch(&mut tx, *id).await?;
+        if *category.get_or_insert(s.category) != s.category {
+            return Err(Error::Invalid(
+                "reorder lists one category at a time".into(),
+            ));
+        }
+        slots.push(s.position);
+    }
+    let mut ids: Vec<i64> = ids_in_order.iter().map(|i| i.0).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    if ids.is_empty() || ids.len() != ids_in_order.len() {
+        return Err(Error::Invalid("reorder needs distinct status ids".into()));
+    }
+    slots.sort_unstable();
+    let before = rows::all(&mut tx, "statuses").await?;
+    for (id, position) in ids_in_order.iter().zip(slots) {
+        sqlx::query("UPDATE statuses SET position = ? WHERE id = ?")
+            .bind(position)
+            .bind(id.0)
+            .execute(&mut *tx)
+            .await?;
+    }
+    rows::changed(&mut tx, src, before).await?;
     tx.commit().await?;
     Ok(())
 }

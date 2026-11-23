@@ -1,4 +1,4 @@
-use crate::{Db, Error, Pin, PinId, PinKind, ResolvedPin, Result, settings};
+use crate::{ChangeSource, Db, Error, Pin, PinId, PinKind, ResolvedPin, Result, rows, settings};
 
 type PinRow = (i64, String, String, Option<String>, i64);
 
@@ -66,19 +66,80 @@ async fn find(db: &Db, kind: PinKind, target: &str) -> Result<Option<Pin>> {
     .transpose()
 }
 
+/// Pins or unpins every target in one transaction, so it is one undo step. Pinned targets are skipped.
+///
+/// # Errors
+///
+/// Fails on a database error or an invalid target; then nothing changes.
+pub async fn set(db: &Db, kind: PinKind, targets: &[String], pinned: bool) -> Result<()> {
+    for t in targets {
+        validate(kind, t)?;
+    }
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    for t in targets {
+        if pinned {
+            let added = sqlx::query(
+                "INSERT INTO pins (kind, target, title, position)
+                 VALUES (?, ?, NULL, (SELECT COALESCE(MAX(position) + 1, 0) FROM pins))
+                 ON CONFLICT (kind, target) DO NOTHING",
+            )
+            .bind(kind_str(kind))
+            .bind(t)
+            .execute(&mut *tx)
+            .await?;
+            if added.rows_affected() == 1 {
+                rows::created(&mut tx, ChangeSource::Ui, "pins", added.last_insert_rowid()).await?;
+            }
+        } else {
+            let id: Option<i64> =
+                sqlx::query_scalar("SELECT id FROM pins WHERE kind = ? AND target = ?")
+                    .bind(kind_str(kind))
+                    .bind(t)
+                    .fetch_optional(&mut *tx)
+                    .await?;
+            if let Some(id) = id {
+                let before = rows::by_key(&mut tx, "pins", id).await?;
+                sqlx::query("DELETE FROM pins WHERE id = ?")
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+                rows::changed(&mut tx, ChangeSource::Ui, before).await?;
+            }
+        }
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 /// Idempotent: pinning the same `(kind, target)` twice returns the existing pin.
 ///
 /// # Errors
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn pin(db: &Db, kind: PinKind, target: &str, title: Option<String>) -> Result<Pin> {
+    pin_as(db, ChangeSource::Ui, kind, target, title).await
+}
+
+/// Like [`pin`], recording `src` as the change source (the MCP server pins as the agent).
+///
+/// # Errors
+///
+/// Fails on a database error or invalid arguments.
+pub async fn pin_as(
+    db: &Db,
+    src: ChangeSource,
+    kind: PinKind,
+    target: &str,
+    title: Option<String>,
+) -> Result<Pin> {
     validate(kind, target)?;
     if let Some(existing) = find(db, kind, target).await? {
         return Ok(existing);
     }
     let title = title.filter(|t| !t.trim().is_empty());
     // ON CONFLICT keeps this safe if another writer pins the same target between the two queries.
-    sqlx::query(
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let added = sqlx::query(
         "INSERT INTO pins (kind, target, title, position)
          VALUES (?, ?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM pins))
          ON CONFLICT (kind, target) DO NOTHING",
@@ -86,8 +147,12 @@ pub async fn pin(db: &Db, kind: PinKind, target: &str, title: Option<String>) ->
     .bind(kind_str(kind))
     .bind(target)
     .bind(title)
-    .execute(&db.pool)
+    .execute(&mut *tx)
     .await?;
+    if added.rows_affected() == 1 {
+        rows::created(&mut tx, src, "pins", added.last_insert_rowid()).await?;
+    }
+    tx.commit().await?;
     find(db, kind, target)
         .await?
         .ok_or_else(|| Error::NotFound(format!("pin {target}")))
@@ -97,13 +162,26 @@ pub async fn pin(db: &Db, kind: PinKind, target: &str, title: Option<String>) ->
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn unpin(db: &Db, id: PinId) -> Result<()> {
+    unpin_as(db, ChangeSource::Ui, id).await
+}
+
+/// Like [`unpin`], recording `src` as the change source.
+///
+/// # Errors
+///
+/// Fails on a database error or when the pin does not exist.
+pub async fn unpin_as(db: &Db, src: ChangeSource, id: PinId) -> Result<()> {
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let before = rows::by_key(&mut tx, "pins", id.0).await?;
     let done = sqlx::query("DELETE FROM pins WHERE id = ?")
         .bind(id.0)
-        .execute(&db.pool)
+        .execute(&mut *tx)
         .await?;
     if done.rows_affected() == 0 {
         return Err(Error::NotFound(format!("pin {}", id.0)));
     }
+    rows::changed(&mut tx, src, before).await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -124,6 +202,7 @@ pub async fn reorder(db: &Db, ids_in_order: &[PinId]) -> Result<()> {
             "reorder must list every current pin exactly once".into(),
         ));
     }
+    let before = rows::all(&mut tx, "pins").await?;
     for (index, id) in ids_in_order.iter().enumerate() {
         let position = i64::try_from(index).map_err(|e| Error::Invalid(e.to_string()))?;
         sqlx::query("UPDATE pins SET position = ? WHERE id = ?")
@@ -132,6 +211,7 @@ pub async fn reorder(db: &Db, ids_in_order: &[PinId]) -> Result<()> {
             .execute(&mut *tx)
             .await?;
     }
+    rows::changed(&mut tx, ChangeSource::Ui, before).await?;
     tx.commit().await?;
     Ok(())
 }

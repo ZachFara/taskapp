@@ -1,13 +1,31 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { registerShortcut } from '../../lib/keymap';
-  import { api } from '../../lib/api';
-  import type { FieldRef, FixedField, Issue, IssuePatch, PropertyKind, SavedView, Value } from '../../lib/bindings';
+  import { onMount, tick, untrack } from 'svelte';
+  import type { FieldRef, FixedField, Issue, IssuePatch, PropertyKind, SavedView, StatusCategory, Value } from '../../lib/bindings';
+  import { selection } from '../../lib/selection.svelte';
   import { currentViewId, issues, propertyDefs, refreshAll, statuses, views } from '../../lib/stores.svelte';
+  import Checkbox from '../../ui/Checkbox.svelte';
+  import CommandButton from '../CommandButton.svelte';
+  import IssueMenu from './IssueMenu.svelte';
+  import { api } from '../../lib/api';
+  import type { Label, Project } from '../../lib/bindings';
+  import { workspaceZone, dayText, dueDay, isOverdue } from './dates';
+  import EmptyState from '../../ui/EmptyState.svelte';
+  import GroupHeader from '../../ui/GroupHeader.svelte';
+  import IconButton from '../../ui/IconButton.svelte';
+    import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
+    import { priorityGlyph, priorityName, priorityOrder } from '../../lib/priority';
+  import Select from '../../ui/Select.svelte';
+  import Skeleton from '../../ui/Skeleton.svelte';
+  import TextInput from '../../ui/TextInput.svelte';
+  import Button from '../../ui/Button.svelte';
+  import Popover from '../../ui/Popover.svelte';
+  import DisplayPanel from '../display/DisplayPanel.svelte';
+  import FieldValue from '../display/FieldValue.svelte';
+  import { emptyCtx, loadCtx, pointsTotal, pointsName, type Ctx, type DisplayDef } from '../display/types';
 
   let { view }: { view: SavedView } = $props();
 
-  type EditKind = PropertyKind | 'Status' | 'Priority';
+  type EditKind = PropertyKind | 'Status' | 'Priority' | 'Project' | 'Labels' | 'Read';
   // Fixed fields a table can show and edit. Others are left out of the column picker and skipped in views.
   const FIXED: Partial<Record<FixedField, { label: string; kind: EditKind }>> = {
     Title: { label: 'Title', kind: 'Text' },
@@ -16,7 +34,16 @@
     StartDate: { label: 'Start', kind: 'Date' },
     DueDate: { label: 'Due', kind: 'Date' },
     Estimate: { label: 'Estimate', kind: 'Number' },
+    Points: { label: 'Points', kind: 'Read' },
+    Project: { label: 'Project', kind: 'Project' },
+    Label: { label: 'Labels', kind: 'Labels' },
+    // Shown through FieldValue and not editable here.
+    Key: { label: 'Key', kind: 'Read' }, Milestone: { label: 'Milestone', kind: 'Read' }, Cycle: { label: 'Cycle', kind: 'Read' },
+    Parent: { label: 'Parent', kind: 'Read' }, SubIssueProgress: { label: 'Sub-issues', kind: 'Read' }, RelationCount: { label: 'Relations', kind: 'Read' },
+    CommentCount: { label: 'Comments', kind: 'Read' }, CreatedAt: { label: 'Created', kind: 'Read' }, UpdatedAt: { label: 'Updated', kind: 'Read' },
   };
+  // A view with no columns of its own shows these.
+  const DEFAULT: FieldRef[] = ['Priority', 'Title', 'Status', 'Project', 'Label', 'DueDate', 'Estimate'].map((f) => ({ Fixed: f as FixedField }));
   const PATCH: Partial<Record<FixedField, (v: Value) => IssuePatch>> = {
     Title: (v) => ({ title: v as string }),
     Status: (v) => ({ status_id: v as number }),
@@ -36,30 +63,42 @@
   const live = $derived(views.find((v) => v.id === view.id) ?? view);
   const def = $derived(live.def);
   // Columns whose property def is gone (or fixed field not supported) are skipped, keeping their index in the def.
+  const base = $derived(def.columns.length ? def.columns : DEFAULT);
+  // Points is invisible when the estimation setting excludes it: a stored Points column or group is ignored, not rewritten.
+  const groupBy = $derived(def.group_by?.Fixed === 'Points' && !ctx.points ? null : def.group_by);
   const cols = $derived(
-    def.columns
-      .map((ref, index) => ({ ref, index, id: colId(ref), kind: kindOf(ref) }))
+    base
+      .filter((ref) => ctx.points || ref.Fixed !== 'Points')
+      .map((ref, index) => ({ ref, index, id: colId(ref), kind: kindOf(ref), label: label(ref) }))
       .filter((c): c is typeof c & { kind: EditKind } => c.kind !== null),
   );
-  const label = (ref: FieldRef) =>
-    ref.Property !== undefined ? (propertyDefs.find((d) => d.key === ref.Property)?.name ?? '') : FIXED[ref.Fixed!]!.label;
-  const addable = $derived([
-    ...Object.entries(FIXED)
-      .filter(([f]) => !def.columns.some((c) => c.Fixed === f))
-      .map(([f, m]) => ({ id: `fixed:${f}`, name: m!.label })),
-    ...propertyDefs
-      .filter((d) => !def.columns.some((c) => c.Property === d.key))
-      .map((d) => ({ id: `prop:${d.key}`, name: d.name })),
-  ]);
-
-  let active = $state({ row: 0, col: 0 });
+  function label(ref: FieldRef) {
+    return ref.Property !== undefined ? (propertyDefs.find((d) => d.key === ref.Property)?.name ?? '') : FIXED[ref.Fixed!]!.label;
+  }
   let editing = $state<{ row: number; col: number } | null>(null);
   let draft = $state('');
+  let original = $state('');
   let error = $state<string | null>(null);
+  let activeCol = $state(0);
+  let sort = $state<{ col: string; dir: 'asc' | 'desc' } | null>(null);
+  let widths = $state<Record<string, number>>({});
+  let collapsed = $state(new Set<string>());
+  let loaded = $state(false);
+  let picked = $state('');
+  let editorEl = $state<HTMLElement>();
+  let projects = $state.raw<Project[]>([]);
+  let labels = $state.raw<Label[]>([]);
+  let tz = $state('UTC');
+  let ctx = $state.raw<Ctx>(emptyCtx);
+  $effect(() => {
+    const d = $state.snapshot(def);
+    loadCtx(d).then((c) => (ctx = c));
+  });
 
   onMount(() => {
     currentViewId.value = view.id;
-    void refreshAll();
+    void refreshAll().finally(() => (loaded = true));
+    void Promise.all([api.projects.list(), api.labels.list(), workspaceZone()]).then(([p, l, z]) => ([projects, labels, tz] = [p, l, z]));
   });
 
   const raw = (i: Issue, ref: FieldRef): Value => {
@@ -69,8 +108,11 @@
       case 'Status': return i.status_id;
       case 'Priority': return i.priority;
       case 'StartDate': return i.start_date;
-      case 'DueDate': return i.due?.Date ?? i.due?.DateTime?.utc.slice(0, 10) ?? null;
+      case 'DueDate': return dueDay(i, tz);
+      case 'Project': return i.project_id;
+      case 'Label': return i.label_ids.join(',');
       case 'Estimate': return i.estimate_minutes;
+      case 'Points': return i.points;
       default: return null;
     }
   };
@@ -80,14 +122,81 @@
       : ref.Property !== undefined
         ? (propertyDefs.find((d) => d.key === ref.Property)?.options ?? []).map((o) => ({ value: o.value, label: o.value }))
         : [];
-  const show = (v: Value, kind: EditKind): string => {
-    if (v === null || v === '') return '';
-    if (kind === 'Status') return statuses.find((s) => s.id === v)?.name ?? String(v);
-    if (typeof v === 'boolean') return v ? 'Yes' : 'No';
-    if (Array.isArray(v)) return v.join(', ');
-    return typeof v === 'object' ? JSON.stringify(v) : String(v);
-  };
   const draftOf = (v: Value, kind: EditKind) => (v === null ? '' : kind === 'Status' ? String(v) : Array.isArray(v) ? v.join(', ') : String(v));
+
+  // Sorting is per visit and stays client-side; the query order is the base order.
+  const sortValue = (i: Issue, ref: FieldRef): Value => {
+    if (ref.Fixed === 'Status') return statuses.find((s) => s.id === i.status_id)?.position ?? null;
+    return raw(i, ref);
+  };
+  const isEmpty = (v: Value) => v === null || v === '';
+  function compare(a: Value, b: Value): number {
+    if (typeof a === 'number' && typeof b === 'number') return a - b;
+    if (typeof a === 'boolean' && typeof b === 'boolean') return Number(a) - Number(b);
+    return String(a).localeCompare(String(b));
+  }
+  const sorted = $derived.by(() => {
+    const s = sort;
+    const col = s && cols.find((c) => c.id === s.col);
+    if (!s || !col) return issues;
+    const sign = s.dir === 'asc' ? 1 : -1;
+    return [...issues].sort((x, y) => {
+      const a = sortValue(x, col.ref);
+      const b = sortValue(y, col.ref);
+      // Empty cells sort last in both directions.
+      if (isEmpty(a) || isEmpty(b)) return Number(isEmpty(a)) - Number(isEmpty(b));
+      return sign * compare(a, b);
+    });
+  });
+
+  type Group = { name: string; category: StatusCategory; status: boolean; priority?: number; rows: Issue[] };
+  const groupOf = (i: Issue): { name: string; category: StatusCategory; status: boolean; priority?: number } => {
+    const field = groupBy;
+    if (field?.Fixed === 'Status') {
+      const st = statuses.find((s) => s.id === i.status_id);
+      return { name: st?.name ?? 'Unknown', category: st?.category ?? 'Backlog', status: true };
+    }
+    if (field?.Fixed === 'Points') return { name: pointsName(i.points), category: 'Backlog' as StatusCategory, status: false };
+    if (field?.Fixed === 'Priority') return { name: priorityName(i.priority), category: 'Backlog' as StatusCategory, status: false, priority: i.priority };
+    if (field?.Property !== undefined) {
+      const v = i.properties[field.Property];
+      return { name: isEmpty(v ?? null) ? 'None' : String(v), category: 'Backlog' as StatusCategory, status: false };
+    }
+    return { name: '', category: 'Backlog' as StatusCategory, status: true };
+  };
+  // Groups keep the order of the rows; status groups follow the status positions.
+  const groups = $derived.by<Group[]>(() => {
+    const byName = new Map<string, Group & { order: number }>();
+    for (const i of sorted) {
+      const g = groupOf(i);
+      const hit = byName.get(g.name) ?? { ...g, rows: [], order: groupOrder(i) };
+      hit.rows.push(i);
+      byName.set(g.name, hit);
+    }
+    if ((def as DisplayDef).show_empty_groups && groupBy?.Fixed === 'Status')
+      for (const st of statuses) if (!byName.has(st.name)) byName.set(st.name, { name: st.name, category: st.category, status: true, rows: [], order: st.position });
+    return [...byName.values()].sort((a, b) => a.order - b.order);
+  });
+  function groupOrder(i: Issue): number {
+    const field = groupBy;
+    if (field?.Fixed === 'Status') return statuses.find((s) => s.id === i.status_id)?.position ?? Infinity;
+    if (field?.Fixed === 'Priority') return priorityOrder(i.priority);
+    if (field?.Fixed === 'Points') return i.points ?? Infinity;
+    return 0;
+  }
+  const visibleRows = $derived(groups.flatMap((g) => (collapsed.has(g.name) ? [] : g.rows)));
+  const visibleIds = $derived(visibleRows.map((i) => i.id));
+  const activeRowId = $derived(selection.focused ?? visibleIds[0] ?? null);
+
+  function startEdit(issue: Issue, c: number) {
+    const col = cols[c];
+    if (!col || col.kind === 'Project' || col.kind === 'Labels' || col.kind === 'Read') return;
+    if (col.kind === 'Checkbox') return void save(issue, col, raw(issue, col.ref) !== true);
+    editing = { row: visibleIds.indexOf(issue.id), col: c };
+    original = draft = draftOf(raw(issue, col.ref), col.kind);
+    error = null;
+  }
+  const editingIssue = () => (editing ? visibleRows[editing.row] : undefined);
 
   type Parsed = { ok: true; value: Value } | { ok: false; message: string };
   // Client-side checks run before the API call; the API's own errors are shown as they come.
@@ -143,43 +252,10 @@
     }
   }
 
-  function startEdit() {
-    const issue = issues[active.row];
-    const col = cols[active.col];
-    if (!issue || !col) return;
-    if (col.kind === 'Checkbox') return void save(issue, col, raw(issue, col.ref) !== true);
-    editing = { row: active.row, col: active.col };
-    draft = draftOf(raw(issue, col.ref), col.kind);
-    error = null;
-  }
-
-  function jump(delta: number) {
-    if (!editing) active = { ...active, row: Math.min(Math.max(active.row + delta, 0), Math.max(issues.length - 1, 0)) };
-  }
-
-  // s and p edit the active row's Status or Priority cell when the view shows that column.
-  function editField(field: FixedField) {
-    const col = cols.findIndex((c) => c.ref.Fixed === field);
-    if (editing || col < 0) return;
-    active = { ...active, col };
-    startEdit();
-  }
-
-  onMount(() => {
-    const offs = [
-      registerShortcut('j', 'table.next', () => jump(1)),
-      registerShortcut('k', 'table.previous', () => jump(-1)),
-      registerShortcut('enter', 'table.open', () => !editing && startEdit()),
-      registerShortcut('s', 'table.status', () => editField('Status')),
-      registerShortcut('p', 'table.priority', () => editField('Priority')),
-    ];
-    return () => offs.forEach((off) => off());
-  });
-
   async function commit() {
-    const e = editing!;
-    const issue = issues[e.row];
-    const col = cols[e.col];
+    const issue = editingIssue();
+    if (!editing || !issue) return;
+    const col = cols[editing.col];
     const parsed = parse(draft, col);
     if (!parsed.ok) {
       error = parsed.message;
@@ -189,30 +265,68 @@
     await save(issue, col, parsed.value);
   }
 
-  function onkeydown(e: KeyboardEvent) {
+  // Pickers commit as soon as the value changes; text and date fields commit on Enter (the form's submit).
+  const pickerKind = (kind: EditKind | undefined) => kind === 'Status' || kind === 'Select';
+  $effect(() => {
+    const col = editing ? cols[editing.col] : undefined;
+    if (col && pickerKind(col.kind) && draft !== original) untrack(() => void commit());
+  });
+  $effect(() => {
+    if (editing && editorEl) void tick().then(() => editorEl?.querySelector<HTMLElement>('input, button')?.focus());
+  });
+
+  function pick(issue: Issue, c: number) {
     if (editing) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        void commit();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        editing = null;
-        error = null;
-      }
-      return;
+      if (editing.col === c && visibleIds[editing.row] === issue.id) return;
+      void commit();
+      if (editing) return;
     }
-    const clamp = (n: number, max: number) => Math.min(Math.max(n, 0), Math.max(max - 1, 0));
-    const moves: Record<string, () => void> = {
-      ArrowUp: () => (active = { ...active, row: clamp(active.row - 1, issues.length) }),
-      ArrowDown: () => (active = { ...active, row: clamp(active.row + 1, issues.length) }),
-      ArrowLeft: () => (active = { ...active, col: clamp(active.col - 1, cols.length) }),
-      ArrowRight: () => (active = { ...active, col: clamp(active.col + 1, cols.length) }),
-    };
-    if (moves[e.key]) {
-      e.preventDefault();
-      moves[e.key]();
-    }
+    selection.focus(issue.id);
+    activeCol = c;
   }
+
+  // j/k move through the rows the shared selection holds, so the table publishes them and its layout.
+  $effect(() => {
+    selection.setLayout('table');
+    selection.setColumns([visibleIds]);
+    return () => selection.setColumns([]);
+  });
+  // The key commands arrive as window events; each acts on the table's own state.
+  function moveCol(delta: number) {
+    activeCol = Math.min(Math.max(activeCol + delta, 0), Math.max(cols.length - 1, 0));
+  }
+  function editActive() {
+    const issue = visibleRows.find((i) => i.id === activeRowId);
+    if (issue && !editing) startEdit(issue, activeCol);
+  }
+  function cancel() {
+    if (editing) {
+      editing = null;
+      error = null;
+    } else selection.clear();
+  }
+  function editField(field: FixedField) {
+    const c = cols.findIndex((x) => x.ref.Fixed === field);
+    if (editing || c < 0) return;
+    activeCol = c;
+    editActive();
+  }
+  $effect(() => {
+    const handlers: Record<string, () => void> = {
+      left: () => moveCol(-1),
+      right: () => moveCol(1),
+      edit: editActive,
+      cancel,
+      status: () => editField('Status'),
+      priority: () => editField('Priority'),
+    };
+    const listeners = Object.entries(handlers).map(([id, fn]) => {
+      const name = `command:table.${id}`;
+      addEventListener(name, fn);
+      return [name, fn] as const;
+    });
+    return () => listeners.forEach(([name, fn]) => removeEventListener(name, fn));
+  });
 
   async function saveColumns(columns: FieldRef[]) {
     try {
@@ -224,89 +338,290 @@
     }
   }
 
-  function addColumn(e: Event) {
-    const select = e.currentTarget as HTMLSelectElement;
-    const id = select.value;
-    if (!id) return;
-    const ref: FieldRef = id.startsWith('prop:') ? { Property: id.slice(5) } : { Fixed: id.slice(6) as FixedField };
-    void saveColumns([...def.columns, ref]);
+  // Every Display panel change is saved with the rest of the view.
+  async function changeDisplay(patch: Partial<DisplayDef>) {
+    try {
+      await api.views.save(view.id, live.name, { ...def, ...patch });
+      await refreshAll();
+      error = null;
+    } catch (e) {
+      error = (e as { message?: string }).message ?? String(e);
+    }
   }
 
   function moveColumn(index: number, delta: number) {
-    const columns = [...def.columns];
+    const columns = [...base];
     const target = index + delta;
     if (target < 0 || target >= columns.length) return;
     [columns[index], columns[target]] = [columns[target], columns[index]];
     void saveColumns(columns);
   }
 
-  const removeColumn = (index: number) => void saveColumns(def.columns.filter((_, i) => i !== index));
+  const removeColumn = (index: number) => void saveColumns(base.filter((_, i) => i !== index));
+
+  function cycleSort(id: string) {
+    sort = sort?.col !== id ? { col: id, dir: 'asc' } : sort.dir === 'asc' ? { col: id, dir: 'desc' } : null;
+  }
+
+  // Dragging the grip sets the width; widths last for the visit only.
+  function startResize(e: PointerEvent, id: string) {
+    const th = (e.currentTarget as HTMLElement).closest('th')!;
+    const startX = e.clientX;
+    const startW = th.getBoundingClientRect().width;
+    const move = (ev: PointerEvent) => (widths = { ...widths, [id]: Math.max(80, startW + ev.clientX - startX) });
+    const up = () => {
+      removeEventListener('pointermove', move);
+      removeEventListener('pointerup', up);
+    };
+    addEventListener('pointermove', move);
+    addEventListener('pointerup', up);
+  }
+
+  const toggleGroup = (name: string) => {
+    const next = new Set(collapsed);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    collapsed = next;
+  };
+  const rowSelected = (i: Issue) => selection.selected.includes(i.id);
+  const grouped = $derived(groupBy !== null);
 </script>
 
 <section class="table-view">
-  <header class="toolbar">
-    <h1>{live.name}</h1>
-    <label>
-      Add column
-      <select data-testid="add-column" onchange={addColumn}>
-        <option value="">+</option>
-        {#each addable as opt (opt.id)}
-          <option value={opt.id}>{opt.name}</option>
-        {/each}
-      </select>
-    </label>
-  </header>
-
   {#if error}
     <p role="alert" class="error">{error}</p>
   {/if}
 
-  <table role="grid" tabindex="0" {onkeydown}>
-    <thead>
-      <tr>
-        <th scope="col">Key</th>
+  {#if loaded && issues.length === 0}
+    <EmptyState title="No issues in this view" hint="Add an issue, or change the view's filter.">
+      {#snippet action()}<CommandButton command="issue.create" variant="primary" />{/snippet}
+    </EmptyState>
+  {:else if !loaded}
+    <div class="loading" aria-busy="true">
+      {#each [0, 1, 2, 3] as n (n)}<Skeleton height="var(--row-h)" />{/each}
+    </div>
+  {:else}
+    <IssueMenu>
+    <table role="grid" class:grouped>
+      <colgroup>
+        <col class="key-col" />
         {#each cols as col (col.id)}
-          <th scope="col" data-col={col.id}>
-            <span>{label(col.ref)}</span>
-            <button type="button" aria-label="Move {label(col.ref)} left" onclick={() => moveColumn(col.index, -1)}>&lsaquo;</button>
-            <button type="button" aria-label="Move {label(col.ref)} right" onclick={() => moveColumn(col.index, 1)}>&rsaquo;</button>
-            <button type="button" aria-label="Remove column {label(col.ref)}" onclick={() => removeColumn(col.index)}>&times;</button>
-          </th>
+          <col style:width={widths[col.id] ? `${widths[col.id]}px` : undefined} />
         {/each}
-      </tr>
-    </thead>
-    <tbody>
-      {#each issues as issue, r (issue.id)}
-        <tr data-key={issue.key}>
-          <th scope="row">{issue.key}</th>
-          {#each cols as col, c (col.id)}
-            {@const isEditing = editing !== null && editing.row === r && editing.col === c}
-            <td
-              role="gridcell"
-              data-col={col.id}
-              data-active={r === active.row && c === active.col ? 'true' : undefined}
-              onclick={() => (active = { row: r, col: c })}
-            >
-              {#if isEditing}
-                {#if col.kind === 'Status' || col.kind === 'Select' || col.kind === 'MultiSelect'}
-                  <select bind:value={draft} autofocus>
-                    {#if col.kind !== 'Status'}<option value=""></option>{/if}
-                    {#each optionsOf(col.kind, col.ref) as opt (opt.value)}
-                      <option value={opt.value}>{opt.label}</option>
-                    {/each}
-                  </select>
-                {:else if col.kind === 'Date'}
-                  <input type="date" bind:value={draft} autofocus />
-                {:else}
-                  <input type="text" bind:value={draft} autofocus inputmode={col.kind === 'Number' ? 'decimal' : undefined} />
-                {/if}
-              {:else}
-                {show(raw(issue, col.ref), col.kind)}
-              {/if}
-            </td>
+      </colgroup>
+      <thead>
+        <tr>
+          <th scope="col" class="key-head">Key</th>
+          {#each cols as col (col.id)}
+            <th scope="col" data-col={col.id} data-sticky={col.id === 'fixed:Title' ? '' : undefined} class:num={col.kind === 'Number'} aria-sort={sort?.col === col.id ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+              <span class="head">
+                <Button variant="quiet" icon={sort?.col === col.id ? (sort.dir === 'asc' ? 'chevron-up' : 'chevron-down') : undefined} onclick={() => cycleSort(col.id)}>{col.label}</Button>
+                <span class="tools">
+                <span class="flip"><IconButton icon="chevron-right" label="Move {col.label} left" onclick={() => moveColumn(col.index, -1)} /></span>
+                <IconButton icon="chevron-right" label="Move {col.label} right" onclick={() => moveColumn(col.index, 1)} />
+                <IconButton icon="close" label="Remove column {col.label}" onclick={() => removeColumn(col.index)} />
+                </span>
+              </span>
+              <span class="grip" role="separator" aria-orientation="vertical" aria-label="Resize {col.label}" onpointerdown={(e) => startResize(e, col.id)}></span>
+            </th>
           {/each}
+          <th scope="col" class="add-col">
+            <Popover>
+              {#snippet trigger(props)}<span {...props} class="trig"><IconButton icon="plus" label="Add field" /></span>{/snippet}
+              <DisplayPanel {def} onchange={changeDisplay} />
+            </Popover>
+          </th>
         </tr>
+      </thead>
+      {#each groups as g (g.name)}
+        <tbody data-group={g.name}>
+          {#if grouped}
+            <tr class="band-row">
+              <td colspan={cols.length + 1}>
+                <GroupHeader name={g.name || 'None'} count={g.rows.length} total={pointsTotal(g.rows, cols.map((c) => c.ref), ctx)} category={g.status ? g.category : undefined} tone={g.priority ? (Math.min(4, Math.max(1, g.priority)) as 1 | 2 | 3 | 4) : 1} collapsed={collapsed.has(g.name)} ontoggle={() => toggleGroup(g.name)}>
+                  {#snippet leading()}{#if g.priority !== undefined}<PriorityGlyph level={priorityGlyph(g.priority)} />{/if}{/snippet}
+                </GroupHeader>
+              </td>
+            </tr>
+          {/if}
+          {#if !collapsed.has(g.name)}
+            {#each g.rows as issue (issue.id)}
+              <tr data-key={issue.key} data-id={issue.id} aria-selected={rowSelected(issue)} data-focused={issue.id === activeRowId ? '' : undefined}>
+                <th scope="row" class="key-cell">{issue.key}</th>
+                {#each cols as col, c (col.id)}
+                  {@const isEditing = editing !== null && visibleIds[editing.row] === issue.id && editing.col === c}
+                  <td
+                    role="gridcell"
+                    data-col={col.id}
+                    data-sticky={col.id === 'fixed:Title' ? '' : undefined}
+                    data-kind={col.kind}
+                    class:num={col.kind === 'Number'}
+                    data-active={issue.id === activeRowId && c === activeCol ? 'true' : undefined}
+                    onclick={() => pick(issue, c)}
+                  >
+                    {#if isEditing}
+                      <form class="editor" bind:this={editorEl} onsubmit={(e) => { e.preventDefault(); void commit(); }}>
+                        {#if col.kind === 'Status'}
+                          <Select label={col.label} items={optionsOf(col.kind, col.ref)} bind:value={draft} />
+                        {:else if col.kind === 'Select'}
+                          <Select label={col.label} items={optionsOf(col.kind, col.ref)} bind:value={draft} />
+                        {:else if col.kind === 'Date'}
+                          <TextInput label={col.label} type="date" bind:value={draft} invalid={error !== null} />
+                        {:else if col.kind === 'Number'}
+                          <TextInput label={col.label} bind:value={draft} invalid={error !== null} />
+                        {:else}
+                          <TextInput label={col.label} bind:value={draft} invalid={error !== null} placeholder={col.kind === 'MultiSelect' ? 'Comma separated' : undefined} />
+                        {/if}
+                      </form>
+                    {:else if col.kind === 'Checkbox'}
+                      <Checkbox label={`${col.label} for ${issue.key}`} bind:checked={() => raw(issue, col.ref) === true, (v) => void save(issue, col, v)} />
+                    {:else}
+                      <span class="due" data-overdue={col.ref.Fixed === 'DueDate' && isOverdue(issue, statuses.find((s) => s.id === issue.status_id)?.category, tz) ? '' : undefined}>
+                        <FieldValue field={col.ref} {issue} {ctx} />
+                      </span>
+                    {/if}
+                  </td>
+                {/each}
+              </tr>
+            {/each}
+          {/if}
+        </tbody>
       {/each}
-    </tbody>
-  </table>
+    </table>
+    </IssueMenu>
+  {/if}
 </section>
+
+<style>
+  .table-view {
+    display: grid;
+    gap: var(--s-4);
+    padding: 0;
+    min-width: 0;
+    background: var(--sheet);
+    color: var(--ink);
+    font-size: var(--fs-md);
+  }
+  /* Header labels are quiet text on the sheet; the "+" stays in view at the right edge. */
+  .head :global(.btn) { border-color: transparent; background: transparent; padding: 0 var(--s-2); font: inherit; letter-spacing: inherit; text-transform: inherit; }
+  /* Key and Title stay put while the rest scrolls sideways; the "+" is the last column, never laid over one. */
+  .add-col { width: var(--s-10); text-align: end; }
+  .key-col, .key-head, .key-cell { width: calc(var(--s-10) * 2); min-width: calc(var(--s-10) * 2); box-sizing: border-box; }
+  [data-sticky] { position: sticky; left: calc(var(--s-10) * 2); background: var(--sheet); z-index: 1; box-shadow: 1px 0 0 var(--border); }
+  thead [data-sticky] { z-index: calc(var(--z-sticky) + 1); }
+  .trig { display: inline-flex; }
+  .due[data-overdue] { color: var(--signal); font-weight: 700; }
+  th.num { text-align: end; }
+  .loading {
+    display: grid;
+    gap: var(--s-3);
+  }
+  .error {
+    margin: 0;
+    color: var(--signal);
+    font-weight: 600;
+  }
+  table {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  thead th {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-sticky);
+    height: var(--row-h);
+    padding: 0 var(--s-5);
+    background: var(--sheet);
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-align: start;
+    white-space: nowrap;
+  }
+  .head {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+  }
+  .flip {
+    display: inline-grid;
+    transform: scaleX(-1);
+  }
+  .grip {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--s-3);
+    cursor: col-resize;
+  }
+  .key-head {
+    left: 0;
+    z-index: calc(var(--z-sticky) + 1);
+  }
+  .tools { display: inline-flex; opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+  th:hover .tools, th:focus-within .tools { opacity: 1; }
+  td {
+    vertical-align: middle;
+    height: var(--row-h);
+    padding: 0 var(--s-5);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  td.num {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+  }
+  .key-cell {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    padding: 0 var(--s-5);
+    background: var(--sheet);
+    color: var(--muted);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    text-align: start;
+    font-variant-numeric: tabular-nums;
+    border-inline-start: 3px solid transparent;
+  }
+  tr[data-focused] .key-cell {
+    border-inline-start-color: var(--signal);
+    color: var(--ink);
+  }
+  tr[aria-selected="true"] > * {
+    background: var(--selection);
+  }
+  tr[data-key]:hover > * {
+    background: var(--active);
+  }
+  td[data-active] {
+    outline: 2px solid var(--signal);
+    outline-offset: -2px;
+  }
+  .band-row td {
+    height: auto;
+    padding: 0;
+    border-bottom: 0;
+  }
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-3);
+  }
+  .editor {
+    display: flex;
+    align-items: center;
+    height: 100%;
+  }
+  .editor :global(.field) {
+    width: 100%;
+  }
+</style>

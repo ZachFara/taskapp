@@ -1,10 +1,12 @@
 //! The same fixtures as `ui/src/lib/api.mock.ts`, created through core so the real and mock modes match.
 
-use chrono::NaiveDate;
-use serde_json::{Map, json};
+use chrono::{Days, NaiveDate, TimeZone, Utc};
+use serde_json::{Map, Value, json};
 use taskapp_core::{
-    ChangeSource::Ui, Db, Due, NewIssue, ProjectId, PropertyDef, PropertyKind, Result,
-    SelectOption, StatusId, issues, projects, properties,
+    ChangeSource::Ui, Db, Due, Error, IssueId, LabelId, MilestoneId, NewIssue, ProjectId,
+    PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, StatusId,
+    TemplateInput, ViewDef, ViewId, cycles, history, issues, labels, palette::Look, projects,
+    properties, relations, templates, views, workspace,
 };
 
 fn def(
@@ -30,13 +32,441 @@ fn def(
     }
 }
 
-/// Fills an empty database: two projects, three properties, 20 issues. Statuses come from the migration.
+/// One issue of the sample workspace; dates are days from today, `minutes` the estimate.
+struct Row {
+    title: &'static str,
+    description: &'static str,
+    status: i64,
+    priority: u8,
+    project: i64,
+    start: Option<i64>,
+    due: Option<i64>,
+    minutes: u32,
+    labels: &'static [i64],
+    parent: i64,
+    cycle: i64,
+    milestone: i64,
+    area: &'static str,
+    effort: u32,
+}
+
+/// Story points by issue number; the issues not listed have none (the mock lists the same).
+const POINTS: [(i64, f64); 16] = [
+    (1, 5.0),
+    (3, 3.0),
+    (4, 8.0),
+    (5, 2.0),
+    (7, 13.0),
+    (8, 3.0),
+    (10, 5.0),
+    (11, 8.0),
+    (13, 5.0),
+    (14, 1.0),
+    (15, 2.0),
+    (16, 5.0),
+    (17, 3.0),
+    (19, 8.0),
+    (20, 3.0),
+    (23, 1.0),
+];
+
+/// Status moves of the last three weeks as (issue, days ago, from, to), oldest first per issue. Every issue
+/// starts in Todo (2); the last move ends in the status the issue has now.
+const MOVES: [(i64, i64, i64, i64); 14] = [
+    (3, 22, 2, 3),
+    (3, 17, 3, 4),
+    (4, 20, 2, 3),
+    (10, 18, 2, 3),
+    (10, 11, 3, 4),
+    (10, 5, 4, 3),
+    (13, 15, 2, 3),
+    (13, 9, 3, 4),
+    (15, 14, 2, 3),
+    (15, 12, 3, 4),
+    (1, 12, 2, 3),
+    (7, 9, 2, 3),
+    (8, 8, 2, 3),
+    (16, 5, 2, 3),
+];
+/// Cancellations and point revisions: (issue, days ago, from, to).
+const CANCELS: [(i64, i64, i64, i64); 1] = [(22, 4, 2, 5)];
+const REVISIONS: [(i64, i64, f64, f64); 2] = [(4, 12, 5.0, 8.0), (7, 7, 8.0, 13.0)];
+
+/// The same workspace as `ui/src/lib/api.mock.ts`, which the contract tests compare with this one.
+const E: Row = Row {
+    title: "",
+    description: "",
+    status: 1,
+    priority: 0,
+    project: 0,
+    start: None,
+    due: None,
+    minutes: 0,
+    labels: &[],
+    parent: 0,
+    cycle: 0,
+    milestone: 0,
+    area: "",
+    effort: 0,
+};
+
+static ROWS: [Row; 24] = [
+    Row {
+        title: "Redesign homepage hero",
+        description: "Replace the stock photo with the new brand illustration and tighten the headline.",
+        status: 3,
+        priority: 3,
+        project: 1,
+        start: Some(-5),
+        due: Some(2),
+        minutes: 960,
+        labels: &[3],
+        cycle: 1,
+        milestone: 1,
+        area: "work",
+        effort: 13,
+        ..E
+    },
+    Row {
+        title: "Write launch announcement",
+        status: 2,
+        priority: 2,
+        project: 1,
+        start: Some(0),
+        due: Some(5),
+        minutes: 120,
+        labels: &[5],
+        milestone: 1,
+        ..E
+    },
+    Row {
+        title: "Fix broken links in footer",
+        status: 4,
+        priority: 1,
+        project: 1,
+        due: Some(-3),
+        minutes: 60,
+        labels: &[1],
+        ..E
+    },
+    Row {
+        title: "Migrate blog to new CMS",
+        description: "Export posts, redirect the old URLs and check every embedded image.",
+        status: 3,
+        priority: 4,
+        project: 1,
+        start: Some(-10),
+        due: Some(-2),
+        minutes: 2400,
+        labels: &[6],
+        cycle: 1,
+        area: "work",
+        effort: 21,
+        ..E
+    },
+    Row {
+        title: "Set up analytics dashboard",
+        status: 1,
+        project: 1,
+        minutes: 240,
+        labels: &[2],
+        ..E
+    },
+    Row {
+        title: "Audit page speed",
+        status: 2,
+        priority: 2,
+        project: 1,
+        start: Some(1),
+        due: Some(4),
+        minutes: 180,
+        labels: &[4],
+        effort: 8,
+        ..E
+    },
+    Row {
+        title: "Mobile onboarding flow",
+        description: "Three screens: welcome, permissions and account setup. Skippable at every step.",
+        status: 3,
+        priority: 3,
+        project: 2,
+        start: Some(-3),
+        due: Some(6),
+        minutes: 1440,
+        labels: &[2, 3],
+        cycle: 1,
+        milestone: 2,
+        area: "work",
+        effort: 34,
+        ..E
+    },
+    Row {
+        title: "Welcome screen illustrations",
+        status: 3,
+        priority: 2,
+        project: 2,
+        start: Some(-3),
+        due: Some(1),
+        minutes: 480,
+        labels: &[3],
+        parent: 7,
+        cycle: 1,
+        ..E
+    },
+    Row {
+        title: "Permission prompts copy",
+        status: 2,
+        priority: 1,
+        project: 2,
+        start: Some(2),
+        due: Some(5),
+        minutes: 60,
+        labels: &[5],
+        parent: 7,
+        ..E
+    },
+    Row {
+        title: "Crash on launch for Android 9",
+        status: 3,
+        priority: 4,
+        project: 2,
+        due: Some(-1),
+        minutes: 240,
+        labels: &[1],
+        cycle: 1,
+        ..E
+    },
+    Row {
+        title: "Push notification settings",
+        status: 2,
+        priority: 2,
+        project: 2,
+        start: Some(3),
+        due: Some(9),
+        minutes: 960,
+        labels: &[2],
+        cycle: 2,
+        ..E
+    },
+    Row {
+        title: "Offline mode research",
+        description: "Compare local-first sync options and write up the trade-offs.",
+        status: 1,
+        priority: 1,
+        project: 2,
+        minutes: 480,
+        labels: &[4],
+        ..E
+    },
+    Row {
+        title: "Dark mode icons",
+        status: 4,
+        priority: 2,
+        project: 2,
+        start: Some(-8),
+        due: Some(-4),
+        minutes: 240,
+        labels: &[3],
+        ..E
+    },
+    Row {
+        title: "Update app store listing",
+        status: 2,
+        priority: 2,
+        project: 2,
+        due: Some(3),
+        minutes: 60,
+        labels: &[5],
+        parent: 7,
+        cycle: 2,
+        ..E
+    },
+    Row {
+        title: "Confirm new office lease",
+        status: 4,
+        priority: 3,
+        project: 3,
+        start: Some(-14),
+        due: Some(-9),
+        ..E
+    },
+    Row {
+        title: "Order standing desks",
+        status: 3,
+        priority: 2,
+        project: 3,
+        start: Some(-2),
+        due: Some(4),
+        minutes: 120,
+        labels: &[6],
+        cycle: 1,
+        area: "home",
+        ..E
+    },
+    Row {
+        title: "Book movers",
+        status: 2,
+        priority: 3,
+        project: 3,
+        start: Some(2),
+        due: Some(11),
+        minutes: 60,
+        area: "home",
+        ..E
+    },
+    Row {
+        title: "Plan seating chart",
+        status: 2,
+        priority: 2,
+        project: 3,
+        start: Some(4),
+        due: Some(10),
+        minutes: 240,
+        labels: &[3],
+        ..E
+    },
+    Row {
+        title: "Set up network and Wi-Fi",
+        description: "Two access points per floor, a guest network and a printer VLAN.",
+        status: 1,
+        priority: 3,
+        project: 3,
+        due: Some(14),
+        minutes: 960,
+        labels: &[6],
+        ..E
+    },
+    Row {
+        title: "Order access points",
+        status: 1,
+        priority: 2,
+        project: 3,
+        minutes: 480,
+        labels: &[6],
+        parent: 19,
+        ..E
+    },
+    Row {
+        title: "Send address change notices",
+        status: 2,
+        priority: 2,
+        project: 3,
+        due: Some(7),
+        minutes: 60,
+        labels: &[5],
+        ..E
+    },
+    Row {
+        title: "Cancel old storage unit",
+        status: 5,
+        project: 3,
+        ..E
+    },
+    Row {
+        title: "Rename Contact page",
+        status: 2,
+        priority: 1,
+        minutes: 30,
+        ..E
+    },
+    Row {
+        title: "Team retro notes",
+        status: 1,
+        labels: &[4],
+        ..E
+    },
+];
+
+/// Fills an empty database with a believable workspace: three projects, six labels, two cycles, two milestones,
+/// two issue templates, three view templates, four views, three properties, 24 issues. Statuses and the first three views come from the migration.
 ///
 /// # Errors
 /// Fails when a core call fails, for example on a database that already holds these rows.
 pub async fn run(db: &Db) -> Result<()> {
-    for (slug, name) in [("home", "Home"), ("work", "Work")] {
-        projects::create(db, slug, name, Ui).await?;
+    reference_data(db).await?;
+    let today = Utc::now().date_naive();
+    for (k, row) in ROWS.iter().enumerate() {
+        issue(db, today, row, k).await?;
+    }
+    for (from, to, kind) in [
+        (4, 6, RelationKind::Blocks),
+        (16, 18, RelationKind::Blocks),
+        (10, 11, RelationKind::Related),
+    ] {
+        let (from, to) = (IssueId(from), IssueId(to));
+        relations::add(db, Relation { from, to, kind }, Ui).await?;
+    }
+    seed_history(db).await?;
+    seed_views(db, today).await
+}
+
+/// Backdated status and points changes written through `history::record_past` (rows with no undo step), so
+/// progress charts have a three-week shape. Each lands at 12:00 UTC on its day; the issues were created with
+/// their final values, so the first row's old value is what they started with.
+async fn seed_history(db: &Db) -> Result<()> {
+    let today = Utc::now().date_naive();
+    let when = |ago: i64| {
+        let noon = at(today, -ago).and_hms_opt(12, 0, 0).unwrap_or_default();
+        Utc.from_utc_datetime(&noon)
+    };
+    let status = MOVES
+        .iter()
+        .chain(&CANCELS)
+        .map(|&(n, ago, from, to)| (n, ago, "status_id", json!(from), json!(to)));
+    let points = REVISIONS
+        .iter()
+        .map(|&(n, ago, from, to)| (n, ago, "points", json!(from), json!(to)));
+    for (n, ago, field, old, new) in status.chain(points) {
+        let edit = history::Edit {
+            field,
+            old: Some(&old),
+            new: Some(&new),
+        };
+        history::record_past(db, when(ago), Ui, "issue", &n.to_string(), &edit).await?;
+    }
+    Ok(())
+}
+
+fn bad(e: &serde_json::Error) -> Error {
+    Error::Invalid(e.to_string())
+}
+
+fn at(today: NaiveDate, days: i64) -> NaiveDate {
+    let d = Days::new(days.unsigned_abs());
+    (if days < 0 {
+        today.checked_sub_days(d)
+    } else {
+        today.checked_add_days(d)
+    })
+    .unwrap_or(today)
+}
+
+async fn reference_data(db: &Db) -> Result<()> {
+    for (slug, name) in [
+        ("website", "Website relaunch"),
+        ("mobile", "Mobile app"),
+        ("office", "Office move"),
+    ] {
+        projects::create(db, slug, name, None, None, Ui).await?;
+    }
+    for (name, color, icon) in [
+        ("Bug", "red", "flag"),
+        ("Feature", "blue", "bolt"),
+        ("Design", "purple", "star"),
+        ("Research", "teal", "target"),
+        ("Docs", "green", "bookmark"),
+        ("Ops", "orange", "tag"),
+    ] {
+        labels::create(db, name, color, Some(format!("icon:{icon}")), Ui).await?;
+    }
+    let today = Utc::now().date_naive();
+    for (name, from, to) in [("Sprint 1", -6, 7), ("Sprint 2", 8, 21)] {
+        let (from, to) = (at(today, from), at(today, to));
+        cycles::create(db, Some(name.into()), from, to, Look::default(), Ui).await?;
+    }
+    for (project, name, days) in [(1, "Soft launch", 21), (2, "Store release", 30)] {
+        let target = Some(at(today, days));
+        projects::create_milestone(db, ProjectId(project), name, target, Ui).await?;
     }
     let area = [("home", "#4caf50"), ("work", "#2196f3")];
     for d in [
@@ -46,40 +476,99 @@ pub async fn run(db: &Db) -> Result<()> {
     ] {
         properties::create_def(db, d, Ui).await?;
     }
-    for n in 1..=20_u32 {
-        let mut props = Map::new();
-        match n % 3 {
-            1 => {
-                props.insert("area".into(), json!("home"));
-                props.insert("effort".into(), json!(n));
-            }
-            2 => {
-                props.insert("area".into(), json!("work"));
-            }
-            _ => {}
-        }
-        let dec = |day: u32| NaiveDate::from_ymd_opt(2026, 12, day);
-        issues::create(
-            db,
-            NewIssue {
-                title: format!("Fixture task {n}"),
-                description: Some(String::new()),
-                status_id: Some(StatusId(i64::from((n - 1) % 5 + 1))),
-                priority: u8::try_from(n % 5).ok(),
-                project_id: (n % 3 != 0).then_some(ProjectId(i64::from(n % 2 + 1))),
-                start_date: if n % 4 == 0 { dec(n) } else { None },
-                due: if n % 4 == 0 {
-                    dec(n + 2).map(Due::Date)
-                } else {
-                    None
-                },
-                estimate_minutes: (n % 2 == 1).then_some(480),
-                properties: Some(props),
-                ..NewIssue::default()
-            },
-            Ui,
-        )
-        .await?;
+    // After the properties, so the planning-table template lists them.
+    workspace::setup(db, "Cairn", "ABC", Some("UTC")).await?;
+    for t in [
+        json!({"name": "Bug", "slug": "bug", "icon": "icon:flag", "color": "red", "body": {
+            "title_prefix": "Bug: ",
+            "fields": {"description": "Steps to reproduce:\n\nExpected:\n\nActual:", "priority": 2, "label_ids": [1]},
+            "sub_issues": [{"title": "Reproduce", "fields": {"priority": 2}}]}}),
+        json!({"name": "Research idea", "slug": "research", "icon": "icon:target", "color": "teal", "body": {
+            "title_prefix": "Research: ",
+            "fields": {"description": "Question:\n\nWhy it matters:", "label_ids": [4], "estimate_minutes": 240},
+            "sub_issues": []}}),
+    ] {
+        let input: TemplateInput = serde_json::from_value(t).map_err(|e| bad(&e))?;
+        templates::create(db, input, Ui).await?;
+    }
+    Ok(())
+}
+
+async fn issue(db: &Db, today: NaiveDate, r: &Row, k: usize) -> Result<()> {
+    let n = i64::try_from(k + 1).unwrap_or(0);
+    let mut props = Map::new();
+    if !r.area.is_empty() {
+        props.insert("area".into(), json!(r.area));
+    }
+    if r.effort > 0 {
+        props.insert("effort".into(), json!(r.effort));
+    }
+    let opt = |id: i64| (id > 0).then_some(id);
+    let created = Utc::now() - chrono::Duration::days(30 - i64::try_from(k + 1).unwrap_or(0));
+    issues::create(
+        db,
+        NewIssue {
+            title: r.title.into(),
+            description: Some(r.description.into()),
+            status_id: Some(StatusId(r.status)),
+            priority: Some(r.priority),
+            project_id: opt(r.project).map(ProjectId),
+            milestone_id: opt(r.milestone).map(MilestoneId),
+            parent_id: opt(r.parent).map(IssueId),
+            cycle_id: opt(r.cycle).map(taskapp_core::CycleId),
+            label_ids: Some(r.labels.iter().map(|&l| LabelId(l)).collect()),
+            start_date: r.start.map(|d| at(today, d)),
+            due: r.due.map(|d| Due::Date(at(today, d))),
+            estimate_minutes: (r.minutes > 0).then_some(r.minutes),
+            points: POINTS.iter().find(|p| p.0 == n).map(|p| p.1),
+            properties: Some(props),
+            created_at: Some(created),
+            ..NewIssue::default()
+        },
+        Ui,
+    )
+    .await?;
+    Ok(())
+}
+
+/// Active and Board group by status, the timeline by project, and "This week" is added; the first three get icons.
+async fn seed_views(db: &Db, today: NaiveDate) -> Result<()> {
+    let open = json!({"Cond": {"field": {"Fixed": "StatusCategory"}, "op": "In", "value": ["unstarted", "started"]}});
+    let def = |filter: Value, group: Value, layout: &str| {
+        let v = json!({"filter": filter, "sorts": [], "group_by": group, "layout": layout, "columns": [], "include_archived": false});
+        serde_json::from_value::<ViewDef>(v).map_err(|e| bad(&e))
+    };
+    let status = json!({"Fixed": "Status"});
+    let week = json!({"And": [open.clone(), {"Cond": {"field": {"Fixed": "DueDate"}, "op": "Lte", "value": at(today, 7).to_string()}}]});
+    let not_done =
+        json!({"Cond": {"field": {"Fixed": "StatusCategory"}, "op": "Neq", "value": "completed"}});
+    let all = [
+        (
+            Some(1),
+            "Active",
+            def(open.clone(), status.clone(), "List")?,
+            "list",
+        ),
+        (Some(2), "Board", def(open, status, "Board")?, "board"),
+        (
+            Some(3),
+            "Timeline: all projects",
+            def(not_done, json!({"Fixed": "Project"}), "Gantt")?,
+            "timeline",
+        ),
+        (
+            None,
+            "This week",
+            def(week, Value::Null, "List")?,
+            "calendar",
+        ),
+    ];
+    for (id, name, d, icon) in all {
+        let look = Look {
+            icon: Some(format!("icon:{icon}")),
+            color: None,
+        };
+        views::save(db, id.map(ViewId), name, d, look, Ui).await?;
     }
     Ok(())
 }

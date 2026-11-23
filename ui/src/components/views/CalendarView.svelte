@@ -2,20 +2,55 @@
   import { Calendar, DayGrid, Interaction, TimeGrid } from '@event-calendar/core';
   import '@event-calendar/core/index.css';
   import { onMount } from 'svelte';
+  import { getWeekStart } from '../../lib/theme.svelte';
+  import { selection } from '../../lib/selection.svelte';
   import { api } from '../../lib/api';
-  import type { Due, Issue, SavedView, WorkBlock } from '../../lib/bindings';
+  import { labelFor, shortcutFor } from '../../lib/commands';
+  import type { Due, Issue, SavedView, Status, StatusCategory, WorkBlock } from '../../lib/bindings';
+  import FieldValue from '../display/FieldValue.svelte';
+  import { emptyCtx, loadCtx, showWeekends, type Ctx } from '../display/types';
+  import Button from '../../ui/Button.svelte';
+  import EmptyState from '../../ui/EmptyState.svelte';
+  import GroupHeader from '../../ui/GroupHeader.svelte';
+  import IconButton from '../../ui/IconButton.svelte';
+  import Skeleton from '../../ui/Skeleton.svelte';
+  import StatusGlyph from '../../ui/StatusGlyph.svelte';
+  import Tabs from '../../ui/Tabs.svelte';
 
   let { view }: { view: SavedView } = $props();
 
   const HOUR = 60 * 60_000;
+  const MODE_KEY = 'cairn.calendar.mode';
+  const viewOf = (m: string) => (m === 'month' ? 'dayGridMonth' : 'timeGridWeek');
+  // shortcut: no storage in a private window, the mode falls back to month
+  const readMode = () => {
+    try {
+      return localStorage.getItem(MODE_KEY) === 'week' ? 'week' : 'month';
+    } catch {
+      return 'month';
+    }
+  };
+
   let blocks = $state<WorkBlock[]>([]);
   let issues = $state<Issue[]>([]);
+  let statuses = $state<Status[]>([]);
+  let loaded = $state(false);
   let selected = $state<number | null>(null);
   let error = $state('');
+  let range = $state('');
+  let mode = $state(readMode());
+  let anchor = new Date();
   let calendar = $state<any>();
+  let ctx = $state.raw<Ctx>(emptyCtx);
+  // The chip shows the title plus up to two displayed fields; a view with none of its own stays title-only.
+  const chipFields = $derived(view.def.columns.slice(0, 2));
 
   const message = (e: unknown) => (e as { message?: string })?.message ?? String(e);
   const blockId = (id: string) => Number(id.slice('block-'.length));
+  const pad = (n: number) => String(n).padStart(2, '0');
+  // Local wall-clock parts, as the calendar reads them back from a dropped event.
+  const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const hms = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 
   // Timed dues are floating wall-clock strings in the due's own zone, so a DST change cannot shift them.
   function dueWallClock(utc: string, tz: string) {
@@ -33,16 +68,28 @@
     }
   }
 
+  // The zone's offset at an instant, then the instant whose wall clock in `tz` reads `wall` (one correction).
+  const offsetMs = (utc: number, tz: string) => Date.parse(`${dueWallClock(new Date(utc).toISOString(), tz)}Z`) - utc;
+  function wallToUtc(wall: string, tz: string) {
+    const asUtc = Date.parse(`${wall}Z`);
+    const first = asUtc - offsetMs(asUtc, tz);
+    return new Date(asUtc - offsetMs(first, tz)).toISOString();
+  }
+
+  const categoryOf = (i: Issue): StatusCategory => statuses.find((s) => s.id === i.status_id)?.category ?? 'Backlog';
+  const isDue = (id: string) => id.startsWith('due-');
+
   function dueEvents(i: Issue) {
     const due: Due | null = i.due;
     if (!due) return [];
-    const title = `${i.key} ${i.title}`;
+    const extendedProps = { key: i.key, category: categoryOf(i), issue: i };
+    const title = i.title;
     if ('Date' in due) {
-      return [{ id: `due-${i.id}`, title, start: due.Date, allDay: true, editable: false, classNames: ['due'] }];
+      return [{ id: `due-${i.id}`, title, start: due.Date, allDay: true, editable: true, durationEditable: false, classNames: ['due'], extendedProps }];
     }
     const { utc, tz } = due.DateTime;
     const end = new Date(Date.parse(utc) + 15 * 60_000).toISOString();
-    return [{ id: `due-${i.id}`, title, start: dueWallClock(utc, tz), end: dueWallClock(end, tz), editable: false, classNames: ['due'] }];
+    return [{ id: `due-${i.id}`, title, start: dueWallClock(utc, tz), end: dueWallClock(end, tz), editable: true, durationEditable: false, classNames: ['due'], extendedProps }];
   }
 
   // Blocks go in as local Dates: the calendar reads a Date as the wall clock of its own timezone.
@@ -51,14 +98,16 @@
       const issue = issues.find((i) => i.id === b.issue_id);
       return {
         id: `block-${b.id}`,
-        title: issue ? `${issue.key} ${issue.title}` : `Issue ${b.issue_id}`,
+        title: issue ? issue.title : `Issue ${b.issue_id}`,
         start: new Date(b.start_utc),
         end: new Date(b.end_utc),
         classNames: ['block'],
+        extendedProps: { key: issue?.key, category: issue ? categoryOf(issue) : 'Backlog', issue },
       };
     }),
     ...issues.flatMap(dueEvents),
   ]);
+  const unscheduled = $derived(issues.filter((i) => !i.due));
 
   // Read `events` before the optional chain: when the calendar is not yet bound, the chain would skip it
   // and the effect would never track it.
@@ -67,12 +116,65 @@
     calendar?.setOption('events', current);
   });
 
+  $effect(() => {
+    const m = mode;
+    calendar?.setOption('view', viewOf(m));
+    try {
+      localStorage.setItem(MODE_KEY, m);
+    } catch {
+      // shortcut: the mode is not remembered without storage, upgrade with a stored view setting
+    }
+  });
+
+  // Commands reach the view as window events; the registry decides when their keys fire.
+  $effect(() => {
+    const actions: Record<string, () => void> = {
+      'calendar.prev': () => shift(-1),
+      'calendar.next': () => shift(1),
+      'calendar.today': () => goTo(new Date()),
+      'calendar.week': () => (mode = 'week'),
+      'calendar.month': () => (mode = 'month'),
+    };
+    const listeners = Object.entries(actions).map(([id, run]) => {
+      const h = () => run();
+      window.addEventListener(`command:${id}`, h);
+      return [id, h] as const;
+    });
+    return () => {
+      for (const [id, h] of listeners) window.removeEventListener(`command:${id}`, h);
+    };
+  });
+
+  const fire = (id: string) => window.dispatchEvent(new CustomEvent(`command:${id}`));
+
+  function shift(dir: number) {
+    const d = new Date(anchor);
+    if (mode === 'month') d.setMonth(d.getMonth() + dir, 1);
+    else d.setDate(d.getDate() + 7 * dir);
+    goTo(d);
+  }
+
+  function goTo(d: Date) {
+    anchor = d;
+    calendar?.setOption('date', d);
+  }
+
   async function loadBlocks(start: Date, end: Date) {
     try {
       blocks = await api.blocks.between(start.toISOString(), end.toISOString());
     } catch (e) {
       error = message(e);
     }
+  }
+
+  const fmt = (d: Date, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(undefined, o).format(d);
+
+  function onRange(start: Date, end: Date) {
+    range =
+      mode === 'week'
+        ? `${fmt(start, { day: 'numeric', month: 'short' })} to ${fmt(new Date(end.getTime() - 1), { day: 'numeric', month: 'short', year: 'numeric' })}`
+        : fmt(new Date((start.getTime() + end.getTime()) / 2), { month: 'long', year: 'numeric' });
+    return loadBlocks(start, end);
   }
 
   async function onMove(info: any) {
@@ -95,15 +197,50 @@
     }
   }
 
+  // A due keeps its kind: a date stays a date, a timed due keeps its zone and, when dropped on the all-day row,
+  // its time of day.
+  async function moveDue(info: any) {
+    const { event, revert } = info;
+    const id = Number(String(event.id).slice('due-'.length));
+    const issue = issues.find((i) => i.id === id);
+    if (!issue?.due) {
+      revert();
+      return;
+    }
+    const day = ymd(event.start);
+    let due: Due;
+    if ('Date' in issue.due) {
+      due = { Date: day };
+    } else {
+      const { utc, tz } = issue.due.DateTime;
+      const time = event.allDay ? dueWallClock(utc, tz).slice(11) : hms(event.start);
+      due = { DateTime: { utc: wallToUtc(`${day}T${time}`, tz), tz } };
+    }
+    try {
+      const updated = await api.issues.update(id, { due });
+      issues = issues.map((i) => (i.id === id ? updated : i));
+      error = '';
+    } catch (e) {
+      revert();
+      error = message(e);
+    }
+  }
+
+  // An issue dropped on the all-day row gets that date as its due; dropped on a time slot it becomes a 60-minute block.
   async function onDrop(e: DragEvent) {
     e.preventDefault();
     const issueId = Number(e.dataTransfer?.getData('text/plain'));
     const hit = calendar?.dateFromPoint(e.clientX, e.clientY);
     if (!issueId || !hit) return;
-    const start = hit.date;
     try {
-      const block = await api.blocks.create(issueId, start.toISOString(), new Date(start.getTime() + HOUR).toISOString());
-      blocks = [...blocks, block];
+      if (hit.allDay) {
+        const updated = await api.issues.update(issueId, { due: { Date: ymd(hit.date) } });
+        issues = issues.map((i) => (i.id === issueId ? updated : i));
+      } else {
+        const start = hit.date;
+        const block = await api.blocks.create(issueId, start.toISOString(), new Date(start.getTime() + HOUR).toISOString());
+        blocks = [...blocks, block];
+      }
       error = '';
     } catch (err) {
       error = message(err);
@@ -125,54 +262,168 @@
   }
 
   const options = {
-    view: 'timeGridWeek',
+    view: viewOf(mode),
     timeZone: 'local',
+    firstDay: 0,
+    scrollTime: '08:00:00',
+    height: '100%',
+    // Month rows share the sheet's height and long days show "+ more" instead of growing.
+    dayMaxEvents: true,
+    // A month header names only the weekday; a week header adds the date.
+    views: {
+      dayGridMonth: { dayHeaderFormat: (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short' }) },
+      timeGridWeek: { dayHeaderFormat: (d: Date) => `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${d.getDate()}` },
+    },
+    headerToolbar: false,
+    hiddenDays: showWeekends(view.def) ? [] : [0, 6],
     editable: true,
     eventStartEditable: true,
     eventDurationEditable: true,
-    headerToolbar: { start: 'title', center: '', end: 'today prev,next timeGridDay,timeGridWeek,dayGridMonth' },
-    datesSet: (info: { start: Date; end: Date }) => loadBlocks(info.start, info.end),
+    datesSet: (info: { start: Date; end: Date }) => onRange(info.start, info.end),
     eventClick: (info: { event: { id: string } }) => {
       selected = info.event.id.startsWith('block-') ? blockId(info.event.id) : null;
     },
-    eventDrop: onMove,
+    eventDrop: (info: any) => (isDue(info.event.id) ? moveDue(info) : onMove(info)),
     eventResize: onMove,
   };
 
   onMount(async () => {
+    selection.setLayout('calendar');
+    options.firstDay = (await getWeekStart()) === 'monday' ? 1 : 0;
+    calendar?.setOption('firstDay', options.firstDay);
     try {
-      issues = await api.views.query(view.def);
+      [statuses, issues, ctx] = await Promise.all([api.statuses.list(), api.views.query(view.def), loadCtx(view.def)]);
+      loaded = true;
     } catch (e) {
       error = message(e);
     }
   });
+
+  const modes = [
+    { id: 'week', label: 'Week' },
+    { id: 'month', label: 'Month' },
+  ];
 </script>
 
 <svelte:window onkeydown={onKeydown} />
 
 <div class="calendar">
-  <aside aria-label="Issues to schedule">
-    <ul>
-      {#each issues as issue (issue.id)}
-        <li draggable="true" ondragstart={(e) => e.dataTransfer?.setData('text/plain', String(issue.id))}>
-          <span class="key">{issue.key}</span> {issue.title}
-        </li>
-      {/each}
-    </ul>
-  </aside>
-  <div class="grid" data-calendar ondragover={(e) => e.preventDefault()} ondrop={onDrop} role="presentation">
-    <Calendar bind:this={calendar} plugins={[TimeGrid, DayGrid, Interaction]} {options} />
+  <div class="toolbar">
+    <Tabs bind:value={mode} tabs={modes} label="Calendar range" segmented />
+    <span class="range" aria-live="polite">{range}</span>
+    <div class="grow"></div>
+    <IconButton icon="chevron-left" label={labelFor('calendar.prev') ?? 'Previous'} shortcut={shortcutFor('calendar.prev')} onclick={() => fire('calendar.prev')} />
+    <Button variant="quiet" tooltip={{ label: labelFor('calendar.today') ?? 'Today', shortcut: shortcutFor('calendar.today') }} onclick={() => fire('calendar.today')}>Today</Button>
+    <IconButton icon="chevron-right" label={labelFor('calendar.next') ?? 'Next'} shortcut={shortcutFor('calendar.next')} onclick={() => fire('calendar.next')} />
+  </div>
+
+  <div class="body">
+    <div class="grid" data-calendar ondragover={(e) => e.preventDefault()} ondrop={onDrop} role="presentation">
+      <Calendar bind:this={calendar} plugins={[TimeGrid, DayGrid, Interaction]} {options}>
+        {#snippet eventContent(info: any)}
+          {@const x = info.event.extendedProps}
+          <span class="chip" data-key={x.key} title={x.key}>
+            {#if x.category}<StatusGlyph category={x.category} size={12} />{/if}
+            <span class="text">{info.event.title}</span>
+            {#if x.issue}{#each chipFields as f (f.Property ?? f.Fixed)}<span class="fv"><FieldValue field={f} issue={x.issue} {ctx} /></span>{/each}{/if}
+          </span>
+        {/snippet}
+      </Calendar>
+    </div>
+
+    <aside class="side" aria-label="Issues to schedule">
+      <GroupHeader name="Unscheduled" count={unscheduled.length} category="Backlog" />
+      {#if !loaded}
+        <div class="loading"><Skeleton /><Skeleton /><Skeleton /></div>
+      {:else if unscheduled.length}
+        <ul aria-label="Unscheduled">
+          {#each unscheduled as issue (issue.id)}
+            <li draggable="true" tabindex="0" data-key={issue.key} ondragstart={(e) => e.dataTransfer?.setData('text/plain', String(issue.id))}>
+              <StatusGlyph category={categoryOf(issue)} size={14} />
+              <span class="key">{issue.key}</span>
+              <span class="text">{issue.title}</span>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <EmptyState title="Everything has a date" hint="Issues without a due date land here." />
+      {/if}
+    </aside>
   </div>
 </div>
 {#if error}
-  <p role="alert">{error}</p>
+  <p role="alert" class="alert">{error}</p>
 {/if}
 
 <style>
-  .calendar { display: grid; grid-template-columns: 16rem 1fr; gap: 1rem; padding: 1rem; }
-  aside ul { list-style: none; margin: 0; padding: 0; }
-  aside li { padding: 0.25rem 0.5rem; cursor: grab; border-radius: 4px; }
-  aside li:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
-  .key { font-variant-numeric: tabular-nums; opacity: 0.6; margin-right: 0.25rem; }
-  @media (max-width: 640px) { .calendar { grid-template-columns: 1fr; } }
+  .calendar { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  .toolbar { flex: none; height: var(--topbar-h); display: flex; align-items: center; gap: var(--s-4); padding: 0 var(--s-7); }
+  .grow { flex: 1; }
+  .range { font-size: var(--fs-lg); font-weight: 700; letter-spacing: -0.01em; padding: 0 var(--s-6); }
+  .body { flex: 1; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1fr) calc(var(--sidebar-w) + var(--s-9)); border-top: 1px solid var(--border); }
+  .grid {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: var(--s-6) var(--s-7);
+    font-family: var(--font);
+    font-size: var(--fs-md);
+    color: var(--ink);
+  }
+  /* The library sets its variables and its font on .ec itself, so they are overridden there. */
+  .grid :global(.ec) {
+    --ec-bg-color: var(--sheet);
+    --ec-day-bg-color: var(--sheet);
+    --ec-border-color: var(--border);
+    --ec-text-color: var(--ink);
+    --ec-today-bg-color: transparent;
+    --ec-highlight-color: var(--selection);
+    --ec-popup-bg-color: var(--raised);
+    --ec-now-indicator-color: var(--signal);
+    --ec-event-bg-color: var(--card);
+    --ec-event-text-color: var(--ink);
+    font-family: inherit;
+    font-size: inherit;
+    border: 0;
+    flex: 1;
+    min-height: 0;
+  }
+  .grid :global(.ec-day-head) { color: var(--muted); font-size: var(--fs-sm); font-weight: 600; }
+  .grid :global(.ec-today .ec-day-head) { color: var(--ink); font-weight: 700; background: color-mix(in srgb, var(--signal) 14%, transparent); box-shadow: inset 0 var(--s-1) 0 var(--signal); }
+  .grid :global(.ec-today .ec-day-num), .grid :global(.ec-today .ec-day-head) { color: var(--signal); }
+  .grid :global(.ec-event) { border: 0; border-left: 3px solid var(--control); border-radius: var(--r-sm); }
+  .grid :global(.ec-event.due) { border-left-color: var(--stone); }
+  .grid :global(.ec-event.block) { --ec-event-bg-color: var(--band-3); border-left-color: var(--accent); }
+  .fv { flex: none; display: inline-flex; }
+  .chip { display: flex; align-items: center; gap: var(--s-3); min-width: 0; padding: var(--s-1) var(--s-3); font-size: var(--fs-sm); }
+  .text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .key { flex: none; white-space: nowrap; font-weight: 700; color: var(--muted); margin-right: var(--s-2); }
+
+  .side { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--raised); }
+  .side ul { list-style: none; margin: 0; padding: 0; overflow: auto; }
+  .side li {
+    display: flex;
+    align-items: center;
+    gap: var(--s-4);
+    height: var(--row-h);
+    padding: 0 var(--s-7);
+    border-bottom: 1px solid var(--border);
+    cursor: grab;
+    transition: background var(--dur-1) var(--ease);
+  }
+  .side li:hover { background: var(--active); }
+  .side li .text { font-size: var(--fs-md); }
+  .loading { display: grid; gap: var(--s-4); padding: var(--s-6) var(--s-7); }
+  .alert { margin: 0 var(--s-7); color: var(--signal); font-weight: 600; }
+
+  /* Narrow window: the unscheduled list goes under the grid so the chips keep their width. */
+  @media (max-width: 1100px) {
+    .body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+    .side { border-left: 0; border-top: 1px solid var(--border); max-height: 30vh; }
+  }
+  @media (max-width: 640px) {
+    .body { grid-template-columns: 1fr; }
+    .side { border-left: 0; }
+  }
 </style>

@@ -32,12 +32,12 @@ fn is_done(c: StatusCategory) -> bool {
     matches!(c, StatusCategory::Completed | StatusCategory::Canceled)
 }
 
-async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Issue> {
+pub(crate) async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Issue> {
     let r = sqlx::query!(
         r#"SELECT id AS "id!: i64", number, title, description, status_id, priority,
                   project_id, milestone_id, parent_id, cycle_id,
                   start_date AS "start_date: NaiveDate", due_date AS "due_date: NaiveDate",
-                  due_time_utc AS "due_time_utc: DateTime<Utc>", due_tz, estimate_minutes, properties,
+                  due_time_utc AS "due_time_utc: DateTime<Utc>", due_tz, estimate_minutes, points, properties,
                   created_at AS "created_at: DateTime<Utc>", updated_at AS "updated_at: DateTime<Utc>",
                   completed_at AS "completed_at: DateTime<Utc>", archived_at AS "archived_at: DateTime<Utc>"
            FROM issues WHERE id = ?"#,
@@ -79,6 +79,7 @@ async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Issue> {
             .map(u32::try_from)
             .transpose()
             .map_err(bad)?,
+        points: r.points,
         properties: serde_json::from_str(&r.properties).map_err(bad)?,
         created_at: r.created_at,
         updated_at: r.updated_at,
@@ -127,6 +128,7 @@ pub(crate) fn issue_from_row(r: &SqliteRow, prefix: &str) -> Result<Issue> {
         estimate_minutes: opt("estimate_minutes")?
             .map(|m| u32::try_from(m).map_err(|e| Error::Invalid(e.to_string())))
             .transpose()?,
+        points: r.try_get("points")?,
         properties: serde_json::from_str::<Map<String, Value>>(&props)
             .map_err(|e| Error::Invalid(format!("issue properties: {e}")))?,
         created_at: r.try_get("created_at")?,
@@ -145,7 +147,25 @@ pub(crate) async fn issues_from_rows(
     rows.iter().map(|r| issue_from_row(r, &prefix)).collect()
 }
 
-fn check_fields(title: &str, priority: u8) -> Result<()> {
+/// 0 to 1000 with at most one decimal, judged on the shortest text of the number so a float's noise
+/// (0.30000000000000004) is refused rather than rounded.
+pub(crate) fn valid_points(p: f64) -> bool {
+    let one_decimal = |s: String| s.split_once('.').is_none_or(|(_, f)| f.len() == 1);
+    p.is_finite() && (0.0..=1000.0).contains(&p) && one_decimal(p.to_string())
+}
+
+fn check_points(points: Option<f64>) -> Result<()> {
+    let Some(p) = points else { return Ok(()) };
+    if !valid_points(p) {
+        return Err(Error::Invalid(format!(
+            "points {p} must be 0 to 1000 with at most one decimal"
+        )));
+    }
+    Ok(())
+}
+
+fn check_fields(title: &str, priority: u8, points: Option<f64>) -> Result<()> {
+    check_points(points)?;
     if title.trim().is_empty() {
         return Err(Error::Invalid("title is empty".into()));
     }
@@ -200,13 +220,34 @@ async fn record_created(tx: &mut SqliteConnection, src: ChangeSource, issue: &Is
         Value::from(issue.title.as_str()),
         Value::from(issue.key.as_str()),
     );
-    for (field, v) in [("title", &title), ("key", &key)] {
+    // What the new issue points at is recorded too, so undoing the create lets those rows be deleted, and a
+    // redo links them again. The key comes last: undo archives first, redo restores last.
+    let refs = [
+        ("project_id", issue.project_id.map(|p| p.0)),
+        ("milestone_id", issue.milestone_id.map(|m| m.0)),
+        ("cycle_id", issue.cycle_id.map(|c| c.0)),
+    ]
+    .into_iter()
+    .map(|(f, v)| (f, v.map(Value::from)))
+    .chain(
+        issue
+            .label_ids
+            .iter()
+            .map(|l| ("label", Some(Value::from(l.0)))),
+    );
+    let fields = [("title", Some(title))]
+        .into_iter()
+        .chain(refs)
+        .chain([("key", Some(key))]);
+    for (field, v) in fields {
         let edit = history::Edit {
             field,
             old: None,
-            new: Some(v),
+            new: v.as_ref(),
         };
-        history::record(tx, src, "issue", &id, &edit).await?;
+        if v.is_some() {
+            history::record(tx, src, "issue", &id, &edit).await?;
+        }
     }
     search::reindex_in(tx, issue.id).await
 }
@@ -233,7 +274,7 @@ pub async fn create_in(
     src: ChangeSource,
 ) -> Result<Issue> {
     let priority = new.priority.unwrap_or(0);
-    check_fields(&new.title, priority)?;
+    check_fields(&new.title, priority, new.points)?;
     check_props(tx, None, new.properties.as_ref()).await?;
     let status = match new.status_id {
         Some(s) => s,
@@ -259,10 +300,10 @@ pub async fn create_in(
     let (parent, cycle) = (new.parent_id.map(|p| p.0), new.cycle_id.map(|c| c.0));
     let id = sqlx::query!(
         "INSERT INTO issues (number, title, description, status_id, priority, project_id, milestone_id,
-           parent_id, cycle_id, start_date, due_date, due_time_utc, due_tz, estimate_minutes, properties,
+           parent_id, cycle_id, start_date, due_date, due_time_utc, due_tz, estimate_minutes, points, properties,
            created_at, updated_at, completed_at)
          VALUES ((SELECT COALESCE(MAX(number), 0) + 1 FROM issues), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-           ?, ?, ?)",
+           ?, ?, ?, ?)",
         new.title,
         description,
         status.0,
@@ -276,6 +317,7 @@ pub async fn create_in(
         due.utc,
         due.tz,
         new.estimate_minutes,
+        new.points,
         props,
         created,
         created,
@@ -320,6 +362,7 @@ fn apply_patch(old: &Issue, p: IssuePatch) -> Issue {
     n.start_date = p.start_date.unwrap_or(n.start_date);
     n.due = p.due.unwrap_or(n.due);
     n.estimate_minutes = p.estimate_minutes.unwrap_or(n.estimate_minutes);
+    n.points = p.points.unwrap_or(n.points);
     if let Some(mut l) = p.label_ids {
         l.sort_by_key(|l| l.0);
         l.dedup();
@@ -397,6 +440,7 @@ fn changes(old: &Issue, n: &Issue) -> Vec<(&'static str, Value, Value)> {
         &old.estimate_minutes,
         &n.estimate_minutes,
     );
+    diff(&mut c, "points", &old.points, &n.points);
     diff(&mut c, "properties", &old.properties, &n.properties);
     c
 }
@@ -447,7 +491,7 @@ pub async fn update_in(
 ) -> Result<Issue> {
     let old = fetch(tx, id).await?;
     let mut new = apply_patch(&old, patch);
-    check_fields(&new.title, new.priority)?;
+    check_fields(&new.title, new.priority, new.points)?;
     check_parent(tx, id, new.parent_id).await?;
     check_props(tx, Some(&old.properties), Some(&new.properties)).await?;
     let cs = changes(&old, &new);
@@ -474,7 +518,7 @@ pub async fn update_in(
     sqlx::query!(
         "UPDATE issues SET title = ?, description = ?, status_id = ?, priority = ?, project_id = ?,
            milestone_id = ?, parent_id = ?, cycle_id = ?, start_date = ?, due_date = ?, due_time_utc = ?,
-           due_tz = ?, estimate_minutes = ?, properties = ?, updated_at = ?, completed_at = ? WHERE id = ?",
+           due_tz = ?, estimate_minutes = ?, points = ?, properties = ?, updated_at = ?, completed_at = ? WHERE id = ?",
         new.title,
         new.description,
         new.status_id.0,
@@ -488,6 +532,7 @@ pub async fn update_in(
         due.utc,
         due.tz,
         new.estimate_minutes,
+        new.points,
         props,
         new.updated_at,
         new.completed_at,
@@ -511,15 +556,19 @@ pub async fn get(db: &Db, id: IssueId) -> Result<Issue> {
 
 /// # Errors
 ///
-/// `NotFound` when the key is malformed, has another prefix, or names no issue.
+/// `NotFound` when the key is malformed or names no issue. The prefix is display-only: the number
+/// alone identifies the issue, so keys from before a prefix change still resolve.
 pub async fn get_by_key(db: &Db, key: &str) -> Result<Issue> {
     let mut conn = db.pool.acquire().await?;
     let not_found = || Error::NotFound(format!("issue {key}"));
+    let key = key.trim().to_ascii_uppercase();
     let (p, n) = key.rsplit_once('-').ok_or_else(not_found)?;
-    let number: i64 = n.parse().map_err(|_| not_found())?;
-    if p != prefix(&mut conn).await? {
+    // Only the digits the display shows: no sign, no leading zero.
+    if n.is_empty() || !n.bytes().all(|b| b.is_ascii_digit()) || n.starts_with('0') {
         return Err(not_found());
     }
+    let number: i64 = n.parse().map_err(|_| not_found())?;
+    crate::workspace::validate_key(p).map_err(|_| not_found())?;
     let id = sqlx::query_scalar!(
         r#"SELECT id AS "id!: i64" FROM issues WHERE number = ?"#,
         number
@@ -532,7 +581,19 @@ pub async fn get_by_key(db: &Db, key: &str) -> Result<Issue> {
 
 async fn set_archived(db: &Db, id: IssueId, src: ChangeSource, archive: bool) -> Result<()> {
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
-    let issue = fetch(&mut tx, id).await?;
+    set_archived_in(&mut tx, id, src, archive).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Archives or restores inside the caller's transaction; already in that state is a no-op.
+pub(crate) async fn set_archived_in(
+    tx: &mut SqliteConnection,
+    id: IssueId,
+    src: ChangeSource,
+    archive: bool,
+) -> Result<()> {
+    let issue = fetch(tx, id).await?;
     if issue.archived_at.is_some() == archive {
         return Ok(());
     }
@@ -546,9 +607,7 @@ async fn set_archived(db: &Db, id: IssueId, src: ChangeSource, archive: bool) ->
             .map_or(Value::Null, |t| Value::from(t.to_rfc3339())),
         at.map_or(Value::Null, |t| Value::from(t.to_rfc3339())),
     );
-    record_all(&mut tx, src, id, &[("archived_at", old, new)]).await?;
-    tx.commit().await?;
-    Ok(())
+    record_all(tx, src, id, &[("archived_at", old, new)]).await
 }
 
 /// Archiving an archived issue is a no-op.
