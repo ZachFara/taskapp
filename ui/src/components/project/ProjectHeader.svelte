@@ -9,6 +9,7 @@
   import Popover from '../../ui/Popover.svelte';
   import TextInput from '../../ui/TextInput.svelte';
   import { humanDate } from '../detail/format';
+  import { openLinks, renderMarkdown } from '../detail/markdown';
   import ProgressSummary from '../insights/ProgressSummary.svelte';
 
   let { project, progress, renaming = $bindable(false), onsaved }: {
@@ -75,7 +76,7 @@
         <Button variant="primary" type="submit">Save</Button>
       </form>
     {:else if project.description}
-      <p class="desc" data-testid="description">{project.description}</p>
+      <div class="desc md" data-testid="description" use:openLinks>{@html renderMarkdown(project.description)}</div>
     {:else}
       <div><Button icon="plus" onclick={() => { desc = ''; editingDesc = true; }}>Add description</Button></div>
     {/if}
