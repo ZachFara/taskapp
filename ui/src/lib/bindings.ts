@@ -840,6 +840,15 @@ export const commands = {
 	 *  Fails when no export directory or remote is set, the histories diverged, or git fails.
 	 */
 	exportPull: (options?: InvokeOptions) => __TAURI_INVOKE<Applied>("export_pull", undefined, options),
+	/**
+	 *  Replaces this workspace with an export: a folder, or a Git URL (https or ssh) cloned with the machine's
+	 *  own git into `clone_to` (default: the app data folder). A backup of the current database is written
+	 *  first. Afterwards the export settings point at the restored folder. Returns that folder.
+	 * 
+	 *  # Errors
+	 *  Fails on a bad source, a failed clone or an export that does not parse; the workspace is unchanged then.
+	 */
+	restoreFromExport: (source: string, cloneTo: string | null, applyLocal: boolean, options?: InvokeOptions) => __TAURI_INVOKE<string>("restore_from_export", { source, cloneTo, applyLocal }, options),
 };
 
 /* Types */

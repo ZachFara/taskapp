@@ -23,12 +23,14 @@ async function submit() {
 const ondone = vi.fn();
 let setup: ReturnType<typeof vi.fn>;
 let settingsSet: ReturnType<typeof vi.fn>;
+let fromExport: ReturnType<typeof vi.fn>;
 let app: ReturnType<typeof mount> | null = null;
 
 beforeEach(async () => {
   setup = vi.fn(async (name: string, key: string, timezone: string) => ({ setup_done: true, name, key, timezone }));
   settingsSet = vi.fn(async () => {});
-  setApi({ workspace: { setup }, settings: { set: settingsSet } } as unknown as TestApi);
+  fromExport = vi.fn(async (source: string) => source);
+  setApi({ workspace: { setup }, settings: { set: settingsSet, get: async () => null }, restore: { fromExport } } as unknown as TestApi);
   ondone.mockClear();
   vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({
     timeZone: 'Europe/Lisbon',
@@ -117,5 +119,44 @@ describe('Setup', () => {
 
   it('the theme choice is a segmented control', () => {
     expect(document.querySelector('[aria-label="Theme"].cx-seg')).not.toBeNull();
+  });
+
+  const choose = async (label: string) => {
+    [...document.querySelectorAll('[role=tab], button')].find((b) => b.textContent?.trim() === label)!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await settle();
+  };
+
+  it('offers restoring from an export beside starting a new workspace', async () => {
+    const tabs = [...document.querySelectorAll('[aria-label="First run"] button, [aria-label="First run"] [role=tab]')].map((b) => b.textContent?.trim());
+    expect(tabs).toEqual(['Start a new workspace', 'Restore from an export']);
+    await choose('Restore from an export');
+    expect(document.querySelector('input[aria-label="Export source"]')).not.toBeNull();
+    expect(document.querySelector('input[aria-label="Workspace name"]')).toBeNull();
+  });
+
+  it('restore sends the source and the machine-settings choice, then finishes setup', async () => {
+    await choose('Restore from an export');
+    await type('Export source', ' git@github.com:me/tasks.git ');
+    await submit();
+    expect(fromExport).toHaveBeenCalledWith('git@github.com:me/tasks.git', null, true);
+    expect(setup).not.toHaveBeenCalled();
+    expect(ondone).toHaveBeenCalledOnce();
+  });
+
+  it('restore without a source says so and calls nothing', async () => {
+    await choose('Restore from an export');
+    await submit();
+    expect(fromExport).not.toHaveBeenCalled();
+    expect(document.querySelector('[role=alert]')?.textContent).toMatch(/folder or the Git address/);
+  });
+
+  it('a failed restore shows the error and stays on the screen', async () => {
+    fromExport.mockRejectedValueOnce({ kind: 'Invalid', message: 'invalid: statuses.yaml is broken' });
+    await choose('Restore from an export');
+    await type('Export source', '/exports/cairn');
+    await submit();
+    expect(document.querySelector('[role=alert]')?.textContent).toContain('statuses.yaml is broken');
+    expect(ondone).not.toHaveBeenCalled();
+    expect(document.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);
   });
 });

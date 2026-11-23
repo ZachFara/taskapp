@@ -1,15 +1,16 @@
 <script lang="ts">
-  import { onMount, setContext, untrack } from 'svelte';
+  import { onMount, setContext, tick, untrack } from 'svelte';
   import { matchRoute, navigate } from './routes';
   import { api } from '../lib/api';
   import { attachKeys, type Ctx, type Layout } from '../lib/commands';
   import { selection } from '../lib/selection.svelte';
-  import { issues, projects, selectedIssueId, views } from '../lib/stores.svelte';
+  import { issues, projects, refreshAll, selectedIssueId, views } from '../lib/stores.svelte';
   import { initTheme } from '../lib/theme.svelte';
   import CheatSheet from '../components/CheatSheet.svelte';
   import CommandPalette from '../components/CommandPalette.svelte';
   import IssueDetail from '../components/IssueDetail.svelte';
   import QuickAdd from '../components/QuickAdd.svelte';
+  import RestoreDialog from '../components/RestoreDialog.svelte';
   import Setup from '../components/Setup.svelte';
   import Shell from '../components/Shell.svelte';
   import Sidebar from '../components/Sidebar.svelte';
@@ -26,6 +27,7 @@
   let refreshed = $state(0); // bumps when a command wrote, so the open view loads its rows again
   let palettePage = $state<string | undefined>();
   let paletteIssues = $state(false);
+  let restoreOpen = $state(false);
   let cheat = $state(false); // CheatSheet opens itself on help.shortcuts; this only lets the root close it
 
   // Rows from every view select through `selectedIssueId`; the peek key goes through the selection store.
@@ -93,6 +95,7 @@
       ['command:nav.search', () => ((palettePage = undefined), (paletteIssues = true), (overlay = 'palette'))],
       ['command:issue.create', () => (overlay = 'quickadd')],
       ['command:view.refresh', () => refreshed++],
+      ['command:settings.restore', () => (restoreOpen = true)],
     ];
     on.forEach(([n, f]) => addEventListener(n, f));
     return () => on.forEach(([n, f]) => removeEventListener(n, f));
@@ -116,6 +119,16 @@
         selection.togglePeek();
       }
     });
+
+  // The data under every store changed: load it again, show the start page, and say what happened.
+  async function restored(folder: string) {
+    restoreOpen = false;
+    await refreshAll();
+    refreshed++;
+    navigate('/');
+    await tick(); // moving pages clears the toast, so say it after
+    undoToast.value = { label: `Restored from ${folder}`, tone: 'success' };
+  }
 
   async function created({ issue }: { issue: { key: string } }) {
     const key = issue.key;
@@ -144,6 +157,8 @@
       <p>Not found: {path}</p>
     {/if}
   </Shell>
+
+  <RestoreDialog bind:open={restoreOpen} onrestored={restored} />
 
   {#if overlay === 'palette'}
     <CommandPalette page={palettePage} issues={paletteIssues} onclose={() => (overlay = null)} oncreate={() => (overlay = 'quickadd')} />
