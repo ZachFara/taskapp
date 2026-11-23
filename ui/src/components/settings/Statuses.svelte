@@ -9,6 +9,7 @@
   import Dialog from '../../ui/Dialog.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
   import IconButton from '../../ui/IconButton.svelte';
+  import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import TextInput from '../../ui/TextInput.svelte';
   import './entities.css';
 
@@ -98,6 +99,7 @@
               ondrop={(e) => { e.preventDefault(); drop(s); }}
               ondragend={() => (dragId = overId = null)}
             >
+              <StatusGlyph category={s.category} />
               <IconColorPicker
                 label={`Icon and colour of ${s.name}`}
                 value={{ icon: s.icon, color: s.color }}

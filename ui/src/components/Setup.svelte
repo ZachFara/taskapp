@@ -110,6 +110,7 @@
       <span>Theme</span>
       <Tabs
         label="Theme"
+        segmented
         bind:value={theme}
         tabs={[
           { id: 'system', label: 'System' },
@@ -133,7 +134,9 @@
     position: fixed;
     inset: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
+    grid-template-columns: minmax(0, 520px) minmax(320px, 440px);
+    justify-content: center;
+    align-content: center;
     align-items: center;
     gap: var(--s-10);
     padding: var(--s-10);

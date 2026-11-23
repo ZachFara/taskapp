@@ -15,6 +15,12 @@ describe('Statuses', () => {
     expect(bands).toEqual(['Backlog', 'Unstarted', 'Started', 'Completed', 'Canceled']);
   });
 
+  it('each status row shows the glyph of its category beside the icon picker', async () => {
+    const { target } = await mountSettings(Statuses);
+    const cats = [...target.querySelectorAll('.es-row')].map((r) => r.querySelector('svg.glyph[data-category]')?.getAttribute('data-category'));
+    expect(cats).toEqual(['Backlog', 'Unstarted', 'Started', 'Completed', 'Canceled']);
+  });
+
   it('adds a status to the chosen category once', async () => {
     const { target, calls } = await mountSettings(Statuses);
     await add(target, 'Started', 'Review');
