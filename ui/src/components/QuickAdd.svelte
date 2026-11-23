@@ -28,7 +28,6 @@
     status_id?: number | null;
   } = $props();
 
-  const PRIORITY = PRIORITIES;
   const DUE_WORDS = String.raw`(?:today|tomorrow|next week|(?:mon|tue|wed|thu|fri|sat|sun)\w*|\d{4}-\d{2}-\d{2}|in \d+ (?:day|days|week|weeks))`;
 
   let open = $state(true);
@@ -66,7 +65,7 @@
       template && { key: 'template', label: `/${template.slug}` },
       parsed?.due && { key: 'due', label: `Due ${humanDate(parsed.due.Date ?? parsed.due.DateTime!.utc.slice(0, 10))}` },
       parsed?.start_date && { key: 'start', label: `Start ${humanDate(parsed.start_date)}` },
-      parsed?.priority != null && { key: 'priority', label: PRIORITY[parsed.priority] ?? `P${parsed.priority}` },
+      parsed?.priority != null && { key: 'priority', label: PRIORITIES[parsed.priority] ?? `P${parsed.priority}` },
       parsed?.project_slug && { key: 'project', label: `#${parsed.project_slug}` },
       ...(parsed?.label_names ?? []).map((l) => ({ key: 'labels', label: `@${l}` })),
       parsed?.estimate_minutes != null && { key: 'estimate', label: `${parsed.estimate_minutes}m` },
@@ -214,7 +213,7 @@
             </button>
           {/snippet}
           {#if c.key === 'priority'}
-            {#each PRIORITY as name, level (name)}
+            {#each PRIORITIES as name, level (name)}
               <MenuItem label={name} onSelect={() => setToken(/(^|\s)p[0-4](?=\s|$)/i, level ? `p${level}` : '')} />
             {/each}
           {:else if c.key === 'project'}

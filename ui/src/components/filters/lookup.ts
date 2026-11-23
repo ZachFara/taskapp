@@ -1,11 +1,11 @@
 import type { Cycle, FieldRef, Label, Project, PropertyDef, PropertyKind, Status, StatusCategory, Value } from '../../lib/bindings';
+import { PRIORITY_OPTIONS } from '../../lib/priority';
 import { fixedKind } from './model';
 
 export type Data = { statuses: Status[]; projects: Project[]; defs: PropertyDef[]; cycles: Cycle[]; labels: Label[] };
 export type Choice = { value: Value; label: string };
 
 const categories: StatusCategory[] = ['Backlog', 'Unstarted', 'Started', 'Completed', 'Canceled'];
-const priorities = ['No priority', 'Urgent', 'High', 'Medium', 'Low'];
 const names: Record<string, string> = {
   StatusCategory: 'Status category', DueDate: 'Due', StartDate: 'Start', CreatedAt: 'Created', UpdatedAt: 'Updated',
   CompletedAt: 'Completed',
@@ -26,7 +26,7 @@ export function makeLookup(d: Data) {
       case 'Cycle': return named(d.cycles.map((c) => ({ id: c.id, name: c.name ?? `${c.start_date} to ${c.end_date}` })));
       case 'Label': return named(d.labels);
       case 'StatusCategory': return categories.map((c) => ({ value: c.toLowerCase(), label: c })) // stored lowercase in the db;
-      case 'Priority': return priorities.map((label, value) => ({ value, label }));
+      case 'Priority': return PRIORITY_OPTIONS.map(({ value, name }) => ({ value, label: name }));
       default: return [];
     }
   };

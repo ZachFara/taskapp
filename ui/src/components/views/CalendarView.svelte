@@ -266,6 +266,9 @@
     timeZone: 'local',
     firstDay: 0,
     scrollTime: '08:00:00',
+    height: '100%',
+    // Month rows share the sheet's height and long days show "+ more" instead of growing.
+    dayMaxEvents: true,
     // A month header names only the weekday; a week header adds the date.
     views: {
       dayGridMonth: { dayHeaderFormat: (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short' }) },
@@ -297,8 +300,8 @@
   });
 
   const modes = [
-    { id: 'week', label: 'Week', icon: 'calendar' },
-    { id: 'month', label: 'Month', icon: 'calendar' },
+    { id: 'week', label: 'Week' },
+    { id: 'month', label: 'Month' },
   ];
 </script>
 
@@ -306,7 +309,7 @@
 
 <div class="calendar">
   <div class="toolbar">
-    <Tabs bind:value={mode} tabs={modes} label="Calendar range" />
+    <Tabs bind:value={mode} tabs={modes} label="Calendar range" segmented />
     <span class="range" aria-live="polite">{range}</span>
     <div class="grow"></div>
     <IconButton icon="chevron-left" label={labelFor('calendar.prev') ?? 'Previous'} shortcut={shortcutFor('calendar.prev')} onclick={() => fire('calendar.prev')} />
@@ -357,10 +360,12 @@
   .toolbar { flex: none; height: var(--topbar-h); display: flex; align-items: center; gap: var(--s-4); padding: 0 var(--s-7); }
   .grow { flex: 1; }
   .range { font-size: var(--fs-lg); font-weight: 700; letter-spacing: -0.01em; padding: 0 var(--s-6); }
-  .body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) calc(var(--sidebar-w) + var(--s-9)); border-top: 1px solid var(--border); }
+  .body { flex: 1; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1fr) calc(var(--sidebar-w) + var(--s-9)); border-top: 1px solid var(--border); }
   .grid {
     min-width: 0;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
     padding: var(--s-6) var(--s-7);
     font-family: var(--font);
     font-size: var(--fs-md);
@@ -381,6 +386,8 @@
     font-family: inherit;
     font-size: inherit;
     border: 0;
+    flex: 1;
+    min-height: 0;
   }
   .grid :global(.ec-day-head) { color: var(--muted); font-size: var(--fs-sm); font-weight: 600; }
   .grid :global(.ec-today .ec-day-head) { color: var(--ink); font-weight: 700; background: color-mix(in srgb, var(--signal) 14%, transparent); box-shadow: inset 0 var(--s-1) 0 var(--signal); }
@@ -391,7 +398,7 @@
   .fv { flex: none; display: inline-flex; }
   .chip { display: flex; align-items: center; gap: var(--s-3); min-width: 0; padding: var(--s-1) var(--s-3); font-size: var(--fs-sm); }
   .text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .key { font-weight: 700; color: var(--muted); margin-right: var(--s-2); }
+  .key { flex: none; white-space: nowrap; font-weight: 700; color: var(--muted); margin-right: var(--s-2); }
 
   .side { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--raised); }
   .side ul { list-style: none; margin: 0; padding: 0; overflow: auto; }
@@ -410,6 +417,11 @@
   .loading { display: grid; gap: var(--s-4); padding: var(--s-6) var(--s-7); }
   .alert { margin: 0 var(--s-7); color: var(--signal); font-weight: 600; }
 
+  /* Narrow window: the unscheduled list goes under the grid so the chips keep their width. */
+  @media (max-width: 1100px) {
+    .body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+    .side { border-left: 0; border-top: 1px solid var(--border); max-height: 30vh; }
+  }
   @media (max-width: 640px) {
     .body { grid-template-columns: 1fr; }
     .side { border-left: 0; }

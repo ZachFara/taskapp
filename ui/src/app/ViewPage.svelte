@@ -4,6 +4,7 @@
   import type { Layout, SavedView, ViewDef } from '../lib/bindings';
   import { api } from '../lib/api';
   import { issues, refreshAll, selectedIssueId } from '../lib/stores.svelte';
+  import { announce } from '../components/undoState.svelte';
   import ViewEditor from '../components/ViewEditor.svelte';
   import InsightsPanel from '../components/insights/InsightsPanel.svelte';
   import CommandButton from '../components/CommandButton.svelte';
@@ -33,11 +34,11 @@
   const byLayout: Record<Layout, Component<any>> = {
     List: ListView, Table: TableView, Board: BoardView, Gantt: GanttView, Calendar: CalendarView,
   };
-  const layoutTabs = [
-    { id: 'List', label: 'List', icon: 'list' }, { id: 'Board', label: 'Board', icon: 'board' },
-    { id: 'Table', label: 'Table', icon: 'table' }, { id: 'Gantt', label: 'Timeline', icon: 'timeline' },
-    { id: 'Calendar', label: 'Calendar', icon: 'calendar' },
-  ];
+  const layoutTabs = $derived([
+    { id: 'List', label: 'List', icon: 'list', cmd: 'list' }, { id: 'Board', label: 'Board', icon: 'board', cmd: 'board' },
+    { id: 'Table', label: 'Table', icon: 'table', cmd: 'table' }, { id: 'Gantt', label: 'Timeline', icon: 'timeline', cmd: 'timeline' },
+    { id: 'Calendar', label: 'Calendar', icon: 'calendar', cmd: 'calendar' },
+  ].map(({ cmd, ...t }) => ({ ...t, shortcut: shortcutFor(`view.layout.${cmd}`) })));
   const SAVE_DELAY = 400;
 
   let view = $state.raw<SavedView | null>(null);
@@ -77,13 +78,22 @@
   const filtered = $derived(def?.filter != null);
 
   // Debounced: a burst of chip edits is one save.
+  // A filter change changes what the user sees, so its save is announced with an Undo; display toggles are not.
+  let loud = false;
   const save = () => {
     clearTimeout(timer);
-    timer = setTimeout(() => view && def && api.views.save(view.id, name, def, view.icon, view.color), SAVE_DELAY);
+    timer = setTimeout(async () => {
+      if (!view || !def) return;
+      const say = loud;
+      loud = false;
+      await api.views.save(view.id, name, def, view.icon, view.color);
+      if (say) announce(`Changed filter of ${name}`);
+    }, SAVE_DELAY);
   };
   function change(patch: Partial<ViewDef>) {
     if (!def) return;
     def = { ...def, ...patch };
+    if ('filter' in patch) loud = true;
     save();
   }
   const setLayout = (l: string) => {
@@ -96,6 +106,7 @@
     if (!next || !view || next === name) return;
     name = next;
     await api.views.save(view.id, next, def!, view.icon, view.color);
+    announce(`Renamed view to ${next}`);
     await refreshAll();
   }
   async function togglePin() {
@@ -177,6 +188,7 @@
 
 {#if live}
   {#key params.id}
+    <div class="page">
     <PageHeader title={name} icon={view?.icon ?? 'icon:layers'} color={view?.color ?? undefined}>
       {#snippet tabs()}<Tabs tabs={layoutTabs} bind:value={() => layout, setLayout} />{/snippet}
       {#snippet filters()}<ViewEditor def={live.def} onchange={change} {clearSignal} />{/snippet}
@@ -210,10 +222,11 @@
           {#snippet action()}<Button onclick={clearFilters}>Clear filters</Button>{/snippet}
         </EmptyState>
       {:else}
-        <div role="presentation" onclick={pick}><Shown view={live} embedded /></div>
+        <div class="pane" role="presentation" onclick={pick}><Shown view={live} embedded /></div>
       {/if}
     </main>
     {#if insights && view}<InsightsPanel kind="view" id={view.id} title={name} onclose={() => (insights = false)} />{/if}
+    </div>
     </div>
   {/key}
   <NewViewDialog bind:open={creating} current={live} />
@@ -227,8 +240,11 @@
 {/if}
 
 <style>
+  /* The page is as tall as the sheet, so a view can fill it and scroll inside itself. */
+  .page { display: flex; flex-direction: column; height: 100%; }
   .cols { flex: 1; min-height: 0; display: flex; }
   .body { flex: 1; min-height: 0; overflow: auto; border-top: 1px solid var(--border); }
+  .pane { height: 100%; }
   .trig { display: inline-flex; }
   .row { display: flex; justify-content: flex-end; margin-top: var(--s-4); }
   .load { display: grid; gap: var(--s-4); padding: var(--s-7); }

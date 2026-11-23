@@ -97,12 +97,12 @@
     display: inline-grid;
     place-items: center;
     padding: 0;
-    border: 1px dashed var(--control);
+    border: 1px solid var(--border);
     border-radius: var(--r-ctl);
     background: transparent;
     transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
   }
-  .chip:hover, .chip[data-open] { background: var(--active); border-style: solid; }
+  .chip:hover, .chip[data-open] { background: var(--active); border-color: var(--control); }
   .picker { width: 296px; display: grid; gap: var(--s-4); }
   .seg { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-1); padding: var(--s-1); background: var(--raised); border-radius: var(--r-ctl); }
   .seg button { height: var(--row-h-compact); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--muted); font-weight: 600; }

@@ -114,4 +114,8 @@ describe('Setup', () => {
     await submit();
     expect(settingsSet).toHaveBeenCalledWith('theme', 'dark');
   });
+
+  it('the theme choice is a segmented control', () => {
+    expect(document.querySelector('[aria-label="Theme"].cx-seg')).not.toBeNull();
+  });
 });

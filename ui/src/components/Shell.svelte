@@ -151,6 +151,10 @@
   .dot { width: var(--s-4); height: var(--s-4); border-radius: var(--r-round); background: var(--positive); }
   .dot.error { background: var(--signal); }
   .panel { position: relative; flex: none; width: var(--panel-w); min-height: 0; display: flex; flex-direction: column; background: var(--raised); border-left: 1px solid var(--border); overflow: hidden; }
+  /* Narrow window: the panel floats over the sheet so the list keeps its width. */
+  @media (max-width: 1100px) {
+    .panel { position: absolute; top: 0; right: 0; bottom: 0; z-index: var(--z-sticky); box-shadow: var(--shadow-float); }
+  }
   .body { position: relative; flex: 1; min-height: 0; overflow: auto; }
   .contour { position: absolute; right: calc(var(--s-10) * -2); bottom: calc(var(--s-10) * -1); color: var(--border); pointer-events: none; }
   .grip { position: absolute; z-index: var(--z-sticky); left: calc(var(--s-2) * -1); top: 0; bottom: 0; width: var(--s-4); padding: 0; border: 0; background: transparent; cursor: col-resize; }

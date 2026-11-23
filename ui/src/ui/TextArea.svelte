@@ -20,7 +20,7 @@
     background: var(--sheet);
     color: var(--ink);
     line-height: var(--lh-body);
-    resize: vertical;
+    resize: none;
     transition: border-color var(--dur-1) var(--ease);
   }
   .field::placeholder { color: var(--muted); }

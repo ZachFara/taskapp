@@ -60,6 +60,17 @@ describe('IssueDetail', () => {
     expect(q('h2').textContent).toContain('Renamed');
   });
 
+  it('project_icon_matches_the_sidebar_when_the_project_has_none', async () => {
+    api = createMockApi();
+    setApi(api);
+    const proj = await api.projects.create('ico', 'Iconless', null, null);
+    const issue = await api.issues.create({ title: 'In a project', project_id: proj.id });
+    app = mount(IssueDetail, { target: document.body, props: { params: { key: issue.key } } });
+    await settle();
+    expect(q('h1, h2, header')!.querySelector('[data-icon]')?.getAttribute('data-icon')).toBe('project');
+    expect(row('Project').querySelector('[data-icon]')?.getAttribute('data-icon')).toBe('project');
+  });
+
   it('priority_edit_calls_api_once_and_shows_value', async () => {
     const i = await open();
     const spy = vi.spyOn(api.issues, 'update');

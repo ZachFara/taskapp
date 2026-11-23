@@ -15,6 +15,7 @@
   import MenuItem from '../../ui/MenuItem.svelte';
   import Pill from '../../ui/Pill.svelte';
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
+  import { priorityGlyph, priorityName, priorityOrder } from '../../lib/priority';
   import Skeleton from '../../ui/Skeleton.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import Tooltip from '../../ui/Tooltip.svelte';
@@ -29,9 +30,6 @@
   const OVERSCAN = 10;
   const WINDOW_ABOVE = 300;
   const FALLBACK_VIEWPORT = 800;
-  const PRIORITY_NAMES = ['No priority', 'Low', 'Medium', 'High', 'Urgent'];
-  // Backend priority: 0 none, 1 urgent ... 4 low. The glyph counts the other way round.
-  const glyph = (p: number) => (p === 0 ? 0 : 5 - p);
 
   let { view }: { view: SavedView } = $props();
 
@@ -84,6 +82,8 @@
     }
     return keep;
   });
+  // Per-column facts, worked out once rather than for every cell of every row.
+  const cells = $derived(fields.map((f) => ({ f, key: f.Property !== undefined ? `P:${f.Property}` : `F:${f.Fixed}`, right: rightAligned(f) })));
   const columns = $derived(`var(--s-8) var(--s-8) 64px var(--s-8) minmax(0, 1fr) ${fields.map(widthOf).join(' ')}`);
   let menu = $state<{ id: number; x: number; y: number } | null>(null);
   let menuOpen = $state(false);
@@ -144,7 +144,7 @@
       } else if (groupField === 'Cycle') {
         put(i, { key: `c${i.cycle_id}`, ...base, kind: 'cycle', ...named(cycles, i.cycle_id, 'No cycle', (c) => c.name ?? `Cycle ${c.number}`), patch: { cycle_id: i.cycle_id } });
       } else if (groupField === 'Priority') {
-        put(i, { key: `r${i.priority}`, ...base, kind: 'priority', name: i.priority === 0 ? PRIORITY_NAMES[0] : PRIORITY_NAMES[glyph(i.priority)], order: i.priority === 0 ? 9 : i.priority, patch: { priority: i.priority } });
+        put(i, { key: `r${i.priority}`, ...base, kind: 'priority', name: priorityName(i.priority), order: priorityOrder(i.priority), patch: { priority: i.priority } });
       } else if (groupField === 'Points') {
         put(i, { key: `pt${i.points}`, ...base, kind: 'points', name: pointsName(i.points), order: i.points ?? Infinity, patch: { points: i.points } });
       } else if (groupField === 'Label') {
@@ -168,7 +168,9 @@
   function ordered(rows: Issue[]): Item[] {
     if (subIssues(view.def) !== 'nest') return rows.map((row) => ({ row, depth: 0, kids: 0 }));
     const ids = new Set(rows.map((r) => r.id));
-    const kidsOf = (id: number) => rows.filter((r) => r.parent_id === id);
+    const byParent = new Map<number, Issue[]>();
+    for (const r of rows) if (r.parent_id !== null) byParent.set(r.parent_id, [...(byParent.get(r.parent_id) ?? []), r]);
+    const kidsOf = (id: number) => byParent.get(id) ?? [];
     const out: Item[] = [];
     const walk = (row: Issue, depth: number) => {
       const kids = kidsOf(row.id);
@@ -294,7 +296,7 @@
 
 {#snippet lead(g: Group)}
   {#if g.kind === 'priority'}
-    <PriorityGlyph level={g.rows[0] ? glyph(g.rows[0].priority) : 0} />
+    <PriorityGlyph level={g.rows[0] ? priorityGlyph(g.rows[0].priority) : 0} />
   {:else if g.kind === 'project' || g.kind === 'label'}
     {@const r = g.ref as Project | Label | undefined}
     <EntityIcon icon={(r as Project | undefined)?.icon ?? (g.kind === 'label' ? 'icon:tag' : 'icon:project')} color={r?.color} size={14} />
@@ -365,7 +367,7 @@
                 <Checkbox checked={chosen} label={`Select ${i.key}`} />
               {/if}
             </span>
-            <span class="prio"><PriorityGlyph level={glyph(i.priority)} /></span>
+            <span class="prio"><PriorityGlyph level={priorityGlyph(i.priority)} /></span>
             <span class="key">{i.key}</span>
             {#snippet statusBtn(tp: Record<string, unknown>)}
               <button
@@ -402,8 +404,8 @@
                 <span class="text">{i.title}</span>
               {/if}
             </span>
-            {#each fields as f (f.Property ?? f.Fixed)}
-              <span class="cell" data-field={f.Property !== undefined ? `P:${f.Property}` : `F:${f.Fixed}`} data-right={rightAligned(f) ? '' : undefined} data-overdue={f.Fixed === 'DueDate' && overdue(i) ? '' : undefined}>
+            {#each cells as { f, key, right } (key)}
+              <span class="cell" data-field={key} data-right={right ? '' : undefined} data-overdue={f.Fixed === 'DueDate' && overdue(i) ? '' : undefined}>
                 <FieldValue field={f} issue={i} {ctx} />
               </span>
             {/each}

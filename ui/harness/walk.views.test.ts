@@ -176,4 +176,143 @@ describe('walk project', { timeout: 25_000 }, () => {
     await page.evaluate(() => dispatchEvent(new CustomEvent('command:milestone.new')));
     await page.getByLabel('Milestone name').waitFor();
   });
+
+  // Priority means the same on every screen: whichever way it was set, the list, table, board and detail all say Urgent.
+  // The mock has no db-changed event, so each tab switch mounts a view that reads the rows fresh.
+  const urgentEverywhere = async (title: string) => {
+    const mark = (loc: import('@playwright/test').Locator) => loc.locator('[role=img][aria-label=Urgent][data-level="4"]').first();
+    const row = () => page.locator('li[data-key]').filter({ hasText: title });
+    await pw(mark(row())).toBeVisible();
+    await page.getByRole('tab', { name: 'Table' }).click();
+    await pw(mark(page.locator('tr[data-key]').filter({ hasText: title }))).toBeVisible();
+    await page.getByRole('tab', { name: 'Board' }).click();
+    await pw(mark(page.locator('[data-issue]').filter({ hasText: title }))).toBeVisible();
+    await page.getByRole('tab', { name: 'List' }).click();
+    await row().first().click();
+    await pw(page.locator('aside.panel').getByText('Urgent').first()).toBeVisible();
+  };
+
+  it('R4-09 priority Urgent from the detail panel shows Urgent in list, table, board and detail', async () => {
+    await open();
+    await rows().first().click();
+    await press('Enter');
+    const title = (await page.locator('aside.panel h2').first().innerText()).trim();
+    await page.locator('aside.panel').getByRole('button', { name: /^Priority/ }).click();
+    await page.getByRole('option', { name: 'Urgent' }).click();
+    await urgentEverywhere(title);
+  });
+
+  it('R4-09 priority Urgent from the p command shows Urgent in list, table, board and detail', async () => {
+    await open();
+    await rows().first().click();
+    const title = (await rows().first().locator('.title').first().innerText()).trim();
+    await press('p');
+    await palette().getByRole('option', { name: 'Urgent' }).click();
+    await urgentEverywhere(title);
+  });
+
+  it('R4-09 priority Urgent from quick add p1 shows Urgent in list, table, board and detail', async () => {
+    await open();
+    await press('c');
+    await page.getByLabel('Title, with quick-add tokens').fill('Walk urgent p1');
+    await press('Enter');
+    await pw(page.getByRole('status').getByRole('button', { name: /Undo/ })).toBeVisible();
+    // A new issue starts in the first status, which the Active view hides; move it into view.
+    await page.getByRole('button', { name: /^Remove filter/ }).first().click();
+    await page.locator('li[data-key]').filter({ hasText: 'Walk urgent' }).first().click();
+    await press('s');
+    await palette().getByRole('option', { name: 'Todo' }).click();
+    await urgentEverywhere('Walk urgent');
+  });
+
+  it('R4-01 below 1100px the issue panel overlays the list instead of squeezing it', async () => {
+    await open('/view/1', { width: 1024, height: 768 });
+    const before = (await page.locator('.main').boundingBox())!.width;
+    await rows().first().click();
+    const panel = page.locator('aside.panel');
+    await panel.waitFor();
+    expect(await panel.evaluate((e) => getComputedStyle(e).position)).toBe('absolute');
+    expect((await page.locator('.main').boundingBox())!.width).toBe(before);
+    await open('/view/1', { width: 1440, height: 900 });
+    await rows().first().click();
+    await page.locator('aside.panel').waitFor();
+    expect(await page.locator('aside.panel').evaluate((e) => getComputedStyle(e).position)).toBe('relative');
+  });
+
+  it('R3-4 group header add and collapse, and the layout tabs, show a tooltip with the name', async () => {
+    await open();
+    const tip = async (loc: import('@playwright/test').Locator, text: RegExp) => {
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(150);
+      await loc.hover();
+      await page.locator('.cx-tip').first().waitFor({ timeout: 2500 });
+      expect(await page.locator('.cx-tip').first().innerText()).toMatch(text);
+    };
+    await tip(page.getByRole('button', { name: /^Add to/ }).first(), /Add issue/);
+    await tip(page.getByRole('button', { name: /^Collapse/ }).first(), /Collapse group/);
+    await tip(page.getByRole('tab', { name: 'Board' }), /Board/);
+    expect(await page.getByRole('tab', { name: 'Board' }).getAttribute('data-state')).toBe('inactive');
+    expect(await page.getByRole('tab', { name: 'List' }).getAttribute('data-state')).toBe('active');
+  });
+
+  it('R4-12 calendar: month grid fills the sheet; week opens at working hours; Week and Month show their names at 1024', async () => {
+    await open('/view/1/Calendar');
+    const grid = (await page.locator('.calendar .body').boundingBox())!;
+    const last = (await page.locator('.grid[data-calendar] .ec-day').last().boundingBox())!;
+    expect(last.y + last.height).toBeGreaterThan(grid.y + grid.height - 80);
+    await page.getByRole('tab', { name: 'Week' }).click();
+    await page.waitForTimeout(300);
+    expect(await page.locator('.grid[data-calendar] .ec-main').evaluate((e) => e.scrollTop)).toBeGreaterThan(0);
+    await open('/view/1/Calendar', { width: 1024, height: 768 });
+    expect(await page.getByRole('tab', { name: 'Week' }).innerText()).toContain('Week');
+    const g = (await page.locator('.grid[data-calendar]').boundingBox())!;
+    const side = (await page.locator('aside.side').boundingBox())!;
+    expect(side.y).toBeGreaterThanOrEqual(g.y + g.height - 1);
+  });
+
+  it('R4-13 board: the toggle in the count row is labelled and the board ends inside the sheet', async () => {
+    await open('/view/2');
+    await page.locator('[data-column]').first().waitFor();
+    expect((await page.locator('.count').filter({ hasText: /issues/ }).locator('..').locator('button').first().innerText()).trim()).not.toBe('');
+    const body = (await page.locator('main.body').boundingBox())!;
+    const board = (await page.locator('.board').boundingBox())!;
+    expect(board.y + board.height).toBeLessThanOrEqual(body.y + body.height + 1);
+  });
+
+  it('R4-20 the Group popover is a list with the current choice marked; the Display panel keeps a gutter', async () => {
+    await open();
+    await page.getByRole('button', { name: /^Group/ }).click();
+    const list = page.getByRole('listbox', { name: 'Group by' });
+    await list.waitFor();
+    expect(await list.getByRole('option', { selected: true }).innerText()).toContain('Status');
+    await list.getByRole('option', { name: 'Project' }).click();
+    await pw(page.locator('.band .name', { hasText: 'Website relaunch' }).first()).toBeVisible();
+    await press('Escape');
+    await page.getByRole('button', { name: /^Display/ }).click();
+    const box = (await page.locator('.cx-popover').last().boundingBox())!;
+    expect(1440 - (box.x + box.width)).toBeGreaterThanOrEqual(8);
+  });
+
+  it('R4-23 the comment box has no resize grip and a disabled primary button is plainly disabled', async () => {
+    await open('/issue/ABC-2');
+    const box = page.getByLabel('Leave a comment (markdown)').or(page.locator('textarea').last());
+    expect(await box.evaluate((e) => getComputedStyle(e).resize)).toBe('none');
+    const send = page.getByRole('button', { name: 'Comment', exact: true });
+    expect(await send.isDisabled()).toBe(true);
+    expect(await send.evaluate((e) => getComputedStyle(e).opacity)).toBe('1');
+  });
+
+  it('R5 filter and rename saves raise an undo toast; layout and display toggles stay quiet', async () => {
+    await open();
+    await page.getByRole('tab', { name: 'Table' }).click();
+    await page.waitForTimeout(900);
+    expect(await page.locator('.toast').allInnerTexts()).toEqual([]);
+    await page.getByRole('button', { name: /^Remove filter/ }).first().click();
+    await pw(page.locator('.toast')).toContainText('Changed filter of');
+    await pw(page.locator('.toast').getByRole('button', { name: /Undo/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Rename view' }).click();
+    await page.getByLabel('View name').fill('Renamed once');
+    await page.getByRole('button', { name: 'Rename', exact: true }).click();
+    await pw(page.locator('.toast')).toContainText('Renamed view to Renamed once');
+  });
 });
