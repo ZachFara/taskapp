@@ -51,7 +51,7 @@
   :global(.cx-select:hover:not([data-disabled])) { border-color: var(--muted); }
   :global(.cx-select[data-disabled]) { opacity: 0.55; }
   .v[data-empty] { color: var(--muted); }
-  :global(.cx-listbox) { min-width: var(--bits-select-anchor-width); padding: var(--s-2); }
+  :global(.cx-listbox) { min-width: calc(var(--bits-select-anchor-width) / var(--ui-zoom, 1)); padding: var(--s-2); }
   :global(.cx-option) { cursor: default; }
   :global(.cx-option) .name { flex: 1; }
 </style>

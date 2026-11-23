@@ -69,3 +69,8 @@ h1, h2, h3, h4, h5, h6, p { margin: 0; }
     scroll-behavior: auto !important;
   }
 }
+
+/* Portaled layers (menus, popovers, tooltips, dialogs) sit outside the app root, so they take the interface zoom here.
+   bits-ui measures the unzoomed wrapper, so the heights it allows and the anchor widths it sets are divided by the zoom. */
+.cx-surface, .cx-tip, .cx-dialog { zoom: var(--ui-zoom, 1); }
+.cx-surface { max-height: calc(var(--bits-floating-available-height, 100vh) / var(--ui-zoom, 1)); overflow: auto; }
