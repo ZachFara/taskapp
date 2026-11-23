@@ -84,6 +84,14 @@ describe('keys', () => {
     expect(p.run).not.toHaveBeenCalled();
   });
 
+  it('ctrl+k and cmd+k both fire the mod+k binding', () => {
+    const k = bind('mod+k', { global: true });
+    setup([k.b]);
+    press(document.body, 'k', { ctrlKey: true });
+    press(document.body, 'k', { metaKey: true });
+    expect(k.run).toHaveBeenCalledTimes(2);
+  });
+
   it('the key that fires is not typed into the input it opens', () => {
     const c = bind('c');
     setup([c.b]);

@@ -14,7 +14,7 @@
   import Skeleton from '../ui/Skeleton.svelte';
   import StatusGlyph from '../ui/StatusGlyph.svelte';
 
-  let { onclose, oncreate, page: startPage }: { onclose: () => void; oncreate: () => void; page?: string } = $props();
+  let { onclose, oncreate, page: startPage, issues: startIssues }: { onclose: () => void; oncreate: () => void; page?: string; issues?: boolean } = $props();
 
   // A page may also be multi-pick (stays open, items show a check) or free-input (`parse` turns the typed text into
   // one preview row); the registry type does not carry these yet, so they are read here as optional extras.
@@ -45,6 +45,8 @@
 
   let query = $state('');
   let active = $state(0);
+  // Search issues only (opened by `/` or the "Search issues…" row): no commands, no views, no projects.
+  let issuesOnly = $state(startIssues ?? false);
   let stack = $state<{ title: string; cmd: Command; page: Page; loading?: boolean }[]>([]);
   let found = $state<Issue[]>([]);
   let cycles = $state<Cycle[]>([]);
@@ -132,8 +134,13 @@
       group: sectionOf(c) === 'Issue' ? contextTitle : sectionOf(c),
       icon: c.icon,
       keys: shortcutFor(c.id),
-      more: !!c.page,
+      more: !!c.page || c.id === 'nav.search',
       run: () => {
+        if (c.id === 'nav.search') {
+          query = '';
+          issuesOnly = true;
+          return;
+        }
         if (c.page) {
           query = '';
           active = 0;
@@ -162,7 +169,10 @@
     return top?.parse && q ? top.parse(q) : null;
   });
 
-  // Groups in display order: context first, then the user's commands, then things to jump to.
+  const isIssue = (r: Row) => r.id.startsWith('issue:');
+  const issueRows = $derived(targetRows.filter(isIssue));
+
+  // Groups in display order: matching issues first, then context, the user's commands, then things to jump to.
   const groups = $derived.by(() => {
     const top = stack.at(-1);
     let rows: Row[];
@@ -180,11 +190,13 @@
         },
       }));
       if (parsed) rows = [{ id: 'parsed', label: parsed.label, group: 'Preview', icon: 'check', run: async () => { await parsed.run?.(); onclose(); } }, ...rows];
-    } else rows = [...commandRows(), ...targetRows];
+    } else rows = issuesOnly ? issueRows : [...commandRows(), ...targetRows];
     const q = query.trim();
-    const ranked = parsed || !q ? rows : rank(q, rows.map((r) => ({ ...r, keywords: [r.label, ...(r.keywords ?? [])] })), recent.map((r) => r.id)) as Row[];
+    // Issues come from the backend already matched, so they are listed as found and never re-ranked by letters.
+    const others = rank(q, rows.filter((r) => !isIssue(r)).map((r) => ({ ...r, keywords: [r.label, ...(r.keywords ?? [])] })), recent.map((r) => r.id)) as Row[];
+    const ranked = parsed || !q || issuesOnly ? rows : [...rows.filter(isIssue), ...others];
     const out: { name: string; rows: Row[] }[] = [];
-    if (!top && !q) {
+    if (!top && !q && !issuesOnly) {
       const recents = recent
         .flatMap((r): Row[] => {
           const live = rows.find((x) => x.id === r.id);
@@ -286,8 +298,8 @@
           aria-expanded="true"
           aria-controls="cp-list"
           aria-activedescendant={flat.length ? `cp-${active}` : undefined}
-          aria-label={stack.length ? stack.at(-1)!.title : 'Search commands, issues, views and projects'}
-          placeholder={stack.length ? 'Filter…' : 'Type a command, issue, view or project'}
+          aria-label={stack.length ? stack.at(-1)!.title : issuesOnly ? 'Search issues' : 'Search commands, issues, views and projects'}
+          placeholder={stack.length ? 'Filter…' : issuesOnly ? 'Search issues…' : 'Type a command, issue, view or project'}
           autocomplete="off"
           spellcheck="false"
         />
@@ -328,7 +340,7 @@
         {:else}
           {#if stack.at(-1)?.loading}
             <div class="skel" aria-busy="true"><Skeleton height="var(--row-h)" /></div>
-          {:else}<p class="empty">No matches</p>{/if}
+          {:else}<p class="empty">{issuesOnly && !query.trim() ? 'Type an issue title, word or key' : 'No matches'}</p>{/if}
         {/each}
       </div>
       <div class="foot">

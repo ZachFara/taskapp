@@ -25,6 +25,7 @@
   let overlay = $state<'palette' | 'quickadd' | null>(null);
   let refreshed = $state(0); // bumps when a command wrote, so the open view loads its rows again
   let palettePage = $state<string | undefined>();
+  let paletteIssues = $state(false);
   let cheat = $state(false); // CheatSheet opens itself on help.shortcuts; this only lets the root close it
 
   // Rows from every view select through `selectedIssueId`; the peek key goes through the selection store.
@@ -87,8 +88,8 @@
   // Registry commands that open a root surface announce themselves as window events.
   $effect(() => {
     const on: [string, (e: Event) => void][] = [
-      ['command:palette.open', (e) => ((palettePage = (e as CustomEvent<{ page?: string } | null>).detail?.page), (overlay = 'palette'))],
-      ['command:nav.search', () => ((palettePage = undefined), (overlay = 'palette'))],
+      ['command:palette.open', (e) => ((palettePage = (e as CustomEvent<{ page?: string } | null>).detail?.page), (paletteIssues = false), (overlay = 'palette'))],
+      ['command:nav.search', () => ((palettePage = undefined), (paletteIssues = true), (overlay = 'palette'))],
       ['command:issue.create', () => (overlay = 'quickadd')],
       ['command:view.refresh', () => refreshed++],
     ];
@@ -129,7 +130,7 @@
 {#if setup === 'needed'}
   <Setup ondone={() => (setup = 'done')} />
 {:else if setup === 'done'}
-  <Shell {crumb} panelOpen={panelKey !== null} onsearch={() => ((palettePage = undefined), (overlay = 'palette'))}>
+  <Shell {crumb} panelOpen={panelKey !== null} onsearch={() => ((palettePage = undefined), (paletteIssues = false), (overlay = 'palette'))}>
     {#snippet sidebar()}<Sidebar route={path} />{/snippet}
     {#snippet panel()}
       {#if panelKey !== null}
@@ -144,7 +145,7 @@
   </Shell>
 
   {#if overlay === 'palette'}
-    <CommandPalette page={palettePage} onclose={() => (overlay = null)} oncreate={() => (overlay = 'quickadd')} />
+    <CommandPalette page={palettePage} issues={paletteIssues} onclose={() => (overlay = null)} oncreate={() => (overlay = 'quickadd')} />
   {:else if overlay === 'quickadd'}
     <QuickAdd onclose={() => (overlay = null)} oncreated={created} />
   {/if}

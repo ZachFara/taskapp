@@ -333,6 +333,9 @@ theme..." with the same list.
 ## The command menu
 
 - **Open:** `mod+k` or `mod+p` (works inside text fields), the "Search or run a command" button, or `/` (search).
+- **Search issues.** Typing at the top of the menu lists matching issues first, under "Issues". Each word matches
+  from its start, so `cras` finds "Crash on launch", and a key such as `ABC-12` is listed first. `/` or the
+  "Search issues…" row opens the same search on its own, with nothing else in the list.
 - **Use:** type to filter commands, issues, views and projects. `arrowdown` / `arrowup` (or `ctrl+n` / `ctrl+p`,
   `ctrl+j` / `ctrl+k`) move, `enter` runs, `tab` completes the highlighted label, `escape` closes.
 - **Contextual actions.** With an issue focused, selected or open, an "Actions on ABC-1" (or "N issues selected")
