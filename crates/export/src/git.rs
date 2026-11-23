@@ -101,6 +101,32 @@ pub async fn remote_state(dir: &Path, remote: &str) -> Result<RemoteState> {
     )
 }
 
+/// Refuses a fetched tree that holds a symlink or a submodule: the export would read and write through it.
+///
+/// # Errors
+///
+/// `Invalid` naming the first such path.
+pub async fn reject_links(dir: &Path) -> Result<()> {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["ls-tree", "-r", "FETCH_HEAD"])
+        .output()
+        .await?;
+    if !out.status.success() {
+        return Err(std::io::Error::other("git ls-tree FETCH_HEAD failed").into());
+    }
+    for line in String::from_utf8_lossy(&out.stdout).lines() {
+        let (meta, path) = line.split_once('\t').unwrap_or((line, ""));
+        if meta.starts_with("120000") || meta.starts_with("160000") {
+            return Err(taskapp_core::Error::Invalid(format!(
+                "the remote has a symlink or submodule at {path:?}; nothing was pulled"
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Fast-forwards the local branch to what [`remote_state`] fetched last.
 ///
 /// # Errors

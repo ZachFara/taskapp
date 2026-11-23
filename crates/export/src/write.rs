@@ -9,7 +9,7 @@ use taskapp_core::{Db, Result, settings};
 use crate::files::{
     CommentText, CycleRow, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow, MilestoneRow,
     PinRow, ProjectFile, PropertyFile, StatusRow, ViewFile, ViewTemplateFile, WorkBlockRow,
-    invalid, key, render_issue, safe_name,
+    invalid, key, plain_dir, read_plain, render_issue, safe_name,
 };
 
 pub struct ExportStats {
@@ -28,6 +28,9 @@ const MANAGED_DIRS: [&str; 2] = ["issues", "projects"];
 /// Fails when the database cannot be read or a file cannot be written.
 pub async fn write_snapshot(db: &Db, dir: &Path) -> Result<ExportStats> {
     refuse_empty(dir)?;
+    for sub in MANAGED_DIRS {
+        plain_dir(dir, sub)?;
+    }
     let files = render(db).await?;
     let mut stats = ExportStats {
         issues: u32::try_from(files.keys().filter(|k| k.starts_with("issues/")).count())
@@ -37,7 +40,13 @@ pub async fn write_snapshot(db: &Db, dir: &Path) -> Result<ExportStats> {
     };
     for (rel, text) in &files {
         let path = dir.join(rel);
-        if fs::read_to_string(&path).is_ok_and(|old| old == *text) {
+        // A link at a managed path would send the write elsewhere; refuse rather than follow it.
+        if fs::symlink_metadata(&path).is_ok_and(|m| !m.is_file()) {
+            return Err(taskapp_core::Error::Invalid(format!(
+                "{rel} in the export is not a regular file"
+            )));
+        }
+        if read_plain(&path).is_ok_and(|old| old == *text) {
             continue;
         }
         if let Some(parent) = path.parent() {
@@ -54,7 +63,7 @@ pub async fn write_snapshot(db: &Db, dir: &Path) -> Result<ExportStats> {
 
 fn remove_stale(dir: &Path, sub: &str, files: &BTreeMap<String, String>) -> Result<u32> {
     let folder = dir.join(sub);
-    if !folder.is_dir() {
+    if !plain_dir(dir, sub)? {
         return Ok(0);
     }
     let mut removed = 0;

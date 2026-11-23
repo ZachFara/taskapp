@@ -12,6 +12,7 @@ use taskapp_core::{Db, Error, IssueId, Result, ViewDef, search};
 use crate::files::{
     CommentText, CycleRow, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow, PinRow,
     ProjectFile, PropertyFile, StatusRow, ViewFile, ViewTemplateFile, invalid, parse_issue,
+    plain_dir, read_plain,
 };
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -71,12 +72,12 @@ async fn restore_issues(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
 }
 
 fn read_yaml<T: DeserializeOwned>(path: &Path) -> Result<T> {
-    serde_yaml_ng::from_str(&fs::read_to_string(path)?).map_err(invalid)
+    serde_yaml_ng::from_str(&read_plain(path)?).map_err(invalid)
 }
 
 /// A list file that older exports do not have reads as empty.
 fn read_list<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>> {
-    if path.exists() {
+    if fs::symlink_metadata(path).is_ok() {
         read_yaml(path)
     } else {
         Ok(vec![])
@@ -86,13 +87,20 @@ fn read_list<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>> {
 /// The sorted files in `dir/sub` with the given extension.
 fn files_in(dir: &Path, sub: &str, ext: &str) -> Result<Vec<PathBuf>> {
     let folder = dir.join(sub);
-    if !folder.is_dir() {
+    if !plain_dir(dir, sub)? {
         return Ok(vec![]);
     }
     let mut paths = Vec::new();
     for entry in fs::read_dir(&folder)? {
-        let path = entry?.path();
+        let entry = entry?;
+        let path = entry.path();
         if path.extension().is_some_and(|e| e == ext) {
+            if !entry.file_type()?.is_file() {
+                return Err(Error::Invalid(format!(
+                    "{} is not a regular file",
+                    path.display()
+                )));
+            }
             paths.push(path);
         }
     }
@@ -317,7 +325,7 @@ fn read_issues(dir: &Path, prefix: &str) -> Result<Vec<IssueEntry>> {
     files_in(dir, "issues", "md")?
         .iter()
         .map(|path| {
-            let (front, description, comments) = parse_issue(&fs::read_to_string(path)?)?;
+            let (front, description, comments) = parse_issue(&read_plain(path)?)?;
             Ok((number_of(prefix, &front.key)?, front, description, comments))
         })
         .collect()

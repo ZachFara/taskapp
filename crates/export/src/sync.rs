@@ -13,7 +13,7 @@ use taskapp_core::{
 };
 
 use crate::{
-    files::{CommentText, IssueFront, invalid, parse_issue},
+    files::{CommentText, IssueFront, invalid, parse_issue, plain_dir, read_plain},
     git::{self, RemoteState},
 };
 
@@ -60,7 +60,10 @@ pub async fn pull_and_apply(db: &Db, dir: &Path, remote: &str) -> Result<Applied
         RemoteState::Diverged => {
             return Err(Error::Invalid(DIVERGED.into()));
         }
-        RemoteState::Behind => git::fast_forward(dir).await?,
+        RemoteState::Behind => {
+            git::reject_links(dir).await?;
+            git::fast_forward(dir).await?;
+        }
     }
     history::step("Sync from remote", apply_dir(db, dir)).await
 }
@@ -249,18 +252,18 @@ type Span = (DateTime<Utc>, DateTime<Utc>);
 type Incoming = (IssueFront, String, Vec<CommentText>);
 
 fn read_all(dir: &Path) -> Result<Vec<Incoming>> {
-    let Ok(entries) = std::fs::read_dir(dir.join("issues")) else {
+    if !plain_dir(dir, "issues")? {
         return Ok(vec![]);
-    };
-    let mut paths: Vec<_> = entries
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|e| e == "md"))
-        .collect();
+    }
+    let mut paths = Vec::new();
+    for entry in std::fs::read_dir(dir.join("issues"))? {
+        let entry = entry?;
+        if entry.path().extension().is_some_and(|e| e == "md") {
+            paths.push(entry.path());
+        }
+    }
     paths.sort();
-    paths
-        .iter()
-        .map(|p| parse_issue(&std::fs::read_to_string(p)?))
-        .collect()
+    paths.iter().map(|p| parse_issue(&read_plain(p)?)).collect()
 }
 
 /// Creates the issue under the number the file names, so keys agree on both machines.

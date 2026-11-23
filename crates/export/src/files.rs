@@ -8,6 +8,38 @@ use serde_json::{Map, Value};
 use sqlx::FromRow;
 use taskapp_core::{Error, Result};
 
+/// Reads a regular file, never through a symlink: an export folder may come from a remote.
+///
+/// # Errors
+///
+/// `Invalid` when the path is a symlink or anything but a regular file.
+pub fn read_plain(path: &std::path::Path) -> Result<String> {
+    let meta = std::fs::symlink_metadata(path)?;
+    if !meta.is_file() {
+        return Err(Error::Invalid(format!(
+            "{} is not a regular file",
+            path.display()
+        )));
+    }
+    Ok(std::fs::read_to_string(path)?)
+}
+
+/// Whether `dir/sub` is a real directory. A missing one is `false`.
+///
+/// # Errors
+///
+/// `Invalid` when it exists and is a symlink or a file.
+pub fn plain_dir(dir: &std::path::Path, sub: &str) -> Result<bool> {
+    match std::fs::symlink_metadata(dir.join(sub)) {
+        Ok(m) if m.is_dir() => Ok(true),
+        Ok(_) => Err(Error::Invalid(format!(
+            "{sub} in the export is not a real directory"
+        ))),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e.into()),
+    }
+}
+
 pub const SECTION_COMMENTS: &str = "\n## Comments\n";
 
 pub fn invalid(e: impl std::fmt::Display) -> Error {
