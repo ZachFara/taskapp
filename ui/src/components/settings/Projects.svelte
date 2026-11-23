@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SectionHead from './SectionHead.svelte';
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
   import { projects, refreshAll } from '../../lib/stores.svelte';
@@ -51,10 +52,7 @@
 </script>
 
 <div class="es">
-  <header class="es-head">
-    <h2>Projects</h2>
-    <p>Each project has a short key and groups its own issues, milestones and properties.</p>
-  </header>
+  <SectionHead lede="Each project has a short key and groups its own issues, milestones and properties." />
 
   {#if projects.length}
     <ul class="es-list">

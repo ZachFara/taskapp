@@ -10,7 +10,7 @@ use crate::{
     StatusId, history, issues, relations, rows, statuses::category_str,
 };
 
-const COLOR: &str = "#95a2b3";
+pub(crate) const COLOR: &str = "gray";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct PlanStatus {
@@ -259,6 +259,7 @@ async fn created(
 async fn ensure_refs(tx: &mut SqliteConnection, plan: &ImportPlan) -> Result<()> {
     for s in &plan.statuses {
         if find(tx, STATUS_BY_NAME, &s.name).await?.is_none() {
+            // Not recorded: the archived imported issues still point at it, so undo could not delete it.
             sqlx::query("INSERT INTO statuses (name, category, position, color) VALUES (?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM statuses), ?)")
                 .bind(&s.name).bind(category_str(s.category)).bind(COLOR).execute(&mut *tx).await?;
         }
@@ -454,9 +455,7 @@ async fn link(
 
 /// Writes `plan` in one transaction and one undoable step labelled "Import N issues". An issue
 /// whose identifier is already in `import_log` is skipped, so applying a plan twice creates nothing
-/// the second time. Undo works for an import that only creates issues; one that also creates
-/// labels, projects, statuses, cycles, property definitions or relations is refused by undo, which
-/// does not cover those.
+/// the second time. Undo reverses the whole import, log rows included.
 ///
 /// # Errors
 /// `Invalid` when an issue fails core validation (nothing is written), `Db` for other failures.
@@ -492,6 +491,14 @@ async fn write(db: &Db, plan: &ImportPlan) -> Result<Applied> {
         let issue = issues::create_in(&mut tx, new, ChangeSource::Migration).await?;
         sqlx::query("INSERT INTO import_log (external_id, source, issue_id, imported_at) VALUES (?, ?, ?, ?)")
             .bind(&i.external_id).bind(&plan.source).bind(issue.id.0).bind(Utc::now()).execute(&mut *tx).await?;
+        // Recorded so undo removes the log row too; otherwise the undone issues could never be imported again.
+        rows::created(
+            &mut tx,
+            ChangeSource::Migration,
+            "import_log",
+            &i.external_id,
+        )
+        .await?;
         ids.insert(i.external_id.clone(), issue.id.0);
     }
     link(&mut tx, plan, &ids, &mut warnings).await?;

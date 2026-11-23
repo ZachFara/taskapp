@@ -43,6 +43,10 @@ afterEach(() => {
 });
 
 describe('Setup', () => {
+  it('setup_focuses_the_workspace_name_field', () => {
+    expect(document.activeElement).toBe(field('Workspace name'));
+  });
+
   it('setup_default_key_is_ABC_with_preview', () => {
     expect(field('Workspace key').value).toBe('ABC');
     expect(document.body.textContent).toContain('ABC-1');
@@ -109,5 +113,9 @@ describe('Setup', () => {
     await settle();
     await submit();
     expect(settingsSet).toHaveBeenCalledWith('theme', 'dark');
+  });
+
+  it('the theme choice is a segmented control', () => {
+    expect(document.querySelector('[aria-label="Theme"].cx-seg')).not.toBeNull();
   });
 });

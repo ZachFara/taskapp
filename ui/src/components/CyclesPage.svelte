@@ -6,6 +6,7 @@
   import Dialog from '../ui/Dialog.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import GroupHeader from '../ui/GroupHeader.svelte';
+  import Icon from '../ui/Icon.svelte';
   import ListRow from '../ui/ListRow.svelte';
   import EntityIcon from '../ui/EntityIcon.svelte';
   import { localDay } from '../lib/gantt';
@@ -23,7 +24,7 @@
   type Row = Cycle & { band: Band; done: number; total: number };
 
   const DAY = 86_400_000;
-  const CATEGORY: Record<Band, 'Started' | 'Unstarted' | 'Completed'> = { current: 'Started', upcoming: 'Unstarted', past: 'Completed' };
+  const TONE: Record<Band, 1 | 2 | 3 | 4> = { current: 3, upcoming: 2, past: 4 };
   const LABEL: Record<Band, string> = { current: 'Current', upcoming: 'Upcoming', past: 'Past' };
 
   let rows = $state<Row[]>([]);
@@ -36,6 +37,16 @@
   let collapsed = $state<Record<Band, boolean>>({ current: false, upcoming: false, past: true });
   let creating = $state(false);
   let moving = $state(false);
+
+  // The command menu and keys open these dialogs through the registry's events.
+  $effect(() => {
+    const on = (id: string, open: () => void) => {
+      addEventListener(id, open);
+      return () => removeEventListener(id, open);
+    };
+    const offs = [on('command:cycle.new', () => (creating = true)), on('command:cycle.move_unfinished', () => (moving = true))];
+    return () => offs.forEach((off) => off());
+  });
   let name = $state('');
   let start = $state('');
   let end = $state('');
@@ -125,7 +136,9 @@
     {#each bands as group (group.band)}
       {#if group.items.length > 0}
         <section data-group={group.band} class="group">
-          <GroupHeader name={LABEL[group.band]} count={group.items.length} category={CATEGORY[group.band]} collapsed={collapsed[group.band]} ontoggle={() => (collapsed[group.band] = !collapsed[group.band])} />
+          <GroupHeader name={LABEL[group.band]} count={group.items.length} tone={TONE[group.band]} collapsed={collapsed[group.band]} ontoggle={() => (collapsed[group.band] = !collapsed[group.band])}>
+            {#snippet leading()}<Icon name="cycle" size={12} />{/snippet}
+          </GroupHeader>
           {#if !collapsed[group.band]}
             <ul class="rows">
               {#each group.items as c (c.id)}
@@ -140,7 +153,7 @@
                     {#if group.band === 'current'}<span class="left">{daysLeft(c)} days left</span>{/if}
                   </ListRow>
                   {#if group.band === 'current' && next}
-                    <Button onclick={() => (moving = true)}>Move unfinished to next cycle</Button>
+                    <Button class="move" onclick={() => (moving = true)}>Move unfinished to next cycle</Button>
                   {/if}
                 </li>
                 {#if charts && group.band === 'current'}<div class="burnup"><CycleBurnup cycleId={c.id} /></div>{/if}
@@ -180,6 +193,7 @@
   .group { display: grid; }
   .rows { list-style: none; margin: 0; padding: 0; }
   .row { display: flex; align-items: center; gap: var(--s-5); padding-right: var(--s-4); border-bottom: 1px solid var(--border); }
+  .move { flex: none; white-space: nowrap; }
   .title { font-weight: 600; min-width: 120px; }
   .dates, .progress, .left { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .left { margin-left: auto; color: var(--ink); }

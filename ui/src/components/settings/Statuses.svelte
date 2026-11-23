@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SectionHead from './SectionHead.svelte';
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
   import { statuses, issues, refreshAll } from '../../lib/stores.svelte';
@@ -8,6 +9,7 @@
   import Dialog from '../../ui/Dialog.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
   import IconButton from '../../ui/IconButton.svelte';
+  import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import TextInput from '../../ui/TextInput.svelte';
   import './entities.css';
 
@@ -73,10 +75,7 @@
 </script>
 
 <div class="es">
-  <header class="es-head">
-    <h2>Statuses</h2>
-    <p>The stages work moves through. Each status belongs to a category, and the category decides how it counts.</p>
-  </header>
+  <SectionHead lede="The stages work moves through. Each status belongs to a category, and the category decides how it counts." />
 
   {#each categories as c (c)}
     <section aria-label={c}>
@@ -100,13 +99,14 @@
               ondrop={(e) => { e.preventDefault(); drop(s); }}
               ondragend={() => (dragId = overId = null)}
             >
+              <StatusGlyph category={s.category} />
               <IconColorPicker
                 label={`Icon and colour of ${s.name}`}
                 value={{ icon: s.icon, color: s.color }}
                 onchange={(v) => write(() => api.statuses.update(s.id, null, v.color, null, v.icon))}
               />
               <div class="es-name" onchange={(e) => rename(s, e)}><TextInput label={`Name of ${s.name}`} value={s.name} /></div>
-              <span class="es-meta">{users(s)} issues</span>
+              <span class="es-meta">{users(s)} {users(s) === 1 ? 'issue' : 'issues'}</span>
               <div class="es-tools">
                 <IconButton icon="arrow-up" label={`Move ${s.name} up`} disabled={i === 0} onclick={() => move(s, i - 1)} />
                 <IconButton icon="arrow-down" label={`Move ${s.name} down`} disabled={i === inCategory(c).length - 1} onclick={() => move(s, i + 1)} />

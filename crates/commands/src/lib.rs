@@ -4,6 +4,8 @@
 //! table, and (through the macro the app passes in) the Tauri wrappers. Commands that need a sync crate
 //! are not here; the app defines them itself.
 
+mod step_label;
+
 use std::{future::Future, path::PathBuf};
 
 use chrono::{DateTime, NaiveDate, Utc};
@@ -70,8 +72,16 @@ macro_rules! define {
         $(
             #[doc = "Forwards to core with `ChangeSource::Ui`.\n\n# Errors\nFails as the core function it forwards to does."]
             pub async fn $name($s: &AppState $(, $a: $t)*) -> Result<$r> {
-                // One command call is one undoable step.
-                history::step(stringify!($name), async move $body).await
+                // One command call is one undoable step, named once the outcome is known.
+                let args = serde_json::json!({ $(stringify!($a): &$a),* });
+                let name = stringify!($name);
+                history::step(&step_label::step_label(name, &args, None), async move {
+                    let out: Result<$r> = (async move $body).await;
+                    let out = out?;
+                    let shown = serde_json::to_value(&out).unwrap_or(Value::Null);
+                    history::relabel(&$s.db, &step_label::step_label(name, &args, Some(&shown))).await?;
+                    Ok(out)
+                }).await
             })*
 
         const TABLE: &[(&str, Handler)] = &[$((stringify!($name), |st, args| Box::pin(async move {
@@ -121,7 +131,7 @@ macro_rules! with_commands {
             issues_restore(s, id: IssueId) -> () { issues::restore(&s.db, id, ChangeSource::Ui).await }
             issues_children(s, id: IssueId) -> Vec<Issue> { issues::children(&s.db, id).await }
             issues_parse_quickadd(s, input: String) -> ParsedQuickAdd {
-                Ok(quickadd::parse(&input, today(s)?, &s.tz))
+                quickadd::parse_for(&s.db, &input, today(s)?, &s.tz).await
             }
             issues_create_from_quickadd(s, input: String) -> Issue {
                 quickadd::create_from(&s.db, &input, today(s)?, &s.tz, ChangeSource::Ui).await
@@ -309,7 +319,7 @@ macro_rules! with_commands {
             history_redo(s) -> UndoStatus { undo::redo(&s.db).await }
             history_undo_status(s) -> UndoStatus { undo::undo_status(&s.db).await }
             settings_get(s, key: String) -> Option<Value> { settings::get(&s.db, &key).await }
-            settings_set(s, key: String, value: Value) -> () { settings::set(&s.db, &key, &value).await }
+            settings_set(s, key: String, value: Value) -> () { settings::set_from_user(&s.db, &key, &value).await }
             backup_snapshot(s, dir: String, reason: String) -> String {
                 Ok(backup::snapshot(&s.db, dir.as_ref(), &reason).await?.to_string_lossy().into_owned())
             }

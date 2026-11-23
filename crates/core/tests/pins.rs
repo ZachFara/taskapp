@@ -289,3 +289,20 @@ async fn set_with_one_invalid_target_changes_nothing() -> R {
     assert_eq!(pins::list_resolved(&db).await?.len(), 0);
     Ok(())
 }
+
+#[tokio::test]
+async fn a_pin_records_the_source_that_made_it() -> R {
+    let db = Db::open_in_memory().await?;
+    let p = pins::pin_as(
+        &db,
+        taskapp_core::ChangeSource::Agent,
+        PinKind::Url,
+        "https://a.example",
+        None,
+    )
+    .await?;
+    let log = history::list_for(&db, "row:pins", &p.id.0.to_string()).await?;
+    assert_eq!(log.len(), 1);
+    assert_eq!(log[0].source, taskapp_core::ChangeSource::Agent);
+    Ok(())
+}

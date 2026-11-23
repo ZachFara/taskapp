@@ -10,10 +10,11 @@
   import Contour from '../../ui/Contour.svelte';
   import EntityIcon from '../../ui/EntityIcon.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
-  import IconButton from '../../ui/IconButton.svelte';
+  import Button from '../../ui/Button.svelte';
   import FieldValue from '../display/FieldValue.svelte';
   import { BOARD_DEFAULT, density, emptyCtx, loadCtx, pointsName, pointsTotal, shown, type Ctx } from '../display/types';
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
+  import { priorityGlyph } from '../detail/format';
 
   let { view }: { view: SavedView } = $props();
 
@@ -25,7 +26,7 @@
     patch: (i: Issue) => IssuePatch;
   };
 
-  const groupBy = $derived(view.def.group_by);
+  const groupBy = $derived(view.def.group_by?.Fixed === 'Points' && !ctx.points ? null : view.def.group_by);
   const selectProp = $derived.by(() => {
     const key = groupBy?.Property;
     return propertyDefs.find((d) => d.key === key && d.kind === 'Select') ?? null;
@@ -101,7 +102,7 @@
   let error: string | null = $state(null);
   let ctx = $state.raw<Ctx>(emptyCtx);
   // Key and priority are always on the card; the rest follow the view.
-  const fields = $derived(shown(view.def, BOARD_DEFAULT, true).filter((f) => f.Fixed !== 'Key' && f.Fixed !== 'Priority'));
+  const fields = $derived(shown(view.def, BOARD_DEFAULT, true).filter((f) => f.Fixed !== 'Key' && f.Fixed !== 'Priority' && (ctx.points || f.Fixed !== 'Points')));
 
   async function reload() {
     issues = await api.views.query($state.snapshot(view.def));
@@ -177,10 +178,11 @@
   </EmptyState>
 {:else}
 
+<div class="view">
 <div class="bar">
   <span class="count">{issues.length} issues</span>
   <div class="grow"></div>
-  <IconButton icon="filter" label="Hide empty columns" pressed={hideEmpty} onclick={toggleHideEmpty} />
+  <Button icon="filter" aria-label="Hide empty columns" aria-pressed={hideEmpty} onclick={toggleHideEmpty}>{hideEmpty ? 'Show empty columns' : 'Hide empty columns'}</Button>
 </div>
 
 <IssueMenu>
@@ -232,7 +234,7 @@
               >
                 <span class="top">
                   <span class="key">{i.key}</span>
-                  <PriorityGlyph level={i.priority} size={14} />
+                  <PriorityGlyph level={priorityGlyph(i.priority)} size={14} />
                 </span>
                 <span class="title">{i.title}</span>
                 <span class="foot">
@@ -254,6 +256,7 @@
   {/each}
 </div>
 </IssueMenu>
+</div>
 {/if}
 
 <style>
@@ -262,7 +265,10 @@
     font-size: var(--fs-md);
     margin: var(--s-4) var(--s-6);
   }
+  .view { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  .view :global(.fill) { flex: 1; height: auto; min-height: 0; display: flex; flex-direction: column; }
   .bar {
+    flex: none;
     height: var(--row-h);
     display: flex;
     align-items: center;
@@ -277,7 +283,7 @@
     gap: var(--s-4);
     padding: var(--s-4) var(--s-6) var(--s-6);
     overflow-x: auto;
-    height: 100%;
+    flex: 1;
     min-height: 0;
   }
   .column {

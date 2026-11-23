@@ -7,6 +7,8 @@
   import { projects, refreshAll, views } from '../lib/stores.svelte';
   import EntityIcon from '../ui/EntityIcon.svelte';
   import Icon from '../ui/Icon.svelte';
+  import Tooltip from '../ui/Tooltip.svelte';
+  import { shortcutFor } from '../lib/commands';
   import ProjectSpark from './insights/ProjectSpark.svelte';
 
   // The app passes its live route; standalone the sidebar reads the address once.
@@ -84,25 +86,39 @@
 </script>
 
 {#snippet head(id: string, title: string, count: number)}
-  <button class="head" type="button" aria-expanded={!closed[id]} onclick={() => (closed[id] = !closed[id])}>
-    <Icon name={closed[id] ? 'chevron-right' : 'chevron-down'} size={12} />
-    <span>{title}</span>
-    <em>{count}</em>
-  </button>
+  <Tooltip label={`${closed[id] ? 'Expand' : 'Collapse'} ${title}`}>
+    {#snippet children(props)}
+      <button {...props} class="head" type="button" aria-expanded={!closed[id]} onclick={() => (closed[id] = !closed[id])}>
+        <Icon name={closed[id] ? 'chevron-right' : 'chevron-down'} size={12} />
+        <span>{title}</span>
+        <em>{count}</em>
+      </button>
+    {/snippet}
+  </Tooltip>
+{/snippet}
+
+{#snippet navLink(href: string, icon: string, text: string, id: string, on: boolean)}
+  <Tooltip label={text} shortcut={shortcutFor(id)}>
+    {#snippet children(props)}
+      <a {...props} class="item" class:on aria-current={on ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><Icon name={icon} /><span class="t">{text}</span></a>
+    {/snippet}
+  </Tooltip>
 {/snippet}
 
 {#snippet pinBtn(kind: PinKind, target: string, title: string)}
   {@const on = isPinned(kind, target)}
-  <button class="aff" class:on type="button" aria-label={`${on ? 'Unpin' : 'Pin'} ${title}`} aria-pressed={on} onclick={() => toggle(kind, target, title)}><Icon name="pin" size={12} /></button>
+  <Tooltip label={`${on ? 'Unpin' : 'Pin'} ${title}`}>
+    {#snippet children(props)}
+      <button {...props} class="aff" class:on type="button" aria-label={`${on ? 'Unpin' : 'Pin'} ${title}`} aria-pressed={on} onclick={() => toggle(kind, target, title)}><Icon name="pin" size={12} /></button>
+    {/snippet}
+  </Tooltip>
 {/snippet}
 
 <nav aria-label="Sidebar" data-on-frame>
   {#if error}<p role="alert" class="error">{error}</p>{/if}
 
   <ul class="top">
-    {#each [['/inbox', 'inbox', 'Inbox'], ['/my', 'user', 'My issues']] as [href, icon, text] (href)}
-      <li><a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><Icon name={icon} /><span class="t">{text}</span></a></li>
-    {/each}
+    <li>{@render navLink('/my', 'user', 'My issues', 'nav.my', route === '/my')}</li>
   </ul>
 
   <section aria-label="Pinned">
@@ -112,7 +128,11 @@
         {#each pins as r (r.pin.id)}
           <li class="row" class:archived={r.archived} {...drag(r.pin.id)} ondrop={() => dropPin(r.pin.id)}>
             <a class="item" class:on={route === r.route} aria-current={route === r.route ? 'page' : undefined} href={r.route} onclick={(e) => (e.preventDefault(), open(r.route))}><Icon name="pin" /><span class="t">{r.label}</span></a>
-            <button class="aff" type="button" aria-label={`Unpin ${r.label}`} onclick={() => api.pins.unpin(r.pin.id).then(async () => (pins = await api.pins.listResolved()), fail)}><Icon name="close" size={12} /></button>
+            <Tooltip label={`Unpin ${r.label}`}>
+              {#snippet children(props)}
+                <button {...props} class="aff" type="button" aria-label={`Unpin ${r.label}`} onclick={() => api.pins.unpin(r.pin.id).then(async () => (pins = await api.pins.listResolved()), fail)}><Icon name="close" size={12} /></button>
+              {/snippet}
+            </Tooltip>
           </li>
         {/each}
       </ul>
@@ -138,7 +158,7 @@
     {@render head('projects', 'Projects', projects.length)}
     {#if !closed.projects}
       <ul>
-        <li class="row"><a class="item" class:on={route === '/projects'} aria-current={route === '/projects' ? 'page' : undefined} href="/projects" onclick={(e) => (e.preventDefault(), navigate('/projects'))}><Icon name="layers" /><span class="t">All projects</span></a></li>
+        <li class="row">{@render navLink('/projects', 'project', 'All projects', 'nav.projects', route === '/projects')}</li>
         {#each projects as p (p.id)}
           {@const href = `/project/${p.slug}`}
           <li class="row">
@@ -154,7 +174,7 @@
     {@render head('cycles', 'Cycles', cycles.length)}
     {#if !closed.cycles}
       <ul>
-        <li class="row"><a class="item" class:on={route === '/cycles'} aria-current={route === '/cycles' ? 'page' : undefined} href="/cycles" onclick={(e) => (e.preventDefault(), navigate('/cycles'))}><Icon name="cycle" /><span class="t">All cycles</span></a></li>
+        <li class="row">{@render navLink('/cycles', 'cycle', 'All cycles', 'nav.cycles', route === '/cycles')}</li>
         {#each cycles as c (c.id)}
           <li class="row">
             <a class="item" href="/cycles" onclick={(e) => (e.preventDefault(), navigate('/cycles'))}><Icon name="cycle" /><span class="t">{label(c)}</span></a>
@@ -166,7 +186,7 @@
   </section>
 
   <ul class="bottom">
-    <li><a class="item" class:on={route.startsWith('/settings')} aria-current={route.startsWith('/settings') ? 'page' : undefined} href="/settings/general" onclick={(e) => (e.preventDefault(), navigate('/settings/general'))}><Icon name="settings" /><span class="t">Settings</span></a></li>
+    <li>{@render navLink('/settings/general', 'settings', 'Settings', 'nav.settings', route.startsWith('/settings'))}</li>
   </ul>
 </nav>
 

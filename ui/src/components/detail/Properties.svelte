@@ -8,7 +8,7 @@
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import TextInput from '../../ui/TextInput.svelte';
-  import { dueFrom, dueParts, humanDate, isDate, isTime, minutes, PRIORITIES } from './format';
+  import { dueFrom, dueParts, humanDate, isDate, isTime, minutes, PRIORITIES, priorityGlyph } from './format';
   import IssuePicker from './IssuePicker.svelte';
   import OptionList from './OptionList.svelte';
   import PointsRow from '../insights/PointsRow.svelte';
@@ -71,19 +71,19 @@
   </PropertyRow>
 
   <PropertyRow id="priority" name="Priority" cmd="issue.detail.priority" bind:openRow>
-    {#snippet value()}<PriorityGlyph level={issue.priority} />{PRIORITIES[issue.priority]}{/snippet}
+    {#snippet value()}<PriorityGlyph level={priorityGlyph(issue.priority)} />{PRIORITIES[issue.priority]}{/snippet}
     {#snippet editor(close)}
       <OptionList label="Priority" value={issue.priority} options={PRIORITIES.map((name, id) => ({ id, name }))} onpick={(id) => { close(); save({ priority: num(id) }); }}>
-        {#snippet lead(o)}<PriorityGlyph level={Number(o.id)} />{/snippet}
+        {#snippet lead(o)}<PriorityGlyph level={priorityGlyph(Number(o.id))} />{/snippet}
       </OptionList>
     {/snippet}
   </PropertyRow>
 
   <PropertyRow id="project" name="Project" cmd="issue.detail.project" bind:openRow>
-    {#snippet value()}{#if project}<EntityIcon icon={project.icon} color={project.color} />{project.name}{:else}{@render none()}{/if}{/snippet}
+    {#snippet value()}{#if project}<EntityIcon icon={project.icon ?? 'icon:project'} color={project.color} />{project.name}{:else}{@render none()}{/if}{/snippet}
     {#snippet editor(close)}
       <OptionList label="Project" none="No project" value={issue.project_id} options={projects} onpick={(id) => { close(); save({ project_id: num(id), milestone_id: null }); }}>
-        {#snippet lead(o)}{@const p = projects.find((x) => x.id === o.id)!}<EntityIcon icon={p.icon} color={p.color} />{/snippet}
+        {#snippet lead(o)}{@const p = projects.find((x) => x.id === o.id)!}<EntityIcon icon={p.icon ?? 'icon:project'} color={p.color} />{/snippet}
       </OptionList>
     {/snippet}
   </PropertyRow>

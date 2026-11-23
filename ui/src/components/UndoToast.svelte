@@ -1,6 +1,7 @@
 <script lang="ts">
   import { navigate } from '../app/routes';
   import { api } from '../lib/api';
+  import { shortcutFor } from '../lib/commands';
   import Button from '../ui/Button.svelte';
   import Toast from '../ui/Toast.svelte';
   import { dismiss, onWrote, runRedo, runUndo, undoToast } from './undoState.svelte';
@@ -21,7 +22,7 @@
     {#snippet action()}
       {#if m.action}
         <span class="on-dark">
-          <Button variant="quiet" onclick={() => (m.action?.run === 'undo' ? runUndo(api) : runRedo(api))}>{m.action.text}</Button>
+          <Button variant="quiet" kbd={shortcutFor(m.action.run === 'undo' ? 'history.undo' : 'history.redo')} onclick={() => (m.action?.run === 'undo' ? runUndo(api) : runRedo(api))}>{m.action.text}</Button>
           {#if created}<Button variant="quiet" onclick={() => (dismiss(), navigate(`/issue/${created}`))}>Open</Button>{/if}
         </span>
       {/if}

@@ -24,7 +24,7 @@ export function minutes(n: number): string {
   return h && n % 60 ? `${h}h ${n % 60}m` : h ? `${h}h` : `${n}m`;
 }
 
-export const PRIORITIES = ['No priority', 'Low', 'Medium', 'High', 'Urgent'];
+export { PRIORITIES, priorityGlyph } from '../../lib/priority';
 
 /** Share of sub-issues that are done, as whole percent. */
 export const pct = (done: number, total: number) => (total ? Math.round((done / total) * 100) : 0);

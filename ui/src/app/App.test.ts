@@ -4,6 +4,7 @@ import { api, setApi } from '../lib/api';
 import { createMockApi } from '../lib/api.mock';
 import { setTheme } from '../lib/theme.svelte';
 import { refreshAll, selectedIssueId } from '../lib/stores.svelte';
+import { undoToast } from '../components/undoState.svelte';
 import App from './App.svelte';
 import CtxProbe from './testing/CtxProbe.svelte';
 import { navigate, routes } from './routes';
@@ -11,6 +12,11 @@ import { navigate, routes } from './routes';
 let app: ReturnType<typeof mount> | null = null;
 const settle = async () => {
   for (let i = 0; i < 12; i++) await new Promise((r) => setTimeout(r, 0));
+  flushSync();
+};
+// The editor popover mounts and unmounts a few frames after the command, so wait on its state instead of a fixed delay.
+const until = async (done: () => boolean) => {
+  for (let i = 0; i < 200 && !done(); i++) await new Promise((r) => setTimeout(r, 10));
   flushSync();
 };
 const q = <T extends Element = HTMLElement>(s: string) => document.querySelector<T>(s);
@@ -119,6 +125,16 @@ describe('keys and overlays', () => {
     expect(q('[role=dialog]')!.textContent).toContain('New issue');
   });
 
+  it('the_toast_clears_when_the_page_changes', async () => {
+    await open('/my');
+    undoToast.value = { label: 'Updated issue', tone: 'success', action: { run: 'undo', text: 'Undo' } };
+    await settle();
+    expect(q('.toast')).not.toBeNull();
+    navigate('/cycles');
+    await settle();
+    expect(q('.toast')).toBeNull();
+  });
+
   it('g_m_navigates_through_the_registry', async () => {
     await open('/cycles');
     press('g');
@@ -157,10 +173,10 @@ describe('issue panel', () => {
     await withIssue();
     const back = vi.spyOn(history, 'back');
     dispatchEvent(new CustomEvent('command:issue.detail.edit', { detail: 'priority' }));
-    await settle();
+    await until(() => !!q('[role=listbox][aria-label=Priority]'));
     expect(q('[role=listbox][aria-label=Priority]')).not.toBeNull();
     press('Escape');
-    await settle();
+    await until(() => !q('[role=listbox][aria-label=Priority]'));
     expect(q('[role=listbox][aria-label=Priority]')).toBeNull();
     expect(q('aside.panel')).not.toBeNull();
     await new Promise((r) => setTimeout(r, 100));

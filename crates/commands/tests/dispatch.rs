@@ -102,7 +102,7 @@ async fn an_ui_edit_is_one_undoable_step() -> R {
     )
     .await?;
     let status = dispatch(&st, "history_undo_status", json!({})).await?;
-    assert_eq!(status["undo"], "issues_update");
+    assert_eq!(status["undo"], "Edited ABC-1");
     dispatch(&st, "history_undo", json!({})).await?;
     let back = dispatch(&st, "issues_get", json!({"id": id})).await?;
     assert_eq!(back["title"], "ABC one");
@@ -132,7 +132,7 @@ async fn a_bulk_edit_through_dispatch_is_one_undoable_step() -> R {
     .await?;
     assert_eq!(
         dispatch(&st, "history_undo_status", json!({})).await?["undo"],
-        "issues_bulk_update"
+        "Set priority on 2 issues"
     );
     dispatch(&st, "history_undo", json!({})).await?;
     for id in &ids {
@@ -164,7 +164,7 @@ async fn reorder_statuses_and_pin_many_are_one_undo_step_each() -> R {
     )
     .await?;
     let status = dispatch(&s, "history_undo_status", json!({})).await?;
-    assert_eq!(status["undo"], "statuses_reorder");
+    assert_eq!(status["undo"], "Reorder status");
     dispatch(&s, "history_undo", json!({})).await?;
     let list = dispatch(&s, "statuses_list", json!({})).await?;
     let started: Vec<_> = list
@@ -191,7 +191,7 @@ async fn reorder_statuses_and_pin_many_are_one_undo_step_each() -> R {
         Some(2)
     );
     let status = dispatch(&s, "history_undo_status", json!({})).await?;
-    assert_eq!(status["undo"], "pins_set");
+    assert_eq!(status["undo"], "Pinned 2 items");
     dispatch(&s, "history_undo", json!({})).await?;
     assert_eq!(
         dispatch(&s, "pins_list_resolved", json!({}))

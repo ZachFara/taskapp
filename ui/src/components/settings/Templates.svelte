@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
+  import { PRIORITY_OPTIONS } from '../../lib/priority';
   import type { IssueTemplate, Label, TemplateBody, TemplateFields, TemplateInput } from '../../lib/bindings';
   import { projects, propertyDefs, refreshAll, statuses } from '../../lib/stores.svelte';
   import Button from '../../ui/Button.svelte';
@@ -10,8 +11,8 @@
   import EmptyState from '../../ui/EmptyState.svelte';
   import EntityIcon from '../../ui/EntityIcon.svelte';
   import IconColorPicker from '../pickers/IconColorPicker.svelte';
+  import SectionHead from './SectionHead.svelte';
   import IconButton from '../../ui/IconButton.svelte';
-  import PageHeader from '../../ui/PageHeader.svelte';
   import Select from '../../ui/Select.svelte';
   import Skeleton from '../../ui/Skeleton.svelte';
   import TextArea from '../../ui/TextArea.svelte';
@@ -35,7 +36,7 @@
     subs: string[];
   };
 
-  const PRIORITIES = ['No priority', 'Low', 'Medium', 'High', 'Urgent'].map((label, i) => ({ value: String(i), label }));
+  const PRIORITIES = PRIORITY_OPTIONS.map(({ value, name }) => ({ value: String(value), label: name }));
   const SLUG = /^[a-z0-9-]+$/;
 
   const blank = (): Draft => ({
@@ -164,11 +165,11 @@
   const remaining = (i: number) => draft.subs.length - 1 - i;
 </script>
 
-<PageHeader title="Templates" icon="icon:layers">
+<SectionHead lede="A template prefills an issue and can add sub-issues.">
   {#snippet actions()}
     <Button variant="primary" icon="plus" tooltip={{ label: 'New template' }} onclick={startNew}>New template</Button>
   {/snippet}
-</PageHeader>
+</SectionHead>
 
 <div class="tpl">
   <section class="rail" aria-label="Templates">

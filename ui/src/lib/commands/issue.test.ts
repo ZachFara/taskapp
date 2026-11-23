@@ -81,6 +81,12 @@ describe('typed dates and estimates', () => {
     expect(bulk).toHaveBeenLastCalledWith([1, 2], expect.objectContaining({ patch: { estimate_minutes: null } }));
     expect(page('issue.estimate').parse!('lots')).toBeNull();
   });
+
+  it('a bare number is hours', async () => {
+    expect(page('issue.estimate').parse!('5')!.label).toBe('Set the estimate to 5h');
+    await page('issue.estimate').parse!('2.5')!.run();
+    expect(bulk).toHaveBeenLastCalledWith([1, 2], expect.objectContaining({ patch: { estimate_minutes: 150 } }));
+  });
 });
 
 describe('issue commands', () => {
@@ -134,7 +140,7 @@ describe('issue commands', () => {
     const item = (await itemsOf(cmd('issue.priority'), ctx(sel))).find((i) => i.label === 'High')!;
     await item.run();
     expect(bulk).toHaveBeenCalledTimes(1);
-    expect(bulk).toHaveBeenCalledWith(sel, expect.objectContaining({ patch: { priority: 3 } }));
+    expect(bulk).toHaveBeenCalledWith(sel, expect.objectContaining({ patch: { priority: 2 } }));
   });
 
   it('falls back to the focused, then the open issue when nothing is selected', async () => {

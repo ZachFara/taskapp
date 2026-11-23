@@ -69,7 +69,14 @@
       error = (e as { message?: string }).message ?? String(e);
     }
     await load();
+    // The list behind the panel reads its own rows, so tell it something changed.
+    if (mode === 'panel') dispatchEvent(new Event('command:view.refresh'));
   }
+  // A command (the p menu, a status key) wrote to this issue while it is open.
+  $effect(() => {
+    addEventListener('command:view.refresh', load);
+    return () => removeEventListener('command:view.refresh', load);
+  });
   const save = (patch: IssuePatch) => act(api.issues.update(issue!.id, patch));
 
   $effect(() => {
@@ -133,9 +140,12 @@
       ['close', onClose], ['next', () => step(1)], ['prev', () => step(-1)],
       ['pin', togglePin], ['archive', toggleArchive], ['copyKey', copyKey],
     ];
+    const editDesc = () => (editingDesc = true);
+    addEventListener('command:issue.description.edit', editDesc);
     addEventListener('command:issue.detail.edit', edit);
     for (const [n, f] of on) addEventListener(`command:issue.detail.${n}`, f);
     return () => {
+      removeEventListener('command:issue.description.edit', editDesc);
       removeEventListener('command:issue.detail.edit', edit);
       for (const [n, f] of on) removeEventListener(`command:issue.detail.${n}`, f);
     };
@@ -155,7 +165,7 @@
 
 {#if issue}
   <article class="detail" data-mode={mode}>
-    <PageHeader title={crumb} icon={project?.icon ?? 'project'} color={project?.color ?? undefined}>
+    <PageHeader title={crumb} icon={project?.icon ?? 'icon:project'} color={project?.color ?? undefined}>
       {#snippet actions()}
         <IconButton icon="arrow-up" label="Previous issue" shortcut={shortcutFor('issue.detail.prev')} disabled={siblings.indexOf(key) < 1} onclick={() => step(-1)} />
         <IconButton icon="arrow-down" label="Next issue" shortcut={shortcutFor('issue.detail.next')} disabled={siblings.indexOf(key) < 0 || siblings.indexOf(key) >= siblings.length - 1} onclick={() => step(1)} />
@@ -207,7 +217,7 @@
 <style>
   .detail { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--sheet); }
   .scroll { flex: 1; overflow-y: auto; }
-  .hero { display: grid; gap: var(--s-4); padding: var(--s-8) var(--s-8) var(--s-7); background: var(--tone); color: var(--band-ink); border-bottom: 2px solid var(--stone); }
+  .hero { display: grid; gap: var(--s-4); padding: var(--s-7) var(--s-8) var(--s-6); background: var(--tone); color: var(--band-ink); border-bottom: 2px solid var(--stone); }
   .st { display: inline-flex; align-items: center; gap: var(--s-4); font-size: var(--fs-sm); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--band-count); }
   .crumb { font-size: var(--fs-lg); font-weight: 600; color: var(--muted); }
   .sep { margin: 0 var(--s-2); }
@@ -218,13 +228,17 @@
   h2 button:hover { text-decoration: underline dotted; text-underline-offset: var(--s-2); }
   .arch { font-weight: 700; color: var(--signal); }
   .cols { display: grid; grid-template-columns: minmax(0, 1fr) calc(var(--panel-w) - var(--s-4)); }
-  main { display: grid; align-content: start; gap: var(--s-8); padding: var(--s-7) var(--s-8) var(--s-10); min-width: 0; }
+  main { display: grid; align-content: start; gap: var(--s-6); padding: var(--s-7) var(--s-8) var(--s-10); min-width: 0; }
   aside { padding: var(--s-7); background: var(--card); border-left: 1px solid var(--border); position: relative; overflow: hidden; }
   aside h3 { font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--stone); padding-bottom: var(--s-3); border-bottom: 2px solid var(--stone); }
   .meta { margin-top: var(--s-7); font-size: var(--fs-sm); color: var(--muted); }
   .error { margin: var(--s-5) var(--s-8) 0; color: var(--signal); font-weight: 600; }
   .loading { display: grid; gap: var(--s-5); padding: var(--s-8); }
   [data-mode='panel'] .cols { grid-template-columns: minmax(0, 1fr); }
-  [data-mode='panel'] aside { order: -1; border-left: 0; border-bottom: 1px solid var(--border); }
+  [data-mode='panel'] aside { border-left: 0; border-top: 1px solid var(--border); padding: var(--s-5) var(--s-7); }
+  [data-mode='panel'] .key, .crumb { white-space: nowrap; }
+  .detail :global(.top) { gap: var(--s-4); padding-inline: var(--s-5); }
+  .detail :global(.top h1) { flex: none; }
+  .detail :global(.actions) { gap: var(--s-2); }
   [data-mode='panel'] .hero, [data-mode='panel'] main { padding-inline: var(--s-7); }
 </style>

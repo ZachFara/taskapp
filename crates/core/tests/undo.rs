@@ -196,3 +196,41 @@ async fn undo_of_a_status_delete_moves_the_issues_back() -> R {
     assert_eq!(issues::get(&db, a.id).await?.status_id, extra.id);
     Ok(())
 }
+
+#[tokio::test]
+async fn a_step_with_an_uncovered_entity_is_refused_and_applies_nothing() -> R {
+    let db = Db::open_in_memory().await?;
+    let i = seed(&db, "ABC a").await?;
+    edit(&db, "Rename", &i, title("ABC b")).await?;
+    sqlx::query(
+        "INSERT INTO changes (at, source, entity, entity_id, field, old_value, new_value, step, step_label)
+         SELECT at, source, 'widget', '1', 'size', '1', '2', step, step_label FROM changes ORDER BY id DESC LIMIT 1",
+    )
+    .execute(&db.pool)
+    .await?;
+    let e = undo::undo(&db).await.expect_err("uncovered entity");
+    assert!(
+        matches!(&e, Error::Invalid(m) if m.contains("not covered")),
+        "{e}"
+    );
+    assert_eq!(issues::get(&db, i.id).await?.title, "ABC b");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_write_outside_a_step_ends_the_redo_stack() -> R {
+    let db = Db::open_in_memory().await?;
+    let a = seed(&db, "ABC one").await?;
+    edit(&db, "Rename", &a, title("ABC renamed")).await?;
+    undo::undo(&db).await?;
+    issues::update(
+        &db,
+        a.id,
+        title("ABC typed outside a step"),
+        ChangeSource::Agent,
+    )
+    .await?;
+    let s = undo::undo_status(&db).await?;
+    assert_eq!(s.redo, None, "redo still offered: {s:?}");
+    Ok(())
+}

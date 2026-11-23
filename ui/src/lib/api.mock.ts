@@ -3,9 +3,10 @@ import { hexOf, iconOk, keyFor } from './api.mock.palette';
 import { planCsv, projectSlug } from './api.mock.import';
 import { parseQuickadd } from './api.mock.quickadd';
 import * as insights from './api.mock.insights';
-import { seedViewTemplates, withDisplay } from './api.mock.views';
+import { stepLabel } from './api.mock.stepLabel';
+import { scrubDef, seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
-  AppliedTemplate, Applied, Bar, Change, Measure, ProgressScope, Comment, Cycle, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
+  AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
   NewIssue, Pin, Project, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
   TemplateInput, Value, ViewDef, ViewTemplate, WorkBlock,
 } from './bindings';
@@ -58,8 +59,8 @@ const dueDay = (i: Issue) => {
   }
 };
 const nothing = (_?: unknown) => null;
-/** Same rule as core: 0 or more, at most one decimal. */
-const validPoints = (p: number) => Number.isFinite(p) && p >= 0 && Math.abs(p * 10 - Math.round(p * 10)) <= 1e-6;
+/** Same rule as core: 0 to 1000 with exactly the precision of one decimal (no rounding of float noise). */
+const validPoints = (p: number) => Number.isFinite(p) && p >= 0 && p <= 1000 && Number(p.toFixed(1)) === p;
 const dayDiff = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
 
 const isDate = (v: unknown) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v;
@@ -100,7 +101,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, templates, relations, comments, views, milestones, pins, viewTemplates] as unknown[][];
+  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, templates, relations, comments, views, milestones, pins, viewTemplates, importLog] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -126,6 +127,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     collections().forEach((rows, k) => {
       if (JSON.stringify(rows) !== JSON.stringify(target[k])) rows.splice(0, rows.length, ...target[k]);
     });
+    for (const kept of keptStatuses) if (!s.statuses.some((x) => x.id === kept.id)) s.statuses.push(kept);
     const [from_, to] = undo ? [st.after, st.before] : [st.before, st.after];
     for (const was of from_) {
       const target = to.find((x) => x.id === was.id);
@@ -219,7 +221,9 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       case 'IsNotEmpty': return !isEmpty(have);
     }
   };
-  const query = (def: ViewDef) => {
+  const query = (stored: ViewDef) => {
+    // A reference to a property that no longer exists is dropped, like core does.
+    const def = scrubDef(stored, (k) => !s.propertyDefs.some((d) => d.key === k));
     const rows = s.issues.filter((i) => (def.include_archived || !i.archived_at) && (!def.filter || holds(i, def.filter)));
     for (const { field, descending } of [...def.sorts].reverse()) {
       // nulls sort last in either direction
@@ -238,7 +242,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const checkIssue = (i: Issue, props: Record<string, Value>) => {
     if (!i.title.trim()) fail('Invalid', 'title is empty');
     if (i.priority > 4) fail('Invalid', `priority ${i.priority} is not 0 to 4`);
-    if (i.points != null && !validPoints(i.points)) fail('Invalid', `points ${i.points} must be 0 or more with at most one decimal`);
+    if (i.points != null && !validPoints(i.points)) fail('Invalid', `points ${i.points} must be 0 to 1000 with at most one decimal`);
     if (!s.statuses.some((x) => x.id === i.status_id)) fail('Invalid', `status ${i.status_id} does not exist`);
     for (const [k, v] of Object.entries(props)) {
       const d = s.propertyDefs.find((x) => x.key === k);
@@ -316,7 +320,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     return { id, name: input.name, slug: input.slug, icon: input.icon ?? null, color: colorKey(input.color), body };
   };
   const today = () => new Date().toLocaleDateString('sv', { timeZone: tz });
-  const parse = (input: string) => parseQuickadd(input, today(), tz);
+  const parse = (input: string) => parseQuickadd(input, today(), tz, !['none', 'time'].includes(String(settings.get('estimation'))));
   // Ports of schedule.rs: a bar is start..due, or one end derived from the estimate (1 day = 480 minutes, at least 1).
   const barFor = (i: Issue): Bar | null => {
     const due = dueDay(i);
@@ -408,7 +412,9 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     Object.assign(find(rows, row.id, what), row);
   const def = (key: string) => s.propertyDefs.find((d) => d.key === key) ?? fail('NotFound', `property ${key}`);
   const backups: string[] = [];
-  const imported = new Map<string, number>();
+  const importLog: { external_id: string; issue_id: number }[] = [];
+  // Statuses an import created: the backend does not record them, so undo leaves them (archived issues still point at them).
+  const keptStatuses: Status[] = [];
   const ok = async () => null;
   // Sets position to each row's index in `order`; like the real commands, the order must list every row once.
   const reposition = <T extends { position: number }, K>(rows: T[], order: K[], keyOf: (r: T) => K, what: string) => {
@@ -456,7 +462,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       get: async (id) => getIssue(id),
       // The prefix is display-only: the number alone identifies the issue.
       getByKey: async (key) => {
-        const m = /^([A-Z]{2,5})-(\d+)$/.exec(key);
+        // Same forms as the backend: a case-insensitive prefix, digits with no sign and no leading zero.
+        const m = /^([A-Z]{2,5})-([1-9]\d*)$/.exec(key.trim().toUpperCase());
         return s.issues.find((i) => i.id === Number(m?.[2])) ?? fail('NotFound', `issue ${key}`);
       },
       archive: async (id) => {
@@ -540,6 +547,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         const st = find(s.statuses, id, 'status');
         checkIcon(icon);
         const key = colorKey(color) ?? st.color;
+        if (name && s.statuses.some((x) => x.id !== id && x.name === name)) fail('Conflict', `status ${name} already exists`);
         return Object.assign(st, { name: name ?? st.name, color: key, color_hex: hexOf(key)!, position: position ?? st.position, icon: icon ?? st.icon });
       },
       // Hands the listed statuses' own positions to the new order, like the backend.
@@ -552,7 +560,10 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return null;
       },
       delete: async (id, moveIssuesTo) => {
+        const gone = find(s.statuses, id, 'status');
         find(s.statuses, moveIssuesTo, 'status');
+        if (s.statuses.filter((x) => x.category === gone.category).length <= 1)
+          fail('Invalid', `cannot delete the last ${gone.category.toLowerCase()} status`);
         for (const i of s.issues) {
           if (i.status_id !== id) continue;
           rec(i.id, 'status_id', id, moveIssuesTo, 'System');
@@ -565,8 +576,10 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       listDefs: async () => [...s.propertyDefs].sort((a, b) => a.position - b.position),
       createDef: async (d) => {
         if (s.propertyDefs.some((x) => x.key === d.key)) fail('Conflict', `property ${d.key} exists`);
-        s.propertyDefs.push(d);
-        return d;
+        // The position is the next free one whatever the caller sends, like the backend.
+        const made = { ...d, position: Math.max(-1, ...s.propertyDefs.map((x) => x.position)) + 1 };
+        s.propertyDefs.push(made);
+        return made;
       },
       renameDef: async (key, newName) => Object.assign(def(key), { name: newName }),
       changeKind: async (key, kind, options) => {
@@ -577,7 +590,13 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           return kind === 'Number' ? Number.isNaN(Number(v)) : kind === 'Select' && !options.some((o) => o.value === v);
         });
         if (bad.length) fail('Conflict', `values do not fit ${kind}: ${bad.map((i) => i.key).join(', ')}`);
-        for (const i of s.issues) if (kind === 'Number' && i.properties[key] != null) i.properties[key] = Number(i.properties[key]);
+        const text = (v: Value): string => (typeof v === 'string' ? v : Array.isArray(v) ? v.map(text).join(', ') : JSON.stringify(v));
+        for (const i of s.issues) {
+          const v = i.properties[key];
+          if (v == null) continue;
+          if (kind === 'Number') i.properties[key] = Number(v);
+          else if (kind === 'Text') i.properties[key] = text(v);
+        }
         return Object.assign(d, { kind, options });
       },
       reorder: async (keys) => {
@@ -593,6 +612,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       deleteDef: async (key) => {
         s.propertyDefs.splice(s.propertyDefs.indexOf(def(key)), 1);
         s.issues.forEach((i) => delete i.properties[key]);
+        [...views, ...viewTemplates].forEach((v) => (v.def = scrubDef(v.def, (k) => k === key)));
         return null;
       },
       setValue: async (issue, key, value) => {
@@ -621,6 +641,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       },
       update: async (p) => {
         checkIcon(p.icon);
+        if (s.projects.some((x) => x.id !== p.id && x.slug === p.slug)) fail('Db', 'error returned from database: (code: 2067) UNIQUE constraint failed: projects.slug');
         return upsert(s.projects, { ...p, color: colorKey(p.color) }, 'project');
       },
       delete: async (id) => {
@@ -639,7 +660,11 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return m;
       },
       updateMilestone: async (m) => upsert(milestones, m, 'milestone'),
-      deleteMilestone: async (id) => nothing(remove(milestones, id, 'milestone')),
+      deleteMilestone: async (id) => {
+        remove(milestones, id, 'milestone');
+        s.issues.forEach((i) => i.milestone_id === id && (i.milestone_id = null));
+        return null;
+      },
     },
     cycles: {
       list: async () => cycles,
@@ -684,6 +709,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       update: async (l) => {
         checkIcon(l.icon);
         const key = colorKey(l.color)!;
+        if (labels.some((x) => x.id !== l.id && x.name === l.name)) fail('Db', 'error returned from database: (code: 2067) UNIQUE constraint failed: labels.name');
         return upsert(labels, { ...l, color: key, color_hex: hexOf(key)! }, 'label');
       },
       delete: async (id) => {
@@ -778,7 +804,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       },
       saveAsTemplate: async (viewId, name) => {
         const v = find(views, viewId, 'view');
-        const t = { id: next(viewTemplates), name: name ?? v.name, icon: v.icon, color: v.color, def: withDisplay(v.def), position: viewTemplates.length };
+        const t = { id: next(viewTemplates), name: name ?? v.name, icon: v.icon, color: v.color, def: withDisplay(v.def), position: Math.max(-1, ...viewTemplates.map((x) => x.position)) + 1 };
         viewTemplates.push(t);
         return t;
       },
@@ -799,7 +825,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       templatesList: async () => viewTemplates,
       templatesCreate: async (name, d, icon, color) => {
         checkIcon(icon);
-        const t = { id: next(viewTemplates), name, icon: icon ?? null, color: colorKey(color), def: withDisplay(d), position: viewTemplates.length };
+        const t = { id: next(viewTemplates), name, icon: icon ?? null, color: colorKey(color), def: withDisplay(d), position: Math.max(-1, ...viewTemplates.map((x) => x.position)) + 1 };
         viewTemplates.push(t);
         return t;
       },
@@ -819,7 +845,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       progress: async (scope, measure, from, to) => {
         const { tls, range } = scoped(scope, measure);
         const [f, t] = [from ?? range[0], to ?? range[1]];
-        if (t < f || (Date.parse(t) - Date.parse(f)) / 86_400_000 >= insights.MAX_DAYS) fail('Invalid', `range ${f} to ${t} must be 1 to ${insights.MAX_DAYS} days`);
+        if (t < f) fail('Invalid', `range ends (${t}) before it starts (${f})`);
+        if ((Date.parse(t) - Date.parse(f)) / 86_400_000 >= insights.MAX_DAYS) fail('Invalid', `range ${f} to ${t} must be 1 to ${insights.MAX_DAYS} days`);
         return insights.series(tls, measure, f, t);
       },
       velocity: async (scope, measure, periods) => {
@@ -902,8 +929,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         blocks.push(b);
         return b;
       },
-      move: async (id, start, end) => Object.assign(find(blocks, id, 'block'), { start_utc: start, end_utc: end }),
-      delete: async (id) => nothing(remove(blocks, id, 'block')),
+      move: async (id, start, end) => Object.assign(find(blocks, id, 'work block'), { start_utc: start, end_utc: end }),
+      delete: async (id) => nothing(remove(blocks, id, 'work block')),
       between: async (from, to) => blocks.filter((b) => b.start_utc < to && b.end_utc > from),
     },
     history: {
@@ -954,14 +981,18 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       csvPlan: async (csv, mapping) =>
         planCsv(csv, mapping, {
           statuses: s.statuses.map((x) => x.name), labels: labels.map((x) => x.name), projects: s.projects.map((x) => x.name),
-          propertyKeys: s.propertyDefs.map((d) => d.key), cycleStarts: cycles.map((c) => c.start_date), imported: new Set(imported.keys()),
+          propertyKeys: s.propertyDefs.map((d) => d.key), cycleStarts: cycles.map((c) => c.start_date), imported: new Set(importLog.map((x) => x.external_id)),
         }),
       apply: async (plan) => {
         const byName = <T extends { name: string }>(rows: T[], name: string) => rows.find((r) => r.name.toLowerCase() === name.toLowerCase());
         for (const st of plan.statuses ?? []) {
-          if (!byName(s.statuses, st.name)) s.statuses.push({ id: next(s.statuses), name: st.name, category: st.category, position: s.statuses.length, color: '#95a2b3', color_hex: hexOf('gray')!, icon: null });
+          if (!byName(s.statuses, st.name)) {
+            const made: Status = { id: next(s.statuses), name: st.name, category: st.category, position: s.statuses.length, color: 'gray', color_hex: hexOf('gray')!, icon: null };
+            s.statuses.push(made);
+            keptStatuses.push(made);
+          }
         }
-        for (const l of plan.labels ?? []) if (!byName(labels, l)) labels.push({ id: next(labels), name: l, color: '#95a2b3', color_hex: hexOf('gray')!, icon: null });
+        for (const l of plan.labels ?? []) if (!byName(labels, l)) labels.push({ id: next(labels), name: l, color: 'gray', color_hex: hexOf('gray')!, icon: null });
         for (const name of plan.projects ?? []) {
           if (byName(s.projects, name)) continue;
           const base = projectSlug(name);
@@ -975,7 +1006,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         for (const d of plan.property_defs ?? []) if (!s.propertyDefs.some((x) => x.key === d.key)) s.propertyDefs.push({ ...d, position: Math.max(-1, ...s.propertyDefs.map((x) => x.position)) + 1 });
         const ids = new Map<string, number>();
         const warnings: string[] = [];
-        const known = (ext: string) => ids.get(ext) ?? imported.get(ext);
+        const known = (ext: string) => ids.get(ext) ?? importLog.find((x) => x.external_id === ext)?.issue_id;
         for (const i of plan.issues ?? []) {
           if (known(i.external_id) !== undefined) {
             warnings.push(`${i.external_id} was already imported`);
@@ -988,7 +1019,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
             cycle_id: i.cycle ? cycles.find((c) => c.start_date === i.cycle)?.id : undefined,
             label_ids: i.labels.flatMap((l) => byName(labels, l)?.id ?? []),
           });
-          imported.set(i.external_id, made.id);
+          importLog.push({ external_id: i.external_id, issue_id: made.id });
           ids.set(i.external_id, made.id);
         }
         for (const i of (plan.issues ?? []).filter((x) => ids.has(x.external_id) && x.parent)) {
@@ -1024,7 +1055,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     const group = (api as unknown as Record<string, Record<string, (...a: unknown[]) => Promise<unknown>>>)[mod];
     const run = group[fn];
     group[fn] = (...args) =>
-      tracked((r) => (name === 'import.apply' ? `Import ${(r as Applied).created} issues` : commandOf(mod, fn)), () => run(...args));
+      tracked((r) => stepLabel(commandOf(mod, fn), args, r), () => run(...args));
   }
   return api;
 }

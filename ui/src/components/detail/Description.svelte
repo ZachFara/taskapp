@@ -15,13 +15,18 @@
       preview = false;
     }
   });
+  let box: HTMLElement | undefined = $state();
+  // The key that opens the editor must not leak into the shortcut layer, so focus moves in with it.
+  $effect(() => {
+    if (editing && !preview) queueMicrotask(() => box?.querySelector('textarea')?.focus());
+  });
   const commit = () => {
     editing = false;
     if (draft !== issue.description) save({ description: draft });
   };
 </script>
 
-<section aria-label="Description">
+<section aria-label="Description" bind:this={box}>
   {#if editing}
     <div class="modes" role="group" aria-label="Description mode">
       <Button variant={preview ? 'quiet' : 'primary'} onclick={() => (preview = false)}>Write</Button>
@@ -43,7 +48,7 @@
 <style>
   section { display: grid; gap: var(--s-4); }
   .modes, .acts { display: flex; gap: var(--s-3); }
-  .view { display: block; width: 100%; min-height: var(--s-10); padding: var(--s-4) var(--s-5); border: 1px dashed transparent; border-radius: var(--r-ctl); background: transparent; text-align: left; font-weight: 400; }
+  .view { display: block; width: 100%; min-height: var(--s-8); padding: var(--s-4) var(--s-5); border: 1px dashed transparent; border-radius: var(--r-ctl); background: transparent; text-align: left; font-weight: 400; }
   .view:hover { border-color: var(--control); }
   .hint { color: var(--muted); }
   .md { line-height: var(--lh-body); }

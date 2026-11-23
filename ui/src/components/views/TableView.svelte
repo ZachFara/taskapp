@@ -13,6 +13,7 @@
   import GroupHeader from '../../ui/GroupHeader.svelte';
   import IconButton from '../../ui/IconButton.svelte';
     import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
+    import { priorityGlyph, priorityName, priorityOrder } from '../../lib/priority';
   import Select from '../../ui/Select.svelte';
   import Skeleton from '../../ui/Skeleton.svelte';
   import TextInput from '../../ui/TextInput.svelte';
@@ -51,9 +52,6 @@
     DueDate: (v) => ({ due: v === null ? null : { Date: v as string } }),
     Estimate: (v) => ({ estimate_minutes: v as number | null }),
   };
-  // The backend numbers priorities 0 none, 1 urgent to 4 low; the glyph counts rings up to 4 urgent.
-  const PRIORITY = ['No priority', 'Urgent', 'High', 'Medium', 'Low'];
-  const glyphLevel = (p: number) => (p === 0 ? 0 : 5 - p);
 
   const colId = (ref: FieldRef) => (ref.Property !== undefined ? `prop:${ref.Property}` : `fixed:${ref.Fixed}`);
   const kindOf = (ref: FieldRef): EditKind | null =>
@@ -66,8 +64,11 @@
   const def = $derived(live.def);
   // Columns whose property def is gone (or fixed field not supported) are skipped, keeping their index in the def.
   const base = $derived(def.columns.length ? def.columns : DEFAULT);
+  // Points is invisible when the estimation setting excludes it: a stored Points column or group is ignored, not rewritten.
+  const groupBy = $derived(def.group_by?.Fixed === 'Points' && !ctx.points ? null : def.group_by);
   const cols = $derived(
     base
+      .filter((ref) => ctx.points || ref.Fixed !== 'Points')
       .map((ref, index) => ({ ref, index, id: colId(ref), kind: kindOf(ref), label: label(ref) }))
       .filter((c): c is typeof c & { kind: EditKind } => c.kind !== null),
   );
@@ -150,13 +151,13 @@
 
   type Group = { name: string; category: StatusCategory; status: boolean; priority?: number; rows: Issue[] };
   const groupOf = (i: Issue): { name: string; category: StatusCategory; status: boolean; priority?: number } => {
-    const field = def.group_by;
+    const field = groupBy;
     if (field?.Fixed === 'Status') {
       const st = statuses.find((s) => s.id === i.status_id);
       return { name: st?.name ?? 'Unknown', category: st?.category ?? 'Backlog', status: true };
     }
     if (field?.Fixed === 'Points') return { name: pointsName(i.points), category: 'Backlog' as StatusCategory, status: false };
-    if (field?.Fixed === 'Priority') return { name: PRIORITY[i.priority] ?? 'Unknown', category: 'Backlog' as StatusCategory, status: false, priority: i.priority };
+    if (field?.Fixed === 'Priority') return { name: priorityName(i.priority), category: 'Backlog' as StatusCategory, status: false, priority: i.priority };
     if (field?.Property !== undefined) {
       const v = i.properties[field.Property];
       return { name: isEmpty(v ?? null) ? 'None' : String(v), category: 'Backlog' as StatusCategory, status: false };
@@ -172,14 +173,14 @@
       hit.rows.push(i);
       byName.set(g.name, hit);
     }
-    if ((def as DisplayDef).show_empty_groups && def.group_by?.Fixed === 'Status')
+    if ((def as DisplayDef).show_empty_groups && groupBy?.Fixed === 'Status')
       for (const st of statuses) if (!byName.has(st.name)) byName.set(st.name, { name: st.name, category: st.category, status: true, rows: [], order: st.position });
     return [...byName.values()].sort((a, b) => a.order - b.order);
   });
   function groupOrder(i: Issue): number {
-    const field = def.group_by;
+    const field = groupBy;
     if (field?.Fixed === 'Status') return statuses.find((s) => s.id === i.status_id)?.position ?? Infinity;
-    if (field?.Fixed === 'Priority') return i.priority;
+    if (field?.Fixed === 'Priority') return priorityOrder(i.priority);
     if (field?.Fixed === 'Points') return i.points ?? Infinity;
     return 0;
   }
@@ -383,7 +384,7 @@
     collapsed = next;
   };
   const rowSelected = (i: Issue) => selection.selected.includes(i.id);
-  const grouped = $derived(def.group_by !== null);
+  const grouped = $derived(groupBy !== null);
 </script>
 
 <section class="table-view">
@@ -412,7 +413,7 @@
         <tr>
           <th scope="col" class="key-head">Key</th>
           {#each cols as col (col.id)}
-            <th scope="col" data-col={col.id} class:num={col.kind === 'Number'} aria-sort={sort?.col === col.id ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+            <th scope="col" data-col={col.id} data-sticky={col.id === 'fixed:Title' ? '' : undefined} class:num={col.kind === 'Number'} aria-sort={sort?.col === col.id ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
               <span class="head">
                 <Button variant="quiet" icon={sort?.col === col.id ? (sort.dir === 'asc' ? 'chevron-up' : 'chevron-down') : undefined} onclick={() => cycleSort(col.id)}>{col.label}</Button>
                 <span class="tools">
@@ -438,7 +439,7 @@
             <tr class="band-row">
               <td colspan={cols.length + 1}>
                 <GroupHeader name={g.name || 'None'} count={g.rows.length} total={pointsTotal(g.rows, cols.map((c) => c.ref), ctx)} category={g.status ? g.category : undefined} tone={g.priority ? (Math.min(4, Math.max(1, g.priority)) as 1 | 2 | 3 | 4) : 1} collapsed={collapsed.has(g.name)} ontoggle={() => toggleGroup(g.name)}>
-                  {#snippet leading()}{#if g.priority !== undefined}<PriorityGlyph level={glyphLevel(g.priority)} />{/if}{/snippet}
+                  {#snippet leading()}{#if g.priority !== undefined}<PriorityGlyph level={priorityGlyph(g.priority)} />{/if}{/snippet}
                 </GroupHeader>
               </td>
             </tr>
@@ -452,6 +453,7 @@
                   <td
                     role="gridcell"
                     data-col={col.id}
+                    data-sticky={col.id === 'fixed:Title' ? '' : undefined}
                     data-kind={col.kind}
                     class:num={col.kind === 'Number'}
                     data-active={issue.id === activeRowId && c === activeCol ? 'true' : undefined}
@@ -501,8 +503,12 @@
     font-size: var(--fs-md);
   }
   /* Header labels are quiet text on the sheet; the "+" stays in view at the right edge. */
-  .head :global(.btn) { border-color: transparent; background: transparent; padding: 0 var(--s-2); }
-  .add-col { position: sticky; right: 0; z-index: var(--z-sticky); background: var(--sheet); text-align: end; }
+  .head :global(.btn) { border-color: transparent; background: transparent; padding: 0 var(--s-2); font: inherit; letter-spacing: inherit; text-transform: inherit; }
+  /* Key and Title stay put while the rest scrolls sideways; the "+" is the last column, never laid over one. */
+  .add-col { width: var(--s-10); text-align: end; }
+  .key-col, .key-head, .key-cell { width: calc(var(--s-10) * 2); min-width: calc(var(--s-10) * 2); box-sizing: border-box; }
+  [data-sticky] { position: sticky; left: calc(var(--s-10) * 2); background: var(--sheet); z-index: 1; box-shadow: 1px 0 0 var(--border); }
+  thead [data-sticky] { z-index: calc(var(--z-sticky) + 1); }
   .trig { display: inline-flex; }
   .due[data-overdue] { color: var(--signal); font-weight: 700; }
   th.num { text-align: end; }
@@ -531,7 +537,9 @@
     color: var(--muted);
     border-bottom: 1px solid var(--border);
     font-size: var(--fs-xs);
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     text-align: start;
     white-space: nowrap;
   }
@@ -595,7 +603,7 @@
     background: var(--active);
   }
   td[data-active] {
-    outline: 2px solid var(--focus);
+    outline: 2px solid var(--signal);
     outline-offset: -2px;
   }
   .band-row td {

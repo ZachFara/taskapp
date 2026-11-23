@@ -100,6 +100,7 @@
   $effect(() => {
     path;
     selectedIssueId.value = null;
+    dismiss(); // a message about the page left behind
   });
 
   // Deferred a microtask: every handler of the same Esc press must still see the issue open (move.escape checks
@@ -119,7 +120,7 @@
     overlay = null;
     // The write's own toast names the backend's step; wait for it, then say what was made.
     await onWrote();
-    if (key) undoToast.value = { label: `Created ${key}`, tone: 'info', action: { run: 'undo', text: 'Undo' } };
+    if (key) undoToast.value = { label: `Created ${key}`, tone: 'success', action: { run: 'undo', text: 'Undo' } };
   }
 </script>
 

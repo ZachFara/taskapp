@@ -8,7 +8,7 @@ defineCommand({
   label: 'Go to bottom',
   icon: 'list',
   group: 'Navigation',
-  shortcut: 'G',
+  shortcut: 'shift+g',
   run: () => {
     selection.focus(selection.columns.flat().at(-1) ?? null);
   },

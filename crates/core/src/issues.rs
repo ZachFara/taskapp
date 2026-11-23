@@ -147,17 +147,18 @@ pub(crate) async fn issues_from_rows(
     rows.iter().map(|r| issue_from_row(r, &prefix)).collect()
 }
 
-/// At least 0 and at most one decimal, so a scale and a free number both fit.
+/// 0 to 1000 with at most one decimal, judged on the shortest text of the number so a float's noise
+/// (0.30000000000000004) is refused rather than rounded.
 pub(crate) fn valid_points(p: f64) -> bool {
-    let tenths = p * 10.0;
-    p.is_finite() && p >= 0.0 && (tenths - tenths.round()).abs() <= 1e-6
+    let one_decimal = |s: String| s.split_once('.').is_none_or(|(_, f)| f.len() == 1);
+    p.is_finite() && (0.0..=1000.0).contains(&p) && one_decimal(p.to_string())
 }
 
 fn check_points(points: Option<f64>) -> Result<()> {
     let Some(p) = points else { return Ok(()) };
     if !valid_points(p) {
         return Err(Error::Invalid(format!(
-            "points {p} must be 0 or more with at most one decimal"
+            "points {p} must be 0 to 1000 with at most one decimal"
         )));
     }
     Ok(())
@@ -560,7 +561,12 @@ pub async fn get(db: &Db, id: IssueId) -> Result<Issue> {
 pub async fn get_by_key(db: &Db, key: &str) -> Result<Issue> {
     let mut conn = db.pool.acquire().await?;
     let not_found = || Error::NotFound(format!("issue {key}"));
+    let key = key.trim().to_ascii_uppercase();
     let (p, n) = key.rsplit_once('-').ok_or_else(not_found)?;
+    // Only the digits the display shows: no sign, no leading zero.
+    if n.is_empty() || !n.bytes().all(|b| b.is_ascii_digit()) || n.starts_with('0') {
+        return Err(not_found());
+    }
     let number: i64 = n.parse().map_err(|_| not_found())?;
     crate::workspace::validate_key(p).map_err(|_| not_found())?;
     let id = sqlx::query_scalar!(

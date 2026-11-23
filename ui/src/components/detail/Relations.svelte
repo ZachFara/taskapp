@@ -24,14 +24,22 @@
     });
   });
 
+  let sec = $state<HTMLElement>();
   function add(other: Issue) {
     const kind: RelationKind = choice === 'related' ? 'Related' : choice === 'duplicate' ? 'Duplicate' : 'Blocks';
     const [from, to] = choice === 'blocked_by' ? [other.id, issue.id] : [issue.id, other.id];
     act(api.relations.add({ from, to, kind }));
   }
+  // The command menu focuses the same control the section's button does.
+  $effect(() => {
+    const go = () => { collapsed = false; queueMicrotask(() => sec?.querySelector<HTMLElement>('.add input')?.focus()); };
+    addEventListener('command:issue.relation.add', go);
+    return () => removeEventListener('command:issue.relation.add', go);
+  });
 </script>
 
-<section aria-label="Relations">
+
+<section aria-label="Relations" bind:this={sec}>
   <SectionHeading name="Relations" count={rows.length} {collapsed} ontoggle={() => (collapsed = !collapsed)} />
   {#if !collapsed}
     {#if !rows.length}<p class="none">No relations</p>{/if}

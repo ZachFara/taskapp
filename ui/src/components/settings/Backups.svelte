@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SectionHead from './SectionHead.svelte';
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
   import Button from '../../ui/Button.svelte';
@@ -21,6 +22,12 @@
   onMount(async () => {
     dir = ((await api.settings.get('backup_dir')) as string | null) ?? '';
     await load();
+  });
+
+  $effect(() => {
+    const run = () => void saveDir();
+    addEventListener('command:settings.save', run);
+    return () => removeEventListener('command:settings.save', run);
   });
 
   async function saveDir() {
@@ -48,15 +55,12 @@
   }
 </script>
 
-<div class="st-head">
-  <h2>Backups</h2>
-  <p class="st-lede">Snapshots of the whole database, written to a folder you choose.</p>
-</div>
+<SectionHead lede="Snapshots of the whole database, written to a folder you choose." />
 
 <form class="st-card" onsubmit={(e) => { e.preventDefault(); void saveDir(); }}>
   <div class="st-field">
     <span>Backup directory</span>
-    <TextInput label="Backup directory" bind:value={dir} />
+    <TextInput label="Backup directory" placeholder="A folder such as ~/Documents/Cairn backups" bind:value={dir} />
   </div>
   <div class="st-actions">
     <Button type="submit">Save folder</Button>

@@ -266,3 +266,84 @@ async fn deleting_a_template_unlinks_views_and_the_default() -> R {
     );
     Ok(())
 }
+
+async fn area_def(db: &Db) -> R {
+    properties::create_def(
+        db,
+        PropertyDef {
+            key: "area".into(),
+            name: "Area".into(),
+            kind: PropertyKind::Text,
+            options: vec![],
+            project_id: None,
+            position: 0,
+        },
+        UI,
+    )
+    .await?;
+    Ok(())
+}
+
+fn area() -> FieldRef {
+    FieldRef::Property("area".into())
+}
+
+#[tokio::test]
+async fn deleting_a_property_scrubs_templates_and_undo_restores_them() -> R {
+    let db = Db::open_in_memory().await?;
+    area_def(&db).await?;
+    let def = ViewDef {
+        filter: Some(taskapp_core::Filter::Cond {
+            field: area(),
+            op: taskapp_core::Op::Eq,
+            value: json!("web"),
+        }),
+        sorts: vec![taskapp_core::Sort {
+            field: area(),
+            descending: false,
+        }],
+        group_by: Some(area()),
+        ..rich()
+    };
+    let t = view_templates::create(&db, "ABC t", def.clone(), None, None, UI).await?;
+    history::step("Delete property", properties::delete_def(&db, "area", UI)).await?;
+    let d = view_templates::list(&db).await?.remove(0).def;
+    assert_eq!(
+        (d.filter, d.sorts, d.group_by, d.columns, d.card_fields),
+        (
+            None,
+            vec![],
+            None,
+            vec![
+                FieldRef::Fixed(FixedField::Priority),
+                FieldRef::Fixed(FixedField::CommentCount)
+            ],
+            vec![]
+        )
+    );
+    let v = view_templates::create_view(&db, t.id, None, UI).await?;
+    views::query(&db, &v.def).await?;
+    undo::undo(&db).await?;
+    assert_eq!(view_templates::list(&db).await?[0].def, def);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_stale_property_reference_does_not_fail_the_query() -> R {
+    let db = Db::open_in_memory().await?;
+    let stale = ViewDef {
+        filter: Some(taskapp_core::Filter::Cond {
+            field: area(),
+            op: taskapp_core::Op::Eq,
+            value: json!("web"),
+        }),
+        sorts: vec![taskapp_core::Sort {
+            field: area(),
+            descending: false,
+        }],
+        ..ViewDef::default()
+    };
+    views::query(&db, &stale).await?;
+    views::stats(&db, &stale).await?;
+    Ok(())
+}

@@ -380,9 +380,29 @@ async fn key_resolves_by_number_under_any_prefix() -> R {
     assert_eq!(issues::get_by_key(&db, "XY-1").await?.id, a.id);
     taskapp_core::settings::set(&db, "issue_prefix", &"XY").await?;
     assert_eq!(issues::get_by_key(&db, "ABC-1").await?.id, a.id);
-    assert!(matches!(
-        issues::get_by_key(&db, "ab-1").await,
-        Err(Error::NotFound(_))
-    ));
+    // The prefix is case-insensitive, as the display is upper case.
+    assert_eq!(issues::get_by_key(&db, "ab-1").await?.id, a.id);
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_by_key_takes_only_the_forms_the_app_shows() -> R {
+    let db = Db::open_in_memory().await?;
+    let a = issues::create(
+        &db,
+        NewIssue {
+            title: "one".into(),
+            ..NewIssue::default()
+        },
+        ChangeSource::Ui,
+    )
+    .await?;
+    for key in ["ABC-1", "abc-1", " ABC-1 "] {
+        assert_eq!(issues::get_by_key(&db, key).await?.id, a.id, "{key}");
+    }
+    for key in ["ABC-+1", "ABC-01", "ABC-", "ABC-1.0"] {
+        let got = issues::get_by_key(&db, key).await;
+        assert!(matches!(got, Err(Error::NotFound(_))), "{key}: {got:?}");
+    }
     Ok(())
 }

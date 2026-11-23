@@ -232,3 +232,86 @@ async fn templates_prefill_points() -> R {
     assert_eq!(over.issue.points, Some(5.0));
     Ok(())
 }
+
+#[tokio::test]
+async fn points_must_be_in_range_with_exactly_one_decimal() -> R {
+    let db = Db::open_in_memory().await?;
+    for bad in [1e20, 1e300, 1e-7, 9e-8, 0.1 + 0.2, 1000.1, -0.5, f64::NAN] {
+        let e = issues::create(&db, new("ABC x", Some(bad)), UI).await;
+        assert!(matches!(e, Err(Error::Invalid(_))), "{bad}: {e:?}");
+    }
+    for good in [0.0, 0.1, 3.0, 1000.0] {
+        make(&db, "ABC ok", Some(good)).await?;
+    }
+    let plan = csv::plan(
+        &db,
+        "Title,Points\nA,1e20\nB,0.30000000000000004\nC,2.5\n",
+        None,
+    )
+    .await?;
+    assert_eq!((plan.issues.len(), plan.skipped.len()), (1, 2), "{plan:?}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn quick_add_leaves_points_in_the_title_when_points_are_off() -> R {
+    let today = NaiveDate::from_ymd_opt(2026, 12, 1).unwrap_or_default();
+    let db = Db::open_in_memory().await?;
+    let on = quickadd::new_issue(&db, "fix it 3pt", today, "UTC").await?;
+    assert_eq!((on.title.as_str(), on.points), ("fix it", Some(3.0)));
+    for off in ["none", "time"] {
+        settings::set(&db, "estimation", &off).await?;
+        let n = quickadd::new_issue(&db, "fix it 3pt", today, "UTC").await?;
+        assert_eq!((n.title.as_str(), n.points), ("fix it 3pt", None), "{off}");
+        let p = quickadd::parse_for(&db, "fix it 3pt", today, "UTC").await?;
+        assert_eq!((p.title.as_str(), p.points), ("fix it 3pt", None), "{off}");
+    }
+    settings::set(&db, "estimation", &"points").await?;
+    assert_eq!(
+        quickadd::parse_for(&db, "fix 3pt", today, "UTC")
+            .await?
+            .points,
+        Some(3.0)
+    );
+    Ok(())
+}
+
+#[test]
+fn quick_add_accepts_spaced_plural_and_bare_decimal_points_but_not_absurd_ones() {
+    let today = NaiveDate::from_ymd_opt(2026, 12, 1).unwrap_or_default();
+    let p = |s: &str| quickadd::parse(s, today, "UTC");
+    for (text, want, title) in [
+        ("fix 3 pt", 3.0, "fix"),
+        ("fix 3pts", 3.0, "fix"),
+        ("fix .5pt", 0.5, "fix"),
+        ("fix 2.5 pts now", 2.5, "fix now"),
+    ] {
+        assert_eq!(
+            (p(text).points, p(text).title.as_str()),
+            (Some(want), title),
+            "{text}"
+        );
+    }
+    for text in ["fix 99999999999999999999pt", "fix 1001pt", "buy 3 pta"] {
+        assert_eq!(p(text).points, None, "{text}");
+    }
+}
+
+#[tokio::test]
+async fn a_reversed_progress_range_says_so() -> R {
+    let db = Db::open_in_memory().await?;
+    let p = taskapp_core::projects::create(&db, "app", "App", None, None, UI).await?;
+    let d = |n| NaiveDate::from_ymd_opt(2026, 12, n).unwrap_or_default();
+    let e = taskapp_core::insights::progress_on(
+        &db,
+        taskapp_core::ProgressScope::Project(p.id),
+        taskapp_core::Measure::Points,
+        Some(d(20)),
+        Some(d(10)),
+        d(25),
+    )
+    .await;
+    let msg = format!("{e:?}");
+    assert!(msg.contains("before"), "{msg}");
+    Ok(())
+}
