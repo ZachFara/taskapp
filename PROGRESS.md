@@ -1,6 +1,74 @@
 # PROGRESS
 
-## Status
+## Status (plan 2)
+Dated 2026-11-23. Plan 2 (docs/plans/plan-2.md) is built on `plan-2`: generic product "Cairn", the "Survey map"
+design system, every screen rebuilt, command menu, vim-style keys, multi-select and bulk edit, undo for every change,
+issue templates, icons and colours, CSV and Linear import, per-view display options, view templates, optional points
+and progress charts. Final review: five reviewers, 0 Critical, 27 Important, 38 Minor; one fix wave (FX1-FX4) plus two
+sweeps (FX5 UI, FX6 backend); every finding and its state is in docs/review/plan-2/TRACKER.md. Waiting on the owner:
+the PR from plan-2 to main, the licence, and the owner steps in docs/qa-checklist.md.
+
+### How plan 2 was verified
+- CI on every PR: Rust suites, UI suite (about 1,100 tests), 365 contract cases run against the mock and a real
+  devserver, Playwright walk tests (`ui/harness/walk*.test.ts`), token check, layout and commit checks.
+- Headless walk-throughs by the orchestrator with a screenshot per step, on the mock and on the real backend with a
+  seeded throwaway database (core flows: keys, selection, status and due-date commands, undo and redo, quick add, side
+  panel, right-click menu, display panel, board and table keys, view templates).
+- NOT verified: the packaged Mac app (first launch creates the owner's data directory), Linear import against the real
+  service, Reminders, Google Calendar, pushing the git export. The Chrome extension could not take screenshots (its tab
+  was not visible), so the owner's "test in Claude in Chrome" rule was met with a headless browser instead.
+
+### Rulings (plan 2)
+25. Screen tasks take no harness captures; the orchestrator checks screens centrally. (20 devserver builds did not fit
+    on disk; load average reached 345.) Revised later: a fixer may take one mock capture per fixed screen.
+26. Agents do not merge the integration branch locally: a merge commit stages Rust files and the pre-commit gate then
+    builds Rust in every UI worktree. The orchestrator batch-merges; CI tests the merged result.
+27. `l` is "next column" on the board and "labels" in list, table and issue detail; `shift+l` is always labels.
+28. Digits are counts, so layouts switch with `v` + letter.
+29. An applied migration never changes. The default key moves to ABC through a new migration, only on an empty database.
+30. The issue-key prefix is display-only: lookup is by number.
+31. Templates are workspace-wide. A view template lives in its own table.
+32. The Inbox is not built in this plan and is not in the sidebar.
+33. Timing tests scale their budget by a reference workload timed in the same run (owner, decision 0016).
+34. Saving a view's filter or name raises the undo toast; pure display toggles do not.
+35. A status created by an import stays after the import is undone (archived issues reference it).
+
+### Models (plan 2)
+The setting was 50% Sonnet, 50% Haiku. The actual split was about 41 Sonnet runs to 20 Haiku runs (two thirds Sonnet).
+Haiku did well on single-screen and single-file tasks with a complete brief (board, table, calendar, quick add,
+settings pages, templates UI, backend sweep). Sonnet took foundations, integration, reviews and fix tasks. Haiku tasks
+that stalled did so on missing context or on waiting rules, not on difficulty: two handed back without pushing, one
+mistook other agents' test processes for strays.
+
+### Profile of plan 2 (largest costs, largest first)
+1. Per-component tests passed while the product's first-minute flows were broken (Esc left the app, `s` opened the
+   wrong menu, the priority mapping was inverted, the app rendered in the default serif font). Found only when the
+   orchestrator drove the app. Fix: a walk test in CI from the first UI task, and a look at every screen before merging.
+2. Local Rust builds triggered by merge commits in UI worktrees: the main cause of load 345 and of disk falling to
+   20 GB. Fix: ruling 26.
+3. Serial landing under the up-to-date rule: about 60 PRs, each needing an update and a CI run. Batching green PRs
+   into one branch cut this; conflicts were few because each task owned its files.
+4. A timing test that measured the runner: about one rerun in three PRs until decision 0016; it then exposed a real
+   three-fold slowdown of the list.
+5. Reports that were wrong and passed on unchecked by the orchestrator ("pins are not in the history").
+
+### Mistakes by the orchestrator (plan 2)
+- Started 19 agents with no budget for local tests and builds.
+- Dropped per-task captures under load and postponed the visual check until everything had merged.
+- Did not drive the app until all screens were in, although the owner had asked for harness testing.
+- Told the owner pins could not be undone on one agent's word; they could.
+- An agent rebased and force-pushed its own unmerged task branch (history rewrite); not caught before it happened.
+
+### After this plan
+Themes system; agents as assignees; decision tickets; cost per issue; multi-device sync; phone app; recurring tasks;
+remind dates and snooze; inbox view; weekly review screen; Curia integration (keep MCP and CLI stable); renaming
+crates, bundle id and data directory to Cairn; relative dates in filters ("due within 7 days" is a fixed date today);
+changing the time zone without a restart; keyboard resize of panels; the eight commands the devserver does not serve
+have no contract case (backup, export, calendar, reminders, sync).
+
+The raw ledger of plan 2 is docs/review/plan-2/ledger.md. Decisions: docs/decisions/0010 to 0016.
+
+## Status (plan 1)
 Dated 2026-11-21. Plan 1 complete on `plan-1`: every task T0-T35, the final review (4 Sonnet reviewers: 0 Critical,
 23 Important, 28 Minor) and one fix wave (FW1-FW8, every Critical and Important closed with a failing test first).
 Live check: real-mode harness on a seeded database, 11 screens, 0 console errors or failed requests. Waiting on the
@@ -123,7 +191,7 @@ Ledger:
 20. 2026-11-21 View components take a `view: SavedView` prop; /view/:id/:layout forces a layout (harness). Markdown uses marked + dompurify.
 - Final review: harness/shot.ts fails `tsc --noEmit` (no node types) though build and tests pass.
 - 2026-11-21 T15 (Haiku) DONE_WITH_CONCERNS, PR #20; tests watched fail first; CI on new head not started yet. App.svelte now calls refreshAll() at startup (added to PR #25).
-- 2026-11-21 T13 (Haiku) NEEDS_CONTEXT: harness test asserted placeholder text; allowed to change shot.test.ts line to ZF-1 (T28 done). PR #24.
+- 2026-11-21 T13 (Haiku) NEEDS_CONTEXT: harness test asserted placeholder text; allowed to change shot.test.ts line to ABC-1 (T28 done). PR #24.
 - 2026-11-21 T29 (Haiku) DONE_WITH_CONCERNS, PR #26 green, queued.
 - FOLLOW-UP T31 (Haiku, wave 3 with T26): external links (Obsidian button, url pins) open through Tauri opener plugin (@tauri-apps/plugin-opener + Rust plugin + capability); window.open stays as the browser-harness fallback.
 - Final review: ProjectPage lists issues with a plain list, not the shared view components (plan says reuse); harness shot.test flaky once in a combined run.

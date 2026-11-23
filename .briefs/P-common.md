@@ -5,7 +5,7 @@ Read AGENTS.md, docs/IMPLEMENTER-CONTRACT.md, this file, then your own brief. Do
 - Product name is now "Cairn" (was taskapp; crate and package names stay `taskapp-*` for now). It is a generic product:
   no personal names, no "ZF", no real projects, no fixed time zone. Workspace key in examples is ABC.
 - Integration branch `plan-2`. Your worktree and branch:
-  `git -C /Users/user1/Ark/Development/active/taskapp worktree add ../taskapp-wt/<ID> -b task/<ID> origin/plan-2`
+  `git -C <workspace>/taskapp worktree add ../taskapp-wt/<ID> -b task/<ID> origin/plan-2`
   Work ONLY there. Own `target/` (never set CARGO_TARGET_DIR). UI work: `pnpm -C ui install --frozen-lockfile` first.
   UI-only tasks must not run cargo builds unless the brief says so (disk is tight).
 - File ownership: edit only the files and folders your brief names. Shared registration points you may ADD lines to

@@ -37,6 +37,31 @@ production stores (test failed first with that message), and `views.rs` parses w
 | `taskapp --db <temp> add "QA cli row p1"` and MCP `create_issue` ("QA mcp row") on the same db | both rows present (ids 21, 22) |
 | `taskapp property delete effort` (snapshots first), then `taskapp backup restore <snapshot> --yes` | `effort` back (1 row), 22 issues; restore without `--yes` refuses |
 
+## Plan 2, automated (2026-11-22 to 2026-11-23)
+
+Run by the orchestrator in a headless browser with a screenshot per step, on the mock and on a real devserver with a
+seeded throwaway database. All passed with no console errors.
+
+| Flow | Mock | Real backend |
+|---|---|---|
+| `/` opens the first saved view | pass | pass |
+| Esc three times stays in the app | pass | pass |
+| Select two rows, `s`, type "prog", Enter: both move; `u` undoes; redo | pass | pass |
+| `d`, type "next fri": preview, Enter sets the date | pass | pass |
+| Command menu root is grouped and filtered by place | pass | pass |
+| Enter opens the side panel; `j` moves it; Esc closes | pass | pass |
+| Right-click menu: issue actions only, on screen | pass | pass |
+| `c` quick add with live chips; created toast with Undo and Open | pass | pass |
+| `?` cheat sheet | pass | pass |
+| Display panel: fields and custom properties, reorder, reset | pass | pass |
+| Board `j` and `l`; table `j` and `k` | pass | pass |
+| Views page lists the seeded view templates; new view from a template | pass | pass |
+| Insights panel (`shift+i`), project chart, cycle burn-up, points in quick add | pass | not run |
+| 1024 x 768 list | pass | pass |
+
+Not verified in plan 2: the packaged Mac app, Linear import against the real service, dark theme on every new screen,
+table, timeline and calendar keys beyond `j` and `k`, drag and drop, keyboard stepping through charts by hand.
+
 ## Owner (needs the signed app or real accounts)
 
 Build and install: `scripts/build-helper.sh`, then `cargo tauri build` with signing set up, install the app.
