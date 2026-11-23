@@ -414,4 +414,15 @@ export const cases: Case[] = [
   // A cycle's series follows the issues that leave it (issue 8, three points, is in cycle 1).
   call('insights: an issue leaves its cycle', 'issues_update', { id: 8, patch: { cycle_id: null } }),
   call('insights: the cycle series counts it until the day it left', 'insights_progress', { scope: { Cycle: 1 }, measure: 'points', from: null, to: null }),
+  // Work blocks, property order and scope: the commands the table did not reach before.
+  call('blocks: create a block on ABC-1', 'blocks_create', { issue: 1, start: '2026-12-01T09:00:00Z', end: '2026-12-01T10:00:00Z' }),
+  call('blocks: between finds it', 'blocks_between', { from: '2026-12-01T00:00:00Z', to: '2026-12-02T00:00:00Z' }),
+  call('blocks: move it', 'blocks_move', { id: 1, start: '2026-12-01T11:00:00Z', end: '2026-12-01T12:00:00Z' }),
+  call('blocks: between the old span is empty after the move', 'blocks_between', { from: '2026-12-01T09:00:00Z', to: '2026-12-01T10:00:00Z' }),
+  call('blocks: delete it', 'blocks_delete', { id: 1 }),
+  call('blocks: between after delete is empty', 'blocks_between', { from: '2026-12-01T00:00:00Z', to: '2026-12-02T00:00:00Z' }),
+  call('blocks: moving an unknown block is NotFound', 'blocks_move', { id: 999, start: '2026-12-01T11:00:00Z', end: '2026-12-01T12:00:00Z' }),
+  call('properties: reorder must list every def', 'properties_reorder', { keys: ['effort'] }),
+  call('properties: scope a def to no project', 'properties_set_scope', { key: 'link', project: null }),
+  call('properties: scope an unknown def is NotFound', 'properties_set_scope', { key: 'nope', project: null }),
 ];

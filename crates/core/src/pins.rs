@@ -117,6 +117,21 @@ pub async fn set(db: &Db, kind: PinKind, targets: &[String], pinned: bool) -> Re
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn pin(db: &Db, kind: PinKind, target: &str, title: Option<String>) -> Result<Pin> {
+    pin_as(db, ChangeSource::Ui, kind, target, title).await
+}
+
+/// Like [`pin`], recording `src` as the change source (the MCP server pins as the agent).
+///
+/// # Errors
+///
+/// Fails on a database error or invalid arguments.
+pub async fn pin_as(
+    db: &Db,
+    src: ChangeSource,
+    kind: PinKind,
+    target: &str,
+    title: Option<String>,
+) -> Result<Pin> {
     validate(kind, target)?;
     if let Some(existing) = find(db, kind, target).await? {
         return Ok(existing);
@@ -135,7 +150,7 @@ pub async fn pin(db: &Db, kind: PinKind, target: &str, title: Option<String>) ->
     .execute(&mut *tx)
     .await?;
     if added.rows_affected() == 1 {
-        rows::created(&mut tx, ChangeSource::Ui, "pins", added.last_insert_rowid()).await?;
+        rows::created(&mut tx, src, "pins", added.last_insert_rowid()).await?;
     }
     tx.commit().await?;
     find(db, kind, target)
@@ -147,6 +162,15 @@ pub async fn pin(db: &Db, kind: PinKind, target: &str, title: Option<String>) ->
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn unpin(db: &Db, id: PinId) -> Result<()> {
+    unpin_as(db, ChangeSource::Ui, id).await
+}
+
+/// Like [`unpin`], recording `src` as the change source.
+///
+/// # Errors
+///
+/// Fails on a database error or when the pin does not exist.
+pub async fn unpin_as(db: &Db, src: ChangeSource, id: PinId) -> Result<()> {
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let before = rows::by_key(&mut tx, "pins", id.0).await?;
     let done = sqlx::query("DELETE FROM pins WHERE id = ?")
@@ -156,7 +180,7 @@ pub async fn unpin(db: &Db, id: PinId) -> Result<()> {
     if done.rows_affected() == 0 {
         return Err(Error::NotFound(format!("pin {}", id.0)));
     }
-    rows::changed(&mut tx, ChangeSource::Ui, before).await?;
+    rows::changed(&mut tx, src, before).await?;
     tx.commit().await?;
     Ok(())
 }

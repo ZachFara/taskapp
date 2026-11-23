@@ -340,3 +340,53 @@ async fn import_undoes_as_one_step_including_what_it_created() -> R {
     assert_eq!(labels, 0);
     Ok(())
 }
+
+#[tokio::test]
+async fn duplicate_headers_are_refused() -> R {
+    let db = Db::open_in_memory().await?;
+    let e = csv::plan(&db, "title,title,priority\nFirst,Second,high\n", None).await;
+    assert!(matches!(e, Err(Error::Invalid(_))), "{e:?}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn cr_only_line_endings_split_rows() -> R {
+    let db = Db::open_in_memory().await?;
+    let m = map(&[("Title", "title"), ("Priority", "priority")]);
+    let plan = csv::plan(&db, "Title,Priority\rA,high\rB,low\r", Some(&m)).await?;
+    assert_eq!(plan.issues.len(), 2, "{plan:?}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn skipped_rows_count_blank_lines_and_the_header_as_file_lines() -> R {
+    let db = Db::open_in_memory().await?;
+    let m = map(&[("Title", "title"), ("Due", "due_date")]);
+    let plan = csv::plan(&db, "Title,Due\n\nGood,\nBad,soon\n", Some(&m)).await?;
+    let rows: Vec<u32> = plan.skipped.iter().map(|s| s.row).collect();
+    assert_eq!(rows, [4], "{plan:?}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_oversized_file_is_refused_with_a_clear_message() -> R {
+    let db = Db::open_in_memory().await?;
+    let big = format!("Title\n{}\n", "x".repeat(6 * 1024 * 1024));
+    match csv::plan(&db, &big, None).await {
+        Err(Error::Invalid(m)) if m.contains("larger than 5 MB") => Ok(()),
+        other => panic!("expected a size refusal, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn already_imported_rows_keep_their_file_row_numbers() -> R {
+    let db = Db::open_in_memory().await?;
+    let m = map(&[("Title", "title")]);
+    let text = "Title\nA\nB\nC\n";
+    let plan = csv::plan(&db, text, Some(&m)).await?;
+    apply(&db, &plan).await?;
+    let again = csv::plan(&db, text, Some(&m)).await?;
+    let rows: Vec<u32> = again.skipped.iter().map(|s| s.row).collect();
+    assert_eq!(rows, [2, 3, 4], "{again:?}");
+    Ok(())
+}
