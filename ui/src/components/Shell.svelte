@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RowDialogHost from './RowDialogHost.svelte';
   import type { Snippet } from 'svelte';
   import { onMount } from 'svelte';
   import { api } from '../lib/api';
@@ -93,6 +94,7 @@
   <div class="sheet" bind:this={sheet}>
     <div class="main">
       <main>{@render children()}</main>
+      <RowDialogHost />
       <footer class="legend">
         {#each hints as h (h.text)}
           <span><Kbd keys={h.keys} />{h.text}</span>

@@ -8,8 +8,11 @@
   import GroupHeader from '../ui/GroupHeader.svelte';
   import Icon from '../ui/Icon.svelte';
   import ListRow from '../ui/ListRow.svelte';
-  import EntityIcon from '../ui/EntityIcon.svelte';
-  import { localDay } from '../lib/gantt';
+  import RowActions from '../ui/RowActions.svelte';
+  import IconColorPicker from './pickers/IconColorPicker.svelte';
+  import { rowActs, rowUi } from '../lib/rowUi.svelte';
+  import { patch } from '../lib/rowActions';
+    import { localDay } from '../lib/gantt';
   import { workspaceZone, dayText } from './views/dates';
   import PageHeader from '../ui/PageHeader.svelte';
   import TextInput from '../ui/TextInput.svelte';
@@ -28,6 +31,11 @@
   const LABEL: Record<Band, string> = { current: 'Current', upcoming: 'Upcoming', past: 'Past' };
 
   let rows = $state<Row[]>([]);
+  // Ids of pinned cycles, as the pins store them.
+  let pinned = $state<Set<string>>(new Set());
+  async function loadPins() {
+    pinned = new Set((await api.pins.listResolved()).filter((r) => r.pin.kind === 'Cycle').map((r) => r.pin.target));
+  }
   let statuses = $state<Status[]>([]);
   let loaded = $state(false);
   let charts = $state(false);
@@ -115,7 +123,13 @@
     await load();
   }
 
-  onMount(load);
+  onMount(() => {
+    void load();
+    void loadPins();
+    const reload = () => (void load(), void loadPins());
+    addEventListener('rows:changed', reload);
+    return () => removeEventListener('rows:changed', reload);
+  });
 </script>
 
 <PageHeader title="Cycles" icon="icon:cycle">
@@ -143,15 +157,17 @@
             <ul class="rows">
               {#each group.items as c (c.id)}
                 <li class="row" data-cycle={c.id}>
-                  <ListRow selected={opened === c.id} onpick={() => (opened = opened === c.id ? null : c.id)}>
-                    <EntityIcon icon={c.icon ?? 'icon:cycle'} color={c.color} size={16} />
-                    <span class="title">{title(c)}</span>
+                  <RowActions label={title(c)} actions={rowActs({ kind: 'cycle', id: c.id, name: title(c) }, pinned.has(String(c.id)))}>
+                    <IconColorPicker label={`Icon and colour of ${title(c)}`} value={{ icon: c.icon ?? 'icon:cycle', color: c.color }} onchange={(v) => patch({ kind: 'cycle', id: c.id, name: title(c) }, { icon: v.icon, color: v.color })} bind:open={() => rowUi.picking === `cycle:${c.id}`, (o) => (rowUi.picking = o ? `cycle:${c.id}` : null)} />
+                    <span class="grow"><ListRow selected={opened === c.id} onpick={() => (opened = opened === c.id ? null : c.id)}>
+                                        <span class="title">{title(c)}</span>
                     <span class="dates">{dayText(c.start_date)} to {dayText(c.end_date)}</span>
                     <span class="meter" role="progressbar" aria-label="Progress" aria-valuenow={c.done} aria-valuemax={c.total}><span class="fill" style:width={`${c.total ? (c.done / c.total) * 100 : 0}%`}></span></span>
                     {#if charts && group.band === 'past'}<CycleSpark cycleId={c.id} name={title(c)} />{/if}
                     <span class="progress">{c.done} of {c.total} done</span>
                     {#if group.band === 'current'}<span class="left">{daysLeft(c)} days left</span>{/if}
-                  </ListRow>
+                  </ListRow></span>
+                  </RowActions>
                   {#if group.band === 'current' && next}
                     <Button class="move" onclick={() => (moving = true)}>Move unfinished to next cycle</Button>
                   {/if}
@@ -203,4 +219,6 @@
   h3 { font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: var(--s-3); }
   .burnup { padding: var(--s-5) var(--s-7) var(--s-7); }
   .issues { border-left: 2px solid var(--accent); }
+  /* The row's actions take the progress and days-left text's place while the row is hovered or focused. */
+  .row:hover .progress, .row:hover .left, .row:focus-within .progress, .row:focus-within .left { visibility: hidden; }
 </style>

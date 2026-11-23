@@ -1,4 +1,5 @@
 import { defineCommand } from '../../registry';
+import { togglePin, type Target } from '../../../rowActions';
 
 // The project page owns the pin state and listens for this event; the registry only decides when it is offered.
 defineCommand({
@@ -8,5 +9,5 @@ defineCommand({
   group: 'Project',
   noShortcutReason: 'Occasional action; reachable from the command menu and the page header.',
   when: (ctx) => ctx.route.startsWith('/project/'),
-  run: () => dispatchEvent(new CustomEvent('command:project.pin')),
+  run: (_c, _n, t) => (t ? togglePin(t as Target) : dispatchEvent(new CustomEvent('command:project.pin'))),
 });

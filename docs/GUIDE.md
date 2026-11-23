@@ -275,7 +275,9 @@ value).
   Projects and cycles: rename, pin or unpin, change icon, delete (the same confirm as Settings).
 - Issue rows in a list: open, set priority, pin or unpin, delete (archives, as the command is named). Set status with
   the status glyph. Right-click still opens the issue menu.
-- Projects, cycles and labels on their own index pages, and templates in Settings, have no hover actions yet.
+- Projects page, Cycles page, Settings > Labels and Settings > Templates rows: rename, change icon, delete (and pin for
+  projects and cycles). Each action is a registry command; the command menu does not list them because they need a row.
+- Every row's icon opens the icon and colour picker; its choice is saved and shown after a reload.
 
 ## Issue templates
 

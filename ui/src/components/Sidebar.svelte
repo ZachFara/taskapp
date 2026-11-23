@@ -3,15 +3,16 @@
   import { navigate } from '../app/routes';
   import { api } from '../lib/api';
   import { openExternal } from '../lib/openExternal';
-  import type { Cycle, PinKind, ResolvedPin, SavedView } from '../lib/bindings';
+  import type { Cycle, PinKind, ResolvedPin } from '../lib/bindings';
   import { projects, refreshAll, views } from '../lib/stores.svelte';
   import Icon from '../ui/Icon.svelte';
-  import RowActions, { type RowAction } from '../ui/RowActions.svelte';
+  import RowActions from '../ui/RowActions.svelte';
+  import { rowActs, rowUi } from '../lib/rowUi.svelte';
+  import { patch } from '../lib/rowActions';
   import Tooltip from '../ui/Tooltip.svelte';
   import { shortcutFor } from '../lib/commands';
   import ProjectSpark from './insights/ProjectSpark.svelte';
   import IconColorPicker from './pickers/IconColorPicker.svelte';
-  import RowDialog from './RowDialog.svelte';
 
   // The app passes its live route; standalone the sidebar reads the address once.
   let { route = location.pathname }: { route?: string } = $props();
@@ -21,11 +22,6 @@
   let cycles = $state<Cycle[]>([]);
   let error = $state('');
   let sparklines = $state(false);
-  type Kind = 'view' | 'project' | 'cycle';
-  type Target = { kind: Kind; id: number; name: string };
-  // The row whose rename or delete dialog is open, and the `kind:id` whose icon picker is open.
-  let renaming = $state<Target | null>(null);
-  let removing = $state<Target | null>(null);
   let picking = $state<string | null>(null);
 
   onMount(async () => {
@@ -35,88 +31,23 @@
     sparklines = sp === true;
   });
 
+  // Row actions (pin, rename, delete) change pins and cycles; reload them when one lands.
+  $effect(() => {
+    const reload = async () => {
+      pins = await api.pins.listResolved();
+      cycles = await api.cycles.list();
+    };
+    addEventListener('rows:changed', reload);
+    return () => removeEventListener('rows:changed', reload);
+  });
   const fail = (e: unknown) => (error = (e as { message?: string }).message ?? String(e));
   const isPinned = (kind: PinKind, target: string) => pins.some((r) => r.pin.kind === kind && r.pin.target === target);
-
-  async function toggle(kind: PinKind, target: string, title: string) {
-    try {
-      const have = pins.find((r) => r.pin.kind === kind && r.pin.target === target);
-      if (have) await api.pins.unpin(have.pin.id);
-      else await api.pins.pin(kind, target, title);
-      pins = await api.pins.listResolved();
-    } catch (e) {
-      fail(e);
-    }
-  }
 
   // Any scheme other than the openExternal allow-list (script, file) is refused there, so a pin never runs code.
   const external = (route: string) => /^[a-z][a-z0-9+.-]*:/i.test(route);
   function open(route: string) {
     if (!external(route)) return navigate(route);
     void openExternal(route);
-  }
-
-  // Saves a row's name, icon or colour, then refreshes the stores the sidebar reads.
-  async function patch(kind: Kind, id: number, change: { name?: string; icon?: string | null; color?: string | null }) {
-    try {
-      if (kind === 'view') {
-        const v = views.find((x) => x.id === id)!;
-        await api.views.save(id, change.name ?? v.name, v.def, change.icon !== undefined ? change.icon : v.icon, change.color !== undefined ? change.color : v.color);
-      } else if (kind === 'project') {
-        await api.projects.update({ ...projects.find((x) => x.id === id)!, ...change });
-      } else {
-        await api.cycles.update({ ...cycles.find((x) => x.id === id)!, ...change });
-        cycles = await api.cycles.list();
-      }
-      await refreshAll();
-    } catch (e) {
-      fail(e);
-    }
-  }
-  const rename = (name: string) => {
-    const r = renaming;
-    renaming = null;
-    if (r) void patch(r.kind, r.id, { name });
-  };
-  async function remove() {
-    const r = removing;
-    removing = null;
-    if (!r) return;
-    try {
-      if (r.kind === 'view') await api.views.delete(r.id);
-      else if (r.kind === 'project') await api.projects.delete(r.id);
-      else await api.cycles.delete(r.id);
-      if (r.kind === 'cycle') cycles = await api.cycles.list();
-      pins = await api.pins.listResolved();
-      await refreshAll();
-    } catch (e) {
-      fail(e);
-    }
-  }
-  async function duplicate(v: SavedView) {
-    try {
-      await api.views.save(null, `${v.name} copy`, v.def, v.icon, v.color);
-      await refreshAll();
-    } catch (e) {
-      fail(e);
-    }
-  }
-  const removeText: Record<Kind, string> = {
-    view: 'Its issues stay.',
-    project: 'Its milestones go with it. Issues in it stay but lose the project.',
-    cycle: 'Issues in it stay but leave the cycle.',
-  };
-
-  // The actions a row offers on hover and in its right-click menu.
-  function actsFor(kind: Kind, id: number, name: string, pinKind: PinKind, target: string, duplicateView?: () => void): RowAction[] {
-    const on = isPinned(pinKind, target);
-    return [
-      { id: 'rename', label: `Rename ${name}`, icon: 'edit', run: () => (renaming = { kind, id, name }) },
-      ...(duplicateView ? [{ id: 'duplicate', label: `Duplicate ${name}`, icon: 'copy', run: duplicateView }] : []),
-      { id: 'pin', label: `${on ? 'Unpin' : 'Pin'} ${name}`, icon: 'pin', run: () => toggle(pinKind, target, name) },
-      { id: 'icon', label: `Change icon of ${name}`, icon: 'circle', run: () => (picking = `${kind}:${id}`) },
-      { id: 'delete', label: `Delete ${name}`, icon: 'trash', danger: true, run: () => (removing = { kind, id, name }) },
-    ];
   }
 
   const moved = <T,>(ids: T[], from: T, to: T) => {
@@ -208,8 +139,8 @@
         {#each views as v (v.id)}
           {@const href = `/view/${v.id}`}
           <li class="row" {...drag(v.id)} ondrop={() => dropView(v.id)}>
-            <RowActions label={v.name} actions={actsFor('view', v.id, v.name, 'View', String(v.id), () => duplicate(v))}>
-              <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`, color: v.color }} onchange={(c) => patch('view', v.id, { icon: c.icon, color: c.color })} bind:open={() => picking === `view:${v.id}`, (o) => (picking = o ? `view:${v.id}` : null)} />
+            <RowActions label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, isPinned('View', String(v.id)))}>
+              <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`, color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
               <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{v.name}</span></a>
             </RowActions>
           </li>
@@ -226,8 +157,8 @@
         {#each projects as p (p.id)}
           {@const href = `/project/${p.slug}`}
           <li class="row">
-            <RowActions label={p.name} actions={actsFor('project', p.id, p.name, 'Project', p.slug)}>
-              <IconColorPicker label={`Icon and colour of ${p.name}`} value={{ icon: p.icon ?? 'icon:project', color: p.color }} onchange={(c) => patch('project', p.id, { icon: c.icon, color: c.color })} bind:open={() => picking === `project:${p.id}`, (o) => (picking = o ? `project:${p.id}` : null)} />
+            <RowActions label={p.name} actions={rowActs({ kind: 'project', id: p.id, name: p.name }, isPinned('Project', p.slug))}>
+              <IconColorPicker label={`Icon and colour of ${p.name}`} value={{ icon: p.icon ?? 'icon:project', color: p.color }} onchange={(c) => patch({ kind: 'project', id: p.id, name: p.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `project:${p.id}`, (o) => (rowUi.picking = o ? `project:${p.id}` : null)} />
               <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{p.name}</span>{#if sparklines}<ProjectSpark projectId={p.id} name={p.name} />{/if}</a>
             </RowActions>
           </li>
@@ -243,8 +174,8 @@
         <li class="row">{@render navLink('/cycles', 'cycle', 'All cycles', 'nav.cycles', route === '/cycles')}</li>
         {#each cycles as c (c.id)}
           <li class="row">
-            <RowActions label={label(c)} actions={actsFor('cycle', c.id, label(c), 'Cycle', String(c.id))}>
-              <IconColorPicker label={`Icon and colour of ${label(c)}`} value={{ icon: c.icon ?? 'icon:cycle', color: c.color }} onchange={(x) => patch('cycle', c.id, { icon: x.icon, color: x.color })} bind:open={() => picking === `cycle:${c.id}`, (o) => (picking = o ? `cycle:${c.id}` : null)} />
+            <RowActions label={label(c)} actions={rowActs({ kind: 'cycle', id: c.id, name: label(c) }, isPinned('Cycle', String(c.id)))}>
+              <IconColorPicker label={`Icon and colour of ${label(c)}`} value={{ icon: c.icon ?? 'icon:cycle', color: c.color }} onchange={(x) => patch({ kind: 'cycle', id: c.id, name: label(c) }, { icon: x.icon, color: x.color })} bind:open={() => rowUi.picking === `cycle:${c.id}`, (o) => (rowUi.picking = o ? `cycle:${c.id}` : null)} />
               <a class="item" href="/cycles" onclick={(e) => (e.preventDefault(), navigate('/cycles'))}><span class="t">{label(c)}</span></a>
             </RowActions>
           </li>
@@ -253,8 +184,6 @@
     {/if}
   </section>
 
-  <RowDialog bind:open={() => renaming !== null, (o) => { if (!o) renaming = null; }} mode="rename" title={`Rename ${renaming?.name ?? ''}`} value={renaming?.name ?? ''} onconfirm={rename} />
-  <RowDialog bind:open={() => removing !== null, (o) => { if (!o) removing = null; }} mode="delete" title={`Delete ${removing?.name ?? ''}?`} description={removing ? `"${removing.name}" goes away. ${removeText[removing.kind]}` : undefined} onconfirm={remove} />
 
   <ul class="bottom">
     <li>{@render navLink('/settings/general', 'settings', 'Settings', 'nav.settings', route.startsWith('/settings'))}</li>
