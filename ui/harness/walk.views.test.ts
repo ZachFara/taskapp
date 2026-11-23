@@ -278,4 +278,18 @@ describe('walk project', { timeout: 25_000 }, () => {
     const board = (await page.locator('.board').boundingBox())!;
     expect(board.y + board.height).toBeLessThanOrEqual(body.y + body.height + 1);
   });
+
+  it('R4-20 the Group popover is a list with the current choice marked; the Display panel keeps a gutter', async () => {
+    await open();
+    await page.getByRole('button', { name: /^Group/ }).click();
+    const list = page.getByRole('listbox', { name: 'Group by' });
+    await list.waitFor();
+    expect(await list.getByRole('option', { selected: true }).innerText()).toContain('Status');
+    await list.getByRole('option', { name: 'Project' }).click();
+    await pw(page.locator('.band .name', { hasText: 'Website relaunch' }).first()).toBeVisible();
+    await press('Escape');
+    await page.getByRole('button', { name: /^Display/ }).click();
+    const box = (await page.locator('.cx-popover').last().boundingBox())!;
+    expect(1440 - (box.x + box.width)).toBeGreaterThanOrEqual(8);
+  });
 });

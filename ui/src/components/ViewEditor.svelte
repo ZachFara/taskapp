@@ -9,6 +9,7 @@
   import Menu from '../ui/Menu.svelte';
   import MenuItem from '../ui/MenuItem.svelte';
   import Popover from '../ui/Popover.svelte';
+  import OptionList from './detail/OptionList.svelte';
   import Select from '../ui/Select.svelte';
   import Switch from '../ui/Switch.svelte';
   import Tooltip from '../ui/Tooltip.svelte';
@@ -121,7 +122,7 @@
     {#if def.layout !== 'Calendar'}
     <Popover bind:open={groupOpen}>
       {#snippet trigger(props)}<span {...props} class="trig">{@render tip('Group', 'view.group.open', groupBtn)}</span>{/snippet}
-      <Select label="Group by" placeholder="No grouping" items={[{ value: '', label: 'No grouping' }, ...fieldItems]} bind:value={() => (def.group_by ? fieldKey(def.group_by) : ''), setGroup} />
+      <OptionList label="Group by" none="No grouping" value={def.group_by ? fieldKey(def.group_by) : null} options={fieldItems.map((f) => ({ id: f.value, name: f.label }))} onpick={(id) => { setGroup(id === null ? '' : String(id)); groupOpen = false; }} />
     </Popover>
     {/if}
     <Popover bind:open={sortOpen}>
