@@ -312,6 +312,13 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 Other stored settings (not all with a screen): backup folder, Reminders list, Google Calendar choice and switch, export
 folder, remote and switch, the default view template.
 
+### Themes
+
+Settings > General > Look picks one of six looks: Survey map (the default), Linear, Jira, Cupertino, Obsidian and
+Scholastic. Each has a light and a dark variant and also sets corner radius, row height and type face (system fonts
+only). It works with the Light, Dark or System choice above it and applies at once. The command menu has "Change
+theme..." with the same list.
+
 ## The command menu
 
 - **Open:** `mod+k` or `mod+p` (works inside text fields), the "Search or run a command" button, or `/` (search).
