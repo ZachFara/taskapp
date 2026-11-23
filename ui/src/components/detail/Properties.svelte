@@ -1,4 +1,5 @@
 <script lang="ts">
+  import LabelPicker from './LabelPicker.svelte';
   import { api } from '../../lib/api';
   import type { Cycle, Issue, IssuePatch, Label, Milestone, Project, PropertyDef, Status, Value } from '../../lib/bindings';
   import Button from '../../ui/Button.svelte';
@@ -58,6 +59,11 @@
   let draft = $state('');
   const setProp = (key: string, value: Value) => act(api.properties.setValue(issue.id, key, value));
   const toggleLabel = (id: number, on: boolean) => act(on ? api.labels.addLabel(issue.id, id) : api.labels.removeLabel(issue.id, id));
+  const createLabel = async (name: string) => {
+    const made = await api.labels.create(name, 'gray', null);
+    labels = [...labels, made];
+    toggleLabel(made.id, true);
+  };
 </script>
 
 {#snippet none()}<span class="none">None</span>{/snippet}
@@ -118,11 +124,7 @@
       {#each labels.filter((l) => issue.label_ids.includes(l.id)) as l (l.id)}<Pill color={l.color}>{l.name}</Pill>{:else}{@render none()}{/each}
     {/snippet}
     {#snippet editor()}
-      <ul class="checks" aria-label="Labels">
-        {#each labels as l (l.id)}
-          <li><Checkbox label={l.name} bind:checked={() => issue.label_ids.includes(l.id), (on) => toggleLabel(l.id, on)} /> {l.name}</li>
-        {:else}<li class="none">No labels yet</li>{/each}
-      </ul>
+      <LabelPicker {labels} selected={issue.label_ids} ontoggle={toggleLabel} oncreate={createLabel} />
     {/snippet}
   </PropertyRow>
   {/snippet}
@@ -192,6 +194,4 @@
   .none { color: var(--muted); font-weight: 400; }
   .stack { display: grid; gap: var(--s-4); }
   .inline { display: flex; align-items: center; gap: var(--s-4); }
-  .checks { list-style: none; display: grid; gap: var(--s-4); }
-  .checks li { display: flex; align-items: center; gap: var(--s-4); }
 </style>
