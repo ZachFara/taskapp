@@ -66,6 +66,17 @@ crates, bundle id and data directory to Cairn; relative dates in filters ("due w
 changing the time zone without a restart; keyboard resize of panels; the eight commands the devserver does not serve
 have no contract case (backup, export, calendar, reminders, sync).
 
+Added by the owner on 2026-11-22 (later, not built):
+- **Themes.** Several themes, each with a light and a dark variant, chosen in settings. The current look ("Survey
+  map") is one. Others to design: one in the style of Linear, one in the style of Jira, a Cupertino (Apple-like) one,
+  an Obsidian-like light and dark pair, and a minimal scholastic one after the owner's notes vault (deep night-blue
+  ground, gold and rubricated red, blackletter display type, a small-caps serif, faint star field, ornament bands) with
+  no images of saints or people. Tokens are already role-based, so a theme is a block of values plus fonts; type and
+  ornament per theme need a small extension. Use each product's general feel, not its logo, name or artwork.
+- **Split the `test-ui` CI job.** It now runs about 1,100 unit tests, 365 contract cases against a built devserver and
+  the Playwright walk tests in one job; consider separate unit, contract and walk jobs (the walk job's cold-start
+  `page.goto` timed out twice and forced a rerun).
+
 The raw ledger of plan 2 is docs/review/plan-2/ledger.md. Decisions: docs/decisions/0010 to 0016.
 
 ## Status (plan 1)
