@@ -82,11 +82,19 @@ pub async fn record(
 ) -> Result<()> {
     let at = Utc::now();
     // Undo and redo are recorded but are never steps themselves, so they cannot loop.
-    let (step, label) = match source {
-        ChangeSource::Undo | ChangeSource::Redo => None,
-        _ => current_step(tx).await?,
+    let is_replay = matches!(source, ChangeSource::Undo | ChangeSource::Redo);
+    let joined = if is_replay {
+        None
+    } else {
+        current_step(tx).await?
+    };
+    if joined.is_none() && !is_replay {
+        // A write outside any step is a new edit too: it ends the redo stack like a step does.
+        sqlx::query("UPDATE changes SET undone = 2 WHERE undone = 1")
+            .execute(&mut *tx)
+            .await?;
     }
-    .unzip();
+    let (step, label) = joined.unzip();
     let source = enc(&source)?;
     let old = edit.old.map(enc).transpose()?;
     let new = edit.new.map(enc).transpose()?;

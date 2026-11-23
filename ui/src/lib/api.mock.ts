@@ -462,7 +462,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       get: async (id) => getIssue(id),
       // The prefix is display-only: the number alone identifies the issue.
       getByKey: async (key) => {
-        const m = /^([A-Z]{2,5})-(\d+)$/.exec(key);
+        // Same forms as the backend: a case-insensitive prefix, digits with no sign and no leading zero.
+        const m = /^([A-Z]{2,5})-([1-9]\d*)$/.exec(key.trim().toUpperCase());
         return s.issues.find((i) => i.id === Number(m?.[2])) ?? fail('NotFound', `issue ${key}`);
       },
       archive: async (id) => {
@@ -559,7 +560,10 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return null;
       },
       delete: async (id, moveIssuesTo) => {
+        const gone = find(s.statuses, id, 'status');
         find(s.statuses, moveIssuesTo, 'status');
+        if (s.statuses.filter((x) => x.category === gone.category).length <= 1)
+          fail('Invalid', `cannot delete the last ${gone.category.toLowerCase()} status`);
         for (const i of s.issues) {
           if (i.status_id !== id) continue;
           rec(i.id, 'status_id', id, moveIssuesTo, 'System');
@@ -925,8 +929,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         blocks.push(b);
         return b;
       },
-      move: async (id, start, end) => Object.assign(find(blocks, id, 'block'), { start_utc: start, end_utc: end }),
-      delete: async (id) => nothing(remove(blocks, id, 'block')),
+      move: async (id, start, end) => Object.assign(find(blocks, id, 'work block'), { start_utc: start, end_utc: end }),
+      delete: async (id) => nothing(remove(blocks, id, 'work block')),
       between: async (from, to) => blocks.filter((b) => b.start_utc < to && b.end_utc > from),
     },
     history: {

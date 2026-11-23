@@ -216,3 +216,21 @@ async fn a_step_with_an_uncovered_entity_is_refused_and_applies_nothing() -> R {
     assert_eq!(issues::get(&db, i.id).await?.title, "ABC b");
     Ok(())
 }
+
+#[tokio::test]
+async fn a_write_outside_a_step_ends_the_redo_stack() -> R {
+    let db = Db::open_in_memory().await?;
+    let a = seed(&db, "ABC one").await?;
+    edit(&db, "Rename", &a, title("ABC renamed")).await?;
+    undo::undo(&db).await?;
+    issues::update(
+        &db,
+        a.id,
+        title("ABC typed outside a step"),
+        ChangeSource::Agent,
+    )
+    .await?;
+    let s = undo::undo_status(&db).await?;
+    assert_eq!(s.redo, None, "redo still offered: {s:?}");
+    Ok(())
+}

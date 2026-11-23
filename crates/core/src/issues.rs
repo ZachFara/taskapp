@@ -561,7 +561,12 @@ pub async fn get(db: &Db, id: IssueId) -> Result<Issue> {
 pub async fn get_by_key(db: &Db, key: &str) -> Result<Issue> {
     let mut conn = db.pool.acquire().await?;
     let not_found = || Error::NotFound(format!("issue {key}"));
+    let key = key.trim().to_ascii_uppercase();
     let (p, n) = key.rsplit_once('-').ok_or_else(not_found)?;
+    // Only the digits the display shows: no sign, no leading zero.
+    if n.is_empty() || !n.bytes().all(|b| b.is_ascii_digit()) || n.starts_with('0') {
+        return Err(not_found());
+    }
     let number: i64 = n.parse().map_err(|_| not_found())?;
     crate::workspace::validate_key(p).map_err(|_| not_found())?;
     let id = sqlx::query_scalar!(

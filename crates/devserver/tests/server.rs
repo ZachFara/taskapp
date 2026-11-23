@@ -59,11 +59,11 @@ async fn rpc(s: &Server, cmd: &str, body: Value) -> R<Value> {
 async fn rpc_round_trip() -> R {
     let dir = tempfile::tempdir()?;
     let s = start(dir.path(), &dir.path().join("t.db"))?;
-    // Settings are implemented in core already; issue commands still are stubs when this was written.
-    let set = rpc(&s, "settings_set", json!({"key": "k", "value": "v"})).await?;
+    // settings_set only takes keys the UI writes, so the round trip uses one of them.
+    let set = rpc(&s, "settings_set", json!({"key": "theme", "value": "dark"})).await?;
     assert_eq!(set["ok"], Value::Null, "{set}");
-    let got = rpc(&s, "settings_get", json!({"key": "k"})).await?;
-    assert_eq!(got["ok"], "v");
+    let got = rpc(&s, "settings_get", json!({"key": "theme"})).await?;
+    assert_eq!(got["ok"], "dark");
     Ok(())
 }
 

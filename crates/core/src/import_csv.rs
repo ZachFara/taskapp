@@ -52,10 +52,24 @@ impl Field {
     }
 }
 
-/// Parses RFC 4180 CSV: quoted fields, `""` escapes, newlines inside quotes. Blank lines are dropped.
-fn parse(text: &str) -> Result<Vec<Vec<String>>> {
+/// Largest file the import reads. A plan is returned whole to the caller, so the size is bounded.
+const MAX_BYTES: usize = 5 * 1024 * 1024;
+
+/// A file line number and the cells of the row that starts on it.
+type Row = (u32, Vec<String>);
+
+/// Parses RFC 4180 CSV: quoted fields, `""` escapes, newlines inside quotes (LF, CRLF or CR). Blank lines
+/// are dropped. Each row comes with the file line it starts on (the header is line 1).
+fn parse(text: &str) -> Result<Vec<Row>> {
+    if text.len() > MAX_BYTES {
+        return Err(Error::Invalid(format!(
+            "the file is larger than {} MB; split it into smaller files",
+            MAX_BYTES / (1024 * 1024)
+        )));
+    }
     let (mut rows, mut row, mut cell) = (vec![], vec![], String::new());
     let (mut quoted, mut was_quoted) = (false, false);
+    let (mut line, mut row_line) = (1u32, 1u32);
     let mut chars = text.trim_start_matches('\u{feff}').chars().peekable();
     while let Some(c) = chars.next() {
         match c {
@@ -69,14 +83,22 @@ fn parse(text: &str) -> Result<Vec<Vec<String>>> {
                 row.push(std::mem::take(&mut cell));
                 was_quoted = false;
             }
-            '\r' if !quoted => {}
-            '\n' if !quoted => {
+            '\r' | '\n' if !quoted => {
+                if c == '\r' && chars.peek() == Some(&'\n') {
+                    continue;
+                }
                 row.push(std::mem::take(&mut cell));
                 was_quoted = false;
                 if row.iter().any(|c| !c.is_empty()) {
-                    rows.push(std::mem::take(&mut row));
+                    rows.push((row_line, std::mem::take(&mut row)));
                 }
                 row.clear();
+                line += 1;
+                row_line = line;
+            }
+            '\n' => {
+                line += 1;
+                cell.push(c);
             }
             _ => cell.push(c),
         }
@@ -86,7 +108,7 @@ fn parse(text: &str) -> Result<Vec<Vec<String>>> {
     }
     row.push(cell);
     if row.iter().any(|c| !c.is_empty()) {
-        rows.push(row);
+        rows.push((row_line, row));
     }
     Ok(rows)
 }
@@ -281,23 +303,15 @@ pub async fn plan(
     mapping: Option<&BTreeMap<String, String>>,
 ) -> Result<ImportPlan> {
     let rows = parse(text)?;
-    let headers = rows
+    let headers = &rows
         .first()
-        .ok_or_else(|| Error::Invalid("the file is empty".into()))?;
+        .ok_or_else(|| Error::Invalid("the file is empty".into()))?
+        .1;
     let mapping = mapping.cloned().unwrap_or_else(|| guess_mapping(headers));
-    if let Some(bad) = mapping.keys().find(|k| !headers.contains(k)) {
-        return Err(Error::Invalid(format!("no column named `{bad}`")));
-    }
-    let mut cols = vec![];
-    for (idx, h) in headers.iter().enumerate() {
-        if let Some(f) = mapping.get(h) {
-            cols.push((idx, Field::parse(f)?));
-        }
-    }
-    if !cols.iter().any(|(_, f)| *f == Field::Title) {
-        return Err(Error::Invalid("no column is mapped to title".into()));
-    }
-    let defs = property_defs(db, &cols, &rows[1..]).await?;
+    let cols = map_columns(headers, &mapping)?;
+    let body = &rows[1..];
+    let data: Vec<Vec<String>> = body.iter().map(|(_, c)| c.clone()).collect();
+    let defs = property_defs(db, &cols, &data).await?;
     let statuses = crate::statuses::list(db)
         .await?
         .into_iter()
@@ -311,23 +325,27 @@ pub async fn plan(
     let mut plan = ImportPlan {
         source: "csv".into(),
         property_defs: defs.1,
+        unmapped: headers
+            .iter()
+            .filter(|h| !mapping.contains_key(*h))
+            .cloned()
+            .collect(),
         ..ImportPlan::default()
     };
-    plan.unmapped = headers
-        .iter()
-        .filter(|h| !mapping.contains_key(*h))
-        .cloned()
-        .collect();
     let mut seen = std::collections::HashSet::new();
-    for (n, cells) in rows.iter().enumerate().skip(1) {
-        let row = u32::try_from(n + 1).map_err(|e| Error::Invalid(e.to_string()))?;
+    let mut plan_rows: Vec<u32> = vec![];
+    for (row, cells) in body {
+        let row = *row;
         let mut warnings = vec![];
         match row_issue(&ctx, cells, &mut warnings) {
             Ok(i) if !seen.insert(i.external_id.clone()) => plan.skipped.push(Skipped {
                 row,
                 reason: "duplicate of an earlier row".into(),
             }),
-            Ok(i) => plan.issues.push(i),
+            Ok(i) => {
+                plan_rows.push(row);
+                plan.issues.push(i);
+            }
             Err(reason) => plan.skipped.push(Skipped { row, reason }),
         }
         for w in warnings {
@@ -336,8 +354,62 @@ pub async fn plan(
             }
         }
     }
-    finish(db, &mut plan).await?;
+    finish_with_rows(db, &mut plan, plan_rows).await?;
     Ok(plan)
+}
+
+/// Column index and field for each mapped header. Refuses duplicate headers, unknown mapped columns and no title.
+fn map_columns(
+    headers: &[String],
+    mapping: &BTreeMap<String, String>,
+) -> Result<Vec<(usize, Field)>> {
+    if let Some(dup) = headers
+        .iter()
+        .enumerate()
+        .find(|(i, h)| headers[..*i].contains(h))
+    {
+        return Err(Error::Invalid(format!(
+            "column `{}` appears more than once",
+            dup.1
+        )));
+    }
+    if let Some(bad) = mapping.keys().find(|k| !headers.contains(k)) {
+        return Err(Error::Invalid(format!("no column named `{bad}`")));
+    }
+    let mut cols = vec![];
+    for (idx, h) in headers.iter().enumerate() {
+        if let Some(f) = mapping.get(h) {
+            cols.push((idx, Field::parse(f)?));
+        }
+    }
+    if !cols.iter().any(|(_, f)| *f == Field::Title) {
+        return Err(Error::Invalid("no column is mapped to title".into()));
+    }
+    Ok(cols)
+}
+
+/// Runs `finish`, then gives the rows it skips as already imported their file row, not their position.
+async fn finish_with_rows(db: &Db, plan: &mut ImportPlan, plan_rows: Vec<u32>) -> Result<()> {
+    let before = plan.skipped.len();
+    let file_rows: Vec<(String, u32)> = plan
+        .issues
+        .iter()
+        .map(|i| i.external_id.clone())
+        .zip(plan_rows)
+        .collect();
+    finish(db, plan).await?;
+    let kept: std::collections::HashSet<&str> =
+        plan.issues.iter().map(|i| i.external_id.as_str()).collect();
+    let mut gone = file_rows
+        .iter()
+        .filter(|(id, _)| !kept.contains(id.as_str()))
+        .map(|(_, r)| *r);
+    for s in plan.skipped.iter_mut().skip(before) {
+        if let Some(r) = gone.next() {
+            s.row = r;
+        }
+    }
+    Ok(())
 }
 
 /// The definition per mapped property name (existing ones win, new ones are inferred), and the new ones.

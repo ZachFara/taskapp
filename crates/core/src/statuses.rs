@@ -195,8 +195,19 @@ pub async fn delete(db: &Db, id: StatusId, move_issues_to: StatusId) -> Result<(
         ));
     }
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
-    fetch(&mut tx, id).await?;
+    let gone = fetch(&mut tx, id).await?;
     fetch(&mut tx, move_issues_to).await?;
+    // Every category keeps a status: the Completed one stamps completed_at, and a category with none has no home.
+    let same: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM statuses WHERE category = ?")
+        .bind(category_str(gone.category))
+        .fetch_one(&mut *tx)
+        .await?;
+    if same <= 1 {
+        return Err(Error::Invalid(format!(
+            "cannot delete the last {} status",
+            category_str(gone.category)
+        )));
+    }
     let moved = sqlx::query_scalar!(
         r#"SELECT id AS "id!: i64" FROM issues WHERE status_id = ?"#,
         id.0

@@ -7,10 +7,10 @@ use rmcp::model::Tool;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Map, Value, json};
 use taskapp_core::{
-    ChangeSource, Db, Issue, IssuePatch, NewIssue, Project, PropertyDef, PropertyKind, Relation,
-    RelationKind, SelectOption, StatusCategory, TemplateInput, ViewDef, backup, comments, cycles,
-    history, import, insights, issues, labels, pins, projects, properties, relations, search,
-    statuses, templates, undo, view_templates, views, workspace,
+    ChangeSource, Db, Issue, IssuePatch, NewIssue, PinKind, Project, PropertyDef, PropertyKind,
+    Relation, RelationKind, SelectOption, StatusCategory, TemplateInput, ViewDef, backup, comments,
+    cycles, history, import, insights, issues, labels, pins, projects, properties, relations,
+    search, statuses, templates, undo, view_templates, views, workspace,
 };
 
 type Res<T> = Result<T, String>;
@@ -250,13 +250,71 @@ pub struct Server {
     backup_dir: PathBuf,
 }
 
+/// The core error text already carries its kind (`invalid: ...`, `not found: ...`).
 fn ce(e: &taskapp_core::Error) -> String {
-    format!("{}: {e}", e.kind())
+    e.to_string()
+}
+
+/// Every argument name a tool reads. A name outside this list is a typo, so the call is refused.
+const ARG_NAMES: &[&str] = &[
+    "body",
+    "category",
+    "color",
+    "created_at",
+    "csv",
+    "def",
+    "description",
+    "doc_link",
+    "end_date",
+    "from",
+    "icon",
+    "id",
+    "items",
+    "key",
+    "kind",
+    "limit",
+    "map",
+    "measure",
+    "migration",
+    "name",
+    "new_name",
+    "options",
+    "overrides",
+    "patch",
+    "periods",
+    "plan",
+    "points",
+    "project_id",
+    "property",
+    "scope",
+    "slug",
+    "start_date",
+    "target",
+    "target_date",
+    "template_id",
+    "text",
+    "timezone",
+    "title",
+    "to",
+    "value",
+    "view_id",
+];
+
+/// The first argument name a tool does not read. `create_issue` takes its whole object as `NewIssue`, which
+/// refuses unknown fields itself.
+fn unknown_arg<'a>(name: &str, args: &'a Value) -> Option<&'a str> {
+    if name == "create_issue" {
+        return None;
+    }
+    args.as_object()?
+        .keys()
+        .find(|k| !ARG_NAMES.contains(&k.as_str()))
+        .map(String::as_str)
 }
 
 fn arg<T: DeserializeOwned>(a: &Value, k: &str) -> Res<T> {
     serde_json::from_value(a.get(k).cloned().unwrap_or(Value::Null))
-        .map_err(|e| format!("invalid argument `{k}`: {e}"))
+        .map_err(|e| format!("invalid: argument `{k}`: {e}"))
 }
 
 /// The call's own arguments minus the ones that are not fields of `T`, so `T` can refuse any other name.
@@ -265,7 +323,7 @@ fn without<T: DeserializeOwned>(a: &Value, skip: &[&str]) -> Res<T> {
     if let Some(o) = a.as_object_mut() {
         o.retain(|k, _| !skip.contains(&k.as_str()));
     }
-    serde_json::from_value(a).map_err(|e| format!("invalid arguments: {e}"))
+    serde_json::from_value(a).map_err(|e| format!("invalid: arguments: {e}"))
 }
 
 fn opt<T: DeserializeOwned>(a: &Value, k: &str) -> Res<Option<T>> {
@@ -298,6 +356,9 @@ impl Server {
         };
         if let Some(missing) = required.iter().find(|k| args.get(**k).is_none()) {
             return Err(format!("missing required argument `{missing}`"));
+        }
+        if let Some(bad) = unknown_arg(name, &args) {
+            return Err(format!("invalid: unknown argument `{bad}` for {name}"));
         }
         // One tool call is one undoable step.
         // import_apply names its own step ("Import N issues"), which a wrapping step would override.
@@ -444,6 +505,17 @@ impl Server {
             return Err("invalid: comment body is empty".into());
         }
         let made = comments::add_comment(&self.db, issue.id, &body, at, src(a)).await;
+        ok(&made.map_err(|e| ce(&e))?)
+    }
+
+    async fn pin(&self, a: &Value, s: ChangeSource) -> Res<Value> {
+        let (kind, target) = (arg::<PinKind>(a, "kind")?, arg::<String>(a, "target")?);
+        if matches!(kind, PinKind::Issue) {
+            issues::get_by_key(&self.db, &target)
+                .await
+                .map_err(|e| ce(&e))?;
+        }
+        let made = pins::pin_as(&self.db, s, kind, &target, opt(a, "title")?).await;
         ok(&made.map_err(|e| ce(&e))?)
     }
 
@@ -686,13 +758,11 @@ impl Server {
                     .map_err(|e| ce(&e))?)
             }
             "list_pins" => ok(&pins::list_resolved(db).await.map_err(|e| ce(&e))?),
-            "pin" => {
-                let (kind, target) = (arg(a, "kind")?, arg::<String>(a, "target")?);
-                let made = pins::pin(db, kind, &target, opt(a, "title")?).await;
-                ok(&made.map_err(|e| ce(&e))?)
-            }
+            "pin" => self.pin(a, s).await,
             _ => {
-                pins::unpin(db, arg(a, "id")?).await.map_err(|e| ce(&e))?;
+                pins::unpin_as(db, s, arg(a, "id")?)
+                    .await
+                    .map_err(|e| ce(&e))?;
                 Ok(json!({ "ok": true }))
             }
         }

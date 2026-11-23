@@ -319,7 +319,7 @@ macro_rules! with_commands {
             history_redo(s) -> UndoStatus { undo::redo(&s.db).await }
             history_undo_status(s) -> UndoStatus { undo::undo_status(&s.db).await }
             settings_get(s, key: String) -> Option<Value> { settings::get(&s.db, &key).await }
-            settings_set(s, key: String, value: Value) -> () { settings::set(&s.db, &key, &value).await }
+            settings_set(s, key: String, value: Value) -> () { settings::set_from_user(&s.db, &key, &value).await }
             backup_snapshot(s, dir: String, reason: String) -> String {
                 Ok(backup::snapshot(&s.db, dir.as_ref(), &reason).await?.to_string_lossy().into_owned())
             }
