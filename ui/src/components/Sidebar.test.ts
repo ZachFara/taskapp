@@ -180,8 +180,7 @@ describe('Sidebar folders', () => {
 
   it('deleting a folder keeps its views at the top level', async () => {
     const api = await withFolder();
-    document.querySelector<HTMLButtonElement>('[aria-label="Delete Work"]')!.click();
-    await settle();
+    await pick('Work', /^Delete/);
     // The shell owns the confirm dialog; the row only asks for it.
     expect(rowUi.dialog).toMatchObject({ mode: 'delete', target: { kind: 'folder', id: 1 } });
     await remove(rowUi.dialog!.target);
