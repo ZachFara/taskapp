@@ -3,8 +3,13 @@
   import { navigate } from '../app/routes';
   import { api } from '../lib/api';
   import { openExternal } from '../lib/openExternal';
-  import type { Cycle, PinKind, ResolvedPin, SavedView } from '../lib/bindings';
-  import { folders, projects, projectStatuses, refreshAll, views } from '../lib/stores.svelte';
+  import type { Snippet } from 'svelte';
+  import type { Cycle, FolderSection, PinKind, Project, ResolvedPin, SavedView } from '../lib/bindings';
+  import { folders, placements, projects, projectStatuses, refreshAll, views } from '../lib/stores.svelte';
+  import { buildRows, canNest, type FolderRow, type TreeRow } from '../lib/folderTree';
+  import { dnd, dragRows, type Drop, type Src } from '../lib/pointerDrag.svelte';
+  import type { Move } from '../lib/rowActions';
+  import ContextMenu from '../ui/ContextMenu.svelte';
   import { glyphCategory } from '../lib/projectFields';
   import StatusGlyph from '../ui/StatusGlyph.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -43,8 +48,10 @@
       pins = await api.pins.listResolved();
       cycles = await api.cycles.list();
     };
+    const refused = (e: Event) => fail({ message: (e as CustomEvent<string>).detail });
     addEventListener('rows:changed', reload);
-    return () => removeEventListener('rows:changed', reload);
+    addEventListener('rows:failed', refused);
+    return () => (removeEventListener('rows:changed', reload), removeEventListener('rows:failed', refused));
   });
   const fail = (e: unknown) => (error = (e as { message?: string }).message ?? String(e));
   const isPinned = (kind: PinKind, target: string) => pins.some((r) => r.pin.kind === kind && r.pin.target === target);
@@ -56,15 +63,6 @@
     void openExternal(route);
   }
 
-  const moved = <T,>(ids: T[], from: T, to: T) => {
-    const rest = ids.filter((i) => i !== from);
-    rest.splice(ids.indexOf(to), 0, from);
-    return rest;
-  };
-  let dragging: number | null = null;
-  let dragKind = '';
-  const drag = (id: number, kind: string) => ({ draggable: true, ondragstart: () => ([dragging, dragKind] = [id, kind]), ondragover: (e: Event) => e.preventDefault() });
-
   // Folders stay open or closed per device: the choice is kept in this browser only.
   const FOLDERS_KEY = 'folders.closed';
   const read = (): Record<number, boolean> => {
@@ -75,53 +73,36 @@
     }
   };
   let shut = $state<Record<number, boolean>>(read());
-  function toggle(id: number) {
-    shut[id] = !shut[id];
+  function setShut(id: number, to: boolean) {
+    shut[id] = to;
     try {
       localStorage.setItem(FOLDERS_KEY, JSON.stringify(shut));
     } catch {
       /* private window: the folder still opens, it just is not remembered */
     }
   }
-  const inFolder = (id: number | null) => views.filter((v) => (v.folder_id ?? null) === id);
 
-  async function dropPin(target: number) {
-    if (dragKind !== 'pin' || dragging === null || dragging === target) return;
-    const before = pins;
-    const ids = moved(pins.map((r) => r.pin.id), dragging, target);
-    pins = ids.map((id) => before.find((r) => r.pin.id === id)!);
-    try {
-      await api.pins.reorder(ids);
-    } catch (e) {
-      pins = before;
-      fail(e);
-    }
-  }
-  async function dropView(target: number) {
-    if (dragKind !== 'view' || dragging === null || dragging === target) return;
-    try {
-      // Dropping on a view in another folder (or the top level) moves the view there first.
-      const [from, to] = [views.find((v) => v.id === dragging)!, views.find((v) => v.id === target)!];
-      if ((from.folder_id ?? null) !== (to.folder_id ?? null)) await api.views.move(from.id, to.folder_id);
-      await api.views.reorder(moved(views.map((v) => v.id), dragging, target));
-      await refreshAll();
-      dispatchEvent(new CustomEvent('rows:changed'));
-    } catch (e) {
-      fail(e);
-    }
-  }
-  async function dropOnFolder(target: number) {
-    if (dragging === null) return;
-    try {
-      if (dragKind === 'view') await api.views.move(dragging, target);
-      else if (dragKind === 'folder' && dragging !== target) await api.folders.reorder(moved(folders.map((f) => f.id), dragging, target));
-      else return;
-      await refreshAll();
-      dispatchEvent(new CustomEvent('rows:changed'));
-    } catch (e) {
-      fail(e);
-    }
-  }
+  // Each section is a tree: folders (nested) and the items placed in them.
+  const tree = <T extends { id: number }>(section: FolderSection, items: T[]) => buildRows(section, folders, placements, items, { shut, placed: true });
+  const pinRows = $derived(tree('pin', pins.map((r) => ({ id: r.pin.id, r }))));
+  const viewRows = $derived(tree('view', views));
+  const projectRows = $derived(tree('project', projects));
+  const cycleRows = $derived(tree('cycle', cycles));
+
+  /** What the drag needs to know about a row: what it is, where it sits, and the line or highlight to draw. */
+  const attrs = (section: FolderSection, type: 'item' | 'folder', id: number, label: string, r: { container: number | null; pos: number; depth: number }, open = false) => ({
+    'data-drag': type,
+    'data-section': section,
+    'data-id': id,
+    'data-container': r.container ?? '',
+    'data-pos': r.pos,
+    'data-label': label,
+    'data-open': open ? '' : undefined,
+    'data-line': dnd.drop?.section === section && dnd.drop.line?.type === type && dnd.drop.line.id === id ? dnd.drop.line.edge : undefined,
+    'data-into': type === 'folder' && dnd.drop?.section === section && dnd.drop.highlight === id ? '' : undefined,
+    style: `--depth: ${r.depth}`,
+  });
+  const dragOpts = { onDrop: (s: Src, d: Drop) => runRow('folder.move', { kind: s.type === 'folder' ? 'folder' : s.section, id: s.id, name: s.label, folder: d.container, index: d.index } satisfies Move), open: (id: number) => setShut(id, false), fits: (id: number, to: number | null) => canNest(folders, id, to) };
 </script>
 
 <script module lang="ts">
@@ -130,16 +111,24 @@
   const LAYOUT_ICON: Record<string, string> = { List: 'list', Board: 'board', Table: 'table', Gantt: 'timeline', Calendar: 'calendar' };
 </script>
 
-{#snippet head(id: string, title: string, count: number)}
-  <Tooltip label={`${closed[id] ? 'Expand' : 'Collapse'} ${title}`}>
-    {#snippet children(props)}
-      <button {...props} class="head" type="button" aria-expanded={!closed[id]} onclick={() => (closed[id] = !closed[id])}>
-        <Icon name={closed[id] ? 'chevron-right' : 'chevron-down'} size={12} />
-        <span>{title}</span>
-        <em>{count}</em>
-      </button>
-    {/snippet}
-  </Tooltip>
+{#snippet head(id: string, title: string, count: number, section: FolderSection)}
+  <div class="row">
+    <Tooltip label={`${closed[id] ? 'Expand' : 'Collapse'} ${title}`}>
+      {#snippet children(props)}
+        <button {...props} class="head" type="button" aria-expanded={!closed[id]} onclick={() => (closed[id] = !closed[id])}>
+          <Icon name={closed[id] ? 'chevron-right' : 'chevron-down'} size={12} />
+          <span>{title}</span>
+          <em>{count}</em>
+        </button>
+      {/snippet}
+    </Tooltip>
+    <Menu>
+      {#snippet trigger(props)}
+        <button {...props} class="aff" type="button" aria-label={`${title} menu`}><Icon name="more" size={12} /></button>
+      {/snippet}
+      <MenuItem label={labelFor('folder.new') ?? 'New folder'} icon="folder" onSelect={() => runRow('folder.new', { section })} />
+    </Menu>
+  </div>
 {/snippet}
 
 {#snippet navLink(href: string, icon: string, text: string, id: string, on: boolean)}
@@ -150,9 +139,48 @@
   </Tooltip>
 {/snippet}
 
-{#snippet viewRow(v: SavedView, nested: boolean)}
+{#snippet folderRow(r: FolderRow, section: FolderSection)}
+  {@const f = r.folder}
+  <li class="row" {...attrs(section, 'folder', f.id, f.name, r, !r.shut)}>
+    <RowActions button={false} label={f.name} actions={rowActs({ kind: 'folder', id: f.id, name: f.name })}>
+      <button class="item folder" type="button" aria-expanded={!r.shut} onclick={() => setShut(f.id, !r.shut)}><Icon name={r.shut ? 'chevron-right' : 'chevron-down'} size={12} /><span class="t">{f.name}</span><em>{r.count}</em></button>
+    </RowActions>
+  </li>
+{/snippet}
+
+<!-- One section's rows. `leaf` draws an item's row; the blank space below takes the right-click menu and the drop to the top level. -->
+{#snippet rowsOf(section: FolderSection, rows: TreeRow<any>[], leaf: Snippet<[any, TreeRow<any>]>, lead?: Snippet)}
+  <ul>
+    {@render lead?.()}
+    {#each rows as r (r.type === 'folder' ? `f${r.folder.id}` : `i${r.item.id}`)}
+      {#if r.type === 'folder'}{@render folderRow(r, section)}{:else}{@render leaf(r.item, r)}{/if}
+    {/each}
+  </ul>
+  <ContextMenu>
+    {#snippet area()}
+      <div class="blank" data-area data-section={section} data-over={dnd.drop?.section === section && dnd.drop.container === null && !dnd.drop.line ? '' : undefined}>{#if dnd.src?.section === section}Move to top level{/if}</div>
+    {/snippet}
+    <MenuItem label={labelFor('folder.new') ?? 'New folder'} icon="folder" onSelect={() => runRow('folder.new', { section })} />
+  </ContextMenu>
+{/snippet}
+
+{#snippet pinLeaf(p: { r: ResolvedPin }, row: TreeRow<unknown>)}
+  {@const r = p.r}
+  <li class="row" class:archived={r.archived} {...attrs('pin', 'item', r.pin.id, r.label, row)}>
+    <RowActions button={false} label={`${r.label} (pinned)`} actions={rowActs({ kind: 'pin', id: r.pin.id, name: r.label })}>
+      <a class="item" class:on={route === r.route} aria-current={route === r.route ? 'page' : undefined} href={r.route} onclick={(e) => (e.preventDefault(), open(r.route))}><Icon name="pin" /><span class="t">{r.label}</span></a>
+    </RowActions>
+    <Tooltip label={`Unpin ${r.label}`}>
+      {#snippet children(props)}
+        <button {...props} class="aff" type="button" aria-label={`Unpin ${r.label}`} onclick={() => api.pins.unpin(r.pin.id).then(async () => (pins = await api.pins.listResolved()), fail)}><Icon name="close" size={12} /></button>
+      {/snippet}
+    </Tooltip>
+  </li>
+{/snippet}
+
+{#snippet viewLeaf(v: SavedView, row: TreeRow<unknown>)}
   {@const href = `/view/${v.id}`}
-  <li class="row" class:nested {...drag(v.id, 'view')} ondrop={() => dropView(v.id)}>
+  <li class="row" {...attrs('view', 'item', v.id, v.name, row)}>
     <RowActions button={false} label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, isPinned('View', String(v.id)))}>
       <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`, color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
       <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{v.name}</span></a>
@@ -160,7 +188,31 @@
   </li>
 {/snippet}
 
-<nav aria-label="Sidebar" data-on-frame>
+{#snippet projectLeaf(p: Project, row: TreeRow<unknown>)}
+  {@const href = `/project/${p.slug}`}
+  {@const st = projectStatuses.find((x) => x.id === p.status_id)}
+  <li class="row" {...attrs('project', 'item', p.id, p.name, row)}>
+    <RowActions button={false} label={p.name} actions={rowActs({ kind: 'project', id: p.id, name: p.name }, isPinned('Project', p.slug))}>
+      <IconColorPicker label={`Icon and colour of ${p.name}`} value={{ icon: p.icon ?? 'icon:project', color: p.color }} onchange={(c) => patch({ kind: 'project', id: p.id, name: p.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `project:${p.id}`, (o) => (rowUi.picking = o ? `project:${p.id}` : null)} />
+      <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{p.name}</span>{#if st}<span class="st" title={st.name}><StatusGlyph category={glyphCategory[st.category]} size={12} label={st.name} /></span>{/if}{#if sparklines}<ProjectSpark projectId={p.id} name={p.name} />{/if}</a>
+    </RowActions>
+  </li>
+{/snippet}
+
+{#snippet cycleLeaf(c: Cycle, row: TreeRow<unknown>)}
+  <li class="row" {...attrs('cycle', 'item', c.id, label(c), row)}>
+    <RowActions button={false} label={label(c)} actions={rowActs({ kind: 'cycle', id: c.id, name: label(c) }, isPinned('Cycle', String(c.id)))}>
+      <IconColorPicker label={`Icon and colour of ${label(c)}`} value={{ icon: c.icon ?? 'icon:cycle', color: c.color }} onchange={(x) => patch({ kind: 'cycle', id: c.id, name: label(c) }, { icon: x.icon, color: x.color })} bind:open={() => rowUi.picking === `cycle:${c.id}`, (o) => (rowUi.picking = o ? `cycle:${c.id}` : null)} />
+      <a class="item" href="/cycles" onclick={(e) => (e.preventDefault(), navigate('/cycles'))}><span class="t">{label(c)}</span></a>
+    </RowActions>
+  </li>
+{/snippet}
+
+{#snippet allProjects()}<li class="row">{@render navLink('/projects', 'project', 'All projects', 'nav.projects', route === '/projects')}</li>{/snippet}
+{#snippet allCycles()}<li class="row">{@render navLink('/cycles', 'cycle', 'All cycles', 'nav.cycles', route === '/cycles')}</li>{/snippet}
+
+<!-- Pointer drag, not HTML5 drag: the Mac app's web view does not deliver drop events reliably. -->
+<nav aria-label="Sidebar" data-on-frame use:dragRows={dragOpts} ondragstart={(e) => e.preventDefault()}>
   {#if error}<p role="alert" class="error">{error}</p>{/if}
 
   <ul class="top">
@@ -168,88 +220,23 @@
   </ul>
 
   <section aria-label="Pinned">
-    {@render head('pinned', 'Pinned', pins.length)}
-    {#if !closed.pinned}
-      <ul>
-        {#each pins as r (r.pin.id)}
-          <li class="row" class:archived={r.archived} {...drag(r.pin.id, 'pin')} ondrop={() => dropPin(r.pin.id)}>
-            <a class="item" class:on={route === r.route} aria-current={route === r.route ? 'page' : undefined} href={r.route} onclick={(e) => (e.preventDefault(), open(r.route))}><Icon name="pin" /><span class="t">{r.label}</span></a>
-            <Tooltip label={`Unpin ${r.label}`}>
-              {#snippet children(props)}
-                <button {...props} class="aff" type="button" aria-label={`Unpin ${r.label}`} onclick={() => api.pins.unpin(r.pin.id).then(async () => (pins = await api.pins.listResolved()), fail)}><Icon name="close" size={12} /></button>
-              {/snippet}
-            </Tooltip>
-          </li>
-        {/each}
-      </ul>
-    {/if}
+    {@render head('pinned', 'Pinned', pins.length, 'pin')}
+    {#if !closed.pinned}{@render rowsOf('pin', pinRows, pinLeaf)}{/if}
   </section>
 
   <section aria-label="Views">
-    <div class="row">
-      {@render head('views', 'Views', views.length)}
-      <Menu>
-        {#snippet trigger(props)}
-          <button {...props} class="aff" type="button" aria-label="Views menu"><Icon name="more" size={12} /></button>
-        {/snippet}
-        <MenuItem label={labelFor('folder.new') ?? 'New folder'} icon="folder" onSelect={() => runRow('folder.new', 0)} />
-      </Menu>
-    </div>
-    {#if !closed.views}
-      <ul>
-        {#each folders as f (f.id)}
-          <li class="row" {...drag(f.id, 'folder')} ondrop={() => dropOnFolder(f.id)}>
-            <RowActions button={false} label={f.name} actions={rowActs({ kind: 'folder', id: f.id, name: f.name })}>
-              <button class="item folder" type="button" aria-expanded={!shut[f.id]} onclick={() => toggle(f.id)}><Icon name={shut[f.id] ? 'chevron-right' : 'chevron-down'} size={12} /><span class="t">{f.name}</span><em>{inFolder(f.id).length}</em></button>
-            </RowActions>
-          </li>
-          {#if !shut[f.id]}
-            {#each inFolder(f.id) as v (v.id)}
-              {@render viewRow(v, true)}
-            {/each}
-          {/if}
-        {/each}
-        {#each inFolder(null) as v (v.id)}
-          {@render viewRow(v, false)}
-        {/each}
-      </ul>
-    {/if}
+    {@render head('views', 'Views', views.length, 'view')}
+    {#if !closed.views}{@render rowsOf('view', viewRows, viewLeaf)}{/if}
   </section>
 
   <section aria-label="Projects">
-    {@render head('projects', 'Projects', projects.length)}
-    {#if !closed.projects}
-      <ul>
-        <li class="row">{@render navLink('/projects', 'project', 'All projects', 'nav.projects', route === '/projects')}</li>
-        {#each projects as p (p.id)}
-          {@const href = `/project/${p.slug}`}
-          {@const st = projectStatuses.find((x) => x.id === p.status_id)}
-          <li class="row">
-            <RowActions button={false} label={p.name} actions={rowActs({ kind: 'project', id: p.id, name: p.name }, isPinned('Project', p.slug))}>
-              <IconColorPicker label={`Icon and colour of ${p.name}`} value={{ icon: p.icon ?? 'icon:project', color: p.color }} onchange={(c) => patch({ kind: 'project', id: p.id, name: p.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `project:${p.id}`, (o) => (rowUi.picking = o ? `project:${p.id}` : null)} />
-              <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{p.name}</span>{#if st}<span class="st" title={st.name}><StatusGlyph category={glyphCategory[st.category]} size={12} label={st.name} /></span>{/if}{#if sparklines}<ProjectSpark projectId={p.id} name={p.name} />{/if}</a>
-            </RowActions>
-          </li>
-        {/each}
-      </ul>
-    {/if}
+    {@render head('projects', 'Projects', projects.length, 'project')}
+    {#if !closed.projects}{@render rowsOf('project', projectRows, projectLeaf, allProjects)}{/if}
   </section>
 
   <section aria-label="Cycles">
-    {@render head('cycles', 'Cycles', cycles.length)}
-    {#if !closed.cycles}
-      <ul>
-        <li class="row">{@render navLink('/cycles', 'cycle', 'All cycles', 'nav.cycles', route === '/cycles')}</li>
-        {#each cycles as c (c.id)}
-          <li class="row">
-            <RowActions button={false} label={label(c)} actions={rowActs({ kind: 'cycle', id: c.id, name: label(c) }, isPinned('Cycle', String(c.id)))}>
-              <IconColorPicker label={`Icon and colour of ${label(c)}`} value={{ icon: c.icon ?? 'icon:cycle', color: c.color }} onchange={(x) => patch({ kind: 'cycle', id: c.id, name: label(c) }, { icon: x.icon, color: x.color })} bind:open={() => rowUi.picking === `cycle:${c.id}`, (o) => (rowUi.picking = o ? `cycle:${c.id}` : null)} />
-              <a class="item" href="/cycles" onclick={(e) => (e.preventDefault(), navigate('/cycles'))}><span class="t">{label(c)}</span></a>
-            </RowActions>
-          </li>
-        {/each}
-      </ul>
-    {/if}
+    {@render head('cycles', 'Cycles', cycles.length, 'cycle')}
+    {#if !closed.cycles}{@render rowsOf('cycle', cycleRows, cycleLeaf, allCycles)}{/if}
   </section>
 
   <ul class="top">
@@ -272,13 +259,23 @@
   .item.on :global(svg) { color: var(--frame-ink); }
   .st { margin-left: auto; display: inline-flex; }
   .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .head { display: flex; align-items: center; gap: var(--s-3); width: 100%; height: var(--ctl-h); margin-top: var(--s-4); padding: 0 var(--s-3); border: 0; border-radius: var(--r-ctl); background: transparent; color: var(--frame-muted); font: inherit; font-size: var(--fs-sm); font-weight: 600; text-align: left; }
+  :global(.dnd-ghost) { position: fixed; left: 0; top: 0; z-index: var(--z-tooltip); pointer-events: none; padding: var(--s-2) var(--s-5); border-radius: var(--r-ctl); background: var(--frame-raised); color: var(--frame-ink); font-size: var(--fs-md); font-weight: 500; box-shadow: var(--shadow-float); }
+  :global(body.dnd-active) { user-select: none; cursor: grabbing; }
+  .head { display: flex; flex: 1; align-items: center; gap: var(--s-3); width: 100%; height: var(--ctl-h); margin-top: var(--s-4); padding: 0 var(--s-3); border: 0; border-radius: var(--r-ctl); background: transparent; color: var(--frame-muted); font: inherit; font-size: var(--fs-sm); font-weight: 600; text-align: left; }
   .head:hover { color: var(--frame-ink); }
   .head em { margin-left: auto; font-style: normal; font-weight: 500; }
   .row { display: flex; align-items: center; position: relative; }
   .aff { position: absolute; right: var(--s-2); display: grid; place-items: center; width: var(--ctl-h-sm); height: var(--ctl-h-sm); padding: 0; border: 0; border-radius: var(--r-ctl); background: var(--frame-raised); color: var(--frame-ink); opacity: 0; transition: opacity var(--dur-1) var(--ease); }
   .row:hover .aff, .aff:focus-visible, .aff.on { opacity: 1; }
-  .nested { padding-left: var(--s-7); }
+  /* Nested rows step in by one level each; the drag marks the target with a line or a highlight. */
+  .row[data-drag] { padding-left: calc(var(--depth, 0) * var(--s-7)); }
+  .row[data-line]::before { content: ''; position: absolute; left: 0; right: 0; height: 2px; background: var(--frame-ink); pointer-events: none; }
+  .row[data-line='before']::before { top: calc(var(--s-1) / -2 - 1px); }
+  .row[data-line='after']::before { bottom: calc(var(--s-1) / -2 - 1px); }
+  .row[data-into] .item { background: var(--frame-raised); outline: 1px solid var(--frame-ink); }
+  .blank { min-height: var(--s-4); border-radius: var(--r-ctl); color: var(--frame-muted); font-size: var(--fs-sm); text-align: center; }
+  .blank:not(:empty) { display: grid; place-items: center; height: var(--ctl-h); border: 1px dashed var(--frame-muted); }
+  .blank[data-over] { background: var(--frame-raised); color: var(--frame-ink); border-color: var(--frame-ink); }
   .folder { border: 0; background: transparent; font: inherit; text-align: left; cursor: default; }
   .folder em { margin-left: auto; font-style: normal; color: var(--frame-muted); }
   .archived .t { opacity: 0.5; }

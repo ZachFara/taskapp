@@ -573,11 +573,32 @@ pub struct SavedView {
     pub folder_id: Option<ViewFolderId>,
 }
 
-/// A sidebar folder of views.
+/// The sidebar section a folder belongs to; its items live in the table of the same name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum FolderSection {
+    Pin,
+    View,
+    Project,
+    Cycle,
+}
+
+/// A sidebar folder. It holds items of its own section and folders of that section, nested by `parent_id`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct ViewFolder {
     pub id: ViewFolderId,
     pub name: String,
+    pub position: i32,
+    pub section: FolderSection,
+    pub parent_id: Option<ViewFolderId>,
+}
+
+/// Where one pin, view, project or cycle sits: the folder (`None` is the section's top level) and its place there.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct Placement {
+    pub section: FolderSection,
+    pub id: i64,
+    pub folder_id: Option<ViewFolderId>,
     pub position: i32,
 }
 

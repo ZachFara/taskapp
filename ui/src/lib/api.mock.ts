@@ -6,10 +6,11 @@ import { parseQuickadd } from './api.mock.quickadd';
 import * as insights from './api.mock.insights';
 import { stepLabel } from './api.mock.stepLabel';
 import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
+import { foldersApi } from './api.mock.folders';
 import { scrubDef, seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
   AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, Event, EventInput, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
-  NewIssue, Pin, Project, ProjectStatus, ProjectStatusCategory, PropertyAppliesTo, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
+  NewIssue, Pin, Placement, Project, ProjectStatus, ProjectStatusCategory, PropertyAppliesTo, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
   TemplateInput, Value, ViewDef, ViewFolder, ViewTemplate, WorkBlock,
 } from './bindings';
 
@@ -63,7 +64,6 @@ const dueDay = (i: Issue) => {
   }
 };
 const nothing = (_?: unknown) => null;
-const folderName = (name: string) => name.trim() || fail('Invalid', 'a folder needs a name');
 /** Same rule as core: 0 to 1000 with exactly the precision of one decimal (no rounding of float noise). */
 const validPoints = (p: number) => Number.isFinite(p) && p >= 0 && p <= 1000 && Number(p.toFixed(1)) === p;
 const dayDiff = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
@@ -99,6 +99,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const views = s.views ?? [];
   const viewTemplates: ViewTemplate[] = s.viewTemplates ?? [];
   const folders: ViewFolder[] = s.viewFolders ?? [];
+  // shortcut: a deleted item's placement stays until its id is reused, when it would show in the old folder; fixtures never reuse ids.
+  const placed: Placement[] = [];
   const milestones: Milestone[] = s.milestones ?? [];
   const comments: Comment[] = [];
   const relations: Relation[] = s.relations ?? [];
@@ -111,7 +113,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, importLog] as unknown[][];
+  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -950,38 +952,19 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return v;
       },
       delete: async (id) => nothing(remove(views, id, 'view')),
-      move: async (id, folderId) => {
-        if (folderId !== null) find(folders, folderId, 'view folder');
-        const v = find(views, id, 'view');
-        Object.assign(v, { folder_id: folderId, position: Math.max(-1, ...views.map((x) => x.position)) + 1 });
-        views.sort((a, b) => a.position - b.position);
-        return null;
-      },
       reorder: async (ids) => {
         reposition(views, ids, (v) => v.id, 'view');
         views.sort((a, b) => a.position - b.position);
         return null;
       },
     },
-    folders: {
-      list: async () => folders,
-      create: async (name) => {
-        const f = { id: next(folders), name: folderName(name), position: Math.max(-1, ...folders.map((x) => x.position)) + 1 };
-        folders.push(f);
-        return f;
-      },
-      rename: async (id, name) => Object.assign(find(folders, id, 'view folder'), { name: folderName(name) }),
-      delete: async (id) => {
-        remove(folders, id, 'view folder');
-        for (const v of views) if (v.folder_id === id) v.folder_id = null;
-        return null;
-      },
-      reorder: async (ids) => {
-        reposition(folders, ids, (f) => f.id, 'folder');
-        folders.sort((a, b) => a.position - b.position);
-        return null;
-      },
-    },
+    folders: foldersApi(
+      folders, placed, views,
+      (sec) => ({ pin: pins.map((x) => x.id), view: views.map((x) => x.id), project: s.projects.map((x) => x.id), cycle: cycles.map((x) => x.id) })[sec],
+      (sec, id) => (sec === 'pin' ? pins.find((x) => x.id === id)!.position : 1_000_000),
+      (sec, id, position) => { if (sec === 'pin') pins.find((x) => x.id === id)!.position = position; },
+      fail,
+    ),
     view: {
       templatesList: async () => viewTemplates,
       templatesCreate: async (name, d, icon, color) => {
@@ -1222,7 +1205,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     'projects.create projects.update projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink templates.create templates.update templates.delete templates.apply ' +
     'labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
-    'relations.add relations.remove relation.kindsCreate relation.kindsUpdate relation.kindsDelete views.save views.delete views.reorder views.move folders.create folders.rename folders.delete folders.reorder views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
+    'relations.add relations.remove relation.kindsCreate relation.kindsUpdate relation.kindsDelete views.save views.delete views.reorder folders.create folders.rename folders.delete folders.place folders.placeItem views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
     'view.templatesCreate view.templatesUpdate view.templatesDelete pins.pin pins.unpin pins.reorder pins.set import.apply'
   ).split(' ');
   for (const name of mutating) {

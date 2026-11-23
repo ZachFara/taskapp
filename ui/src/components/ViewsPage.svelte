@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../lib/api';
-  import type { Layout, SavedView, ViewFolder } from '../lib/bindings';
+  import type { Layout, Placement, SavedView, ViewFolder } from '../lib/bindings';
+  import { buildRows } from '../lib/folderTree';
   import { navigate } from '../app/routes';
   import NewViewDialog from './display/NewViewDialog.svelte';
   import { defaultTemplateId, setDefaultTemplate, templates, type ViewTemplate } from './display/templatesApi';
@@ -29,7 +30,10 @@
 
   let views = $state<SavedView[]>([]);
   let folders = $state<ViewFolder[]>([]);
-  const inFolder = (id: number | null) => views.filter((v) => (v.folder_id ?? null) === id);
+  let places = $state<Placement[]>([]);
+  // Folders first, nested, then each folder's views; the views of no folder come last.
+  const tree = $derived(buildRows('view', folders, places, views, { placed: true }));
+  const firstLoose = $derived(tree.findIndex((r) => r.type === 'item' && r.depth === 0));
   let pinned = $state<Set<string>>(new Set());
   let loaded = $state(false);
   let creating = $state(false);
@@ -46,9 +50,10 @@
   let confirmingTpl = $state(false);
 
   async function load() {
-    const [list, pins, fs] = await Promise.all([api.views.list(), api.pins.listResolved(), api.folders.list()]);
+    const [list, pins, fs, pl] = await Promise.all([api.views.list(), api.pins.listResolved(), api.folders.list(), api.folders.items()]);
     views = list;
     folders = fs;
+    places = pl;
     pinned = new Set(pins.map((p) => p.route));
     loaded = true;
     [tpls, defaultId] = await Promise.all([templates().list(), defaultTemplateId()]);
@@ -120,16 +125,14 @@
       {#snippet action()}<Button variant="primary" icon="plus" onclick={() => (creating = true)}>New view</Button>{/snippet}
     </EmptyState>
   {:else}
-    {#each folders as f (f.id)}
-      <h2 class="section" data-folder-id={f.id}>{f.name}</h2>
-      <ul class="rows">
-        {#each inFolder(f.id) as v (v.id)}{@render viewRow(v)}{/each}
-      </ul>
+    {#each tree as r, i (r.type === 'folder' ? `f${r.folder.id}` : `v${r.item.id}`)}
+      {#if r.type === 'folder'}
+        <h2 class="section" data-folder-id={r.folder.id} style:margin-left={`calc(${r.depth} * var(--s-8))`}>{r.folder.name}</h2>
+      {:else}
+        {#if folders.length && i === firstLoose}<h2 class="section">No folder</h2>{/if}
+        <ul class="rows" style:margin-left={`calc(${r.depth} * var(--s-8))`}>{@render viewRow(r.item)}</ul>
+      {/if}
     {/each}
-    {#if folders.length && inFolder(null).length}<h2 class="section">No folder</h2>{/if}
-    <ul class="rows">
-      {#each inFolder(null) as v (v.id)}{@render viewRow(v)}{/each}
-    </ul>
   {/if}
 
   {#if tpls}

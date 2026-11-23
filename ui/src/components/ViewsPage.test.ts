@@ -34,13 +34,16 @@ describe('ViewsPage', () => {
   });
 
   it('groups_views_under_their_folder', async () => {
-    const mock = createMockApi({ ...fixtures, viewFolders: [{ id: 1, name: 'Work', position: 0 }] });
+    const mock = createMockApi({ ...fixtures, viewFolders: [{ id: 1, name: 'Work', position: 0, section: 'view', parent_id: null }, { id: 2, name: 'Sub', position: 1, section: 'view', parent_id: 1 }] });
     const id = fixtures.views![1].id;
-    await mock.views.move(id, 1);
+    await mock.folders.placeItem('view', id, 2, null);
     const { target } = await open(mock);
-    const heading = target.querySelector('[data-folder-id="1"]')!;
-    expect(heading.textContent).toBe('Work');
-    expect(heading.nextElementSibling!.querySelector(`[data-view-id="${id}"]`)).not.toBeNull();
+    const [outer, inner] = [target.querySelector<HTMLElement>('[data-folder-id="1"]')!, target.querySelector<HTMLElement>('[data-folder-id="2"]')!];
+    expect(outer.textContent).toBe('Work');
+    // the nested folder is indented one step more and holds the view
+    expect(outer.style.marginLeft).toContain('0 *');
+    expect(inner.style.marginLeft).toContain('1 *');
+    expect(inner.nextElementSibling!.querySelector(`[data-view-id="${id}"]`)).not.toBeNull();
     expect(target.textContent).toContain('No folder');
   });
 

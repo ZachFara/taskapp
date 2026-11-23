@@ -313,7 +313,7 @@ async fn restore_cycles(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let cycles: Vec<CycleRow> = read_yaml(&dir.join("cycles.yaml"))?;
     for c in cycles {
         sqlx::query(
-            "INSERT INTO cycles (number, name, start_date, end_date, icon, color) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO cycles (number, name, start_date, end_date, icon, color, folder_id, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(c.number)
         .bind(c.name)
@@ -321,6 +321,8 @@ async fn restore_cycles(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         .bind(c.end_date)
         .bind(c.icon)
         .bind(c.color)
+        .bind(c.folder_id)
+        .bind(c.position)
             .execute(&mut **tx)
             .await?;
     }
@@ -332,10 +334,10 @@ async fn restore_projects(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         let p: ProjectFile = read_yaml(&path)?;
         let id = sqlx::query(
             "INSERT INTO projects (slug, name, description, doc_link, start_date, target_date,
-               archived_at, created_at, icon, color, status_id, priority, properties)
+               archived_at, created_at, icon, color, status_id, priority, properties, folder_id, position)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                COALESCE((SELECT id FROM project_statuses WHERE name = ?),
-                        (SELECT id FROM project_statuses ORDER BY position, id LIMIT 1)), ?, ?)",
+                        (SELECT id FROM project_statuses ORDER BY position, id LIMIT 1)), ?, ?, ?, ?)",
         )
         .bind(&p.slug)
         .bind(p.name)
@@ -350,6 +352,8 @@ async fn restore_projects(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         .bind(p.status)
         .bind(p.priority)
         .bind(Value::Object(p.properties).to_string())
+        .bind(p.folder_id)
+        .bind(p.position)
         .execute(&mut **tx)
         .await?
         .last_insert_rowid();
@@ -421,10 +425,12 @@ async fn restore_views(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
 async fn restore_view_folders(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let folders: Vec<ViewFolderFile> = read_list(&dir.join("view_folders.yaml"))?;
     for f in folders {
-        sqlx::query("INSERT INTO view_folders (id, name, position) VALUES (?, ?, ?)")
+        sqlx::query("INSERT INTO view_folders (id, name, position, section, parent_id) VALUES (?, ?, ?, ?, ?)")
             .bind(f.id)
             .bind(f.name)
             .bind(f.position)
+            .bind(f.section)
+            .bind(f.parent_id)
             .execute(&mut **tx)
             .await?;
     }
@@ -488,13 +494,16 @@ async fn restore_import_log(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
 async fn restore_pins(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let pins: Vec<PinRow> = read_yaml(&dir.join("pins.yaml"))?;
     for p in pins {
-        sqlx::query("INSERT INTO pins (kind, target, title, position) VALUES (?, ?, ?, ?)")
-            .bind(p.kind)
-            .bind(p.target)
-            .bind(p.title)
-            .bind(p.position)
-            .execute(&mut **tx)
-            .await?;
+        sqlx::query(
+            "INSERT INTO pins (kind, target, title, position, folder_id) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(p.kind)
+        .bind(p.target)
+        .bind(p.title)
+        .bind(p.position)
+        .bind(p.folder_id)
+        .execute(&mut **tx)
+        .await?;
     }
     Ok(())
 }

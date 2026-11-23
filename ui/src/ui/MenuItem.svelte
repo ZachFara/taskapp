@@ -10,13 +10,14 @@
     shortcut,
     danger = false,
     disabled = false,
+    indent = 0,
     onSelect,
-  }: { label: string; icon?: string; shortcut?: string | string[]; danger?: boolean; disabled?: boolean; onSelect?: () => void } = $props();
+  }: { label: string; icon?: string; shortcut?: string | string[]; danger?: boolean; disabled?: boolean; indent?: number; onSelect?: () => void } = $props();
   // ContextMenu sets this so the same MenuItem works under both menus.
   const Item = getContext('cx-menu') === 'context' ? ContextMenu.Item : DropdownMenu.Item;
 </script>
 
-<Item class="cx-item" {disabled} {onSelect} data-danger={danger || undefined}>
+<Item class="cx-item" {disabled} {onSelect} data-danger={danger || undefined} style={indent ? `padding-left: calc(var(--s-4) + ${indent} * var(--s-5))` : undefined}>
   <span class="lead">{#if icon}<Icon name={icon} />{/if}</span>
   <span class="name">{label}</span>
   {#if shortcut}<Kbd keys={shortcut} />{/if}

@@ -26,12 +26,17 @@ const pick = async (row: string, item: RegExp) => {
   await vi.waitFor(() => menuItem(item).click());
   await settle();
 };
-const fire = (el: Element, type: string) => el.dispatchEvent(new Event(type, { bubbles: true, cancelable: true }));
+const fire = (el: Element, type: string, init: MouseEventInit = {}) => el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, ...init }));
 const row = (text: string) => [...document.querySelectorAll('.row')].find((r) => r.textContent?.includes(text))!;
-const dragOnto = (from: string, to: string) => {
-  fire(row(from), 'dragstart');
-  fire(row(to), 'drop');
+/** A pointer drag of one row onto another, `frac` of the way down the target (rows have no size in jsdom, so 20px is given). */
+const dragOnto = (from: string, to: string, frac = 0.5) => {
+  const target = row(to);
+  target.getBoundingClientRect = () => ({ top: 0, height: 20 }) as DOMRect;
+  fire(row(from), 'pointerdown', { clientX: 0, clientY: 0 });
+  fire(target, 'pointermove', { clientX: 20, clientY: 20 * frac });
+  fire(target, 'pointerup', { clientX: 20, clientY: 20 * frac });
 };
+const folder = (id: number, name: string, position = 0, parent_id: number | null = null, section: 'view' | 'pin' | 'project' | 'cycle' = 'view') => ({ id, name, position, section, parent_id });
 
 let mock: Api;
 let app: ReturnType<typeof mount>;
@@ -62,7 +67,7 @@ describe('Sidebar', () => {
     await api.pins.pin('Project', 'website', 'Home');
     await open(api);
     expect(names('[aria-label=Pinned]')).toEqual(['One', 'Home']);
-    dragOnto('Home', 'One');
+    dragOnto('Home', 'One', 0.1);
     await settle();
     expect(names('[aria-label=Pinned]')).toEqual(['Home', 'One']);
     expect((await api.pins.listResolved()).map((r) => r.label)).toEqual(['Home', 'One']);
@@ -80,21 +85,21 @@ describe('Sidebar', () => {
   it('reorder_views', async () => {
     await open();
     expect(names('[aria-label=Views]')).toEqual(['Alpha', 'Beta', 'Gamma']);
-    dragOnto('Gamma', 'Alpha');
+    dragOnto('Gamma', 'Alpha', 0.1);
     await settle();
     expect(names('[aria-label=Views]')).toEqual(['Gamma', 'Alpha', 'Beta']);
     expect((await mock.views.list()).map((v) => v.id)).toEqual([3, 1, 2]);
   });
 
-  it('reorder_with_failed_api_restores_old_order', async () => {
+  it('a refused move leaves the old order', async () => {
     const api = createMockApi(seed);
     await api.pins.pin('View', '1', 'One');
     await api.pins.pin('Project', 'website', 'Home');
-    api.pins.reorder = async () => {
+    api.folders.placeItem = async () => {
       throw { kind: 'Io', message: 'disk full' };
     };
     await open(api);
-    dragOnto('Home', 'One');
+    dragOnto('Home', 'One', 0.1);
     await settle();
     expect(names('[aria-label=Pinned]')).toEqual(['One', 'Home']);
     expect(document.querySelector('[role=alert]')?.textContent).toBe('disk full');
@@ -145,17 +150,20 @@ describe('Sidebar', () => {
 
 describe('Sidebar folders', () => {
   const withFolder = async () => {
-    const api = createMockApi({ ...seed, viewFolders: [{ id: 1, name: 'Work', position: 0 }], views: seed.views.map((v) => ({ ...v, folder_id: v.id === 2 ? 1 : null, template_id: null })) });
+    const api = createMockApi({ ...seed, viewFolders: [folder(1, 'Work')], views: seed.views.map((v) => ({ ...v, folder_id: v.id === 2 ? 1 : null, template_id: null })) });
     await open(api);
     return api;
   };
+  const folderOf = async (api: Api, name: string) => (await api.views.list()).find((v) => v.name === name)!.folder_id;
   afterEach(() => localStorage.clear());
 
   it('shows a folder with its views indented, loose views after it', async () => {
     await withFolder();
     expect(row('Work').textContent).toContain('1');
-    expect(row('Beta').classList.contains('nested')).toBe(true);
-    expect(row('Alpha').classList.contains('nested')).toBe(false);
+    expect(row('Beta').getAttribute('style')).toContain('--depth: 1');
+    expect(row('Alpha').getAttribute('style')).toContain('--depth: 0');
+    const order = [...document.querySelectorAll('[aria-label=Views] ul .row')].map((r) => r.textContent?.replace(/\d+\s*$/, '').trim());
+    expect(order).toEqual(['Work', 'Beta', 'Alpha', 'Gamma']);
   });
 
   it('collapses a folder and remembers it on this device', async () => {
@@ -169,14 +177,68 @@ describe('Sidebar folders', () => {
     expect(document.body.textContent).not.toContain('Beta');
   });
 
-  it('dropping a view on a folder moves it in, dropping on a loose view moves it out', async () => {
+  it('dragging a view onto a folder moves it in; between rows it reorders and takes the folder of that row', async () => {
     const api = await withFolder();
     dragOnto('Alpha', 'Work');
     await settle();
-    expect((await api.views.list()).find((v) => v.name === 'Alpha')!.folder_id).toBe(1);
-    dragOnto('Beta', 'Gamma');
+    expect(await folderOf(api, 'Alpha')).toBe(1);
+    expect(row('Work').getAttribute('data-into')).toBeNull(); // the highlight ends with the drag
+    dragOnto('Beta', 'Gamma', 0.9);
     await settle();
-    expect((await api.views.list()).find((v) => v.name === 'Beta')!.folder_id).toBeNull();
+    expect(await folderOf(api, 'Beta')).toBeNull();
+    expect(names('[aria-label=Views]')).toEqual(['Alpha', 'Gamma', 'Beta']);
+  });
+
+  it('the insertion line and the target folder show while dragging, and Esc puts everything back', async () => {
+    const api = await withFolder();
+    const [from, to] = [row('Alpha'), row('Gamma')];
+    to.getBoundingClientRect = () => ({ top: 0, height: 20 }) as DOMRect;
+    fire(from, 'pointerdown', { clientX: 0, clientY: 0 });
+    fire(to, 'pointermove', { clientX: 20, clientY: 18 });
+    await settle();
+    expect(to.getAttribute('data-line')).toBe('after');
+    expect(document.querySelector('.dnd-ghost')!.textContent).toBe('Alpha');
+    const f = row('Work');
+    f.getBoundingClientRect = () => ({ top: 0, height: 20 }) as DOMRect;
+    fire(f, 'pointermove', { clientX: 20, clientY: 10 });
+    await settle();
+    expect(f.getAttribute('data-into')).toBe('');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    fire(f, 'pointerup', { clientX: 20, clientY: 10 });
+    await settle();
+    expect(document.querySelector('.dnd-ghost')).toBeNull();
+    expect(await folderOf(api, 'Alpha')).toBeNull();
+  });
+
+  it('holding a view over a collapsed folder opens it', async () => {
+    await withFolder();
+    row('Work').querySelector<HTMLButtonElement>('button.folder')!.click();
+    await settle();
+    vi.useFakeTimers();
+    const f = row('Work');
+    f.getBoundingClientRect = () => ({ top: 0, height: 20 }) as DOMRect;
+    fire(row('Alpha'), 'pointerdown', { clientX: 0, clientY: 0 });
+    fire(f, 'pointermove', { clientX: 20, clientY: 10 });
+    vi.advanceTimersByTime(700);
+    vi.useRealTimers();
+    await settle();
+    expect(document.body.textContent).toContain('Beta');
+    fire(f, 'pointerup', { clientX: 20, clientY: 10 });
+    await settle();
+  });
+
+  it('a folder goes inside another folder, two levels down, and the third level is refused', async () => {
+    const api = createMockApi({ ...seed, viewFolders: [folder(1, 'A', 0), folder(2, 'B', 1), folder(3, 'C', 2), folder(4, 'D', 3)] });
+    await open(api);
+    dragOnto('B', 'A'); // A > B
+    await settle();
+    dragOnto('C', 'B'); // A > B > C
+    await settle();
+    expect((await api.folders.list()).map((f) => [f.name, f.parent_id])).toEqual([['A', null], ['B', 1], ['C', 2], ['D', null]]);
+    expect(row('C').getAttribute('style')).toContain('--depth: 2');
+    dragOnto('D', 'C'); // would be four deep: no target, nothing happens
+    await settle();
+    expect((await api.folders.list()).find((f) => f.name === 'D')!.parent_id).toBeNull();
   });
 
   it('deleting a folder keeps its views at the top level', async () => {
@@ -187,6 +249,47 @@ describe('Sidebar folders', () => {
     await remove(rowUi.dialog!.target);
     expect(await api.folders.list()).toEqual([]);
     expect((await api.views.list()).every((v) => v.folder_id === null)).toBe(true);
+  });
+
+  it('the Move to folder submenu lists the folders by depth, and moving a project uses it', async () => {
+    const api = createMockApi({ ...seed, viewFolders: [folder(1, 'Work', 0, null, 'project'), folder(2, 'Deep', 1, 1, 'project'), folder(3, 'Other', 2, null, 'view')] });
+    await open(api);
+    const name = fixtures.projects[0].name;
+    document.querySelector(`.rowactions[aria-label="${name}"]`)!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    flushSync();
+    await vi.waitFor(() => expect([...document.querySelectorAll('[role="menuitem"]')].some((e) => /Move to folder/.test(e.textContent ?? ''))).toBe(true));
+    const trigger = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((e) => /Move to folder/.test(e.textContent ?? ''))!;
+    trigger.focus();
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await vi.waitFor(() => expect([...document.querySelectorAll('[role="menuitem"]')].map((e) => e.textContent?.trim())).toContain('Deep'));
+    expect([...document.querySelectorAll('[role="menuitem"]')].map((e) => e.textContent?.trim())).toEqual(expect.arrayContaining(['Top level', 'Work', 'Deep', 'New folder…']));
+    expect([...document.querySelectorAll('[role="menuitem"]')].map((e) => e.textContent?.trim())).not.toContain('Other');
+    menuItem(/^Deep$/).click();
+    await settle();
+    expect((await api.folders.items()).find((p) => p.section === 'project' && p.id === fixtures.projects[0].id)!.folder_id).toBe(2);
+    expect(row(name).getAttribute('style')).toContain('--depth: 2');
+  });
+
+  it('a folder in Pinned and one in Projects work like the one in Views', async () => {
+    const api = createMockApi({ ...seed, viewFolders: [folder(1, 'Fav', 0, null, 'pin'), folder(2, 'Work', 1, null, 'project')] });
+    await api.pins.pin('View', '1', 'One');
+    await open(api);
+    dragOnto('One', 'Fav');
+    dragOnto(fixtures.projects[0].name, 'Work');
+    await settle();
+    const at = (await api.folders.items()).filter((p) => p.folder_id !== null).map((p) => [p.section, p.folder_id]);
+    expect(at).toEqual(expect.arrayContaining([['pin', 1], ['project', 2]]));
+  });
+
+  it('a section menu and right-click on its empty space make a folder in that section', async () => {
+    const api = await withFolder();
+    const blank = document.querySelector('[aria-label=Projects] .blank')!;
+    blank.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    flushSync();
+    await vi.waitFor(() => menuItem(/^New folder$/).click());
+    await settle();
+    expect((await api.folders.list()).map((f) => f.section)).toEqual(['view', 'project']);
+    expect(rowUi.dialog).toMatchObject({ mode: 'rename', target: { kind: 'folder' } });
   });
 });
 
