@@ -96,7 +96,7 @@
   .text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .lbl { margin-right: var(--s-2); }
   .muted { color: var(--muted); }
-  .with, .chips { display: inline-flex; align-items: center; gap: var(--s-3); min-width: 0; overflow: hidden; }
+  .with, .chips { display: flex; align-items: center; gap: var(--s-3); min-width: 0; overflow: hidden; }
   .with { color: var(--muted); }
   .check { display: inline-flex; color: var(--accent); }
   .url { display: inline-flex; color: var(--accent); }

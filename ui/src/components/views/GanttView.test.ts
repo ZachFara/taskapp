@@ -207,6 +207,16 @@ describe('GanttView', () => {
     expect(zoom()).toBe('Month');
   });
 
+  it('axis_labels_stay_clear_of_the_today_flag', async () => {
+    await show(chain(), { today: '2026-12-04' });
+    const today = parseFloat(document.querySelector<HTMLElement>('[data-testid="today"]')!.style.left);
+    const ticks = [...document.querySelectorAll<HTMLElement>('.axis .tick')];
+    const near = ticks.filter((t) => { const d = parseFloat(t.style.left) - today; return d > -56 && d < 28; });
+    expect(near.length).toBeGreaterThan(0);
+    for (const t of near) expect(t.textContent?.trim(), t.style.left).toBe('');
+    expect(ticks.some((t) => t.textContent?.trim())).toBe(true);
+  });
+
   it('today_marker_sits_on_its_day', async () => {
     await show(chain());
     // the axis starts 2026-11-28 (three days before the first bar), 14px a day: 4 days to 12-02

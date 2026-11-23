@@ -88,6 +88,8 @@
     untrack(load);
   });
 
+  // The Today flag sits on the axis; a label it would cover is left out (the tick line stays).
+  const flagCovers = (x: number) => x - xOf(today) > -56 && x - xOf(today) < 28;
   const toToday = () => {
     if (timeline) timeline.scrollLeft = Math.max(0, xOf(today) - timeline.clientWidth / 3);
   };
@@ -212,7 +214,7 @@
         <div class="axisrow">
           <div class="corner">{mode === 'projects' ? 'Projects' : 'Issues'}</div>
           <div class="axis">
-            {#each ticks as t (t)}<span class="tick" style="left:{xOf(t)}px">{tickLabel(t, zoom)}</span>{/each}
+            {#each ticks as t (t)}<span class="tick" style="left:{xOf(t)}px">{flagCovers(xOf(t)) ? '' : tickLabel(t, zoom)}</span>{/each}
             <span class="today-chip" style="left:{xOf(today)}px">Today</span>
           </div>
         </div>
@@ -358,7 +360,8 @@
   .bar[data-category='Started'] { background: var(--accent); }
   .bar[data-category='Completed'] { background: var(--stone); }
   .bar[data-category='Canceled'] { background: var(--border); opacity: 0.7; }
-  .bar.estimated { opacity: 0.6; background-image: repeating-linear-gradient(135deg, transparent 0 var(--s-3), var(--sheet) var(--s-3) var(--s-4)); }
+  /* An estimated bar keeps its category colour; thin sheet-coloured stripes mark it, so a one-day bar still reads. */
+  .bar.estimated { background-image: repeating-linear-gradient(135deg, transparent 0 var(--s-3), var(--sheet) var(--s-3) calc(var(--s-3) + 1px)); outline: 1px solid var(--control); outline-offset: -1px; }
   .bar.critical { background: var(--signal); }
   .bar.rollup { height: var(--s-4); top: var(--s-6); background: var(--ink); cursor: default; border-radius: 0; }
   .bar.group { height: var(--s-2); top: calc(var(--row-h-compact) - var(--s-4)); background: var(--band-count); cursor: default; border-radius: 0; }

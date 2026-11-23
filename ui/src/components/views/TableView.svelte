@@ -503,7 +503,7 @@
     font-size: var(--fs-md);
   }
   /* Header labels are quiet text on the sheet; the "+" stays in view at the right edge. */
-  .head :global(.btn) { border-color: transparent; background: transparent; padding: 0 var(--s-2); }
+  .head :global(.btn) { border-color: transparent; background: transparent; padding: 0 var(--s-2); font: inherit; letter-spacing: inherit; text-transform: inherit; }
   /* Key and Title stay put while the rest scrolls sideways; the "+" is the last column, never laid over one. */
   .add-col { width: var(--s-10); text-align: end; }
   .key-col, .key-head, .key-cell { width: calc(var(--s-10) * 2); min-width: calc(var(--s-10) * 2); box-sizing: border-box; }
@@ -537,7 +537,9 @@
     color: var(--muted);
     border-bottom: 1px solid var(--border);
     font-size: var(--fs-xs);
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     text-align: start;
     white-space: nowrap;
   }
@@ -601,7 +603,7 @@
     background: var(--active);
   }
   td[data-active] {
-    outline: 2px solid var(--focus);
+    outline: 2px solid var(--signal);
     outline-offset: -2px;
   }
   .band-row td {
