@@ -224,9 +224,7 @@ fn add_node(plan: &mut ImportPlan, n: &Value, as_points: bool) -> std::result::R
 fn add_relations(plan: &mut ImportPlan, id: &str, n: &Value) {
     for r in n["relations"]["nodes"].as_array().into_iter().flatten() {
         let kind = match r["type"].as_str() {
-            Some("blocks") => RelationKind::Blocks,
-            Some("duplicate") => RelationKind::Duplicate,
-            Some("related") => RelationKind::Related,
+            Some(t @ ("blocks" | "duplicate" | "related")) => RelationKind::new(t),
             other => {
                 plan.warnings
                     .push(format!("{id}: relation type {other:?} is not supported"));

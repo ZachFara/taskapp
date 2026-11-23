@@ -11,17 +11,27 @@
   let remote = $state('');
   let error = $state('');
   let result = $state('');
+  let behind = $state('');
+  let last = $state<{ at: string; changed: number; conflicts: string[] } | null>(null);
 
   onMount(async () => {
     enabled = ((await api.settings.get('export_enabled')) as boolean | null) === true;
     dir = ((await api.settings.get('export_dir')) as string | null) ?? '';
     remote = ((await api.settings.get('export_remote')) as string | null) ?? '';
+    last = (await api.settings.get('last_remote_sync')) as typeof last;
+    const state = (await api.sync.status()).export;
+    behind = typeof state === 'object' && 'Error' in state ? state.Error.message : '';
   });
 
   $effect(() => {
     const run = () => void save();
     addEventListener('command:settings.save', run);
-    return () => removeEventListener('command:settings.save', run);
+    const pullRun = () => void pull();
+    addEventListener('command:settings.export.pull', pullRun);
+    return () => {
+      removeEventListener('command:settings.save', run);
+      removeEventListener('command:settings.export.pull', pullRun);
+    };
   });
 
   async function save() {
@@ -45,6 +55,18 @@
       result = '';
       await api.export.now();
       result = 'Exported.';
+    } catch (e) {
+      error = (e as { message?: string }).message ?? String(e);
+    }
+  }
+
+  async function pull() {
+    error = '';
+    try {
+      result = '';
+      const out = await api.export.pull();
+      last = { at: new Date().toISOString(), changed: out.created, conflicts: out.warnings };
+      behind = '';
     } catch (e) {
       error = (e as { message?: string }).message ?? String(e);
     }
@@ -74,7 +96,14 @@
   <div class="st-actions">
     <Button type="submit" variant="primary">Save</Button>
     <Button onclick={exportNow}>Export now</Button>
+    {#if remote.trim()}<Button onclick={pull}>Pull and apply</Button>{/if}
     {#if result}<span class="st-hint">{result}</span>{/if}
-    {#if error}<p role="alert" class="st-error">{error}</p>{/if}
+    {#if error}<p role="alert" class="st-error">{error}</p>{:else if behind}<p role="alert" class="st-error">{behind}</p>{/if}
   </div>
+  {#if last}
+    <p class="st-hint" data-last-sync>
+      Last pull from the remote: {last.changed} {last.changed === 1 ? 'issue' : 'issues'} changed, {last.conflicts.length} {last.conflicts.length === 1 ? 'conflict' : 'conflicts'}.
+    </p>
+    {#each last.conflicts as c}<p class="st-hint">{c}</p>{/each}
+  {/if}
 </form>

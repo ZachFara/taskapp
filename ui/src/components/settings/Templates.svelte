@@ -9,7 +9,9 @@
   import Contour from '../../ui/Contour.svelte';
   import Dialog from '../../ui/Dialog.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
-  import EntityIcon from '../../ui/EntityIcon.svelte';
+  import RowActions from '../../ui/RowActions.svelte';
+  import { rowActs, rowUi } from '../../lib/rowUi.svelte';
+  import { patch } from '../../lib/rowActions';
   import IconColorPicker from '../pickers/IconColorPicker.svelte';
   import SectionHead from './SectionHead.svelte';
   import IconButton from '../../ui/IconButton.svelte';
@@ -185,11 +187,13 @@
       <ul class="list">
         {#each list as t (t.id)}
           <li>
-            <button class="row" aria-current={open && draft.id === t.id ? 'true' : undefined} onclick={() => choose(t)}>
-              <EntityIcon icon={t.icon} color={t.color} size={16} />
-              <span class="name">{t.name}</span>
-              <span class="slug">/{t.slug}</span>
-            </button>
+            <RowActions label={t.name} actions={rowActs({ kind: 'template', id: t.id, name: t.name })}>
+              <IconColorPicker label={`Icon and colour of ${t.name}`} value={{ icon: t.icon || null, color: t.color || null }} onchange={(v) => patch({ kind: 'template', id: t.id, name: t.name }, { icon: v.icon, color: v.color })} bind:open={() => rowUi.picking === `template:${t.id}`, (o) => (rowUi.picking = o ? `template:${t.id}` : null)} />
+              <button class="row grow" aria-current={open && draft.id === t.id ? 'true' : undefined} onclick={() => choose(t)}>
+                <span class="name">{t.name}</span>
+                <span class="slug">/{t.slug}</span>
+              </button>
+            </RowActions>
           </li>
         {/each}
       </ul>
@@ -285,7 +289,11 @@
 <style>
   .tpl { display: grid; grid-template-columns: minmax(14rem, 1fr) minmax(0, 2.2fr); gap: var(--s-6); align-items: start; }
   .rail { display: flex; flex-direction: column; gap: var(--s-2); }
-  .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-1); }
+  .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-1); width: 100%; }
+  /* Each row spans the list, so its actions sit at the list's right edge. */
+  .list > li { display: flex; }
+  /* The list is a narrow column: the row's actions take the slug's place while the row is hovered or focused. */
+  .list > li:hover .slug, .list > li:focus-within .slug { visibility: hidden; }
   .row {
     all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: var(--s-3);
     min-height: var(--row-h); padding: 0 var(--s-3); border-radius: var(--r-ctl); cursor: pointer;

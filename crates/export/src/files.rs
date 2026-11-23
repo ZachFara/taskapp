@@ -8,6 +8,38 @@ use serde_json::{Map, Value};
 use sqlx::FromRow;
 use taskapp_core::{Error, Result};
 
+/// Reads a regular file, never through a symlink: an export folder may come from a remote.
+///
+/// # Errors
+///
+/// `Invalid` when the path is a symlink or anything but a regular file.
+pub fn read_plain(path: &std::path::Path) -> Result<String> {
+    let meta = std::fs::symlink_metadata(path)?;
+    if !meta.is_file() {
+        return Err(Error::Invalid(format!(
+            "{} is not a regular file",
+            path.display()
+        )));
+    }
+    Ok(std::fs::read_to_string(path)?)
+}
+
+/// Whether `dir/sub` is a real directory. A missing one is `false`.
+///
+/// # Errors
+///
+/// `Invalid` when it exists and is a symlink or a file.
+pub fn plain_dir(dir: &std::path::Path, sub: &str) -> Result<bool> {
+    match std::fs::symlink_metadata(dir.join(sub)) {
+        Ok(m) if m.is_dir() => Ok(true),
+        Ok(_) => Err(Error::Invalid(format!(
+            "{sub} in the export is not a real directory"
+        ))),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e.into()),
+    }
+}
+
 pub const SECTION_COMMENTS: &str = "\n## Comments\n";
 
 pub fn invalid(e: impl std::fmt::Display) -> Error {
@@ -49,6 +81,17 @@ pub struct LabelRow {
     pub icon: Option<String>,
 }
 
+/// A custom relation kind; the built-in ones come with the database.
+#[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
+pub struct RelationKindRow {
+    pub id: String,
+    pub name: String,
+    pub forward: String,
+    pub reverse: String,
+    pub symmetric: bool,
+    pub position: i64,
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
 pub struct CycleRow {
     pub number: i64,
@@ -59,6 +102,27 @@ pub struct CycleRow {
     pub icon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+}
+
+/// `events/<id>.yaml`. Times are local wall-clock text; `issues` are keys.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct EventFile {
+    pub id: i64,
+    pub title: String,
+    pub starts_at: String,
+    pub ends_at: Option<String>,
+    pub all_day: bool,
+    pub place: Option<String>,
+    pub notes: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    pub archived: bool,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub issues: Vec<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
@@ -153,6 +217,15 @@ pub struct ImportLogRow {
     pub source: String,
     pub issue: i64,
     pub imported_at: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub source_deleted: bool,
+}
+
+/// One planned work block of an issue, listed in its frontmatter.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct WorkBlockRow {
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
 }
 
 /// Frontmatter of `issues/<KEY>.md`. Every reference is by name or key, never by database id.
@@ -184,8 +257,13 @@ pub struct IssueFront {
     pub related: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub duplicate: Vec<String>,
+    /// Every other kind, by kind id; blocks, related and duplicate keep their own keys so old exports read back.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub relations: std::collections::BTreeMap<String, Vec<String>>,
     #[serde(default, skip_serializing_if = "Map::is_empty")]
     pub properties: Map<String, Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub work_blocks: Vec<WorkBlockRow>,
 }
 
 /// The frontmatter, the description, and the comments of one issue file.

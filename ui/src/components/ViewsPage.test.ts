@@ -3,6 +3,8 @@ import { flushSync, mount, unmount } from 'svelte';
 import { setApi } from '../lib/api';
 import { createMockApi, fixtures } from '../lib/api.mock';
 import ViewsPage from './ViewsPage.svelte';
+import RowDialogHost from './RowDialogHost.svelte';
+import '../lib/commands';
 import { setTemplateApi, type TemplateApi, type ViewTemplate } from './display/templatesApi';
 
 let live: ReturnType<typeof mount> | null = null;
@@ -35,10 +37,11 @@ describe('ViewsPage', () => {
     const { mock, target } = await open();
     const del = vi.spyOn(mock.views, 'delete');
     const id = fixtures.views![0].id;
+    mount(RowDialogHost, { target: document.body });
     target.querySelector<HTMLElement>(`[data-view-id="${id}"]`)!.querySelector<HTMLButtonElement>('button[aria-label^="Delete"]')!.click();
     flushSync();
     expect(del).not.toHaveBeenCalled();
-    [...document.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === 'Delete view')!.click();
+    [...document.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === 'Delete')!.click();
     await vi.waitFor(() => expect(del).toHaveBeenCalledWith(id));
   });
 });

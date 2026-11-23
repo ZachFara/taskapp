@@ -12,15 +12,16 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::Value;
 use taskapp_core::{
     Applied, AppliedTemplate, Bar, BulkPatch, Change, ChangeSource, Comment, CommentId, Cycle,
-    CycleId, Db, Error, ImportPlan, Issue, IssueId, IssuePatch, IssueStats, IssueTemplate, Label,
-    LabelId, Measure, Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId, PinKind,
-    ProgressScope, ProgressSeries, Project, ProjectId, PropertyDef, PropertyKind, Relation,
-    Reschedule, ResolvedPin, Result, SavedView, SelectOption, Status, StatusCategory, StatusId,
-    SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewId,
-    ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks, bulk,
-    comments, cycles, history, import, insights, issues, labels, pins, projects, properties,
-    quickadd, relations, schedule, search, settings, statuses, templates, undo, view_templates,
-    views, workspace,
+    CycleId, Db, Error, Event, EventId, EventInput, ImportPlan, Issue, IssueId, IssuePatch,
+    IssueStats, IssueTemplate, Label, LabelId, Measure, Milestone, MilestoneId, NewIssue,
+    ParsedQuickAdd, Pin, PinId, PinKind, ProgressScope, ProgressSeries, Project, ProjectId,
+    PropertyDef, PropertyKind, Relation, RelationKind, RelationKindDef, Reschedule, ResolvedPin,
+    Result, SavedView, SelectOption, Status, StatusCategory, StatusId, SyncState, SyncStatus,
+    TemplateId, TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewId, ViewTemplate,
+    ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks, bulk, comments,
+    cycles, events, history, import, insights, issues, labels, pins, projects, properties,
+    quickadd, relation_kinds, relations, schedule, search, settings, statuses, templates, undo,
+    view_templates, views, workspace,
 };
 
 pub struct AppState {
@@ -202,6 +203,22 @@ macro_rules! with_commands {
             cycles_update(s, cycle: Cycle) -> Cycle { cycles::update(&s.db, cycle, ChangeSource::Ui).await }
             cycles_delete(s, id: CycleId) -> () { cycles::delete(&s.db, id, ChangeSource::Ui).await }
 
+            events_list(s, from: Option<NaiveDate>, to: Option<NaiveDate>) -> Vec<Event> {
+                events::list(&s.db, from, to).await
+            }
+            events_get(s, id: EventId) -> Event { events::get(&s.db, id).await }
+            events_create(s, input: EventInput) -> Event { events::create(&s.db, input, ChangeSource::Ui).await }
+            events_update(s, id: EventId, input: EventInput) -> Event {
+                events::update(&s.db, id, input, ChangeSource::Ui).await
+            }
+            events_delete(s, id: EventId) -> () { events::delete(&s.db, id, ChangeSource::Ui).await }
+            events_link(s, event: EventId, issue: IssueId) -> () {
+                events::link(&s.db, event, issue, ChangeSource::Ui).await
+            }
+            events_unlink(s, event: EventId, issue: IssueId) -> () {
+                events::unlink(&s.db, event, issue, ChangeSource::Ui).await
+            }
+
             labels_list(s) -> Vec<Label> { labels::list(&s.db).await }
             labels_create(s, name: String, color: String, icon: Option<String>) -> Label {
                 labels::create(&s.db, &name, &color, icon, ChangeSource::Ui).await
@@ -239,6 +256,14 @@ macro_rules! with_commands {
             relations_add(s, rel: Relation) -> () { relations::add(&s.db, rel, ChangeSource::Ui).await }
             relations_remove(s, rel: Relation) -> () { relations::remove(&s.db, rel, ChangeSource::Ui).await }
             relations_for_issue(s, id: IssueId) -> Vec<Relation> { relations::for_issue(&s.db, id).await }
+            relation_kinds_list(s) -> Vec<RelationKindDef> { relation_kinds::list(&s.db).await }
+            relation_kinds_create(s, name: String, forward: String, reverse: String, symmetric: bool) -> RelationKindDef {
+                relation_kinds::create(&s.db, &name, &forward, &reverse, symmetric, ChangeSource::Ui).await
+            }
+            relation_kinds_update(s, kind: RelationKindDef) -> RelationKindDef {
+                relation_kinds::update(&s.db, kind, ChangeSource::Ui).await
+            }
+            relation_kinds_delete(s, id: RelationKind) -> () { relation_kinds::delete(&s.db, &id, ChangeSource::Ui).await }
 
             schedule_bars(s, view_id: ViewId) -> Vec<Bar> {
                 Ok(view_issues(s, view_id).await?.iter().filter_map(schedule::bar_for).collect())

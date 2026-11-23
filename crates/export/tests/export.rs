@@ -10,7 +10,7 @@ use serde_json::json;
 use taskapp_core::{
     ChangeSource, Db, Due, IssueId, Layout, NewIssue, PinKind, PropertyDef, PropertyKind, Relation,
     RelationKind, StatusCategory, ViewDef, comments, cycles, issues, labels, pins, projects,
-    properties, relations, settings, views,
+    properties, relation_kinds, relations, settings, views,
 };
 use taskapp_export::{git, rebuild, write};
 
@@ -91,7 +91,7 @@ async fn link_and_comment(db: &Db, docs: IssueId, ship: IssueId) -> R {
         Relation {
             from: docs,
             to: ship,
-            kind: RelationKind::Blocks,
+            kind: RelationKind::new("blocks"),
         },
         SRC,
     )
@@ -522,6 +522,9 @@ async fn dump(
         "property_defs",
         "pins",
         "import_log",
+        "relation_kinds",
+        "events",
+        "work_blocks",
     ] {
         let cols: Vec<String> = sqlx::query_scalar(
             "SELECT name FROM pragma_table_info(?1) WHERE (name != 'id' OR ?1 = 'view_templates')
@@ -531,7 +534,7 @@ async fn dump(
         .fetch_all(&db.pool)
         .await?;
         let mut fields: Vec<String> = cols.iter().map(|c| format!("'{c}', \"{c}\"")).collect();
-        if t == "import_log" {
+        if t == "import_log" || t == "work_blocks" {
             fields.push("'issue', (SELECT number FROM issues WHERE id = issue_id)".into());
         }
         let sql = format!(
@@ -572,6 +575,12 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
            VALUES ('Bug report', 'bug-report', 'icon:bug', 'red', '{\"title_prefix\":\"Bug: \",\"fields\":{\"priority\":2},\"sub_issues\":[]}')",
         "INSERT INTO import_log (external_id, source, issue_id, imported_at)
            VALUES ('row-1', 'csv', (SELECT id FROM issues WHERE number = 1), '2026-01-02T03:04:05Z')",
+        "INSERT INTO events (id, title, starts_at, ends_at, all_day, place, notes, icon, color)
+           VALUES (4, 'Offsite', '2026-12-10 09:00:00', '2026-12-11 17:00:00', 0, 'Lisbon', 'Bring slides', 'icon:flag', 'teal')",
+        "INSERT INTO event_issues (event_id, issue_id) VALUES (4, (SELECT id FROM issues WHERE number = 1))",
+        "UPDATE import_log SET source_deleted = 1",
+        "INSERT INTO work_blocks (issue_id, start_utc, end_utc)
+           VALUES ((SELECT id FROM issues WHERE number = 2), '2026-01-05T09:00:00+00:00', '2026-01-05T10:30:00+00:00')",
     ] {
         sqlx::query(sql).execute(&db.pool).await?;
     }
@@ -582,6 +591,12 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
     for (table, rows) in &want {
         assert_eq!(&got[table], rows, "table {table}");
     }
+    let linked = sqlx::query_scalar::<_, i64>(
+        "SELECT i.number FROM event_issues e JOIN issues i ON i.id = e.issue_id WHERE e.event_id = 4",
+    )
+    .fetch_all(&rebuilt.pool)
+    .await?;
+    assert_eq!(linked, vec![1]);
     Ok(())
 }
 
@@ -600,6 +615,38 @@ async fn a_hand_edited_slug_or_prefix_still_cannot_become_a_file_name() -> R {
         let result = write::write_snapshot(&db, dir.path()).await;
         assert!(result.is_err(), "a hand-edited {what} was written");
         assert_eq!(fs::read_dir(dir.path())?.count(), 0, "nothing is written");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn custom_relation_kinds_and_their_relations_survive_export_and_rebuild() -> R {
+    let db = seeded().await?;
+    let k = relation_kinds::create(&db, "Mentors", "mentors", "mentored by", false, SRC).await?;
+    for (from, to, kind) in [(1, 2, k.id.0.as_str()), (2, 1, "follows")] {
+        relations::add(
+            &db,
+            Relation {
+                from: IssueId(from),
+                to: IssueId(to),
+                kind: RelationKind::new(kind),
+            },
+            SRC,
+        )
+        .await?;
+    }
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    assert_eq!(
+        relation_kinds::list(&rebuilt).await?,
+        relation_kinds::list(&db).await?
+    );
+    for id in [1, 2] {
+        assert_eq!(
+            relations::for_issue(&rebuilt, IssueId(id)).await?,
+            relations::for_issue(&db, IssueId(id)).await?
+        );
     }
     Ok(())
 }

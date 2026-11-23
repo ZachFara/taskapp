@@ -7,6 +7,8 @@ import PinnedPage from '../components/PinnedPage.svelte';
 import ProjectPage from '../components/ProjectPage.svelte';
 import ProjectsPage from '../components/ProjectsPage.svelte';
 import ViewsPage from '../components/ViewsPage.svelte';
+import EventPage from '../components/events/EventPage.svelte';
+import EventsPage from '../components/events/EventsPage.svelte';
 import Settings from '../components/settings/Settings.svelte';
 import GanttView from '../components/views/GanttView.svelte';
 import ViewPage from './ViewPage.svelte';
@@ -21,6 +23,8 @@ export const routes: { pattern: string; component: Component }[] = [
   { pattern: '/projects/timeline', component: GanttView },
   { pattern: '/pinned', component: PinnedPage },
   { pattern: '/cycles', component: CyclesPage },
+  { pattern: '/events', component: EventsPage },
+  { pattern: '/event/:id', component: EventPage },
   { pattern: '/settings/:section', component: Settings },
   { pattern: '/design', component: DesignGallery },
   { pattern: '/inbox', component: InboxPage },

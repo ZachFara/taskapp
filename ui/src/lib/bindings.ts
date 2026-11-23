@@ -284,6 +284,55 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	eventsList: (from: string | null, to: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Event[]>("events_list", { from, to }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	eventsGet: (id: EventId, options?: InvokeOptions) => __TAURI_INVOKE<Event>("events_get", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	eventsCreate: (input: EventInput, options?: InvokeOptions) => __TAURI_INVOKE<Event>("events_create", { input }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	eventsUpdate: (id: EventId, input: EventInput, options?: InvokeOptions) => __TAURI_INVOKE<Event>("events_update", { id, input }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	eventsDelete: (id: EventId, options?: InvokeOptions) => __TAURI_INVOKE<null>("events_delete", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	eventsLink: (event: EventId, issue: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<null>("events_link", { event, issue }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	eventsUnlink: (event: EventId, issue: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<null>("events_unlink", { event, issue }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	labelsList: (options?: InvokeOptions) => __TAURI_INVOKE<Label[]>("labels_list", undefined, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -404,6 +453,34 @@ export const commands = {
 	 * As that command.
 	 */
 	relationsForIssue: (id: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<Relation[]>("relations_for_issue", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	relationKindsList: (options?: InvokeOptions) => __TAURI_INVOKE<RelationKindDef[]>("relation_kinds_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	relationKindsCreate: (name: string, forward: string, reverse: string, symmetric: boolean, options?: InvokeOptions) => __TAURI_INVOKE<RelationKindDef>("relation_kinds_create", { name, forward, reverse, symmetric }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	relationKindsUpdate: (kind: RelationKindDef, options?: InvokeOptions) => __TAURI_INVOKE<RelationKindDef>("relation_kinds_update", { kind }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	relationKindsDelete: (id: RelationKind, options?: InvokeOptions) => __TAURI_INVOKE<null>("relation_kinds_delete", { id }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -712,6 +789,15 @@ export const commands = {
 	 *  Fails when no export directory is set, or when writing or git fails.
 	 */
 	exportNow: (options?: InvokeOptions) => __TAURI_INVOKE<null>("export_now", undefined, options),
+	/**
+	 *  Fast-forwards the export folder to the remote and applies the incoming issues as one undoable step,
+	 *  then writes the export again so both sides agree. `created` counts issues created or changed;
+	 *  `warnings` are conflicts, kept so Settings can show them.
+	 * 
+	 *  # Errors
+	 *  Fails when no export directory or remote is set, the histories diverged, or git fails.
+	 */
+	exportPull: (options?: InvokeOptions) => __TAURI_INVOKE<Applied>("export_pull", undefined, options),
 };
 
 /* Types */
@@ -798,6 +884,36 @@ export type ErrorPayload = {
 	message: string,
 };
 
+/**  Times are local wall-clock (no zone); an all-day event keeps midnight and the UI ignores the time. */
+export type Event = {
+	id: EventId,
+	title: string,
+	starts_at: string,
+	ends_at: string | null,
+	all_day: boolean,
+	place: string | null,
+	notes: string,
+	icon: string | null,
+	color: string | null,
+	archived: boolean,
+	issue_ids: IssueId[],
+};
+
+export type EventId = number;
+
+/**  What create and update take: everything on [`Event`] except the id and the links. */
+export type EventInput = {
+	title: string,
+	starts_at: string,
+	ends_at: string | null,
+	all_day: boolean,
+	place: string | null,
+	notes: string,
+	icon: string | null,
+	color: string | null,
+	archived: boolean,
+};
+
 export type FieldRef = ({ Fixed: FixedField }) & { Property?: never } | ({ Property: string }) & { Fixed?: never };
 
 export type Filter = ({ And: Filter[] }) & { Cond?: never; Not?: never; Or?: never } | ({ Or: Filter[] }) & { And?: never; Cond?: never; Not?: never } | ({ Not: Filter }) & { And?: never; Cond?: never; Or?: never } | ({ Cond: {
@@ -806,7 +922,9 @@ export type Filter = ({ And: Filter[] }) & { Cond?: never; Not?: never; Or?: nev
 	value: Value,
 } }) & { And?: never; Not?: never; Or?: never };
 
-export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "Points" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount";
+export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "Points" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount" | 
+/**  Filter only: the issue has a relation of the given kind id(s), on either end. */
+"RelationKind";
 
 /**
  *  Everything an import would create. The lists of statuses, labels, projects, cycles and property
@@ -1050,7 +1168,19 @@ export type Relation = {
 	kind: RelationKind,
 };
 
-export type RelationKind = "Blocks" | "Related" | "Duplicate";
+/**  The id of a row in `relation_kinds`: "blocks", "related", "duplicate", or any other kind's slug. */
+export type RelationKind = string;
+
+/**  A kind of relation: `forward` reads from the `from` issue ("blocks"), `reverse` from the `to` issue ("blocked by"). */
+export type RelationKindDef = {
+	id: RelationKind,
+	name: string,
+	forward: string,
+	reverse: string,
+	symmetric: boolean,
+	built_in: boolean,
+	position: number,
+};
 
 export type Reschedule = {
 	issue_id: IssueId,

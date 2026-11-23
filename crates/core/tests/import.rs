@@ -261,7 +261,7 @@ async fn linear_fixture_maps_states_labels_relations_and_sub_issues() -> R {
     assert_eq!(plan.labels, ["bug"]);
     assert_eq!(plan.projects, ["Roadmap"]);
     assert_eq!(plan.cycles.len(), 1);
-    assert_eq!(plan.relations[0].kind, RelationKind::Blocks);
+    assert_eq!(plan.relations[0].kind, RelationKind::new("blocks"));
     assert_eq!(plan.issues[1].parent.as_deref(), Some("ENG-1"));
     assert_eq!(plan.issues[0].estimate_minutes, Some(180));
     apply(&db, &plan).await?;

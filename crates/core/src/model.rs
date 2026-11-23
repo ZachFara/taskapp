@@ -1,6 +1,6 @@
 //! Every type shared across crates. Ids and enums derive `Copy`/`Eq`/`Hash` where cheap, for use as map keys.
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 
@@ -22,7 +22,8 @@ ids!(
     CommentId,
     WorkBlockId,
     PinId,
-    TemplateId
+    TemplateId,
+    EventId
 );
 
 /// A patch field that can also be cleared: absent is `None`, set to null is `Some(None)`.
@@ -79,11 +80,28 @@ pub enum PropertyKind {
     NoteLink,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
-pub enum RelationKind {
-    Blocks,
-    Related,
-    Duplicate,
+/// The id of a row in `relation_kinds`: "blocks", "related", "duplicate", or any other kind's slug.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(transparent)]
+pub struct RelationKind(pub String);
+
+impl RelationKind {
+    #[must_use]
+    pub fn new(id: &str) -> Self {
+        Self(id.to_owned())
+    }
+}
+
+/// A kind of relation: `forward` reads from the `from` issue ("blocks"), `reverse` from the `to` issue ("blocked by").
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct RelationKindDef {
+    pub id: RelationKind,
+    pub name: String,
+    pub forward: String,
+    pub reverse: String,
+    pub symmetric: bool,
+    pub built_in: bool,
+    pub position: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -239,6 +257,36 @@ pub struct Cycle {
     pub color: Option<String>,
 }
 
+/// Times are local wall-clock (no zone); an all-day event keeps midnight and the UI ignores the time.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct Event {
+    pub id: EventId,
+    pub title: String,
+    pub starts_at: NaiveDateTime,
+    pub ends_at: Option<NaiveDateTime>,
+    pub all_day: bool,
+    pub place: Option<String>,
+    pub notes: String,
+    pub icon: Option<String>,
+    pub color: Option<String>,
+    pub archived: bool,
+    pub issue_ids: Vec<IssueId>,
+}
+
+/// What create and update take: everything on [`Event`] except the id and the links.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct EventInput {
+    pub title: String,
+    pub starts_at: NaiveDateTime,
+    pub ends_at: Option<NaiveDateTime>,
+    pub all_day: bool,
+    pub place: Option<String>,
+    pub notes: String,
+    pub icon: Option<String>,
+    pub color: Option<String>,
+    pub archived: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct Label {
     pub id: LabelId,
@@ -353,6 +401,8 @@ pub enum FixedField {
     SubIssueProgress,
     RelationCount,
     CommentCount,
+    /// Filter only: the issue has a relation of the given kind id(s), on either end.
+    RelationKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]

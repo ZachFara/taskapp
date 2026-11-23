@@ -15,6 +15,7 @@ const call = (name: string, cmd: string, args: Record<string, unknown> = {}): Ca
 const importPlan = (external_id: string, title: string, status: string | null = null) => ({
   source: 'csv', issues: [{ external_id, title, description: '', status, priority: 0, project: null, labels: [], start_date: null, due_date: null, estimate_minutes: null, properties: {}, parent: null, cycle: null }],
 });
+const ev = (title: string, starts_at: string, extra: Record<string, unknown> = {}) => ({ title, starts_at, ends_at: null, all_day: false, place: null, notes: '', icon: null, color: null, archived: false, ...extra });
 const tpl = (name: string, slug: string, body: Record<string, unknown>) => ({ name, slug, icon: null, color: null, body });
 
 const zoned = def({ filter: cond(prop('zone'), 'Eq', 'a'), sorts: [{ field: prop('zone'), descending: false }], group_by: prop('zone'), columns: [prop('zone'), fixed('Priority')], card_fields: [prop('zone')] });
@@ -436,4 +437,53 @@ export const cases: Case[] = [
   call('properties: scope an unknown def is NotFound', 'properties_set_scope', { key: 'nope', project: null }),
   call('undo: quick add is labelled like a create', 'issues_create_from_quickadd', { input: 'Label me p2' }),
   call('undo: the quick add step label', 'history_undo_status'),
+
+  // Relation kinds are data: built-ins, custom kinds, and the rules around them.
+  call('kinds: the built-in six', 'relation_kinds_list'),
+  call('kinds: create', 'relation_kinds_create', { name: 'Mentors', forward: 'mentors', reverse: 'mentored by', symmetric: false }),
+  call('kinds: a name already taken is Conflict', 'relation_kinds_create', { name: 'MENTORS', forward: 'x', reverse: 'y', symmetric: false }),
+  call('kinds: an empty name is Invalid', 'relation_kinds_create', { name: ' ', forward: 'x', reverse: 'y', symmetric: false }),
+  call('kinds: a symmetric kind needs no reverse label', 'relation_kinds_create', { name: 'Pairs with', forward: 'pairs with', reverse: '', symmetric: true }),
+  call('kinds: relate with a custom kind by its name', 'relations_add', { rel: { from: 2, to: 3, kind: 'Mentors' } }),
+  call('kinds: relate with a built-in kind by its name', 'relations_add', { rel: { from: 3, to: 2, kind: 'caused by' } }),
+  call('kinds: an unknown kind is Invalid', 'relations_add', { rel: { from: 2, to: 3, kind: 'nope' } }),
+  call('kinds: relations carry the stored ids', 'relations_for_issue', { id: 2 }),
+  filter('kinds: filter by kind In', cond(fixed('RelationKind'), 'In', ['mentors', 'part_of'])),
+  filter('kinds: filter by kind IsEmpty', cond(fixed('RelationKind'), 'IsEmpty')),
+  call('kinds: a kind in use cannot be deleted', 'relation_kinds_delete', { id: 'mentors' }),
+  call('kinds: a built-in cannot be deleted', 'relation_kinds_delete', { id: 'blocks' }),
+  call('kinds: a built-in cannot be changed', 'relation_kinds_update', { kind: { id: 'blocks', name: 'Stops', forward: 'stops', reverse: 'stopped by', symmetric: false, built_in: true, position: 0 } }),
+  call('kinds: rename keeps the relations', 'relation_kinds_update', { kind: { id: 'mentors', name: 'Coaches', forward: 'coaches', reverse: 'coached by', symmetric: false, built_in: false, position: 6 } }),
+  call('kinds: renaming to a taken name is Conflict', 'relation_kinds_update', { kind: { id: 'mentors', name: 'blocks', forward: 'coaches', reverse: 'coached by', symmetric: false, built_in: false, position: 6 } }),
+  call('kinds: an unknown kind is NotFound', 'relation_kinds_delete', { id: 'nope' }),
+  call('kinds: unrelate', 'relations_remove', { rel: { from: 2, to: 3, kind: 'mentors' } }),
+  call('kinds: delete', 'relation_kinds_delete', { id: 'mentors' }),
+  call('kinds: the delete step label', 'history_undo_status'),
+  call('kinds: undo brings it back', 'history_undo'),
+  call('kinds: the list after undo', 'relation_kinds_list'),
+
+  // Events
+  call('events: create', 'events_create', { input: ev('Planning', '2026-12-10T09:00:00') }),
+  call('events: multi-day with a look', 'events_create', { input: ev('Offsite', '2026-12-12T00:00:00', { ends_at: '2026-12-14T00:00:00', all_day: true, place: 'Lisbon', icon: 'icon:flag', color: 'teal' }) }),
+  call('events: empty title is Invalid', 'events_create', { input: ev(' ', '2026-12-10T09:00:00') }),
+  call('events: end before start is Invalid', 'events_create', { input: ev('Bad', '2026-12-10T09:00:00', { ends_at: '2026-12-09T09:00:00' }) }),
+  call('events: bad color is Invalid', 'events_create', { input: ev('Bad', '2026-12-10T09:00:00', { color: 'mauve' }) }),
+  call('events: list all', 'events_list', { from: null, to: null }),
+  call('events: a multi-day event shows on its middle day', 'events_list', { from: '2026-12-13', to: '2026-12-13' }),
+  call('events: list from a later day', 'events_list', { from: '2026-12-11', to: null }),
+  call('events: link an issue', 'events_link', { event: 1, issue: 1 }),
+  call('events: linking twice is fine', 'events_link', { event: 1, issue: 1 }),
+  call('events: link an unknown issue is NotFound', 'events_link', { event: 1, issue: 999 }),
+  call('events: link to an unknown event is NotFound', 'events_link', { event: 99, issue: 1 }),
+  call('events: get carries its issue ids', 'events_get', { id: 1 }),
+  call('events: update keeps the links', 'events_update', { id: 1, input: ev('Planning 2', '2026-12-10T10:30:00', { place: 'Room 4' }) }),
+  call('events: update an unknown event is NotFound', 'events_update', { id: 99, input: ev('x', '2026-12-10T10:30:00') }),
+  call('events: unlink', 'events_unlink', { event: 1, issue: 1 }),
+  call('events: unlinking twice is fine', 'events_unlink', { event: 1, issue: 1 }),
+  call('events: link again before delete', 'events_link', { event: 1, issue: 2 }),
+  call('events: delete', 'events_delete', { id: 1 }),
+  call('events: get after delete is NotFound', 'events_get', { id: 1 }),
+  call('events: delete is one undo step', 'history_undo_status'),
+  call('events: undo the delete', 'history_undo'),
+  call('events: the links came back', 'events_get', { id: 1 }),
 ];

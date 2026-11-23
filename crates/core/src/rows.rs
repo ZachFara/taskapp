@@ -15,6 +15,7 @@ pub(crate) const TABLES: &[&str] = &[
     "cycles",
     "comments",
     "property_defs",
+    "relation_kinds",
     "relations",
     "views",
     "view_templates",
@@ -23,6 +24,8 @@ pub(crate) const TABLES: &[&str] = &[
     "work_blocks",
     "settings",
     "import_log",
+    "events",
+    "event_issues",
 ];
 
 pub(crate) const ENTITY_PREFIX: &str = "row:";

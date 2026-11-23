@@ -10,6 +10,10 @@
   import EmptyState from '../ui/EmptyState.svelte';
   import EntityIcon from '../ui/EntityIcon.svelte';
   import ListRow from '../ui/ListRow.svelte';
+  import RowActions from '../ui/RowActions.svelte';
+  import { rowActs, rowUi } from '../lib/rowUi.svelte';
+  import { patch } from '../lib/rowActions';
+  import IconColorPicker from './pickers/IconColorPicker.svelte';
   import IconButton from '../ui/IconButton.svelte';
   import PageHeader from '../ui/PageHeader.svelte';
   import Pill from '../ui/Pill.svelte';
@@ -26,8 +30,6 @@
   let views = $state<SavedView[]>([]);
   let pinned = $state<Set<string>>(new Set());
   let loaded = $state(false);
-  let doomed = $state<SavedView | null>(null);
-  let confirming = $state(false);
   let creating = $state(false);
 
   // Templates are null until the backend exposes them; then the section is hidden.
@@ -47,13 +49,6 @@
     pinned = new Set(pins.map((p) => p.route));
     loaded = true;
     [tpls, defaultId] = await Promise.all([templates().list(), defaultTemplateId()]);
-  }
-
-  async function remove() {
-    if (!doomed) return;
-    await api.views.delete(doomed.id);
-    confirming = false;
-    await load();
   }
 
   function openEdit(t: ViewTemplate, withLayout: boolean) {
@@ -87,7 +82,11 @@
     // The command menu's "New view" lands here from another route (see defs/create/view.new.ts).
     const open = () => (creating = true);
     addEventListener('command:view.new', open);
-    return () => removeEventListener('command:view.new', open);
+    addEventListener('rows:changed', load);
+    return () => {
+      removeEventListener('command:view.new', open);
+      removeEventListener('rows:changed', load);
+    };
   });
 </script>
 
@@ -106,13 +105,16 @@
     <ul class="rows">
       {#each views as v (v.id)}
         <li class="row" data-view-id={v.id}>
-          <ListRow onpick={() => navigate(`/view/${v.id}`)}>
-            <EntityIcon icon={v.icon ?? 'icon:layers'} color={v.color} />
-            <span class="name">{v.name}</span>
-            <Pill>{layoutName(v.def.layout)}</Pill>
-            {#if pinned.has(`/view/${v.id}`)}<Pill>Pinned</Pill>{/if}
-          </ListRow>
-          <div class="tools"><IconButton icon="trash" label={`Delete ${v.name}`} onclick={() => ((doomed = v), (confirming = true))} /></div>
+          <RowActions label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, pinned.has(`/view/${v.id}`))}>
+            <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? 'icon:layers', color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
+            <span class="grow">
+              <ListRow onpick={() => navigate(`/view/${v.id}`)}>
+                <span class="name">{v.name}</span>
+                <Pill>{layoutName(v.def.layout)}</Pill>
+                {#if pinned.has(`/view/${v.id}`)}<Pill>Pinned</Pill>{/if}
+              </ListRow>
+            </span>
+          </RowActions>
         </li>
       {/each}
     </ul>
@@ -147,12 +149,6 @@
 
 <NewViewDialog bind:open={creating} />
 
-<Dialog bind:open={confirming} title="Delete view?" description={doomed ? `"${doomed.name}" goes away. Its issues stay.` : undefined}>
-  {#snippet actions()}
-    <Button variant="quiet" onclick={() => (confirming = false)}>Cancel</Button>
-    <Button variant="danger" onclick={remove}>Delete view</Button>
-  {/snippet}
-</Dialog>
 
 <Dialog bind:open={editOpen} title={editLayout ? 'Edit template' : 'Rename template'}>
   <div class="form">

@@ -7,6 +7,7 @@
   import Dialog from '../ui/Dialog.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import IconButton from '../ui/IconButton.svelte';
+  import IconColorPicker from './pickers/IconColorPicker.svelte';
   import PageHeader from '../ui/PageHeader.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
   import Tabs from '../ui/Tabs.svelte';
@@ -33,6 +34,7 @@
   let renaming = $state(false);
   let confirming = $state(false);
   let insights = $state(false);
+  let iconOpen = $state(false);
 
   const pinned = $derived(pins.find((p) => p.pin.kind === 'Project' && p.pin.target === slug));
   // Only Obsidian and https links get a button; anything else (javascript:, http:, file:) is dropped.
@@ -68,6 +70,12 @@
     pins = await api.pins.listResolved();
   }
 
+  async function changeLook(c: { icon: string | null; color: string | null }) {
+    if (!project) return;
+    await api.projects.update({ ...project, icon: c.icon, color: c.color });
+    await reload(slug);
+  }
+
   async function archive() {
     if (!project) return;
     confirming = false;
@@ -85,6 +93,8 @@
     const pin = () => void togglePin();
     const ask = () => (confirming = true);
     const panel = () => (insights = !insights);
+    const icon = () => (iconOpen = true);
+    addEventListener('command:icon.change', icon);
     const rename = () => (renaming = true);
     addEventListener('command:project.rename', rename);
     addEventListener('command:project.pin', pin);
@@ -95,6 +105,7 @@
       removeEventListener('command:project.pin', pin);
       removeEventListener('command:project.archive', ask);
       removeEventListener('command:insights.toggle', panel);
+      removeEventListener('command:icon.change', icon);
     };
   });
 </script>
@@ -110,6 +121,7 @@
 {:else}
   <div class="page">
     <PageHeader title={crumb} icon={project.icon ?? 'icon:project'} color={project.color}>
+      {#snippet iconEdit()}<IconColorPicker label={`Icon and colour of ${project!.name}`} value={{ icon: project!.icon, color: project!.color }} onchange={changeLook} bind:open={iconOpen} />{/snippet}
       {#snippet actions()}
         {#if docHref}
           <Button icon="link" tooltip={{ label: 'Open the project doc' }} onclick={() => openExternal(docHref)}><span data-testid="open-obsidian">Open doc</span></Button>

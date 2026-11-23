@@ -46,6 +46,13 @@ describe('Points in the Display panel', () => {
   it('is offered as a hidden field', async () => {
     expect((await panel('both')).querySelector('[data-section="Hidden"] [data-field="F:Points"]')).not.toBeNull();
   });
+  it('stays in the saved columns while its field is off', async () => {
+    const onchange = vi.fn();
+    const t = await render(DisplayPanel, { def: def({ columns: [{ Fixed: 'Status' }, { Fixed: 'Points' }] }), onchange }, '[data-field="F:Status"]', 'none');
+    (t.querySelector('[data-field="F:Status"] input[type="checkbox"], [data-field="F:Status"] [role="switch"]') as HTMLElement).click();
+    flushSync();
+    expect(onchange).toHaveBeenCalledWith({ columns: [{ Fixed: 'Points' }] });
+  });
   it.each(['none', 'time'])('is not offered when estimation is %s', async (e) => {
     expect((await panel(e)).querySelector('[data-field="F:Points"]')).toBeNull();
   });

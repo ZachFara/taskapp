@@ -74,3 +74,8 @@ h1, h2, h3, h4, h5, h6, p { margin: 0; }
 .md a.chip { display: inline-flex; align-items: center; gap: var(--s-2); max-width: 100%; padding: 0 var(--s-2); border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--raised); color: var(--ink); text-decoration: none; vertical-align: baseline; }
 .md a.chip:hover { background: var(--active); }
 .md a.chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Portaled layers (menus, popovers, tooltips, dialogs) sit outside the app root, so they take the interface zoom here.
+   bits-ui measures the unzoomed wrapper, so the heights it allows and the anchor widths it sets are divided by the zoom. */
+.cx-surface, .cx-tip, .cx-dialog { zoom: var(--ui-zoom, 1); }
+.cx-surface { max-height: calc(var(--bits-floating-available-height, 100vh) / var(--ui-zoom, 1)); overflow: auto; }

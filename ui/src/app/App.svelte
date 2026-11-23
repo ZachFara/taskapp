@@ -64,7 +64,7 @@
     if (f !== null && untrack(() => selectedIssueId.value) !== null) selectedIssueId.value = f;
   });
 
-  const LABELS: Record<string, string> = { my: 'My issues', inbox: 'Inbox', pinned: 'Pinned', cycles: 'Cycles', projects: 'Projects', views: 'Views', settings: 'Settings', design: 'Design' };
+  const LABELS: Record<string, string> = { my: 'My issues', inbox: 'Inbox', pinned: 'Pinned', cycles: 'Cycles', events: 'Events', event: 'Events', projects: 'Projects', views: 'Views', settings: 'Settings', design: 'Design' };
   const crumb = $derived.by(() => {
     const [a, b] = path.split('/').slice(1);
     if (!a) return ['Pinned'];

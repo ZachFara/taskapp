@@ -5174,6 +5174,7 @@ dependencies = [
  "serde",
  "serde_json",
  "taskapp-core",
+ "taskapp-export",
  "tempfile",
  "tokio",
 ]

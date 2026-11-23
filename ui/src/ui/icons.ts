@@ -42,6 +42,7 @@ export const ICONS: Record<string, string> = {
   link: `<path d="M6.8 9.2a2.6 2.6 0 0 0 3.7 0l2-2a2.6 2.6 0 0 0-3.7-3.7l-.6.6M9.2 6.8a2.6 2.6 0 0 0-3.7 0l-2 2a2.6 2.6 0 0 0 3.7 3.7l.6-.6"/>`,
   // actions
   plus: `<path d="M8 3v10M3 8h10"/>`,
+  minus: `<path d="M3 8h10"/>`,
   close: `<path d="M4 4l8 8M12 4l-8 8"/>`,
   check: `<path d="M3.5 8.5l3 3 6-7"/>`,
   more: `<path d="${dot(3.5, 8)}${dot(8, 8)}${dot(12.5, 8)}" stroke-width="2.2"/>`,

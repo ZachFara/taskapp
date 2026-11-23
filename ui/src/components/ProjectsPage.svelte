@@ -5,7 +5,10 @@
   import Button from '../ui/Button.svelte';
   import Dialog from '../ui/Dialog.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
-  import EntityIcon from '../ui/EntityIcon.svelte';
+  import RowActions from '../ui/RowActions.svelte';
+  import IconColorPicker from './pickers/IconColorPicker.svelte';
+  import { rowActs, rowUi } from '../lib/rowUi.svelte';
+  import { patch } from '../lib/rowActions';
   import { navigate } from '../app/routes';
   import { dayText } from './views/dates';
   import PageHeader from '../ui/PageHeader.svelte';
@@ -15,6 +18,8 @@
   type Row = Project & { done: number; total: number };
   let rows = $state<Row[]>([]);
   let loaded = $state(false);
+  // Slugs of pinned projects.
+  let pinned = $state<Set<string>>(new Set());
   let creating = $state(false);
   let name = $state('');
 
@@ -28,6 +33,7 @@
     const list = await api.projects.list();
     const progress = await Promise.all(list.map((p) => api.projects.progress(p.id)));
     rows = list.map((p, i) => ({ ...p, done: progress[i][0], total: progress[i][1] }));
+    pinned = new Set((await api.pins.listResolved()).filter((r) => r.pin.kind === 'Project').map((r) => r.pin.target));
     loaded = true;
   }
 
@@ -42,7 +48,11 @@
     await load();
   }
 
-  onMount(load);
+  onMount(() => {
+    void load();
+    addEventListener('rows:changed', load);
+    return () => removeEventListener('rows:changed', load);
+  });
 </script>
 
 <PageHeader title="Projects" icon="icon:project">
@@ -67,7 +77,14 @@
       <tbody>
         {#each rows as p (p.id)}
           <tr data-slug={p.slug} onclick={() => navigate(`/project/${p.slug}`)}>
-            <td><span class="name"><EntityIcon icon={p.icon} color={p.color} /> {p.name}</span></td>
+            <td>
+              <div role="presentation" onclick={(e) => e.stopPropagation()}>
+                <RowActions label={p.name} actions={rowActs({ kind: 'project', id: p.id, name: p.name }, pinned.has(p.slug))}>
+                  <IconColorPicker label={`Icon and colour of ${p.name}`} value={{ icon: p.icon ?? 'icon:project', color: p.color }} onchange={(c) => patch({ kind: 'project', id: p.id, name: p.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `project:${p.id}`, (o) => (rowUi.picking = o ? `project:${p.id}` : null)} />
+                  <a class="name" href={`/project/${p.slug}`} onclick={(e) => (e.preventDefault(), navigate(`/project/${p.slug}`))}>{p.name}</a>
+                </RowActions>
+              </div>
+            </td>
             <td>
               <span class="prog"><span class="meter" aria-label={`${p.done} of ${p.total} done`}><span class="fill" style:width={`${p.total ? (p.done / p.total) * 100 : 0}%`}></span></span><span class="muted">{p.done} of {p.total}</span></span>
             </td>
@@ -102,7 +119,7 @@
   th { text-align: left; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--border); }
   td { height: var(--row-h); padding: 0 var(--s-4); border-bottom: 1px solid var(--border); }
   tbody tr:hover { background: var(--active); }
-  .name { display: inline-flex; align-items: center; gap: var(--s-4); font-weight: 600; }
+  .name { display: inline-flex; align-items: center; gap: var(--s-4); font-weight: 600; color: inherit; text-decoration: none; }
   .prog { display: inline-flex; align-items: center; gap: var(--s-4); }
   tbody tr { cursor: pointer; }
   .muted { color: var(--muted); }

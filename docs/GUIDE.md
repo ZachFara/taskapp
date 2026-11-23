@@ -7,7 +7,7 @@ registry (`ui/src/lib/commands/defs/**`); `ui/src/lib/commands/guide.test.ts` ke
 
 Contents: [What it is](#what-cairn-is) - [First run](#first-run) - [The screen](#the-screen) - [Issues](#issues) -
 [Selection and bulk edit](#selection-and-bulk-edit) - [Undo and redo](#undo-and-redo) - [Views](#views) -
-[Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) -
+[Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) - [Events](#events) -
 [Points and insights](#points-and-insights) - [Custom properties](#custom-properties) -
 [Statuses, labels, icons, colours](#statuses-labels-icons-and-colours) - [Templates](#issue-templates) -
 [Import, export, backups](#import-export-and-backups) - [Reminders and Google Calendar](#reminders-and-google-calendar) -
@@ -136,7 +136,11 @@ Quick-add has no token for status, parent, cycle or milestone. Example: `Pay ren
 - **Sub-issues.** In the issue panel, "Sub-issues" shows a progress bar and a field: type a title and press enter to
   create one, or pick an existing issue to attach. Or set a parent with `shift+p`. In a list the Sub-issues display
   option nests, flattens or hides them.
-- **Relations.** Kinds: blocks, blocked by, related, duplicate. Add from the panel's Relations section, or with `r`.
+- **Relations.** Kinds: blocks, related, duplicate, follows, caused by, part of, plus your own. Each reads one way from
+  the first issue and the other way from the second (blocks / blocked by). Add from the panel's Relations section, or
+  with `r`. Manage kinds in Settings > Relations: add one with its two labels, rename it, delete it once no relation uses
+  it. Built-in kinds cannot be changed. A view can filter on "Relation kind" (issues with a relation of that kind, on
+  either end).
   CLI: `relation add`. In the timeline, "blocks" relations draw as arrows and a critical path is highlighted.
 - **Comments.** Markdown. Panel "Comments" section: type and press the Comment button. CLI `comment add`; MCP `add_comment`.
 - **History.** The panel's History section lists every change with its source (UI, Agent, Cli, import, Undo, ...).
@@ -181,6 +185,10 @@ saved automatically (after a short pause). Filter changes show an "Undo" toast.
   Status, StatusCategory, Priority, Project, Milestone, Cycle, Label, Parent, StartDate, DueDate, Estimate, Points,
   CreatedAt, UpdatedAt, CompletedAt, Archived, Key, SubIssueProgress, RelationCount, CommentCount, and any custom
   property.
+- **Quick filter.** The filter icon in the header (`shift+f`) opens a bar of temporary filters: a text box that matches
+  titles, and chips for Status, Priority, Project, Label and Due. They narrow the view while the bar is open and are not
+  saved with it; the bar says "Temporary". "Save to view" keeps them as part of the saved filter. Esc, the x, or
+  leaving the view clears them.
 - **Group.** "Group" button (not on the calendar): choose any of Status, Status category, Priority, Project, Cycle,
   Due, Title, Points (if on) or a custom property. Group headers collapse; the list adds an issue to a group.
 - **Sort.** One sort field plus a Descending switch.
@@ -230,6 +238,23 @@ saved automatically (after a short pause). Filter changes show an "Undo" toast.
   to the next cycle. Set an issue's cycle with `shift+c`.
 - **Pins.** Pin issues, projects, views and cycles (CLI also notes and URLs). The Pinned page lists them; `g h`.
 
+## Events
+
+An event is a dated thing (a meeting, a launch, a deadline day) that many issues can be linked to, and one issue can
+belong to many events. Times are wall-clock times with no zone.
+
+- **Events page** (sidebar "Events", `g e`): upcoming events grouped by day, with past ones behind a "Past" toggle.
+  "New event" (or the command) asks for title, date, optional end date, all day or a from and to time, place and notes.
+- **An event** (click it, `/event/<id>`): details, Edit, Delete (undoable), and the linked issues with "Link an issue"
+  (search by text) and a remove button on each.
+- **On an issue**: the Events section lists its events, with "Add to event" and a remove button on each.
+- **Calendar layout**: events show as their own chip (calendar icon, accent edge); click one to open it. They are not
+  dragged from the calendar and do not follow the view's filter.
+- Undo covers create, edit, delete, link and unlink. The export writes one `events/<id>.yaml` per event and a rebuild
+  restores it with its links.
+- CLI: `event list`, `event create`, `event link`. MCP: `list_events`, `create_event`, `link_event`.
+- Not built: writing events to Google Calendar, recurrence, reminders, and searching events.
+
 ## Points and insights
 
 - **Estimation setting** (Settings > General): None, Points, Time or Both. Points show only for Points or Both; time
@@ -271,10 +296,22 @@ are also off whenever Estimation (General) has no points. The list is the `issue
   pink. A `#rrggbb` value sent by CLI or MCP maps to the nearest key.
 - **Icons**: `icon:<id>` from the built-in set or `emoji:<emoji>` (any 1 to 8 non-ASCII characters). Today the
   icon and colour picker exists only in Settings: the "icon and colour" button next to the name field when you add a
-  status, label, project, cycle, template or property. There is no way yet to change an icon by clicking it on a
-  project page, view header or sidebar row, and no "Change icon" command. Views have an icon and colour in the data
-  (the sidebar shows them) but no screen sets them. CLI and MCP can set icons when creating projects, labels, cycles,
-  statuses and templates.
+  status, label, project, cycle, template or property. Click the icon of a view, project or cycle in the sidebar, of a
+  view or project in its page header, or pick "Change icon" in the command menu on a view or project page: the same
+  picker opens and saves. CLI and MCP can set icons when creating projects, labels, cycles, statuses and templates.
+
+## Hover actions and right-click menus
+
+- Point at a sidebar row (view, project, cycle), a view on the Views page, or an issue row in a list, and its actions
+  appear at the row's right edge. Tab to a row to show them from the keyboard. They do not move the row's contents.
+- Right-click a sidebar row or a Views page row, or press Shift+F10 or the menu key on it, for the same actions as a
+  menu. Views: rename, duplicate, pin or unpin, change icon, delete (delete asks first and keeps the issues).
+  Projects and cycles: rename, pin or unpin, change icon, delete (the same confirm as Settings).
+- Issue rows in a list: open, set priority, pin or unpin, delete (archives, as the command is named). Set status with
+  the status glyph. Right-click still opens the issue menu.
+- Projects page, Cycles page, Settings > Labels and Settings > Templates rows: rename, change icon, delete (and pin for
+  projects and cycles). Each action is a registry command; the command menu does not list them because they need a row.
+- Every row's icon opens the icon and colour picker; its choice is saved and shown after a reload.
 
 ## Issue templates
 
@@ -295,7 +332,17 @@ quick-add, `taskapp template apply <id> [title]`, or MCP `apply_template`.
   `import_linear_plan`. A runbook for migrating with an agent is in docs/linear-migration.md. Needs your Linear key.
 - **Export** (Settings > Export): turn it on, choose a folder and optionally a Git remote, "Export now". It writes one
   markdown file per issue and commits and pushes it. Needs your own Git remote (see docs/github-setup.md). Not verified
-  against a real repository.
+  against a real repository. The export carries everything but secrets, machine-local settings and the raw change
+  history, including each issue's work blocks.
+- **Two machines** (same remote on both): before it writes, an export fetches the remote. If another machine pushed
+  first, nothing is overwritten; Settings > Export shows the message and "Pull and apply" fast-forwards the folder and
+  applies the incoming issues in one undoable step, "Sync from remote". The newer edit (by updated time) wins per
+  issue; conflicts are listed under "Last pull from the remote". New issues, comments, relations and work blocks are
+  added. Statuses, labels, projects, settings and deletions are not carried over yet (docs/decisions/0017). If both
+  machines have unpushed commits the export stops with a message; merge them in the export folder with git.
+- **Restore from an export**: `taskapp restore --from <export folder> --db <new database path>` builds a fresh database
+  from the files. It refuses to overwrite an existing database. Quit the app first and point `--db` at a path that does
+  not exist; then move it into place. Not yet proven on real data, which is why backups stay (docs/decisions/0017).
 - **Backups** (Settings > Backups): set a folder, "Snapshot now" writes a copy of the database to `snapshots/`; a nightly
   copy goes to `nightly/`. The newest 14 nightly and 30 snapshot files are kept. Before risky changes (property type
   change or delete, a bulk update over 10 items) a snapshot is taken. To restore: quit the app, then
@@ -314,7 +361,7 @@ quick-add, `taskapp template apply <id> [title]`, or MCP `apply_template`.
 
 ## Settings
 
-Settings is a list of sections: General, Statuses, Labels, Projects, Cycles, Fields, Properties, Templates, Import, Reminders,
+Settings is a list of sections: General, Statuses, Labels, Projects, Cycles, Fields, Properties, Relations, Templates, Import, Reminders,
 Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` saves the open page.
 
 | General setting | Values | Notes |
@@ -328,6 +375,9 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 | Point scale | Fibonacci, Linear, Powers, T-shirt | Disabled when points are off. |
 | Progress charts | on or off | Burn-ups and sparklines on projects and cycles. |
 | Sidebar sparklines | on or off | A small progress line per project. |
+| Interface size | 100%, 110%, 115%, 125% | Scales the whole app on this device (not saved in the workspace). Default 110%. Applies at once. |
+
+Sidebar and issue panel widths are remembered per device. Drag an edge to resize; double-click it to reset.
 
 Other stored settings (not all with a screen): backup folder, Reminders list, Google Calendar choice and switch, export
 folder, remote and switch, the default view template.
@@ -378,6 +428,14 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 |---|---|---|---|
 | `palette.open` | Open command menu | `mod+k` or `mod+p` | Open the command menu. Works inside text fields. |
 | `nav.search` | Search | `/` | Open the command menu for search. |
+| `sidebar.toggle` | Show or hide sidebar | `mod+\` | Collapse or show the sidebar. |
+| `pane.sidebar.wider` | Make sidebar wider | `alt+arrowright` | Widen the sidebar by 16 px. |
+| `pane.sidebar.narrower` | Make sidebar narrower | `alt+arrowleft` | Narrow the sidebar by 16 px. |
+| `pane.panel.wider` | Make issue panel wider | `alt+shift+arrowleft` | Widen the issue panel by 16 px. |
+| `pane.panel.narrower` | Make issue panel narrower | `alt+shift+arrowright` | Narrow the issue panel by 16 px. |
+| `size.up` | Increase interface size | `mod+=` | Next interface size step (100, 110, 115, 125%). |
+| `size.down` | Decrease interface size | `mod+-` | Previous interface size step. |
+| `size.reset` | Reset interface size | `mod+0` | Back to 110%. |
 | `help.shortcuts` | Keyboard shortcuts | `?` | Open the keyboard shortcuts sheet (grouped, with a filter box). |
 | `issue.create` | New issue | `c` | Open the quick-add dialog. |
 | `history.undo` | Undo | `mod+z` or `u` | Undo the newest step. Inside a text field mod+z stays the field's own undo. |
@@ -387,6 +445,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.pinned` | Go to Pinned | `g h` | Go to Pinned. |
 | `nav.projects` | Go to Projects | `g p` | Go to the project list. |
 | `nav.cycles` | Go to Cycles | `g c` | Go to Cycles. |
+| `nav.events` | Go to Events | `g e` | Go to Events. |
 | `nav.views` | Go to Views | `g v` | Go to Views. |
 | `nav.timeline` | Go to Timeline | `g t` | Go to the all-projects timeline. |
 | `nav.settings` | Go to Settings | `g s` | Go to Settings. |
@@ -425,7 +484,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `issue.points` | Set points | `shift+e` | Set points: scale values or type a number to one decimal, `none` clears. Only offered when estimation is Points or Both. |
 | `issue.parent` | Set parent | `shift+p` | Set the parent issue, or no parent. |
 | `issue.property` | Set property | `a` | Set a Select or Checkbox custom property (other kinds are edited in the issue panel or table). |
-| `issue.relation` | Add relation | `r` | Add a relation (Blocks, Related to, Duplicate of) to another issue. |
+| `issue.relation` | Add relation | `r` | Add a relation of any kind to another issue. |
 | `issue.archive` | Archive | `#` | Archive the selection. More than 5 issues asks for confirmation in the command menu. |
 | `issue.delete` | Delete (archives) | `delete` | Same as Archive. There is no hard delete. |
 | `issue.duplicate` | Duplicate | `mod+d` | Duplicate the selection (one undo step). |
@@ -440,6 +499,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 
 | Command id | Name | Keys | What it does |
 |---|---|---|---|
+| `view.quickFilter` | Show or hide quick filter | `shift+f` | Temporary filters that are not saved with the view. |
 | `view.layout.list` | List layout | `v l` | Switch the view to List. |
 | `view.layout.board` | Board layout | `v b` | Switch the view to Board. |
 | `view.layout.table` | Table layout | `v t` | Switch the view to Table. |
@@ -499,6 +559,8 @@ These appear in the command menu (when they apply) and have no shortcut.
 | Command id | Name | Keys | What it does |
 |---|---|---|---|
 | `app.reload` | Reload | (none) | Reload the window. |
+| `pane.sidebar.reset` | Reset sidebar width | (none) | Back to the default sidebar width. |
+| `pane.panel.reset` | Reset issue panel width | (none) | Back to the default issue panel width. |
 | `cycle.move_unfinished` | Move unfinished issues to the next cycle | (none) | Move unfinished issues of the cycle to the next cycle (Cycles page). |
 | `cycle.new` | New cycle | (none) | New cycle. |
 | `group.add` | Add issue to this group | (none) | Add an issue to this group. |
@@ -522,11 +584,13 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `settings.calendar` | Calendar | (none) | Open Settings, Calendar. |
 | `settings.cycles` | Cycles | (none) | Open Settings, Cycles. |
 | `settings.export` | Export | (none) | Open Settings, Export. |
+| `settings.export.pull` | Pull and apply from remote | (none) | On Settings, Export: pull the remote export and apply it. |
 | `settings.general` | General | (none) | Open Settings, General. |
 | `settings.import` | Import | (none) | Open Settings, Import. |
 | `settings.labels` | Labels | (none) | Open Settings, Labels. |
 | `settings.projects` | Projects | (none) | Open Settings, Projects. |
 | `settings.properties` | Properties | (none) | Open Settings, Properties. |
+| `settings.relations` | Relations | (none) | Open Settings, Relations. |
 | `settings.reminders` | Reminders | (none) | Open Settings, Reminders. |
 | `settings.statuses` | Statuses | (none) | Open Settings, Statuses. |
 | `settings.templates` | Templates | (none) | Open Settings, Templates. |
@@ -561,7 +625,7 @@ These are handled by the dialogs themselves, not the command registry, so they a
 
 Binary `taskapp` (build: `cargo build -p taskapp-cli`; or `cargo run -p taskapp-cli -- <args>`). Global options:
 `--db <path>` (default: the app's database) and `--json` (JSON instead of a table). `taskapp --help` and
-`taskapp <command> --help` print the full list. Every write is one undoable step with source Cli. There are 45
+`taskapp <command> --help` print the full list. Every write is one undoable step with source Cli. There are 48
 subcommands; keys are issue keys such as `ABC-1`, ids are numbers.
 
 | Command | What it does | Example |
@@ -571,6 +635,9 @@ subcommands; keys are issue keys such as `ABC-1`, ids are numbers.
 | `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points`. | `taskapp issue update ABC-1 --status 3` |
 | `issue get <key>` | Show one issue. | `taskapp issue get ABC-1` |
 | `issue archive <key>` | Archive an issue. | `taskapp issue archive ABC-1` |
+| `event list [--from --to]` | Events overlapping a date range. | `taskapp event list --from 2026-12-01` |
+| `event create <title> --start T [--end T --all-day --place --notes]` | Create an event (`T` is `YYYY-MM-DDTHH:MM` or a date). | `taskapp event create Demo --start 2026-12-10T09:30` |
+| `event link <id> <key>` | Link an event to an issue. | `taskapp event link 1 ABC-1` |
 | `issue search <text> [--limit 20]` | Full-text search (archived issues are left out). | `taskapp issue search rent` |
 | `view query [--def JSON \| --id N]` | Run an ad hoc view definition or a saved view. | `taskapp view query --id 1` |
 | `view templates` | List view templates. | `taskapp view templates` |
@@ -588,7 +655,7 @@ subcommands; keys are issue keys such as `ABC-1`, ids are numbers.
 | `cycle list` / `cycle create --start --end [--name --color --icon]` | List or create cycles. | `taskapp cycle create --start 2026-12-01 --end 2026-12-14` |
 | `label list` / `label create <name> <color> [--icon]` | List or create labels. | `taskapp label create bug red` |
 | `comment add <key> <body>` | Comment on an issue. | `taskapp comment add ABC-1 "Looks good"` |
-| `relation add <from> <kind> <to>` / `relation remove ...` | Kinds: blocks, related, duplicate. | `taskapp relation add ABC-1 blocks ABC-2` |
+| `relation add <from> <kind> <to>` / `relation remove ...` | Kind: an id or name (blocks, related, duplicate, follows, caused_by, part_of, or a custom one). | `taskapp relation add ABC-1 blocks ABC-2` |
 | `pin list` / `pin add <kind> <target> [--title]` / `pin remove <id>` | Kinds: issue, project, view, cycle, note, url. | `taskapp pin add issue ABC-1` |
 | `template list` / `create` / `update <id>` / `delete <id>` | Issue templates: `create <name> <slug> [--icon --color --body JSON]`. | `taskapp template create Bug bug --body '{"title_prefix":"[Bug] "}'` |
 | `template apply <id> [title]` | Create the issue and its sub-issues. | `taskapp template apply 1 "Login fails"` |
@@ -607,7 +674,7 @@ The CLI has no command for statuses, milestones, settings or unarchiving; use th
 ## MCP tools reference
 
 Server `taskapp-mcp` over stdio (`taskapp-mcp [--db <path>]`). Writes use source Agent, or Migration when a call passes
-`migration: true`. Unknown argument names are refused. Only `import_linear_plan` uses the network. 51 tools:
+`migration: true`. Unknown argument names are refused. Only `import_linear_plan` uses the network. 54 tools:
 
 | Tool | What it does (key arguments) |
 |---|---|
@@ -617,9 +684,12 @@ Server `taskapp-mcp` over stdio (`taskapp-mcp [--db <path>]`). Writes use source
 | `create_issue` | Create. Fields of NewIssue (`title` required; `due` as `{"Date":"2026-01-10"}`; `properties`; `created_at`, `completed_at`). |
 | `update_issue` | Change an issue. `key`, `patch` (null clears a nullable field). |
 | `archive_issue` | Archive. `key`. |
+| `list_events` | Events overlapping a range. `from`, `to` (dates, optional). |
+| `create_event` | Create an event. `title`, `starts_at` (`2026-12-10T09:30:00`), `ends_at`, `all_day`, `place`, `notes`, `icon`, `color`. |
+| `link_event` | Link an event to an issue. `id` (event), `key` (issue). |
 | `bulk_update` | Many patches. `items` = list of `{key, patch}`; over 10 snapshots first; an unknown key applies nothing. |
 | `add_comment` | `key`, `body`, `created_at`. |
-| `add_relation` / `remove_relation` | `from_key`, `to_key`, `kind` (Blocks, Related, Duplicate). |
+| `add_relation` / `remove_relation` | `from_key`, `to_key`, `kind` (an id or name, as in the CLI). |
 | `set_points` | `key`, `points` (null clears). |
 | `get_history` | Change history. `key`. |
 | `list_properties` | List custom properties. |

@@ -22,6 +22,7 @@ describe('g jumps', () => {
     ['p', '/projects'],
     ['t', '/projects/timeline'],
     ['c', '/cycles'],
+    ['e', '/events'],
     ['s', '/settings/general'],
   ])('g %s goes to %s', (key, path) => {
     press('g');

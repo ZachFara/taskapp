@@ -43,6 +43,99 @@ pub async fn commit_and_push(dir: &Path, message: &str, remote: Option<&str>) ->
     Ok(!unchanged)
 }
 
+/// How the remote's branch relates to the local one, after a fetch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemoteState {
+    /// Nothing the local branch has not seen (or the remote has no such branch yet).
+    Current,
+    /// The remote has commits this machine has not seen and the local branch has none of its own: fast-forward.
+    Behind,
+    /// Both sides have commits the other lacks. Needs a person.
+    Diverged,
+}
+
+async fn succeeds(dir: &Path, args: &[&str]) -> Result<bool> {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .output()
+        .await?;
+    Ok(out.status.success())
+}
+
+/// Fetches the branch `HEAD` names from `remote` and compares it with the local one.
+///
+/// # Errors
+///
+/// Fails when git cannot reach the remote.
+pub async fn remote_state(dir: &Path, remote: &str) -> Result<RemoteState> {
+    let branch = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["symbolic-ref", "--short", "-q", "HEAD"])
+        .output()
+        .await?;
+    let branch = String::from_utf8_lossy(&branch.stdout).trim().to_string();
+    if branch.is_empty()
+        || !succeeds(
+            dir,
+            &["ls-remote", "--exit-code", "--heads", remote, &branch],
+        )
+        .await?
+    {
+        return Ok(RemoteState::Current);
+    }
+    git(dir, &["fetch", "-q", remote, &branch]).await?;
+    if !succeeds(dir, &["rev-parse", "--verify", "-q", "HEAD"]).await? {
+        return Ok(RemoteState::Behind);
+    }
+    Ok(
+        if succeeds(dir, &["merge-base", "--is-ancestor", "FETCH_HEAD", "HEAD"]).await? {
+            RemoteState::Current
+        } else if succeeds(dir, &["merge-base", "--is-ancestor", "HEAD", "FETCH_HEAD"]).await? {
+            RemoteState::Behind
+        } else {
+            RemoteState::Diverged
+        },
+    )
+}
+
+/// Refuses a fetched tree that holds a symlink or a submodule: the export would read and write through it.
+///
+/// # Errors
+///
+/// `Invalid` naming the first such path.
+pub async fn reject_links(dir: &Path) -> Result<()> {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["ls-tree", "-r", "FETCH_HEAD"])
+        .output()
+        .await?;
+    if !out.status.success() {
+        return Err(std::io::Error::other("git ls-tree FETCH_HEAD failed").into());
+    }
+    for line in String::from_utf8_lossy(&out.stdout).lines() {
+        let (meta, path) = line.split_once('\t').unwrap_or((line, ""));
+        if meta.starts_with("120000") || meta.starts_with("160000") {
+            return Err(taskapp_core::Error::Invalid(format!(
+                "the remote has a symlink or submodule at {path:?}; nothing was pulled"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Fast-forwards the local branch to what [`remote_state`] fetched last.
+///
+/// # Errors
+///
+/// Fails when the working tree blocks the fast-forward.
+pub async fn fast_forward(dir: &Path) -> Result<()> {
+    git(dir, &["merge", "-q", "--ff-only", "FETCH_HEAD"]).await
+}
+
 async fn git(dir: &Path, args: &[&str]) -> Result<()> {
     let out = Command::new("git")
         .arg("-C")

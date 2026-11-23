@@ -35,7 +35,7 @@ afterEach(() => {
 describe('Sidebar', () => {
   it('pin_toggle_on_view_row', async () => {
     await open();
-    const btn = () => document.querySelector<HTMLButtonElement>('[aria-label$="Alpha"]')!;
+    const btn = () => document.querySelector<HTMLButtonElement>('[aria-label="Pin Alpha"], [aria-label="Unpin Alpha"]')!;
     btn().click();
     await settle();
     expect(names('[aria-label=Pinned]')).toEqual(['Alpha']);

@@ -476,3 +476,75 @@ fn points_flags_and_insights() {
             .success()
     );
 }
+
+#[test]
+fn events_are_created_linked_and_listed() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Parent"]);
+    let made = run_json(
+        &db,
+        &[
+            "event",
+            "create",
+            "Demo",
+            "--start",
+            "2026-12-10T09:30",
+            "--place",
+            "Room 4",
+        ],
+    );
+    assert_eq!(made["starts_at"], "2026-12-10T09:30:00");
+    let id = made["id"].to_string();
+    run(&db, &["event", "link", &id, "ABC-1"]);
+    let day = run_json(
+        &db,
+        &[
+            "event",
+            "list",
+            "--from",
+            "2026-12-10",
+            "--to",
+            "2026-12-10",
+        ],
+    );
+    assert_eq!(day[0]["issue_ids"].as_array().map(Vec::len), Some(1));
+    let later = run_json(&db, &["event", "list", "--from", "2026-12-11"]);
+    assert_eq!(later.as_array().map(Vec::len), Some(0));
+}
+
+#[test]
+fn restore_builds_a_new_database_from_an_export_and_refuses_an_existing_one() {
+    let (_src, src_db) = fresh();
+    run(&src_db, &["add", "Keep me"]);
+    run(
+        &src_db,
+        &["event", "create", "Demo", "--start", "2026-12-10T09:30"],
+    );
+    let export = tempfile::tempdir().expect("tempdir");
+    tokio::runtime::Runtime::new()
+        .expect("runtime")
+        .block_on(async {
+            let db = taskapp_core::Db::open(&src_db).await.expect("open");
+            taskapp_export::write::write_snapshot(&db, export.path())
+                .await
+                .expect("export");
+        });
+    let from = export.path().to_str().expect("utf8");
+
+    let (_dst, dst_db) = fresh();
+    let out = run(&dst_db, &["restore", "--from", from]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        run_json(&dst_db, &["issue", "get", "ABC-1"])["title"],
+        "Keep me"
+    );
+    assert_eq!(run_json(&dst_db, &["event", "list"])[0]["title"], "Demo");
+
+    let again = run(&dst_db, &["restore", "--from", from]);
+    assert!(!again.status.success());
+    assert!(String::from_utf8_lossy(&again.stderr).contains("already exists"));
+}

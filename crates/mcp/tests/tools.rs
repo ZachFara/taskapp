@@ -31,6 +31,9 @@ const TOOL_NAMES: &[&str] = &[
     "create_milestone",
     "list_cycles",
     "create_cycle",
+    "list_events",
+    "create_event",
+    "link_event",
     "list_labels",
     "create_label",
     "list_pins",
@@ -534,6 +537,31 @@ fn view_templates_round_trip() {
                 .is_some_and(|a| a.len() == 1)
     );
     assert_eq!(r[4].as_ref().expect("deleted")["deleted"], true);
+}
+
+#[test]
+fn events_are_created_linked_and_listed() {
+    let (_d, db) = tmp();
+    let r = session(
+        &db,
+        &[
+            ("create_issue", json!({"title": "A"})),
+            (
+                "create_event",
+                json!({"title": "Demo", "starts_at": "2026-12-10T09:00:00", "place": "Room 4"}),
+            ),
+            ("link_event", json!({"id": 1, "key": "ABC-1"})),
+            (
+                "list_events",
+                json!({"from": "2026-12-10", "to": "2026-12-10"}),
+            ),
+            ("list_events", json!({"from": "2026-12-11"})),
+        ],
+    );
+    assert_eq!(r[1].as_ref().expect("created")["place"], "Room 4");
+    assert!(r[2].is_ok(), "{:?}", r[2]);
+    assert_eq!(r[3].as_ref().expect("listed")[0]["issue_ids"], json!([1]));
+    assert_eq!(r[4].as_ref().expect("listed"), &json!([]));
 }
 
 #[test]

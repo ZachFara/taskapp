@@ -3,20 +3,21 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use taskapp_core::{
-    ChangeSource, CycleId, Db, Due, Error, IssueId, IssuePatch, LabelId, Measure, NewIssue, PinId,
-    PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind, Relation, RelationKind, Result,
-    SelectOption, StatusId, TemplateId, ViewDef, ViewId, ViewTemplateId, backup, comments, cycles,
-    history, import, insights, issues, labels, pins, projects, properties, quickadd, relations,
-    search, templates, undo, view_templates, views,
+    ChangeSource, CycleId, Db, Due, Error, EventId, EventInput, IssueId, IssuePatch, LabelId,
+    Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind,
+    Relation, RelationKind, Result, SelectOption, StatusId, TemplateId, ViewDef, ViewId,
+    ViewTemplateId, backup, comments, cycles, events, history, import, insights, issues, labels,
+    pins, projects, properties, quickadd, relations, search, templates, undo, view_templates,
+    views,
 };
 
 use crate::{
-    Cmd, CommentCmd, CycleCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd, PinCmd, ProjectCmd,
-    PropertyCmd, RelationCmd, ScopeArgs, TemplateCmd, ViewCmd,
+    Cmd, CommentCmd, CycleCmd, EventCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd, PinCmd,
+    ProjectCmd, PropertyCmd, RelationCmd, ScopeArgs, TemplateCmd, ViewCmd,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
@@ -30,6 +31,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Redo => val(undo::redo(db).await?),
         Cmd::Template(cmd) => template(db, cmd).await,
         Cmd::Insights(cmd) => insights(db, cmd).await,
+        Cmd::Event(cmd) => event(db, cmd).await,
         cmd => run_group(db, dir, cmd).await,
     }
 }
@@ -47,12 +49,15 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Relation(cmd) => relation(db, cmd).await,
         Cmd::Pin(cmd) => pin(db, cmd).await,
         Cmd::Import(cmd) => import(db, cmd).await,
-        Cmd::Backup(_) => Err(Error::Invalid(
-            "backup runs before the database opens".into(),
+        Cmd::Backup(_) | Cmd::Restore { .. } => Err(Error::Invalid(
+            "this command runs before the database opens".into(),
         )),
-        Cmd::Undo | Cmd::Redo | Cmd::Setup { .. } | Cmd::Template(_) | Cmd::Insights(_) => {
-            handled_in_run()
-        }
+        Cmd::Undo
+        | Cmd::Redo
+        | Cmd::Setup { .. }
+        | Cmd::Template(_)
+        | Cmd::Insights(_)
+        | Cmd::Event(_) => handled_in_run(),
         Cmd::History { key } => {
             let id = issue_id(db, &key).await?;
             val(history::list_for(db, "issue", &id.0.to_string()).await?)
@@ -327,6 +332,46 @@ async fn cycle(db: &Db, cmd: CycleCmd) -> Result<Value> {
     }
 }
 
+async fn event(db: &Db, cmd: EventCmd) -> Result<Value> {
+    match cmd {
+        EventCmd::List { from, to } => {
+            let (from, to) = (from.as_deref().map(date), to.as_deref().map(date));
+            val(events::list(db, from.transpose()?, to.transpose()?).await?)
+        }
+        EventCmd::Create {
+            title,
+            start,
+            end,
+            all_day,
+            place,
+            notes,
+        } => {
+            let input = EventInput {
+                title,
+                starts_at: local_time(&start)?,
+                ends_at: end.as_deref().map(local_time).transpose()?,
+                all_day,
+                place,
+                notes: notes.unwrap_or_default(),
+                icon: None,
+                color: None,
+                archived: false,
+            };
+            val(events::create(db, input, SRC).await?)
+        }
+        EventCmd::Link { id, key } => {
+            events::link(db, EventId(id), issue_id(db, &key).await?, SRC).await?;
+            Ok(json!({ "ok": true }))
+        }
+    }
+}
+
+fn local_time(text: &str) -> Result<NaiveDateTime> {
+    NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M")
+        .or_else(|_| date(text).map(|d| d.and_time(chrono::NaiveTime::MIN)))
+        .map_err(|_| Error::Invalid(format!("not a time (YYYY-MM-DDTHH:MM): {text}")))
+}
+
 async fn template(db: &Db, cmd: TemplateCmd) -> Result<Value> {
     Ok(match cmd {
         TemplateCmd::List => val(templates::list(db).await?)?,
@@ -365,7 +410,7 @@ async fn relation(db: &Db, cmd: RelationCmd) -> Result<Value> {
     let rel = Relation {
         from: issue_id(db, &from).await?,
         to: issue_id(db, &to).await?,
-        kind: relation_kind(&kind)?,
+        kind: RelationKind::new(&kind),
     };
     if add {
         relations::add(db, rel, SRC).await?;
@@ -455,15 +500,6 @@ fn property_kind(name: &str) -> Result<PropertyKind> {
         "url" => PropertyKind::Url,
         "notelink" => PropertyKind::NoteLink,
         _ => return Err(Error::Invalid(format!("unknown property kind: {name}"))),
-    })
-}
-
-fn relation_kind(name: &str) -> Result<RelationKind> {
-    Ok(match name {
-        "blocks" => RelationKind::Blocks,
-        "related" => RelationKind::Related,
-        "duplicate" => RelationKind::Duplicate,
-        _ => return Err(Error::Invalid(format!("unknown relation kind: {name}"))),
     })
 }
 
