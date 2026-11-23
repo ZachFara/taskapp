@@ -548,3 +548,39 @@ fn restore_builds_a_new_database_from_an_export_and_refuses_an_existing_one() {
     assert!(!again.status.success());
     assert!(String::from_utf8_lossy(&again.stderr).contains("already exists"));
 }
+
+#[test]
+fn a_status_then_a_view_filtered_on_it_can_be_created() {
+    let (_d, db) = fresh();
+    let status = run_json(&db, &["status", "create", "Inbox", "--category", "Backlog"]);
+    let id = status["id"].as_i64().expect("status id");
+    let def = format!(
+        r#"{{"filter":{{"Cond":{{"field":{{"Fixed":"Status"}},"op":"In","value":[{id}]}}}},"sorts":[],"group_by":null,"layout":"List","columns":[],"include_archived":false}}"#
+    );
+    let view = run_json(&db, &["view", "save", "Inbox", "--def", &def]);
+    assert_eq!(view["name"], "Inbox");
+    let views = run_json(&db, &["view", "list"]);
+    assert!(
+        views
+            .as_array()
+            .expect("views")
+            .iter()
+            .any(|v| v["name"] == "Inbox")
+    );
+    let project = run_json(
+        &db,
+        &[
+            "project",
+            "status-create",
+            "Backlog",
+            "--category",
+            "Planned",
+        ],
+    );
+    assert_eq!(project["name"], "Backlog");
+    assert!(
+        !run(&db, &["status", "create", "X", "--category", "nope"])
+            .status
+            .success()
+    );
+}

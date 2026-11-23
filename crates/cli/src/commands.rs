@@ -11,13 +11,13 @@ use taskapp_core::{
     Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind,
     Relation, RelationKind, Result, SelectOption, StatusId, TemplateId, ViewDef, ViewId,
     ViewTemplateId, backup, comments, cycles, events, history, import, insights, issues, labels,
-    pins, project_statuses, projects, properties, quickadd, relations, search, templates, undo,
-    view_templates, views,
+    pins, project_statuses, projects, properties, quickadd, relations, search, statuses, templates,
+    undo, view_templates, views,
 };
 
 use crate::{
     Cmd, CommentCmd, CycleCmd, EventCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd, PinCmd,
-    ProjectCmd, PropertyCmd, RelationCmd, ScopeArgs, TemplateCmd, ViewCmd,
+    ProjectCmd, PropertyCmd, RelationCmd, ScopeArgs, StatusCmd, TemplateCmd, ViewCmd,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
@@ -32,6 +32,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Template(cmd) => template(db, cmd).await,
         Cmd::Insights(cmd) => insights(db, cmd).await,
         Cmd::Event(cmd) => event(db, cmd).await,
+        Cmd::Status(cmd) => status(db, cmd).await,
         cmd => run_group(db, dir, cmd).await,
     }
 }
@@ -57,6 +58,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Setup { .. }
         | Cmd::Template(_)
         | Cmd::Insights(_)
+        | Cmd::Status(_)
         | Cmd::Event(_) => handled_in_run(),
         Cmd::History { key } => {
             let id = issue_id(db, &key).await?;
@@ -214,10 +216,40 @@ async fn insights(db: &Db, cmd: InsightsCmd) -> Result<Value> {
     }
 }
 
+/// A category or other unit enum from its serialised name.
+fn named<T: serde::de::DeserializeOwned>(text: &str) -> Result<T> {
+    serde_json::from_value(json!(text)).map_err(|e| Error::Invalid(e.to_string()))
+}
+
+async fn status(db: &Db, cmd: StatusCmd) -> Result<Value> {
+    match cmd {
+        StatusCmd::List => val(statuses::list(db).await?),
+        StatusCmd::Create {
+            name,
+            category,
+            color,
+        } => val(statuses::create(db, &name, named(&category)?, &color, None, SRC).await?),
+    }
+}
+
 async fn view(db: &Db, cmd: ViewCmd) -> Result<Value> {
     let (def, id) = match cmd {
         ViewCmd::Query { def, id } => (def, id),
         ViewCmd::Templates => return val(view_templates::list(db).await?),
+        ViewCmd::List => return val(views::list(db).await?),
+        ViewCmd::Save { name, def, id } => {
+            let def: ViewDef =
+                serde_json::from_str(&def).map_err(|e| Error::Invalid(e.to_string()))?;
+            let saved = views::save(
+                db,
+                id.map(ViewId),
+                &name,
+                def,
+                taskapp_core::palette::Look::default(),
+                SRC,
+            );
+            return val(saved.await?);
+        }
         ViewCmd::SaveAsTemplate { view_id, name } => {
             let t = view_templates::from_view(db, ViewId(view_id), name.as_deref(), SRC);
             return val(t.await?);
@@ -361,6 +393,11 @@ async fn project(db: &Db, cmd: ProjectCmd) -> Result<Value> {
     match cmd {
         ProjectCmd::List => val(projects::list(db).await?),
         ProjectCmd::Statuses => val(project_statuses::list(db).await?),
+        ProjectCmd::StatusCreate {
+            name,
+            category,
+            color,
+        } => val(project_statuses::create(db, &name, named(&category)?, &color, None, SRC).await?),
         ProjectCmd::Set {
             slug,
             status,

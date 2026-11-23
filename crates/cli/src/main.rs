@@ -36,6 +36,8 @@ enum Cmd {
     #[command(subcommand)]
     View(ViewCmd),
     #[command(subcommand)]
+    Status(StatusCmd),
+    #[command(subcommand)]
     Property(PropertyCmd),
     #[command(subcommand)]
     Project(ProjectCmd),
@@ -266,6 +268,29 @@ enum ViewCmd {
     DeleteTemplate {
         id: i64,
     },
+    /// List saved views with their definitions.
+    List,
+    /// Create a saved view from a JSON definition, or replace the one with `--id`.
+    Save {
+        name: String,
+        #[arg(long)]
+        def: String,
+        #[arg(long)]
+        id: Option<i64>,
+    },
+}
+
+#[derive(Subcommand)]
+enum StatusCmd {
+    List,
+    /// Create an issue status. Category: Backlog, Unstarted, Started, Completed or Canceled.
+    Create {
+        name: String,
+        #[arg(long)]
+        category: String,
+        #[arg(long, default_value = "gray")]
+        color: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -319,6 +344,14 @@ enum ProjectCmd {
     },
     /// Project statuses.
     Statuses,
+    /// Create a project status. Category: Planned, Started, Paused, Completed or Cancelled.
+    StatusCreate {
+        name: String,
+        #[arg(long)]
+        category: String,
+        #[arg(long, default_value = "gray")]
+        color: String,
+    },
     /// Change a project's status, priority, labels or a custom property value.
     Set {
         slug: String,
