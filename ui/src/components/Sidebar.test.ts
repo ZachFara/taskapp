@@ -18,9 +18,10 @@ const menuItem = (re: RegExp) => {
   if (!m) throw new Error(`no menu item ${re}`);
   return m;
 };
-/** Opens a row's "…" menu and chooses the item. */
+/** Opens a row's right-click menu and chooses the item. */
 const pick = async (row: string, item: RegExp) => {
-  document.querySelector<HTMLButtonElement>(`[aria-label="More actions for ${row}"]`)!.click();
+  // Sidebar rows show no button on hover; the menu opens on right-click.
+  document.querySelector(`.rowactions[aria-label="${row}"]`)!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
   flushSync();
   await vi.waitFor(() => menuItem(item).click());
   await settle();
@@ -229,9 +230,9 @@ describe('Sidebar tooltips', () => {
     return document.querySelector('.cx-tip')?.textContent ?? '';
   };
 
-  it('a pin button names its action', async () => {
+  it('a row shows no action button on hover: it only highlights, the menu is on right-click', async () => {
     await open();
-    expect(await tip(document.querySelector('[aria-label="More actions for Alpha"]'))).toContain('More actions for Alpha');
+    expect(document.querySelector('[aria-label^="More actions for"]')).toBeNull();
   });
 
   it('a section link shows the go-to key', async () => {

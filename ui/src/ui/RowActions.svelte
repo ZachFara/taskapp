@@ -10,7 +10,8 @@
 
   // One "…" button at the row's right end, shown while the row is hovered or has focus. It opens the same actions menu
   // as right-click, Shift+F10 and the menu key. The name keeps the rest of the row, so a click on it opens the view.
-  let { label, actions, children }: { label: string; actions: RowAction[]; children: Snippet } = $props();
+  // `button={false}` (the sidebar) shows no button at all: the row only highlights, and the menu is on right-click.
+  let { label, actions, children, button = true }: { label: string; actions: RowAction[]; children: Snippet; button?: boolean } = $props();
   let open = $state(false);
   const key = (e: KeyboardEvent) => {
     if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
@@ -24,9 +25,11 @@
   {#snippet area()}
     <div class="rowactions" role="group" aria-label={label} onkeydown={key}>
       {@render children()}
-      <div class="acts">
-        <IconButton icon="more" label={`More actions for ${label}`} onclick={() => (open = true)} />
-      </div>
+      {#if button}
+        <div class="acts">
+          <IconButton icon="more" label={`More actions for ${label}`} onclick={() => (open = true)} />
+        </div>
+      {/if}
     </div>
   {/snippet}
   {#each actions as a (a.id)}

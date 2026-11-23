@@ -151,7 +151,7 @@
 {#snippet viewRow(v: SavedView, nested: boolean)}
   {@const href = `/view/${v.id}`}
   <li class="row" class:nested {...drag(v.id, 'view')} ondrop={() => dropView(v.id)}>
-    <RowActions label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, isPinned('View', String(v.id)))}>
+    <RowActions button={false} label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, isPinned('View', String(v.id)))}>
       <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`, color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
       <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{v.name}</span></a>
     </RowActions>
@@ -197,7 +197,7 @@
       <ul>
         {#each folders as f (f.id)}
           <li class="row" {...drag(f.id, 'folder')} ondrop={() => dropOnFolder(f.id)}>
-            <RowActions label={f.name} actions={rowActs({ kind: 'folder', id: f.id, name: f.name })}>
+            <RowActions button={false} label={f.name} actions={rowActs({ kind: 'folder', id: f.id, name: f.name })}>
               <button class="item folder" type="button" aria-expanded={!shut[f.id]} onclick={() => toggle(f.id)}><Icon name={shut[f.id] ? 'chevron-right' : 'chevron-down'} size={12} /><span class="t">{f.name}</span><em>{inFolder(f.id).length}</em></button>
             </RowActions>
           </li>
@@ -222,7 +222,7 @@
         {#each projects as p (p.id)}
           {@const href = `/project/${p.slug}`}
           <li class="row">
-            <RowActions label={p.name} actions={rowActs({ kind: 'project', id: p.id, name: p.name }, isPinned('Project', p.slug))}>
+            <RowActions button={false} label={p.name} actions={rowActs({ kind: 'project', id: p.id, name: p.name }, isPinned('Project', p.slug))}>
               <IconColorPicker label={`Icon and colour of ${p.name}`} value={{ icon: p.icon ?? 'icon:project', color: p.color }} onchange={(c) => patch({ kind: 'project', id: p.id, name: p.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `project:${p.id}`, (o) => (rowUi.picking = o ? `project:${p.id}` : null)} />
               <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{p.name}</span>{#if sparklines}<ProjectSpark projectId={p.id} name={p.name} />{/if}</a>
             </RowActions>
@@ -239,7 +239,7 @@
         <li class="row">{@render navLink('/cycles', 'cycle', 'All cycles', 'nav.cycles', route === '/cycles')}</li>
         {#each cycles as c (c.id)}
           <li class="row">
-            <RowActions label={label(c)} actions={rowActs({ kind: 'cycle', id: c.id, name: label(c) }, isPinned('Cycle', String(c.id)))}>
+            <RowActions button={false} label={label(c)} actions={rowActs({ kind: 'cycle', id: c.id, name: label(c) }, isPinned('Cycle', String(c.id)))}>
               <IconColorPicker label={`Icon and colour of ${label(c)}`} value={{ icon: c.icon ?? 'icon:cycle', color: c.color }} onchange={(x) => patch({ kind: 'cycle', id: c.id, name: label(c) }, { icon: x.icon, color: x.color })} bind:open={() => rowUi.picking === `cycle:${c.id}`, (o) => (rowUi.picking = o ? `cycle:${c.id}` : null)} />
               <a class="item" href="/cycles" onclick={(e) => (e.preventDefault(), navigate('/cycles'))}><span class="t">{label(c)}</span></a>
             </RowActions>
