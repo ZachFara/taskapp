@@ -89,6 +89,11 @@ Added by the owner on 2026-11-22 (later, not built):
   app. The menu does search issues in the harness (opened with Cmd+K or Cmd+P; typing part of a title lists matching
   issues), so find out what differs: the menu opens with Cmd, not Ctrl, on a Mac (consider binding Ctrl+K too); the
   real backend matches whole words, not parts of words; and an obvious "Search issues" entry and `/` hint are missing.
+- **Choose which issue fields exist.** In settings, switch each built-in field of the issue details on or off
+  (milestone, cycle, labels, start, due, estimate, points, parent, and as many others as can safely go; status and
+  title stay), and order them; a field that is off disappears from the details panel, quick add, filters, display
+  options, commands and the cheat sheet. Custom properties can already be added and removed; this covers the built-in
+  ones. Today only points (through the estimation setting) can be switched off.
 - **Split the `test-ui` CI job.** It now runs about 1,100 unit tests, 365 contract cases against a built devserver and
   the Playwright walk tests in one job; consider separate unit, contract and walk jobs (the walk job's cold-start
   `page.goto` timed out twice and forced a rerun).
