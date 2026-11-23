@@ -73,6 +73,13 @@ Added by the owner on 2026-11-22 (later, not built):
   ground, gold and rubricated red, blackletter display type, a small-caps serif, faint star field, ornament bands) with
   no images of saints or people. Tokens are already role-based, so a theme is a block of values plus fonts; type and
   ornament per theme need a small extension. Use each product's general feel, not its logo, name or artwork.
+- **Events.** A first-class "event" (a meeting, a trip, a deadline day): its own list and calendar view, with a
+  title, time span, place and notes, and links to any number of issues (an issue can link to several events and an
+  event to several issues), shown on both sides. Today the calendar shows only issues' due dates and work blocks, and
+  Google Calendar events are written one way for notifications; there is no event object.
+- **Full two-way sync and a restore command.** The Git export is one-way history and backup (see docs/GUIDE.md); it
+  leaves out the change history, comments' edit history, work blocks and machine-local settings, and rebuilding a
+  database from it has no CLI command. A real sync between machines is still future work.
 - **Split the `test-ui` CI job.** It now runs about 1,100 unit tests, 365 contract cases against a built devserver and
   the Playwright walk tests in one job; consider separate unit, contract and walk jobs (the walk job's cold-start
   `page.goto` timed out twice and forced a rerun).
