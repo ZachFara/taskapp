@@ -44,6 +44,15 @@ describe('General', () => {
     expect(target.textContent).toMatch(/existing issue keys (do not|keep working)/i);
   });
 
+  it('offers only the week starts the core accepts', async () => {
+    const { target } = await mountSettings(General);
+    const trigger = field(target, 'Week starts on');
+    trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }));
+    await new Promise((r) => setTimeout(r, 0));
+    const offered = [...document.querySelectorAll('[role="option"]')].map((o) => o.textContent?.trim());
+    expect(offered).toEqual(['Sunday', 'Monday']);
+  });
+
   it('saves the time zone, theme and week start with the same keys as before', async () => {
     const { target, api } = await mountSettings(General);
     await pick(target, 'Time zone', 'Europe/Paris');

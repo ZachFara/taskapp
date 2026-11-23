@@ -27,7 +27,6 @@
   const weekItems = [
     { value: 'sunday', label: 'Sunday' },
     { value: 'monday', label: 'Monday' },
-    { value: 'saturday', label: 'Saturday' },
   ];
 
   let name = $state('');

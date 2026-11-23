@@ -2,7 +2,7 @@
 
 Give the prompt below to an agent that has two MCP servers connected: the official Linear server (read only) and
 `taskapp-mcp` (write). The agent never changes anything in Linear. Take a snapshot of the taskapp database first
-(`taskapp backup` or copy the file with the app quit); a failed run is undone with `taskapp backup restore <file> --yes`.
+(copy the database file with the app quit); a failed run is undone with `taskapp backup restore <file> --yes`.
 
 Tool names below are the ones in `crates/mcp/src/tools.rs`. Linear tool names are the official server's.
 
