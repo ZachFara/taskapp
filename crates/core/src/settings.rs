@@ -66,6 +66,7 @@ const USER_KEYS: &[&str] = &[
     "theme",
     "estimation",
     "point_scale",
+    "issue_fields",
     "insights_charts",
     "sidebar_sparklines",
     "reminders_list_id",
@@ -108,12 +109,71 @@ pub async fn set_from_user(db: &Db, key: &str, value: &serde_json::Value) -> Res
         }
         "theme" => check_one_of(key, value, &["system", "light", "dark"])?,
         "week_start" => check_one_of(key, value, &["sunday", "monday"])?,
+        "issue_fields" => check_issue_fields(value)?,
         "default_view_template" if !(value.is_null() || value.is_i64()) => {
             return Err(bad("a view template id or null"));
         }
         _ => {}
     }
     set(db, key, value).await
+}
+
+/// The built-in issue fields a workspace may switch off; status and title are always on.
+pub const ISSUE_FIELDS: &[&str] = &[
+    "priority",
+    "project",
+    "milestone",
+    "cycle",
+    "labels",
+    "start",
+    "due",
+    "estimate",
+    "points",
+    "parent",
+];
+
+/// `issue_fields` is an ordered list of `{field, on}`: known names only, each at most once.
+fn check_issue_fields(value: &serde_json::Value) -> Result<()> {
+    let bad = |why: String| Error::Invalid(format!("setting issue_fields: {why}"));
+    let list = value
+        .as_array()
+        .ok_or_else(|| bad("must be a list of {field, on}".into()))?;
+    let mut seen = Vec::new();
+    for item in list {
+        let name = item.get("field").and_then(|f| f.as_str());
+        let on = item.get("on").is_some_and(serde_json::Value::is_boolean);
+        match name {
+            Some(n) if on && ISSUE_FIELDS.contains(&n) && !seen.contains(&n) => seen.push(n),
+            Some(n) if on => return Err(bad(format!("unknown or repeated field `{n}`"))),
+            _ => {
+                return Err(bad(
+                    "each entry needs a field name and a true or false `on`".into(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Fields quick add must not read tokens for: those switched off in `issue_fields`, and points when `estimation`
+/// has them off.
+///
+/// # Errors
+/// Fails on a database error.
+pub async fn fields_off(db: &Db) -> Result<Vec<String>> {
+    let list = get::<Vec<serde_json::Value>>(db, "issue_fields")
+        .await?
+        .unwrap_or_default();
+    let mut off: Vec<String> = list
+        .iter()
+        .filter(|i| i.get("on") == Some(&serde_json::Value::Bool(false)))
+        .filter_map(|i| i.get("field")?.as_str().map(String::from))
+        .collect();
+    let est = get::<String>(db, "estimation").await?;
+    if matches!(est.as_deref(), Some("none" | "time")) {
+        off.push("points".into());
+    }
+    Ok(off)
 }
 
 fn check_one_of(key: &str, value: &serde_json::Value, allowed: &[&str]) -> Result<()> {

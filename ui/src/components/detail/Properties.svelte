@@ -11,6 +11,7 @@
   import { dueFrom, dueParts, humanDate, isDate, isTime, minutes, PRIORITIES, priorityGlyph } from './format';
   import IssuePicker from './IssuePicker.svelte';
   import OptionList from './OptionList.svelte';
+  import { fieldList, fieldOn } from '../../lib/fields.svelte';
   import PointsRow from '../insights/PointsRow.svelte';
   import PropertyRow from './PropertyRow.svelte';
 
@@ -70,6 +71,7 @@
     {/snippet}
   </PropertyRow>
 
+  {#snippet row_priority()}
   <PropertyRow id="priority" name="Priority" cmd="issue.detail.priority" bind:openRow>
     {#snippet value()}<PriorityGlyph level={priorityGlyph(issue.priority)} />{PRIORITIES[issue.priority]}{/snippet}
     {#snippet editor(close)}
@@ -78,7 +80,9 @@
       </OptionList>
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
+  {#snippet row_project()}
   <PropertyRow id="project" name="Project" cmd="issue.detail.project" bind:openRow>
     {#snippet value()}{#if project}<EntityIcon icon={project.icon ?? 'icon:project'} color={project.color} />{project.name}{:else}{@render none()}{/if}{/snippet}
     {#snippet editor(close)}
@@ -87,21 +91,27 @@
       </OptionList>
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
+  {#snippet row_milestone()}
   <PropertyRow id="milestone" name="Milestone" cmd="issue.detail.milestone" bind:openRow>
     {#snippet value()}{#if milestone}{milestone.name}{:else}{@render none()}{/if}{/snippet}
     {#snippet editor(close)}
       <OptionList label="Milestone" none="No milestone" value={issue.milestone_id} options={milestones} onpick={(id) => { close(); save({ milestone_id: num(id) }); }} />
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
+  {#snippet row_cycle()}
   <PropertyRow id="cycle" name="Cycle" cmd="issue.detail.cycle" bind:openRow>
     {#snippet value()}{#if cycle}{cycleName(cycle)}{:else}{@render none()}{/if}{/snippet}
     {#snippet editor(close)}
       <OptionList label="Cycle" none="No cycle" value={issue.cycle_id} options={cycles.map((c) => ({ id: c.id, name: cycleName(c) }))} onpick={(id) => { close(); save({ cycle_id: num(id) }); }} />
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
+  {#snippet row_labels()}
   <PropertyRow id="labels" name="Labels" cmd="issue.detail.labels" bind:openRow>
     {#snippet value()}
       {#each labels.filter((l) => issue.label_ids.includes(l.id)) as l (l.id)}<Pill color={l.color}>{l.name}</Pill>{:else}{@render none()}{/each}
@@ -114,14 +124,18 @@
       </ul>
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
+  {#snippet row_start()}
   <PropertyRow id="start" name="Start" cmd="issue.detail.start" bind:openRow>
     {#snippet value()}{humanDate(issue.start_date)}{/snippet}
     {#snippet editor()}
       <TextInput type="date" label="Start date" value={issue.start_date ?? ''} oninput={(e) => { const v = (e.currentTarget as HTMLInputElement).value; if (isDate(v)) save({ start_date: v || null }); }} />
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
+  {#snippet row_due()}
   <PropertyRow id="due" name="Due" cmd="issue.detail.due" bind:openRow>
     {#snippet value()}{due.date ? `${humanDate(due.date)}${due.timed ? ` ${due.time}` : ''}` : 'None'}{/snippet}
     {#snippet editor()}
@@ -134,7 +148,9 @@
       </div>
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
+  {#snippet row_estimate()}
   <PropertyRow id="estimate" name="Estimate" cmd="issue.detail.estimate" bind:openRow>
     {#snippet value()}{#if issue.estimate_minutes !== null}{minutes(issue.estimate_minutes)}{:else}{@render none()}{/if}{/snippet}
     {#snippet editor(close)}
@@ -144,9 +160,11 @@
       </form>
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
-  <PointsRow {issue} {save} bind:openRow />
+  {#snippet row_points()}<PointsRow {issue} {save} bind:openRow />{/snippet}
 
+  {#snippet row_parent()}
   <PropertyRow id="parent" name="Parent" cmd="issue.detail.parent" bind:openRow>
     {#snippet value()}{#if parent}{parent.key} {parent.title}{:else}{@render none()}{/if}{/snippet}
     {#snippet editor(close)}
@@ -156,6 +174,14 @@
       </div>
     {/snippet}
   </PropertyRow>
+  {/snippet}
+
+  {#each fieldList() as f (f.field)}
+    {#if fieldOn(f.field)}
+      {@const rows = { priority: row_priority, project: row_project, milestone: row_milestone, cycle: row_cycle, labels: row_labels, start: row_start, due: row_due, estimate: row_estimate, points: row_points, parent: row_parent }}
+      {@render rows[f.field]()}
+    {/if}
+  {/each}
 
   {#each visible as d (d.key)}
     {@const v = issue.properties[d.key] ?? null}

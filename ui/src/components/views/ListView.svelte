@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fieldOn } from '../../lib/fields.svelte';
   import { api } from '../../lib/api';
   import type { Cycle, FieldRef, Issue, IssuePatch, Label, Project, SavedView, Status, StatusCategory } from '../../lib/bindings';
   import { listState } from '../../lib/listState.svelte';
@@ -367,7 +368,7 @@
                 <Checkbox checked={chosen} label={`Select ${i.key}`} />
               {/if}
             </span>
-            <span class="prio"><PriorityGlyph level={priorityGlyph(i.priority)} /></span>
+            <span class="prio">{#if fieldOn('priority')}<PriorityGlyph level={priorityGlyph(i.priority)} />{/if}</span>
             <span class="key">{i.key}</span>
             {#snippet statusBtn(tp: Record<string, unknown>)}
               <button

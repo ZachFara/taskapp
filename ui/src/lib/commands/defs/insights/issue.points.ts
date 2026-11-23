@@ -1,6 +1,7 @@
 import { readEstimation, pointsOn, SCALES, type Estimation } from '../../../../components/insights/estimation';
 import type { IssuePatch } from '../../../bindings';
 import { defineCommand } from '../../registry';
+import { fieldOn } from '../../../fields.svelte';
 import { apply, patchOf } from '../issue/_issue';
 
 const set = (ctx: Parameters<typeof apply>[0], points: number | null) => apply(ctx, patchOf({ points } as IssuePatch));
@@ -20,7 +21,7 @@ addEventListener('history:wrote', refresh);
 
 defineCommand({
   id: 'issue.points', label: 'Set points', icon: 'bolt', group: 'Issue', shortcut: 'shift+e',
-  when: () => pointsOn(estimation),
+  when: () => fieldOn('points') && pointsOn(estimation),
   page: (ctx) => ({
     title: 'Points',
     // A typed number to one decimal; `none` clears.

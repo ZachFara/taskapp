@@ -12,6 +12,7 @@
   import EmptyState from '../../ui/EmptyState.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
   import IconButton from '../../ui/IconButton.svelte';
+    import { fixedOn } from '../../lib/fields.svelte';
     import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
     import { priorityGlyph, priorityName, priorityOrder } from '../../lib/priority';
   import Select from '../../ui/Select.svelte';
@@ -70,7 +71,7 @@
     base
       .filter((ref) => ctx.points || ref.Fixed !== 'Points')
       .map((ref, index) => ({ ref, index, id: colId(ref), kind: kindOf(ref), label: label(ref) }))
-      .filter((c): c is typeof c & { kind: EditKind } => c.kind !== null),
+      .filter((c): c is typeof c & { kind: EditKind } => c.kind !== null && fixedOn(c.ref.Fixed)),
   );
   function label(ref: FieldRef) {
     return ref.Property !== undefined ? (propertyDefs.find((d) => d.key === ref.Property)?.name ?? '') : FIXED[ref.Fixed!]!.label;

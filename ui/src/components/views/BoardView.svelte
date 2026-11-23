@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fieldOn } from '../../lib/fields.svelte';
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
   import type { Issue, IssuePatch, SavedView, StatusCategory } from '../../lib/bindings';
@@ -234,7 +235,7 @@
               >
                 <span class="top">
                   <span class="key">{i.key}</span>
-                  <PriorityGlyph level={priorityGlyph(i.priority)} size={14} />
+                  {#if fieldOn('priority')}<PriorityGlyph level={priorityGlyph(i.priority)} size={14} />{/if}
                 </span>
                 <span class="title">{i.title}</span>
                 <span class="foot">

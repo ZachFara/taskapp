@@ -33,7 +33,7 @@ describe('Settings', () => {
     const { target } = await mountSettings(Settings);
     const names = [...target.querySelectorAll('nav a')].map((a) => a.textContent?.trim());
     expect(names).toEqual([
-      'General', 'Statuses', 'Labels', 'Projects', 'Cycles', 'Properties', 'Templates', 'Import',
+      'General', 'Statuses', 'Labels', 'Projects', 'Cycles', 'Fields', 'Properties', 'Templates', 'Import',
       'Reminders', 'Calendar', 'Export', 'Backups', 'Keyboard shortcuts',
     ]);
     expect(target.textContent).toContain('Keyboard shortcuts');

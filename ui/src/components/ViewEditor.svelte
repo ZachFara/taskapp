@@ -17,7 +17,7 @@
   import DisplayPanel from './display/DisplayPanel.svelte';
   import FilterChip from './filters/FilterChip.svelte';
   import { fieldKey, makeLookup, parseField, type Data } from './filters/lookup';
-  import { pointsOn, readEstimation, type Estimation } from './insights/estimation';
+  import { fixedOn } from '../lib/fields.svelte';
   import { buildFilter, newChip, splitFilter, type Chip } from './filters/model';
 
   let { def, onchange, clearSignal = 0 }: { def: ViewDef; onchange: (patch: Partial<ViewDef>) => void; clearSignal?: number } = $props();
@@ -31,8 +31,6 @@
   let sortOpen = $state(false);
   let displayOpen = $state(false);
   let addOpen = $state(false);
-  let estimation = $state<Estimation>('both');
-  void readEstimation().then((r) => (estimation = r.estimation));
   // The command menu runs the same open handlers the buttons do.
   onMount(() => {
     const on: [string, () => void][] = [
@@ -62,7 +60,7 @@
   const commit = () => onchange({ filter: buildFilter($state.snapshot(advanced), $state.snapshot(chips)) });
   const quick: FixedField[] = ['Status', 'StatusCategory', 'Project', 'Label', 'Priority', 'DueDate'];
   const addable = $derived<{ field: FieldRef; name: string }[]>([
-    ...quick.map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
+    ...quick.filter(fixedOn).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
     ...data.defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name })),
   ]);
   function add(field: FieldRef) {
@@ -83,7 +81,7 @@
   };
 
   const allFields = $derived([
-    ...(['Status', 'StatusCategory', 'Priority', 'Project', 'Cycle', 'DueDate', 'Points', 'Title'] as FixedField[]).filter((f) => f !== 'Points' || pointsOn(estimation)).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
+    ...(['Status', 'StatusCategory', 'Priority', 'Project', 'Cycle', 'DueDate', 'Points', 'Title'] as FixedField[]).filter(fixedOn).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
     ...data.defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name })),
   ]);
   const fieldItems = $derived(allFields.map((f) => ({ value: fieldKey(f.field), label: f.name })));
@@ -99,7 +97,7 @@
   </Tooltip>
 {/snippet}
 {#snippet addBtn()}<Button icon="filter">Add filter</Button>{/snippet}
-{#snippet groupBtn()}<Button icon="group">Group{def.group_by && (def.group_by.Fixed !== 'Points' || pointsOn(estimation)) ? `: ${lookup.name(def.group_by)}` : ''}</Button>{/snippet}
+{#snippet groupBtn()}<Button icon="group">Group{def.group_by && fixedOn(def.group_by.Fixed) ? `: ${lookup.name(def.group_by)}` : ''}</Button>{/snippet}
 {#snippet sortBtn()}<Button icon="sort">Sort{sort ? `: ${lookup.name(sort.field)}` : ''}</Button>{/snippet}
 {#snippet displayBtn()}<Button icon="eye">Display</Button>{/snippet}
 

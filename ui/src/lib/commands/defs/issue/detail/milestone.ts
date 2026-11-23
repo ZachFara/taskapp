@@ -1,4 +1,5 @@
 import { defineCommand } from '../../../registry';
+import { fieldOn } from '../../../../fields.svelte';
 
 // The open issue screen listens for the event; the registry only decides when it fires.
 defineCommand({
@@ -8,6 +9,6 @@ defineCommand({
   group: 'Issue',
   scope: 'detail',
   noShortcutReason: 'rare edit, reached from the properties list or the command menu',
-  when: (c) => c.route.startsWith('/issue/') || c.openIssueId !== null,
+  when: (c) => fieldOn('milestone') && (c.route.startsWith('/issue/') || c.openIssueId !== null),
   run: () => dispatchEvent(new CustomEvent('command:issue.detail.edit', { detail: 'milestone' })),
 });

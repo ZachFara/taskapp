@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import { createMockApi, fixtures, type MockSeed } from '../../lib/api.mock';
 import { setApi } from '../../lib/api';
+import { loadFields } from '../../lib/fields.svelte';
 import { refreshAll } from '../../lib/stores.svelte';
 import type { Issue, SavedView, ViewDef } from '../../lib/bindings';
 import BoardView from '../views/BoardView.svelte';
@@ -28,6 +29,7 @@ async function render(comp: Parameters<typeof mount>[0], props: Record<string, u
   const api = createMockApi({ ...fixtures, issues: ISSUES, views: [] } as MockSeed);
   await api.settings.set('estimation', estimation);
   setApi(api);
+  await loadFields();
   await refreshAll();
   const target = document.body.appendChild(document.createElement('div'));
   live = mount(comp, { target, props });
