@@ -4,6 +4,8 @@ Cairn is a single-user, Linear-like task manager for the Mac. It has custom prop
 
 Status: pre-release. There is no signed or notarized build, and no licence yet. See [docs/DESIGN.md](docs/DESIGN.md) for the spec.
 
+How to use the app: [docs/GUIDE.md](docs/GUIDE.md)
+
 ## Build and run
 
 Needs stable Rust, Node with pnpm 10 (`npx -y pnpm@10` works), the Tauri CLI, and the Xcode command line tools for the Swift Reminders helper.
