@@ -38,11 +38,17 @@ export function stepLabel(raw: string): string {
 // Named by the app after any write; the step label comes from the backend, not from the write.
 // A saved view's layout, grouping, sorting and filters change as the user looks around; that is not a step to announce
 // (`u` still undoes it).
+// The backend words every view save "Changed display of <name>"; the page announces the saves that matter (a filter
+// or a rename) itself, so the generic one is dropped.
 const QUIET = new Set(['views_save']);
+const quiet = (label: string) => QUIET.has(label) || label.startsWith('Changed display of ');
+
+/** An undoable change the app names itself. */
+export const announce = (label: string) => show({ label, tone: 'success', action: { run: 'undo', text: 'Undo' } });
 
 export async function onWrote() {
   const { undo } = await api.history.undoStatus();
-  if (undo && !QUIET.has(undo)) show({ label: stepLabel(undo), tone: 'success', action: { run: 'undo', text: 'Undo' } });
+  if (undo && !quiet(undo)) show({ label: stepLabel(undo), tone: 'success', action: { run: 'undo', text: 'Undo' } });
 }
 
 const message = (e: unknown, fallback: string) => (e as Partial<ErrorPayload>)?.message ?? fallback;

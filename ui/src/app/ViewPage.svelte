@@ -4,6 +4,7 @@
   import type { Layout, SavedView, ViewDef } from '../lib/bindings';
   import { api } from '../lib/api';
   import { issues, refreshAll, selectedIssueId } from '../lib/stores.svelte';
+  import { announce } from '../components/undoState.svelte';
   import ViewEditor from '../components/ViewEditor.svelte';
   import InsightsPanel from '../components/insights/InsightsPanel.svelte';
   import CommandButton from '../components/CommandButton.svelte';
@@ -77,13 +78,22 @@
   const filtered = $derived(def?.filter != null);
 
   // Debounced: a burst of chip edits is one save.
+  // A filter change changes what the user sees, so its save is announced with an Undo; display toggles are not.
+  let loud = false;
   const save = () => {
     clearTimeout(timer);
-    timer = setTimeout(() => view && def && api.views.save(view.id, name, def, view.icon, view.color), SAVE_DELAY);
+    timer = setTimeout(async () => {
+      if (!view || !def) return;
+      const say = loud;
+      loud = false;
+      await api.views.save(view.id, name, def, view.icon, view.color);
+      if (say) announce(`Changed filter of ${name}`);
+    }, SAVE_DELAY);
   };
   function change(patch: Partial<ViewDef>) {
     if (!def) return;
     def = { ...def, ...patch };
+    if ('filter' in patch) loud = true;
     save();
   }
   const setLayout = (l: string) => {
@@ -96,6 +106,7 @@
     if (!next || !view || next === name) return;
     name = next;
     await api.views.save(view.id, next, def!, view.icon, view.color);
+    announce(`Renamed view to ${next}`);
     await refreshAll();
   }
   async function togglePin() {

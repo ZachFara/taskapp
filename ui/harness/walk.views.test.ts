@@ -301,4 +301,18 @@ describe('walk project', { timeout: 25_000 }, () => {
     expect(await send.isDisabled()).toBe(true);
     expect(await send.evaluate((e) => getComputedStyle(e).opacity)).toBe('1');
   });
+
+  it('R5 filter and rename saves raise an undo toast; layout and display toggles stay quiet', async () => {
+    await open();
+    await page.getByRole('tab', { name: 'Table' }).click();
+    await page.waitForTimeout(900);
+    expect(await page.locator('.toast').allInnerTexts()).toEqual([]);
+    await page.getByRole('button', { name: /^Remove filter/ }).first().click();
+    await pw(page.locator('.toast')).toContainText('Changed filter of');
+    await pw(page.locator('.toast').getByRole('button', { name: /Undo/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Rename view' }).click();
+    await page.getByLabel('View name').fill('Renamed once');
+    await page.getByRole('button', { name: 'Rename', exact: true }).click();
+    await pw(page.locator('.toast')).toContainText('Renamed view to Renamed once');
+  });
 });
