@@ -39,7 +39,11 @@
   $effect(() => {
     const open = () => (creating = true);
     addEventListener('command:event.new', open);
-    return () => removeEventListener('command:event.new', open);
+    addEventListener('command:view.refresh', load);
+    return () => {
+      removeEventListener('command:event.new', open);
+      removeEventListener('command:view.refresh', load);
+    };
   });
 
   onMount(load);

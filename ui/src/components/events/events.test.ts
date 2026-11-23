@@ -86,6 +86,16 @@ describe('Event page', () => {
     expect(document.body.textContent).not.toContain('Prepare slides');
   });
 
+  it('reloads when something else changes it, as after an undo', async () => {
+    const issue = await api.issues.create({ title: 'Prepare slides' });
+    const e = await api.events.create(input('Demo', '2026-12-02T14:00:00'));
+    await show(EventPage, { params: { id: String(e.id) } });
+    await api.events.link(e.id, issue.id);
+    dispatchEvent(new Event('command:view.refresh'));
+    await settle();
+    expect(document.body.textContent).toContain('Prepare slides');
+  });
+
   it('says so for an event that does not exist', async () => {
     await show(EventPage, { params: { id: '99' } });
     expect(document.body.textContent).toContain('Event not found');

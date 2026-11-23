@@ -54,6 +54,12 @@
     void load();
   });
 
+  // An undo or redo changed it from outside.
+  $effect(() => {
+    addEventListener('command:view.refresh', load);
+    return () => removeEventListener('command:view.refresh', load);
+  });
+
   // The command menu and keys reach this page through the registry's events.
   $effect(() => {
     const on: [string, () => void][] = [

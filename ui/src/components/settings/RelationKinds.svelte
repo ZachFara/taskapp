@@ -34,10 +34,12 @@
     draft = { name: '', forward: '', reverse: '', symmetric: false };
   });
   const change = (k: RelationKindDef, patch: Partial<RelationKindDef>) => write(() => api.relation.kindsUpdate({ ...k, ...patch }));
-  const remove = () => write(async () => {
-    await api.relation.kindsDelete(doomed!.id);
+  // The dialog closes first, so a refusal shows in the page below it instead of behind the dialog.
+  const remove = () => {
+    const { id } = doomed!;
     doomed = null;
-  });
+    return write(() => api.relation.kindsDelete(id));
+  };
 </script>
 
 <div class="es">

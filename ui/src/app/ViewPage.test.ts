@@ -99,6 +99,7 @@ describe('ViewPage', () => {
     await waitFor(async () => expect((await saved()).def.filter).toEqual({
       Cond: { field: { Fixed: 'Title' }, op: 'Contains', value: 'Alpha' },
     }), { timeout: 2000 });
+    expect(await screen.findByRole('button', { name: /^Title contains Alpha/ })).toBeTruthy(); // the kept filter is now a chip
   });
 
   it('empty_result_offers_clear_filters', async () => {
