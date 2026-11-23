@@ -10,7 +10,8 @@ const IDS: [string, string][] = [
   ['view.rename', '/view/1'], ['view.duplicate', '/view/1'], ['view.delete', '/view/1'], ['view.pin', '/view/1'],
   ['group.collapse', '/view/1'], ['group.collapse.all', '/view/1'], ['group.add', '/view/1'],
   ['issue.description.edit', '/issue/ABC-1'], ['issue.comment.focus', '/issue/ABC-1'], ['issue.subissue.add', '/issue/ABC-1'],
-  ['issue.relation.add', '/issue/ABC-1'],
+  ['issue.relation.add', '/issue/ABC-1'], ['issue.event.add', '/issue/ABC-1'],
+  ['event.edit', '/event/1'], ['event.delete', '/event/1'], ['event.link', '/event/1'], ['event.new', '/events'],
   ['project.rename', '/project/web'], ['project.description.edit', '/project/web'], ['milestone.new', '/project/web'],
   ['cycle.move_unfinished', '/cycles'], ['settings.save', '/settings/general'],
 ];

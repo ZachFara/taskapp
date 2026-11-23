@@ -6,7 +6,7 @@ import * as insights from './api.mock.insights';
 import { stepLabel } from './api.mock.stepLabel';
 import { scrubDef, seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
-  AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
+  AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, Event, EventInput, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
   NewIssue, Pin, Project, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
   TemplateInput, Value, ViewDef, ViewTemplate, WorkBlock,
 } from './bindings';
@@ -89,6 +89,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   let workspace: Workspace = s.workspace ?? { setup_done: false, name: null, key: 'ABC', timezone: tz };
   const labels = s.labels ?? [];
   const cycles = s.cycles ?? [];
+  const events: Event[] = [];
   const views = s.views ?? [];
   const viewTemplates: ViewTemplate[] = s.viewTemplates ?? [];
   const milestones: Milestone[] = s.milestones ?? [];
@@ -101,7 +102,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, templates, relations, comments, views, milestones, pins, viewTemplates, importLog] as unknown[][];
+  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, events, templates, relations, comments, views, milestones, pins, viewTemplates, importLog] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -425,6 +426,15 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   // Same checks as core's palette: an icon is `icon:<id>` or `emoji:<emoji>`, a colour a palette key or a hex near one.
   const checkIcon = (icon?: string | null) => icon == null || iconOk(icon) || fail('Invalid', `icon ${icon} must be icon:<id> or emoji:<emoji>`);
   const colorKey = (color?: string | null) => (color == null ? null : (keyFor(color) ?? fail('Invalid', `color ${color} is not a palette key`)));
+  // Times are local wall-clock text; the backend always writes seconds.
+  const clock = (t: string) => (t.length === 16 ? `${t}:00` : t);
+  const eventOf = (id: number, i: EventInput, issue_ids: number[]): Event => {
+    const [starts_at, ends_at] = [clock(i.starts_at), i.ends_at === null ? null : clock(i.ends_at)];
+    if (!i.title.trim()) fail('Invalid', 'an event needs a title');
+    if (ends_at !== null && ends_at < starts_at) fail('Invalid', 'an event cannot end before it starts');
+    checkIcon(i.icon);
+    return { id, ...i, starts_at, ends_at, color: colorKey(i.color), issue_ids };
+  };
   const off = { reminders: 'Off', gcal: 'Off', export: 'Off', backup: 'Off' } as const;
 
   const api: MockApi = {
@@ -679,6 +689,35 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       delete: async (id) => {
         remove(cycles, id, 'cycle');
         s.issues.forEach((i) => i.cycle_id === id && (i.cycle_id = null));
+        return null;
+      },
+    },
+    events: {
+      list: async (from, to) =>
+        events
+          .filter((e) => !e.archived && (from === null || (e.ends_at ?? e.starts_at).slice(0, 10) >= from) && (to === null || e.starts_at.slice(0, 10) <= to))
+          .sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.id - b.id),
+      get: async (id) => ({ ...find(events, id, 'event') }),
+      create: async (input) => {
+        const e = eventOf(next(events), input, []);
+        events.push(e);
+        return { ...e };
+      },
+      update: async (id, input) => {
+        const old = eventOf(id, input, []);
+        const e = find(events, id, 'event');
+        return { ...Object.assign(e, { ...old, issue_ids: e.issue_ids }) };
+      },
+      delete: async (id) => nothing(remove(events, id, 'event')),
+      link: async (event, issue) => {
+        const e = find(events, event, 'event');
+        getIssue(issue);
+        if (!e.issue_ids.includes(issue)) e.issue_ids = [...e.issue_ids, issue].sort((a, b) => a - b);
+        return null;
+      },
+      unlink: async (event, issue) => {
+        const e = find(events, event, 'event');
+        e.issue_ids = e.issue_ids.filter((x) => x !== issue);
         return null;
       },
     },
@@ -1045,7 +1084,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     'issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.delete ' +
     'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
     'projects.create projects.update projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
-    'cycles.create cycles.update cycles.delete templates.create templates.update templates.delete templates.apply ' +
+    'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink templates.create templates.update templates.delete templates.apply ' +
     'labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
     'relations.add relations.remove views.save views.delete views.reorder views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
     'view.templatesCreate view.templatesUpdate view.templatesDelete pins.pin pins.unpin pins.reorder pins.set import.apply'

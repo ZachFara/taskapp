@@ -18,6 +18,7 @@
   import Properties from './detail/Properties.svelte';
   import Relations from './detail/Relations.svelte';
   import SubIssues from './detail/SubIssues.svelte';
+  import IssueEvents from './events/IssueEvents.svelte';
 
   // One component for the full page (/issue/:key) and the side panel (mode 'panel', closed through `onclose`).
   let { params = {}, mode = 'page', onclose, onopen }: {
@@ -193,6 +194,7 @@
           <Description {issue} {save} bind:editing={editingDesc} />
           <SubIssues {issue} {act} {rev} {open} />
           <Relations {issue} {act} {rev} {open} />
+          <IssueEvents {issue} {act} {rev} />
           <Comments {issue} {act} {rev} />
           <History {issue} {rev} />
         </main>
