@@ -365,7 +365,7 @@ async fn relation(db: &Db, cmd: RelationCmd) -> Result<Value> {
     let rel = Relation {
         from: issue_id(db, &from).await?,
         to: issue_id(db, &to).await?,
-        kind: relation_kind(&kind)?,
+        kind: RelationKind::new(&kind),
     };
     if add {
         relations::add(db, rel, SRC).await?;
@@ -455,15 +455,6 @@ fn property_kind(name: &str) -> Result<PropertyKind> {
         "url" => PropertyKind::Url,
         "notelink" => PropertyKind::NoteLink,
         _ => return Err(Error::Invalid(format!("unknown property kind: {name}"))),
-    })
-}
-
-fn relation_kind(name: &str) -> Result<RelationKind> {
-    Ok(match name {
-        "blocks" => RelationKind::Blocks,
-        "related" => RelationKind::Related,
-        "duplicate" => RelationKind::Duplicate,
-        _ => return Err(Error::Invalid(format!("unknown relation kind: {name}"))),
     })
 }
 

@@ -255,7 +255,7 @@ async fn relation_add_and_remove() -> R {
     let rel = Relation {
         from: a.id,
         to: b.id,
-        kind: RelationKind::Blocks,
+        kind: RelationKind::new("blocks"),
     };
     history::step("Relate", relations::add(&db, rel.clone(), UI)).await?;
     undo::undo(&db).await?;

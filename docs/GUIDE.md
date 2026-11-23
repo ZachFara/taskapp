@@ -125,7 +125,11 @@ Quick-add has no token for status, parent, cycle or milestone. Example: `Pay ren
 - **Sub-issues.** In the issue panel, "Sub-issues" shows a progress bar and a field: type a title and press enter to
   create one, or pick an existing issue to attach. Or set a parent with `shift+p`. In a list the Sub-issues display
   option nests, flattens or hides them.
-- **Relations.** Kinds: blocks, blocked by, related, duplicate. Add from the panel's Relations section, or with `r`.
+- **Relations.** Kinds: blocks, related, duplicate, follows, caused by, part of, plus your own. Each reads one way from
+  the first issue and the other way from the second (blocks / blocked by). Add from the panel's Relations section, or
+  with `r`. Manage kinds in Settings > Relations: add one with its two labels, rename it, delete it once no relation uses
+  it. Built-in kinds cannot be changed. A view can filter on "Relation kind" (issues with a relation of that kind, on
+  either end).
   CLI: `relation add`. In the timeline, "blocks" relations draw as arrows and a critical path is highlighted.
 - **Comments.** Markdown. Panel "Comments" section: type and press the Comment button. CLI `comment add`; MCP `add_comment`.
 - **History.** The panel's History section lists every change with its source (UI, Agent, Cli, import, Undo, ...).
@@ -294,7 +298,7 @@ quick-add, `taskapp template apply <id> [title]`, or MCP `apply_template`.
 
 ## Settings
 
-Settings is a list of sections: General, Statuses, Labels, Projects, Cycles, Properties, Templates, Import, Reminders,
+Settings is a list of sections: General, Statuses, Labels, Projects, Cycles, Properties, Relations, Templates, Import, Reminders,
 Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` saves the open page.
 
 | General setting | Values | Notes |
@@ -395,7 +399,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `issue.points` | Set points | `shift+e` | Set points: scale values or type a number to one decimal, `none` clears. Only offered when estimation is Points or Both. |
 | `issue.parent` | Set parent | `shift+p` | Set the parent issue, or no parent. |
 | `issue.property` | Set property | `a` | Set a Select or Checkbox custom property (other kinds are edited in the issue panel or table). |
-| `issue.relation` | Add relation | `r` | Add a relation (Blocks, Related to, Duplicate of) to another issue. |
+| `issue.relation` | Add relation | `r` | Add a relation of any kind to another issue. |
 | `issue.archive` | Archive | `#` | Archive the selection. More than 5 issues asks for confirmation in the command menu. |
 | `issue.delete` | Delete (archives) | `delete` | Same as Archive. There is no hard delete. |
 | `issue.duplicate` | Duplicate | `mod+d` | Duplicate the selection (one undo step). |
@@ -497,6 +501,7 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `settings.labels` | Labels | (none) | Open Settings, Labels. |
 | `settings.projects` | Projects | (none) | Open Settings, Projects. |
 | `settings.properties` | Properties | (none) | Open Settings, Properties. |
+| `settings.relations` | Relations | (none) | Open Settings, Relations. |
 | `settings.reminders` | Reminders | (none) | Open Settings, Reminders. |
 | `settings.statuses` | Statuses | (none) | Open Settings, Statuses. |
 | `settings.templates` | Templates | (none) | Open Settings, Templates. |
@@ -558,7 +563,7 @@ subcommands; keys are issue keys such as `ABC-1`, ids are numbers.
 | `cycle list` / `cycle create --start --end [--name --color --icon]` | List or create cycles. | `taskapp cycle create --start 2026-12-01 --end 2026-12-14` |
 | `label list` / `label create <name> <color> [--icon]` | List or create labels. | `taskapp label create bug red` |
 | `comment add <key> <body>` | Comment on an issue. | `taskapp comment add ABC-1 "Looks good"` |
-| `relation add <from> <kind> <to>` / `relation remove ...` | Kinds: blocks, related, duplicate. | `taskapp relation add ABC-1 blocks ABC-2` |
+| `relation add <from> <kind> <to>` / `relation remove ...` | Kind: an id or name (blocks, related, duplicate, follows, caused_by, part_of, or a custom one). | `taskapp relation add ABC-1 blocks ABC-2` |
 | `pin list` / `pin add <kind> <target> [--title]` / `pin remove <id>` | Kinds: issue, project, view, cycle, note, url. | `taskapp pin add issue ABC-1` |
 | `template list` / `create` / `update <id>` / `delete <id>` | Issue templates: `create <name> <slug> [--icon --color --body JSON]`. | `taskapp template create Bug bug --body '{"title_prefix":"[Bug] "}'` |
 | `template apply <id> [title]` | Create the issue and its sub-issues. | `taskapp template apply 1 "Login fails"` |
@@ -589,7 +594,7 @@ Server `taskapp-mcp` over stdio (`taskapp-mcp [--db <path>]`). Writes use source
 | `archive_issue` | Archive. `key`. |
 | `bulk_update` | Many patches. `items` = list of `{key, patch}`; over 10 snapshots first; an unknown key applies nothing. |
 | `add_comment` | `key`, `body`, `created_at`. |
-| `add_relation` / `remove_relation` | `from_key`, `to_key`, `kind` (Blocks, Related, Duplicate). |
+| `add_relation` / `remove_relation` | `from_key`, `to_key`, `kind` (an id or name, as in the CLI). |
 | `set_points` | `key`, `points` (null clears). |
 | `get_history` | Change history. `key`. |
 | `list_properties` | List custom properties. |

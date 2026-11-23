@@ -107,6 +107,7 @@ impl Ctx<'_> {
         match field {
             FieldRef::Fixed(FixedField::Label) => return self.label(op, value),
             FieldRef::Fixed(FixedField::Archived) => return archived(op, value),
+            FieldRef::Fixed(FixedField::RelationKind) => return self.relation_kind(op, value),
             _ => {}
         }
         let c = self.col(field)?;
@@ -201,6 +202,34 @@ impl Ctx<'_> {
         Ok(format!("{not}{ANY} AND label_id IN ({m}))"))
     }
 
+    fn relation_kind(&mut self, op: Op, value: &Value) -> Result<String> {
+        const ANY: &str = "EXISTS (SELECT 1 FROM relations r WHERE (r.from_id = issues.id OR r.to_id = issues.id)";
+        let (negate, items) = match op {
+            Op::Eq | Op::Contains => (false, vec![scalar(value)?]),
+            Op::Neq => (true, vec![scalar(value)?]),
+            Op::In => (false, as_list(value)?.clone()),
+            Op::NotIn => (true, as_list(value)?.clone()),
+            Op::IsEmpty => return Ok(format!("NOT {ANY})")),
+            Op::IsNotEmpty => return Ok(format!("{ANY})")),
+            _ => {
+                return Err(Error::Invalid(
+                    "unsupported operator for relation kinds".into(),
+                ));
+            }
+        };
+        if items.is_empty() {
+            return Ok(if negate { "1" } else { "0" }.into());
+        }
+        for i in &items {
+            self.binds.push(scalar(i)?);
+        }
+        let not = if negate { "NOT " } else { "" };
+        Ok(format!(
+            "{not}{ANY} AND r.kind IN ({}))",
+            marks(items.len())
+        ))
+    }
+
     fn order(&mut self, sorts: &[Sort]) -> Result<String> {
         let mut parts = vec![];
         for s in sorts {
@@ -249,6 +278,9 @@ fn fixed_col(x: FixedField) -> Result<Col> {
             false,
         ),
         FixedField::Label => return Err(Error::Invalid("cannot sort by label".into())),
+        FixedField::RelationKind => {
+            return Err(Error::Invalid("cannot sort by relation kind".into()));
+        }
     };
     Ok(Col::fixed(sql, text))
 }

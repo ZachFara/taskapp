@@ -409,7 +409,7 @@ enum CommentCmd {
 enum RelationCmd {
     Add {
         from: String,
-        /// blocks, related, duplicate.
+        /// A relation kind id or name: blocks, related, duplicate, follows, `caused_by`, `part_of`, or a custom one.
         kind: String,
         to: String,
     },

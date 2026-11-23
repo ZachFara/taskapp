@@ -11,6 +11,7 @@
   import Projects from './Projects.svelte';
   import Properties from './Properties.svelte';
   import Reminders from './Reminders.svelte';
+  import RelationKinds from './RelationKinds.svelte';
   import Statuses from './Statuses.svelte';
   import Templates from './Templates.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
@@ -25,6 +26,7 @@
     { id: 'projects', label: 'Projects', icon: 'project', screen: Projects },
     { id: 'cycles', label: 'Cycles', icon: 'cycle', screen: Cycles },
     { id: 'properties', label: 'Properties', icon: 'layers', screen: Properties },
+    { id: 'relations', label: 'Relations', icon: 'link', screen: RelationKinds },
     { id: 'templates', label: 'Templates', icon: 'bookmark', screen: Templates },
     { id: 'import', label: 'Import', icon: 'arrow-down', screen: ImportPage },
     { id: 'reminders', label: 'Reminders', icon: 'bell', screen: Reminders },

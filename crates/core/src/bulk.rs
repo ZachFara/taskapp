@@ -31,7 +31,8 @@ pub async fn update(db: &Db, ids: &[IssueId], patch: BulkPatch, src: ChangeSourc
         if let Some(a) = patch.archive {
             issues::set_archived_in(&mut tx, id, src, a).await?;
         }
-        if let Some((kind, to)) = patch.add_relation {
+        if let Some((kind, to)) = &patch.add_relation {
+            let (kind, to) = (kind.clone(), *to);
             relations::add_in(&mut tx, Relation { from: id, to, kind }, src).await?;
         }
     }

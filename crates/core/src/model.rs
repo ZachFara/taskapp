@@ -79,11 +79,28 @@ pub enum PropertyKind {
     NoteLink,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
-pub enum RelationKind {
-    Blocks,
-    Related,
-    Duplicate,
+/// The id of a row in `relation_kinds`: "blocks", "related", "duplicate", or any other kind's slug.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(transparent)]
+pub struct RelationKind(pub String);
+
+impl RelationKind {
+    #[must_use]
+    pub fn new(id: &str) -> Self {
+        Self(id.to_owned())
+    }
+}
+
+/// A kind of relation: `forward` reads from the `from` issue ("blocks"), `reverse` from the `to` issue ("blocked by").
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct RelationKindDef {
+    pub id: RelationKind,
+    pub name: String,
+    pub forward: String,
+    pub reverse: String,
+    pub symmetric: bool,
+    pub built_in: bool,
+    pub position: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -353,6 +370,8 @@ pub enum FixedField {
     SubIssueProgress,
     RelationCount,
     CommentCount,
+    /// Filter only: the issue has a relation of the given kind id(s), on either end.
+    RelationKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]

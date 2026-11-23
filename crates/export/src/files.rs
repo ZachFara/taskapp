@@ -49,6 +49,17 @@ pub struct LabelRow {
     pub icon: Option<String>,
 }
 
+/// A custom relation kind; the built-in ones come with the database.
+#[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
+pub struct RelationKindRow {
+    pub id: String,
+    pub name: String,
+    pub forward: String,
+    pub reverse: String,
+    pub symmetric: bool,
+    pub position: i64,
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
 pub struct CycleRow {
     pub number: i64,
@@ -184,6 +195,9 @@ pub struct IssueFront {
     pub related: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub duplicate: Vec<String>,
+    /// Every other kind, by kind id; blocks, related and duplicate keep their own keys so old exports read back.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub relations: std::collections::BTreeMap<String, Vec<String>>,
     #[serde(default, skip_serializing_if = "Map::is_empty")]
     pub properties: Map<String, Value>,
 }

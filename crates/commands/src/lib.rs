@@ -15,12 +15,12 @@ use taskapp_core::{
     CycleId, Db, Error, ImportPlan, Issue, IssueId, IssuePatch, IssueStats, IssueTemplate, Label,
     LabelId, Measure, Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId, PinKind,
     ProgressScope, ProgressSeries, Project, ProjectId, PropertyDef, PropertyKind, Relation,
-    Reschedule, ResolvedPin, Result, SavedView, SelectOption, Status, StatusCategory, StatusId,
-    SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewId,
-    ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks, bulk,
-    comments, cycles, history, import, insights, issues, labels, pins, projects, properties,
-    quickadd, relations, schedule, search, settings, statuses, templates, undo, view_templates,
-    views, workspace,
+    RelationKind, RelationKindDef, Reschedule, ResolvedPin, Result, SavedView, SelectOption,
+    Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus,
+    VelocityPeriod, ViewDef, ViewId, ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId,
+    WorkspaceStatus, backup, blocks, bulk, comments, cycles, history, import, insights, issues,
+    labels, pins, projects, properties, quickadd, relation_kinds, relations, schedule, search,
+    settings, statuses, templates, undo, view_templates, views, workspace,
 };
 
 pub struct AppState {
@@ -239,6 +239,14 @@ macro_rules! with_commands {
             relations_add(s, rel: Relation) -> () { relations::add(&s.db, rel, ChangeSource::Ui).await }
             relations_remove(s, rel: Relation) -> () { relations::remove(&s.db, rel, ChangeSource::Ui).await }
             relations_for_issue(s, id: IssueId) -> Vec<Relation> { relations::for_issue(&s.db, id).await }
+            relation_kinds_list(s) -> Vec<RelationKindDef> { relation_kinds::list(&s.db).await }
+            relation_kinds_create(s, name: String, forward: String, reverse: String, symmetric: bool) -> RelationKindDef {
+                relation_kinds::create(&s.db, &name, &forward, &reverse, symmetric, ChangeSource::Ui).await
+            }
+            relation_kinds_update(s, kind: RelationKindDef) -> RelationKindDef {
+                relation_kinds::update(&s.db, kind, ChangeSource::Ui).await
+            }
+            relation_kinds_delete(s, id: RelationKind) -> () { relation_kinds::delete(&s.db, &id, ChangeSource::Ui).await }
 
             schedule_bars(s, view_id: ViewId) -> Vec<Bar> {
                 Ok(view_issues(s, view_id).await?.iter().filter_map(schedule::bar_for).collect())

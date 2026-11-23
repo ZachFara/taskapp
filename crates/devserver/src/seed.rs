@@ -389,9 +389,9 @@ pub async fn run(db: &Db) -> Result<()> {
         issue(db, today, row, k).await?;
     }
     for (from, to, kind) in [
-        (4, 6, RelationKind::Blocks),
-        (16, 18, RelationKind::Blocks),
-        (10, 11, RelationKind::Related),
+        (4, 6, RelationKind::new("blocks")),
+        (16, 18, RelationKind::new("blocks")),
+        (10, 11, RelationKind::new("related")),
     ] {
         let (from, to) = (IssueId(from), IssueId(to));
         relations::add(db, Relation { from, to, kind }, Ui).await?;

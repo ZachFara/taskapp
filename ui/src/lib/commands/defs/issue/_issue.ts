@@ -1,12 +1,12 @@
 import type { Api } from '../../../api';
-import type { BulkPatch, IssuePatch, Cycle, Issue, Label, Project, PropertyDef, Status } from '../../../bindings';
+import type { BulkPatch, IssuePatch, Cycle, Issue, Label, Project, PropertyDef, RelationKindDef, Status } from '../../../bindings';
 import { formatDay, formatEstimate, parseDate, parseEstimate } from '../../../parse/when';
 import type { CommandPage, Ctx } from '../../registry';
 
 /** What the pages list; filled from the api each time a page opens, so a page never lists stale or empty choices. */
 export const choices = {
   statuses: [] as Status[], projects: [] as Project[], labels: [] as Label[],
-  cycles: [] as Cycle[], defs: [] as PropertyDef[], issues: [] as Issue[],
+  cycles: [] as Cycle[], defs: [] as PropertyDef[], issues: [] as Issue[], relationKinds: [] as RelationKindDef[],
   /** The workspace time zone, which decides what "today" is for the date pages. */
   tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
 };
@@ -14,11 +14,11 @@ export const choices = {
 const noView = { filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false } as const;
 
 export async function loadChoices(api: Api) {
-  const [statuses, projects, labels, cycles, defs, issues, workspace] = await Promise.all([
+  const [statuses, projects, labels, cycles, defs, issues, workspace, relationKinds] = await Promise.all([
     api.statuses.list(), api.projects.list(), api.labels.list(), api.cycles.list(), api.properties.listDefs(),
-    api.views.query(noView), api.workspace.status(),
+    api.views.query(noView), api.workspace.status(), api.relation.kindsList(),
   ]);
-  Object.assign(choices, { statuses, projects, labels, cycles, defs, issues, tz: workspace.timezone || choices.tz });
+  Object.assign(choices, { statuses, projects, labels, cycles, defs, issues, relationKinds, tz: workspace.timezone || choices.tz });
 }
 
 /** The selection, else the focused issue, else the open one. */

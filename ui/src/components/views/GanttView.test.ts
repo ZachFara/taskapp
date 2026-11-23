@@ -35,7 +35,7 @@ const dragBy = (el: Element, px: number) => {
 };
 // Week zoom is 14px a day.
 const chain = () => [dated(1, '2026-12-01', '2026-12-03'), dated(2, '2026-12-05', '2026-12-07')];
-const block = () => api.relations.add({ from: 1, to: 2, kind: 'Blocks' });
+const block = () => api.relations.add({ from: 1, to: 2, kind: 'blocks' });
 
 describe('GanttView', () => {
   it('drag_confirms_and_applies_shift', async () => {

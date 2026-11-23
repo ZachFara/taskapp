@@ -53,7 +53,7 @@ const TOOLS: &[Row] = &[
     ),
     (
         "add_relation",
-        "Link two issues. Args: from_key, to_key, kind (Blocks, Related or Duplicate).",
+        "Link two issues. Args: from_key, to_key, kind (an id or name: blocks, related, duplicate, follows, caused_by, part_of, or a custom kind).",
         &["from_key", "to_key", "kind"],
     ),
     (
