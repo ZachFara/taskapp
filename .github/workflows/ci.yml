@@ -71,6 +71,8 @@ jobs:
         with: { tool: cargo-machete }
       - run: cargo machete
       - run: cargo build --workspace
+      # a release build compiles code that debug builds skip (cfg(debug_assertions)); `cargo tauri build` is release
+      - run: cargo check --workspace --release
 
   # Sharding rule: a job that passes 3 minutes is split, balanced by measured time. The slowest
   # package gets its own job. Today: core alone, everything else together.

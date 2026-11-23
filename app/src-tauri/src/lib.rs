@@ -18,6 +18,8 @@ use tauri_plugin_deep_link::DeepLinkExt;
 
 use crate::sync_loop::{Real, Syncer, Timing};
 
+// Only debug builds write the bindings file; a release build must not carry an unused constant.
+#[cfg(debug_assertions)]
 const BINDINGS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../ui/src/lib/bindings.ts");
 
 /// Every command, with ids exported as plain numbers (row ids stay far below 2^53).
