@@ -47,7 +47,7 @@ afterAll(async () => {
 async function open(path = '/view/1', viewport = { width: 1440, height: 900 }) {
   await page?.close();
   page = await browser.newPage({ viewport });
-  page.setDefaultTimeout(5_000);
+  page.setDefaultTimeout(Number(process.env.WALK_TIMEOUT ?? 5_000)); // WALK_TIMEOUT: more time on a loaded machine
   await page.goto(base + path);
   await page.locator('[data-key], aside.sidebar').first().waitFor();
   if (path.startsWith('/view/')) await page.locator('li[data-key], li[data-issue], tr[data-key]').first().waitFor();
