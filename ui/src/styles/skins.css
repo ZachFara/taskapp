@@ -1,0 +1,245 @@
+/* Skins: a skin re-values the role tokens (colour, face, radius, density); the light/dark mode stays the separate
+   data-theme setting. Each value is light-dark(light, dark): color-scheme follows data-theme, or the OS when it is
+   unset. The first skin, "survey", is tokens.css itself. The selector repeats data-skin so it outranks
+   tokens.css's :root:not([data-theme]) dark block. The palette (--c-*) is not skinned. skins.test.ts checks every
+   skin defines every role token and meets the contrast floors. */
+
+[data-skin="linear"][data-skin] {
+  color-scheme: light dark;
+  --font: "Inter", "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  --r-sm: 4px;
+  --r-ctl: 6px;
+  --r-pop: 8px;
+  --r-sheet: 12px;
+  --row-h: 30px;
+  --row-h-compact: 26px;
+  --ctl-h: 26px;
+  --ctl-h-sm: 22px;
+  --frame: light-dark(#f7f8fa, #16181d);
+  --frame-raised: light-dark(#eceef3, #1e2128);
+  --frame-inset: light-dark(#e4e7ee, #07080a);
+  --frame-ink: light-dark(#1b1d28, #e6e8ee);
+  --frame-muted: light-dark(#62677a, #8d92a2);
+  --sheet: light-dark(#ffffff, #101216);
+  --raised: light-dark(#f7f8fa, #15171c);
+  --active: light-dark(#eceef4, #1e2128);
+  --selection: light-dark(#e6e8fb, #22264a);
+  --card: light-dark(#ffffff, #15171c);
+  --border: light-dark(#e6e8ee, #23262e);
+  --control: light-dark(#9aa0b2, #4a4f5c);
+  --ink: light-dark(#1b1d28, #e8eaf0);
+  --muted: light-dark(#5f6474, #9096a6);
+  --accent: light-dark(#5b63d3, #8890f0);
+  --accent-ink: light-dark(#ffffff, #0b0c14);
+  --stone: light-dark(#4a52c0, #aab0ff);
+  --signal: light-dark(#c93e25, #ff7a5c);
+  --signal-ink: light-dark(#ffffff, #1a0a06);
+  --positive: light-dark(#1f7a45, #5fd08a);
+  --warning: light-dark(#8f5a00, #f0b445);
+  --focus: light-dark(#5b63d3, #9aa2ff);
+  --focus-frame: light-dark(#5b63d3, #9aa2ff);
+  --band-1: light-dark(#f1f2fb, #171a2b);
+  --band-2: light-dark(#e5e7f8, #1f2340);
+  --band-3: light-dark(#d6d9f3, #292e56);
+  --band-4: light-dark(#c4c8ed, #353b6e);
+  --band-ink: light-dark(#20233a, #e8eaf0);
+  --band-count: light-dark(#3a3f78, #c5caf5);
+  --tip-bg: light-dark(#1b1d28, #e8eaf0);
+  --tip-ink: light-dark(#f4f5f9, #0b0c0f);
+  --overlay: light-dark(rgb(10 14 30 / 0.4), rgb(0 0 0 / 0.62));
+  --shadow-float: 0 8px 28px light-dark(rgb(10 14 30 / 0.2), rgb(0 0 0 / 0.55)), 0 1px 3px light-dark(rgb(10 14 30 / 0.12), rgb(0 0 0 / 0.4));
+}
+[data-skin="linear"][data-theme="light"] { color-scheme: light; }
+[data-skin="linear"][data-theme="dark"] { color-scheme: dark; }
+
+[data-skin="jira"][data-skin] {
+  color-scheme: light dark;
+  --font: "Helvetica Neue", Arial, "Segoe UI", sans-serif;
+  --r-sm: 2px;
+  --r-ctl: 3px;
+  --r-pop: 3px;
+  --r-sheet: 4px;
+  --row-h: 38px;
+  --row-h-compact: 30px;
+  --ctl-h: 32px;
+  --ctl-h-sm: 26px;
+  --frame: light-dark(#f7f8f9, #161a1d);
+  --frame-raised: light-dark(#dcdfe4, #22272b);
+  --frame-inset: light-dark(#cfd3d9, #101214);
+  --frame-ink: light-dark(#172b4d, #b6c2cf);
+  --frame-muted: light-dark(#44546f, #8c9bab);
+  --sheet: light-dark(#ffffff, #1d2125);
+  --raised: light-dark(#f7f8f9, #22272b);
+  --active: light-dark(#e9eaee, #2c333a);
+  --selection: light-dark(#e9f2ff, #1c2b41);
+  --card: light-dark(#ffffff, #22272b);
+  --border: light-dark(#dcdfe4, #38414a);
+  --control: light-dark(#7a8699, #596773);
+  --ink: light-dark(#172b4d, #c7d1db);
+  --muted: light-dark(#44546f, #9fadbc);
+  --accent: light-dark(#0c66e4, #579dff);
+  --accent-ink: light-dark(#ffffff, #082145);
+  --stone: light-dark(#0055cc, #85b8ff);
+  --signal: light-dark(#c9372c, #f87168);
+  --signal-ink: light-dark(#ffffff, #1f1f21);
+  --positive: light-dark(#1f845a, #4bce97);
+  --warning: light-dark(#a54800, #f5cd47);
+  --focus: light-dark(#0c66e4, #579dff);
+  --focus-frame: light-dark(#0c66e4, #579dff);
+  --band-1: light-dark(#e9f2ff, #1c2b41);
+  --band-2: light-dark(#cce0ff, #09326c);
+  --band-3: light-dark(#b3d1ff, #0055cc);
+  --band-4: light-dark(#85b8ff, #1d4f9a);
+  --band-ink: light-dark(#09326c, #dee4ea);
+  --band-count: light-dark(#0055cc, #cce0ff);
+  --tip-bg: light-dark(#172b4d, #b6c2cf);
+  --tip-ink: light-dark(#ffffff, #1d2125);
+  --overlay: light-dark(rgb(10 14 30 / 0.4), rgb(0 0 0 / 0.62));
+  --shadow-float: 0 8px 28px light-dark(rgb(10 14 30 / 0.2), rgb(0 0 0 / 0.55)), 0 1px 3px light-dark(rgb(10 14 30 / 0.12), rgb(0 0 0 / 0.4));
+}
+[data-skin="jira"][data-theme="light"] { color-scheme: light; }
+[data-skin="jira"][data-theme="dark"] { color-scheme: dark; }
+
+[data-skin="cupertino"][data-skin] {
+  color-scheme: light dark;
+  --font: -apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  --r-sm: 6px;
+  --r-ctl: 8px;
+  --r-pop: 12px;
+  --r-sheet: 20px;
+  --row-h: 36px;
+  --row-h-compact: 30px;
+  --ctl-h: 30px;
+  --ctl-h-sm: 24px;
+  --frame: light-dark(#f2f2f7, #000000);
+  --frame-raised: light-dark(#e8e8ed, #1c1c1e);
+  --frame-inset: light-dark(#dcdce2, #000000);
+  --frame-ink: light-dark(#1d1d1f, #f5f5f7);
+  --frame-muted: light-dark(#5e5e63, #a1a1a6);
+  --sheet: light-dark(#ffffff, #1c1c1e);
+  --raised: light-dark(#f5f5f7, #2c2c2e);
+  --active: light-dark(#ebebf0, #3a3a3c);
+  --selection: light-dark(#d9e9fc, #0b3a6e);
+  --card: light-dark(#ffffff, #2c2c2e);
+  --border: light-dark(#d8d8de, #38383a);
+  --control: light-dark(#a1a1a6, #636366);
+  --ink: light-dark(#1d1d1f, #f5f5f7);
+  --muted: light-dark(#6e6e73, #a1a1a6);
+  --accent: light-dark(#0071e3, #4da3ff);
+  --accent-ink: light-dark(#ffffff, #00142b);
+  --stone: light-dark(#0058b0, #7ab8ff);
+  --signal: light-dark(#d70015, #ff6961);
+  --signal-ink: light-dark(#ffffff, #1a0000);
+  --positive: light-dark(#1d7f35, #30d158);
+  --warning: light-dark(#8a5300, #ffd60a);
+  --focus: light-dark(#0071e3, #4da3ff);
+  --focus-frame: light-dark(#0071e3, #4da3ff);
+  --band-1: light-dark(#f0f4fa, #1a2330);
+  --band-2: light-dark(#e1ebf7, #22344a);
+  --band-3: light-dark(#cfdff1, #2b4563);
+  --band-4: light-dark(#bad2ec, #365a80);
+  --band-ink: light-dark(#1d1d1f, #f5f5f7);
+  --band-count: light-dark(#0058b0, #a9cdf5);
+  --tip-bg: light-dark(#1d1d1f, #f5f5f7);
+  --tip-ink: light-dark(#ffffff, #000000);
+  --overlay: light-dark(rgb(10 14 30 / 0.4), rgb(0 0 0 / 0.62));
+  --shadow-float: 0 8px 28px light-dark(rgb(10 14 30 / 0.2), rgb(0 0 0 / 0.55)), 0 1px 3px light-dark(rgb(10 14 30 / 0.12), rgb(0 0 0 / 0.4));
+}
+[data-skin="cupertino"][data-theme="light"] { color-scheme: light; }
+[data-skin="cupertino"][data-theme="dark"] { color-scheme: dark; }
+
+[data-skin="obsidian"][data-skin] {
+  color-scheme: light dark;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --r-sm: 3px;
+  --r-ctl: 5px;
+  --r-pop: 6px;
+  --r-sheet: 8px;
+  --row-h: 30px;
+  --row-h-compact: 26px;
+  --ctl-h: 26px;
+  --ctl-h-sm: 22px;
+  --frame: light-dark(#f3f3f3, #161616);
+  --frame-raised: light-dark(#e8e8e8, #202020);
+  --frame-inset: light-dark(#dddddd, #0e0e0e);
+  --frame-ink: light-dark(#2e3338, #dadada);
+  --frame-muted: light-dark(#5c6370, #999999);
+  --sheet: light-dark(#ffffff, #1e1e1e);
+  --raised: light-dark(#f6f6f6, #262626);
+  --active: light-dark(#eaeaea, #303030);
+  --selection: light-dark(#e6defa, #352a5e);
+  --card: light-dark(#ffffff, #262626);
+  --border: light-dark(#e3e3e3, #363636);
+  --control: light-dark(#a0a0a8, #555555);
+  --ink: light-dark(#2e3338, #dadada);
+  --muted: light-dark(#5c6370, #999999);
+  --accent: light-dark(#6b4fd1, #a68af9);
+  --accent-ink: light-dark(#ffffff, #170c33);
+  --stone: light-dark(#5a3fc0, #c1aefc);
+  --signal: light-dark(#c0392b, #ff7b6b);
+  --signal-ink: light-dark(#ffffff, #1f0805);
+  --positive: light-dark(#1e7a3a, #5fcf7a);
+  --warning: light-dark(#8a5500, #e6b34a);
+  --focus: light-dark(#6b4fd1, #a68af9);
+  --focus-frame: light-dark(#6b4fd1, #a68af9);
+  --band-1: light-dark(#f2eefc, #25203a);
+  --band-2: light-dark(#e6defa, #30284d);
+  --band-3: light-dark(#d6caf6, #3b3060);
+  --band-4: light-dark(#c4b2f0, #4a3b7a);
+  --band-ink: light-dark(#2e3338, #dadada);
+  --band-count: light-dark(#5a3fc0, #c9bafc);
+  --tip-bg: light-dark(#2e3338, #dadada);
+  --tip-ink: light-dark(#ffffff, #1e1e1e);
+  --overlay: light-dark(rgb(10 14 30 / 0.4), rgb(0 0 0 / 0.62));
+  --shadow-float: 0 8px 28px light-dark(rgb(10 14 30 / 0.2), rgb(0 0 0 / 0.55)), 0 1px 3px light-dark(rgb(10 14 30 / 0.12), rgb(0 0 0 / 0.4));
+}
+[data-skin="obsidian"][data-theme="light"] { color-scheme: light; }
+[data-skin="obsidian"][data-theme="dark"] { color-scheme: dark; }
+
+[data-skin="scholastic"][data-skin] {
+  color-scheme: light dark;
+  --font: "Hoefler Text", "Iowan Old Style", "Palatino", Baskerville, Georgia, serif;
+  --r-sm: 1px;
+  --r-ctl: 2px;
+  --r-pop: 2px;
+  --r-sheet: 4px;
+  --row-h: 34px;
+  --row-h-compact: 28px;
+  --ctl-h: 30px;
+  --ctl-h-sm: 24px;
+  --frame: light-dark(#1a2342, #070c1c);
+  --frame-raised: light-dark(#27325a, #131c3a);
+  --frame-inset: light-dark(#101834, #040813);
+  --frame-ink: light-dark(#f1e8d0, #ece2c6);
+  --frame-muted: light-dark(#c3b88f, #b0a67c);
+  --sheet: light-dark(#f6efdc, #0d1530);
+  --raised: light-dark(#efe6cf, #131c3c);
+  --active: light-dark(#e6dbbd, #1b2650);
+  --selection: light-dark(#efdcae, #2a2f56);
+  --card: light-dark(#fbf6e8, #111a38);
+  --border: light-dark(#d9ccaa, #26305a);
+  --control: light-dark(#a3946a, #4a5683);
+  --ink: light-dark(#1a2142, #ece2c6);
+  --muted: light-dark(#5c5638, #b0a67c);
+  --accent: light-dark(#8f1d1d, #d8b152);
+  --accent-ink: light-dark(#fbf6e8, #0d1530);
+  --stone: light-dark(#6f1414, #e6c571);
+  --signal: light-dark(#9a1b1b, #e05a4d);
+  --signal-ink: light-dark(#ffffff, #1a0604);
+  --positive: light-dark(#2f6b2f, #7fc77f);
+  --warning: light-dark(#7a5200, #e6b54a);
+  --focus: light-dark(#8f1d1d, #e6c571);
+  --focus-frame: light-dark(#e6c571, #e6c571);
+  --band-1: light-dark(#f0e7cf, #121c3e);
+  --band-2: light-dark(#e6dbbd, #1a2650);
+  --band-3: light-dark(#d8c99a, #243263);
+  --band-4: light-dark(#c7b67f, #2f4078);
+  --band-ink: light-dark(#1a2142, #ece2c6);
+  --band-count: light-dark(#6f1414, #e6c571);
+  --tip-bg: light-dark(#1a2342, #ece2c6);
+  --tip-ink: light-dark(#f1e8d0, #070c1c);
+  --overlay: light-dark(rgb(10 14 30 / 0.4), rgb(0 0 0 / 0.62));
+  --shadow-float: 0 8px 28px light-dark(rgb(10 14 30 / 0.2), rgb(0 0 0 / 0.55)), 0 1px 3px light-dark(rgb(10 14 30 / 0.12), rgb(0 0 0 / 0.4));
+}
+[data-skin="scholastic"][data-theme="light"] { color-scheme: light; }
+[data-skin="scholastic"][data-theme="dark"] { color-scheme: dark; }

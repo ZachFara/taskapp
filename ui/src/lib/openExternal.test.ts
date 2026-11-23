@@ -47,4 +47,19 @@ describe('openExternal', () => {
     expect(await openExternal('file:///etc/passwd')).toBe(false);
     expect(openUrl).not.toHaveBeenCalled();
   });
+
+  it.each([
+    'obsidian://new?vault=v&content=x',
+    'obsidian://open?vault=v&file=n&content=x',
+    'obsidian://open?vault=v&path=/etc/passwd',
+    'obsidian://unknown?vault=v',
+    'ftp://example.com/x',
+  ])('refuses %s', async (url) => {
+    expect(await openExternal(url)).toBe(false);
+    expect(window.open).not.toHaveBeenCalled();
+  });
+
+  it.each(['mailto:a@example.com', 'https://example.com', 'obsidian://open?vault=v&file=n'])('allows %s', async (url) => {
+    expect(await openExternal(url)).toBe(true);
+  });
 });
