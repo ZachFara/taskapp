@@ -524,6 +524,7 @@ async fn dump(
         "import_log",
         "relation_kinds",
         "events",
+        "work_blocks",
     ] {
         let cols: Vec<String> = sqlx::query_scalar(
             "SELECT name FROM pragma_table_info(?1) WHERE (name != 'id' OR ?1 = 'view_templates')
@@ -533,7 +534,7 @@ async fn dump(
         .fetch_all(&db.pool)
         .await?;
         let mut fields: Vec<String> = cols.iter().map(|c| format!("'{c}', \"{c}\"")).collect();
-        if t == "import_log" {
+        if t == "import_log" || t == "work_blocks" {
             fields.push("'issue', (SELECT number FROM issues WHERE id = issue_id)".into());
         }
         let sql = format!(
@@ -577,6 +578,9 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
         "INSERT INTO events (id, title, starts_at, ends_at, all_day, place, notes, icon, color)
            VALUES (4, 'Offsite', '2026-12-10 09:00:00', '2026-12-11 17:00:00', 0, 'Lisbon', 'Bring slides', 'icon:flag', 'teal')",
         "INSERT INTO event_issues (event_id, issue_id) VALUES (4, (SELECT id FROM issues WHERE number = 1))",
+        "UPDATE import_log SET source_deleted = 1",
+        "INSERT INTO work_blocks (issue_id, start_utc, end_utc)
+           VALUES ((SELECT id FROM issues WHERE number = 2), '2026-01-05T09:00:00+00:00', '2026-01-05T10:30:00+00:00')",
     ] {
         sqlx::query(sql).execute(&db.pool).await?;
     }

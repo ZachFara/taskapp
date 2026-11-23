@@ -8,6 +8,38 @@ use serde_json::{Map, Value};
 use sqlx::FromRow;
 use taskapp_core::{Error, Result};
 
+/// Reads a regular file, never through a symlink: an export folder may come from a remote.
+///
+/// # Errors
+///
+/// `Invalid` when the path is a symlink or anything but a regular file.
+pub fn read_plain(path: &std::path::Path) -> Result<String> {
+    let meta = std::fs::symlink_metadata(path)?;
+    if !meta.is_file() {
+        return Err(Error::Invalid(format!(
+            "{} is not a regular file",
+            path.display()
+        )));
+    }
+    Ok(std::fs::read_to_string(path)?)
+}
+
+/// Whether `dir/sub` is a real directory. A missing one is `false`.
+///
+/// # Errors
+///
+/// `Invalid` when it exists and is a symlink or a file.
+pub fn plain_dir(dir: &std::path::Path, sub: &str) -> Result<bool> {
+    match std::fs::symlink_metadata(dir.join(sub)) {
+        Ok(m) if m.is_dir() => Ok(true),
+        Ok(_) => Err(Error::Invalid(format!(
+            "{sub} in the export is not a real directory"
+        ))),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e.into()),
+    }
+}
+
 pub const SECTION_COMMENTS: &str = "\n## Comments\n";
 
 pub fn invalid(e: impl std::fmt::Display) -> Error {
@@ -185,6 +217,15 @@ pub struct ImportLogRow {
     pub source: String,
     pub issue: i64,
     pub imported_at: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub source_deleted: bool,
+}
+
+/// One planned work block of an issue, listed in its frontmatter.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct WorkBlockRow {
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
 }
 
 /// Frontmatter of `issues/<KEY>.md`. Every reference is by name or key, never by database id.
@@ -221,6 +262,8 @@ pub struct IssueFront {
     pub relations: std::collections::BTreeMap<String, Vec<String>>,
     #[serde(default, skip_serializing_if = "Map::is_empty")]
     pub properties: Map<String, Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub work_blocks: Vec<WorkBlockRow>,
 }
 
 /// The frontmatter, the description, and the comments of one issue file.

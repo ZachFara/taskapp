@@ -12,7 +12,7 @@ use taskapp_core::{Db, Error, IssueId, Result, ViewDef, search};
 use crate::files::{
     CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow,
     PinRow, ProjectFile, PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewTemplateFile,
-    invalid, parse_issue,
+    invalid, parse_issue, plain_dir, read_plain,
 };
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -109,13 +109,13 @@ async fn restore_events(tx: &mut Tx<'_>, dir: &Path, prefix: &str) -> Result<()>
     Ok(())
 }
 
-fn read_yaml<T: DeserializeOwned>(path: &Path) -> Result<T> {
-    serde_yaml_ng::from_str(&fs::read_to_string(path)?).map_err(invalid)
+pub(crate) fn read_yaml<T: DeserializeOwned>(path: &Path) -> Result<T> {
+    serde_yaml_ng::from_str(&read_plain(path)?).map_err(invalid)
 }
 
 /// A list file that older exports do not have reads as empty.
-fn read_list<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>> {
-    if path.exists() {
+pub(crate) fn read_list<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>> {
+    if fs::symlink_metadata(path).is_ok() {
         read_yaml(path)
     } else {
         Ok(vec![])
@@ -123,15 +123,22 @@ fn read_list<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>> {
 }
 
 /// The sorted files in `dir/sub` with the given extension.
-fn files_in(dir: &Path, sub: &str, ext: &str) -> Result<Vec<PathBuf>> {
+pub(crate) fn files_in(dir: &Path, sub: &str, ext: &str) -> Result<Vec<PathBuf>> {
     let folder = dir.join(sub);
-    if !folder.is_dir() {
+    if !plain_dir(dir, sub)? {
         return Ok(vec![]);
     }
     let mut paths = Vec::new();
     for entry in fs::read_dir(&folder)? {
-        let path = entry?.path();
+        let entry = entry?;
+        let path = entry.path();
         if path.extension().is_some_and(|e| e == ext) {
+            if !entry.file_type()?.is_file() {
+                return Err(Error::Invalid(format!(
+                    "{} is not a regular file",
+                    path.display()
+                )));
+            }
             paths.push(path);
         }
     }
@@ -343,13 +350,14 @@ async fn restore_import_log(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let log: Vec<ImportLogRow> = read_list(&dir.join("import_log.yaml"))?;
     for l in log {
         sqlx::query(
-            "INSERT INTO import_log (external_id, source, issue_id, imported_at)
-             VALUES (?, ?, (SELECT id FROM issues WHERE number = ?), ?)",
+            "INSERT INTO import_log (external_id, source, issue_id, imported_at, source_deleted)
+             VALUES (?, ?, (SELECT id FROM issues WHERE number = ?), ?, ?)",
         )
         .bind(l.external_id)
         .bind(l.source)
         .bind(l.issue)
         .bind(l.imported_at)
+        .bind(l.source_deleted)
         .execute(&mut **tx)
         .await?;
     }
@@ -374,7 +382,7 @@ fn read_issues(dir: &Path, prefix: &str) -> Result<Vec<IssueEntry>> {
     files_in(dir, "issues", "md")?
         .iter()
         .map(|path| {
-            let (front, description, comments) = parse_issue(&fs::read_to_string(path)?)?;
+            let (front, description, comments) = parse_issue(&read_plain(path)?)?;
             Ok((number_of(prefix, &front.key)?, front, description, comments))
         })
         .collect()
@@ -483,6 +491,17 @@ async fn link_issue(
     }
     for c in comments {
         insert_comment(tx, number, c).await?;
+    }
+    for b in &f.work_blocks {
+        sqlx::query(
+            "INSERT INTO work_blocks (issue_id, start_utc, end_utc)
+             VALUES ((SELECT id FROM issues WHERE number = ?), ?, ?)",
+        )
+        .bind(number)
+        .bind(b.start)
+        .bind(b.end)
+        .execute(&mut **tx)
+        .await?;
     }
     Ok(())
 }

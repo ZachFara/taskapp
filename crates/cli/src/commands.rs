@@ -49,8 +49,8 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Relation(cmd) => relation(db, cmd).await,
         Cmd::Pin(cmd) => pin(db, cmd).await,
         Cmd::Import(cmd) => import(db, cmd).await,
-        Cmd::Backup(_) => Err(Error::Invalid(
-            "backup runs before the database opens".into(),
+        Cmd::Backup(_) | Cmd::Restore { .. } => Err(Error::Invalid(
+            "this command runs before the database opens".into(),
         )),
         Cmd::Undo
         | Cmd::Redo

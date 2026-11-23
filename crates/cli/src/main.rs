@@ -64,6 +64,11 @@ enum Cmd {
     Redo,
     #[command(subcommand)]
     Backup(BackupCmd),
+    /// Builds a new database from an export folder. Needs --db, which must not exist yet.
+    Restore {
+        #[arg(long, value_name = "DIR")]
+        from: PathBuf,
+    },
     #[command(subcommand)]
     Import(ImportCmd),
     /// First-run setup: workspace name, issue key prefix (2 to 5 capital letters) and time zone.
@@ -490,6 +495,16 @@ async fn run(cli: Cli) -> Result<()> {
     if let Cmd::Backup(cmd) = &cli.cmd {
         let value = backup_cmd(cmd, cli.db.as_deref()).await?;
         print_value(&value, cli.json);
+        return Ok(());
+    }
+    if let Cmd::Restore { from } = &cli.cmd {
+        let to = cli
+            .db
+            .as_deref()
+            .ok_or_else(|| Error::Invalid("restore needs --db <new database path>".into()))?;
+        taskapp_export::rebuild::rebuild(from, to).await?;
+        let (from, to) = (from.display().to_string(), to.display().to_string());
+        print_value(&json!({"restored": to, "from": from}), cli.json);
         return Ok(());
     }
     let path = match cli.db {

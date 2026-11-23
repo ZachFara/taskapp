@@ -9,7 +9,7 @@ use taskapp_core::{Db, Result, settings};
 use crate::files::{
     CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow,
     MilestoneRow, PinRow, ProjectFile, PropertyFile, RelationKindRow, StatusRow, ViewFile,
-    ViewTemplateFile, invalid, key, render_issue, safe_name,
+    ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir, read_plain, render_issue, safe_name,
 };
 
 pub struct ExportStats {
@@ -28,6 +28,9 @@ const MANAGED_DIRS: [&str; 3] = ["issues", "projects", "events"];
 /// Fails when the database cannot be read or a file cannot be written.
 pub async fn write_snapshot(db: &Db, dir: &Path) -> Result<ExportStats> {
     refuse_empty(dir)?;
+    for sub in MANAGED_DIRS {
+        plain_dir(dir, sub)?;
+    }
     let files = render(db).await?;
     let mut stats = ExportStats {
         issues: u32::try_from(files.keys().filter(|k| k.starts_with("issues/")).count())
@@ -37,7 +40,13 @@ pub async fn write_snapshot(db: &Db, dir: &Path) -> Result<ExportStats> {
     };
     for (rel, text) in &files {
         let path = dir.join(rel);
-        if fs::read_to_string(&path).is_ok_and(|old| old == *text) {
+        // A link at a managed path would send the write elsewhere; refuse rather than follow it.
+        if fs::symlink_metadata(&path).is_ok_and(|m| !m.is_file()) {
+            return Err(taskapp_core::Error::Invalid(format!(
+                "{rel} in the export is not a regular file"
+            )));
+        }
+        if read_plain(&path).is_ok_and(|old| old == *text) {
             continue;
         }
         if let Some(parent) = path.parent() {
@@ -54,7 +63,7 @@ pub async fn write_snapshot(db: &Db, dir: &Path) -> Result<ExportStats> {
 
 fn remove_stale(dir: &Path, sub: &str, files: &BTreeMap<String, String>) -> Result<u32> {
     let folder = dir.join(sub);
-    if !folder.is_dir() {
+    if !plain_dir(dir, sub)? {
         return Ok(0);
     }
     let mut removed = 0;
@@ -331,20 +340,23 @@ async fn issue_templates(db: &Db) -> Result<Vec<IssueTemplateFile>> {
 }
 
 async fn import_log(db: &Db) -> Result<Vec<ImportLogRow>> {
-    let rows = sqlx::query_as::<_, (String, String, i64, String)>(
-        "SELECT l.external_id, l.source, i.number, l.imported_at
+    let rows = sqlx::query_as::<_, (String, String, i64, String, bool)>(
+        "SELECT l.external_id, l.source, i.number, l.imported_at, l.source_deleted
          FROM import_log l JOIN issues i ON i.id = l.issue_id ORDER BY l.external_id",
     )
     .fetch_all(&db.pool)
     .await?;
     Ok(rows
         .into_iter()
-        .map(|(external_id, source, issue, imported_at)| ImportLogRow {
-            external_id,
-            source,
-            issue,
-            imported_at,
-        })
+        .map(
+            |(external_id, source, issue, imported_at, source_deleted)| ImportLogRow {
+                external_id,
+                source,
+                issue,
+                imported_at,
+                source_deleted,
+            },
+        )
         .collect())
 }
 
@@ -418,6 +430,7 @@ struct IssueSide {
     labels: BTreeMap<i64, Vec<String>>,
     relations: BTreeMap<i64, Relations>,
     comments: BTreeMap<i64, Vec<CommentText>>,
+    blocks: BTreeMap<i64, Vec<WorkBlockRow>>,
 }
 
 async fn issue_side(db: &Db) -> Result<IssueSide> {
@@ -462,10 +475,22 @@ async fn issue_side(db: &Db) -> Result<IssueSide> {
         })
         .collect(),
     );
+    let blocks = group(
+        sqlx::query_as::<_, (i64, DateTime<Utc>, DateTime<Utc>)>(
+            "SELECT i.number, b.start_utc, b.end_utc FROM work_blocks b
+             JOIN issues i ON i.id = b.issue_id ORDER BY b.start_utc, b.end_utc, b.id",
+        )
+        .fetch_all(&db.pool)
+        .await?
+        .into_iter()
+        .map(|(number, start, end)| (number, WorkBlockRow { start, end }))
+        .collect(),
+    );
     Ok(IssueSide {
         labels,
         relations,
         comments,
+        blocks,
     })
 }
 
@@ -481,7 +506,8 @@ async fn issue_files(db: &Db, prefix: &str) -> Result<Vec<(String, String)>> {
         let labels = side.labels.remove(&number).unwrap_or_default();
         let rels = side.relations.remove(&number).unwrap_or_default();
         let comments = side.comments.remove(&number).unwrap_or_default();
-        let (front, description) = front_of(prefix, row, labels, &rels)?;
+        let (mut front, description) = front_of(prefix, row, labels, &rels)?;
+        front.work_blocks = side.blocks.remove(&number).unwrap_or_default();
         let text = render_issue(&front, &description, &comments)?;
         out.push((front.key, text));
     }
@@ -542,6 +568,7 @@ fn front_of(
         duplicate: keys_of(rels, "duplicate", prefix),
         relations: other_kinds(rels, prefix),
         properties: serde_json::from_str(&properties).map_err(invalid)?,
+        work_blocks: vec![],
     };
     Ok((front, description))
 }

@@ -789,6 +789,15 @@ export const commands = {
 	 *  Fails when no export directory is set, or when writing or git fails.
 	 */
 	exportNow: (options?: InvokeOptions) => __TAURI_INVOKE<null>("export_now", undefined, options),
+	/**
+	 *  Fast-forwards the export folder to the remote and applies the incoming issues as one undoable step,
+	 *  then writes the export again so both sides agree. `created` counts issues created or changed;
+	 *  `warnings` are conflicts, kept so Settings can show them.
+	 * 
+	 *  # Errors
+	 *  Fails when no export directory or remote is set, the histories diverged, or git fails.
+	 */
+	exportPull: (options?: InvokeOptions) => __TAURI_INVOKE<Applied>("export_pull", undefined, options),
 };
 
 /* Types */

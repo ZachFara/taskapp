@@ -332,7 +332,17 @@ quick-add, `taskapp template apply <id> [title]`, or MCP `apply_template`.
   `import_linear_plan`. A runbook for migrating with an agent is in docs/linear-migration.md. Needs your Linear key.
 - **Export** (Settings > Export): turn it on, choose a folder and optionally a Git remote, "Export now". It writes one
   markdown file per issue and commits and pushes it. Needs your own Git remote (see docs/github-setup.md). Not verified
-  against a real repository.
+  against a real repository. The export carries everything but secrets, machine-local settings and the raw change
+  history, including each issue's work blocks.
+- **Two machines** (same remote on both): before it writes, an export fetches the remote. If another machine pushed
+  first, nothing is overwritten; Settings > Export shows the message and "Pull and apply" fast-forwards the folder and
+  applies the incoming issues in one undoable step, "Sync from remote". The newer edit (by updated time) wins per
+  issue; conflicts are listed under "Last pull from the remote". New issues, comments, relations and work blocks are
+  added. Statuses, labels, projects, settings and deletions are not carried over yet (docs/decisions/0017). If both
+  machines have unpushed commits the export stops with a message; merge them in the export folder with git.
+- **Restore from an export**: `taskapp restore --from <export folder> --db <new database path>` builds a fresh database
+  from the files. It refuses to overwrite an existing database. Quit the app first and point `--db` at a path that does
+  not exist; then move it into place. Not yet proven on real data, which is why backups stay (docs/decisions/0017).
 - **Backups** (Settings > Backups): set a folder, "Snapshot now" writes a copy of the database to `snapshots/`; a nightly
   copy goes to `nightly/`. The newest 14 nightly and 30 snapshot files are kept. Before risky changes (property type
   change or delete, a bulk update over 10 items) a snapshot is taken. To restore: quit the app, then
@@ -574,6 +584,7 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `settings.calendar` | Calendar | (none) | Open Settings, Calendar. |
 | `settings.cycles` | Cycles | (none) | Open Settings, Cycles. |
 | `settings.export` | Export | (none) | Open Settings, Export. |
+| `settings.export.pull` | Pull and apply from remote | (none) | On Settings, Export: pull the remote export and apply it. |
 | `settings.general` | General | (none) | Open Settings, General. |
 | `settings.import` | Import | (none) | Open Settings, Import. |
 | `settings.labels` | Labels | (none) | Open Settings, Labels. |
