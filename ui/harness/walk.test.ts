@@ -223,14 +223,14 @@ describe('walk', { timeout: 20_000 }, () => {
     // Away from the template and back.
     await page.getByRole('tab', { name: 'List' }).click();
     await page.waitForTimeout(600);
-    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Reset to template' }).click();
     await pw(page.getByRole('tab', { name: 'Board' })).toHaveAttribute('aria-selected', 'true');
-    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('menuitem', { name: 'New view...' }).click();
     await pw(page.getByRole('dialog', { name: 'New view' }).getByRole('button', { name: /Copy of current view/ })).toBeVisible();
     await press('Escape');
-    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Save as template' }).click();
     // In-app navigation: a reload would reset the mock.
     await page.evaluate(() => { history.pushState(null, '', '/views'); dispatchEvent(new PopStateEvent('popstate')); });
