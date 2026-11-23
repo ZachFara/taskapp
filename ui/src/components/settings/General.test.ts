@@ -65,6 +65,16 @@ describe('General', () => {
   // Opening the time zone list renders every zone; under load that takes longer than the default 5s.
   }, 30_000);
 
+  it('picking an animation speed applies it at once and remembers it on this device', async () => {
+    const { target } = await mountSettings(General);
+    await pick(target, 'Animation speed', 'Slow');
+    expect(document.documentElement.style.getPropertyValue('--motion-scale')).toBe('1.6');
+    expect(localStorage.getItem('cairn.animationSpeed')).toBe('slow');
+    await pick(target, 'Animation speed', 'Off');
+    expect(document.documentElement.style.getPropertyValue('--motion-scale')).toBe('0');
+    localStorage.removeItem('cairn.animationSpeed');
+  });
+
   it('picking a look applies it at once', async () => {
     const { target } = await mountSettings(General);
     await press(target, 'Jira');

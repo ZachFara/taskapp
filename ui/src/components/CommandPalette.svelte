@@ -355,13 +355,13 @@
 </Dialog.Root>
 
 <style>
-  :global(.cp-overlay) { position: fixed; inset: 0; z-index: var(--z-dialog); background: var(--overlay); animation: cp-fade var(--dur-2) var(--ease); }
+  :global(.cp-overlay) { position: fixed; inset: 0; z-index: var(--z-dialog); background: var(--overlay); animation: cx-fade var(--dur-2) var(--ease); }
   :global(.cp) {
     position: fixed; z-index: var(--z-dialog); top: 14%; left: 50%; transform: translateX(-50%);
     width: min(640px, calc(100% - var(--s-9)));
     display: grid; grid-template-rows: auto minmax(0, 1fr) auto; max-height: 68vh;
     background: var(--sheet); color: var(--ink); border: 1px solid var(--control); border-radius: 0;
-    box-shadow: var(--shadow-float); font-family: var(--font); animation: cp-fade var(--dur-2) var(--ease);
+    box-shadow: var(--shadow-float); font-family: var(--font); animation: cx-in-centred var(--dur-2) var(--ease);
   }
   :global(.cp-sr) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .field { display: flex; align-items: center; gap: var(--s-4); padding: var(--s-5) var(--s-6); border-bottom: 1px solid var(--control); color: var(--muted); }
@@ -382,5 +382,4 @@
   .empty { margin: 0; padding: var(--s-8) var(--s-6); text-align: center; color: var(--muted); }
   .foot { display: flex; align-items: center; gap: var(--s-7); padding: var(--s-3) var(--s-6); border-top: 1px solid var(--border); background: var(--raised); color: var(--muted); font-size: var(--fs-xs); }
   .foot span { display: inline-flex; align-items: center; gap: var(--s-2); }
-  @keyframes cp-fade { from { opacity: 0; } }
 </style>

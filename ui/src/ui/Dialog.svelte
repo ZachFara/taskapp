@@ -56,7 +56,7 @@
     border: 1px solid var(--control);
     border-radius: var(--r-pop);
     box-shadow: var(--shadow-float);
-    animation: cx-fade var(--dur-2) var(--ease);
+    animation: cx-in-centred var(--dur-2) var(--ease);
   }
   :global(.cx-dialog[data-size='md']) { width: min(var(--dialog-md), calc(100% - var(--s-9))); }
   :global(.cx-dialog[data-size='lg']) { width: min(var(--dialog-lg), calc(100% - var(--s-9))); }
@@ -64,5 +64,4 @@
   :global(.cx-dialog-desc) { color: var(--muted); }
   .body { margin-top: var(--s-2); }
   .foot { display: flex; justify-content: flex-end; gap: var(--s-4); margin-top: var(--s-4); }
-  @keyframes cx-fade { from { opacity: 0; } }
 </style>

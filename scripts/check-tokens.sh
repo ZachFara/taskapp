@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fails on raw design values in UI source outside ui/src/styles/: hex colours, rgb()/hsl(), px font sizes,
-# raw durations. Everything visual comes from a token in ui/src/styles/tokens.css.
+# raw durations and easing curves. Everything visual comes from a token in ui/src/styles/tokens.css.
 # Usage: check-tokens.sh [file...]  (default: every .svelte and .css under ui/src except ui/src/styles)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -18,4 +18,5 @@ scan 'hex colour' '(^|[^&{[:alnum:]_])#[0-9a-fA-F]{3,8}\b'
 scan 'rgb/hsl colour' '\b(rgba?|hsla?|hwb|oklch|oklab|lab|lch)\('
 scan 'px font size' 'font-size:[[:space:]]*[0-9.]+px|font:[^;]*[0-9.]+px'
 scan 'raw duration' '(transition|animation|duration|delay)[^;]*[^-[:alnum:]_.][0-9.]+m?s\b'
+scan 'raw easing' '\bcubic-bezier\('
 exit $bad

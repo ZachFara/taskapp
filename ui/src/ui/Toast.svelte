@@ -32,6 +32,7 @@
     border-radius: var(--r-pop);
     box-shadow: var(--shadow-float);
     font-weight: 500;
+    animation: cx-toast-in var(--dur-2) var(--ease);
   }
   .lead { display: flex; }
   [data-tone='success'] .lead { color: var(--positive); }

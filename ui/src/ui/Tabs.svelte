@@ -43,7 +43,7 @@
     background: transparent;
     color: var(--muted);
     font-weight: 500;
-    transition: color var(--dur-1) var(--ease);
+    transition: color var(--dur-1) var(--ease), border-color var(--dur-2) var(--ease);
   }
   /* A segmented control: one outlined group, the chosen segment filled. Names always show. */
   :global(.cx-seg) { height: auto; gap: 0; padding: var(--s-1); border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--raised); }

@@ -152,6 +152,13 @@ describe('walk', { timeout: 20_000 }, () => {
     await pw(panel).toHaveCount(0);
   });
 
+  it('M1 c then typing at once: every character lands in the title while the dialog arrives', async () => {
+    await open();
+    await press('c');
+    await page.keyboard.type('Quick motion title');
+    await pw(page.getByLabel('Title, with quick-add tokens')).toHaveValue('Quick motion title');
+  });
+
   it('F6 the created toast has a readable Undo; u with nothing to undo is quiet', async () => {
     await open();
     await press('c');
@@ -223,14 +230,14 @@ describe('walk', { timeout: 20_000 }, () => {
     // Away from the template and back.
     await page.getByRole('tab', { name: 'List' }).click();
     await page.waitForTimeout(600);
-    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Reset to template' }).click();
     await pw(page.getByRole('tab', { name: 'Board' })).toHaveAttribute('aria-selected', 'true');
-    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('menuitem', { name: 'New view...' }).click();
     await pw(page.getByRole('dialog', { name: 'New view' }).getByRole('button', { name: /Copy of current view/ })).toBeVisible();
     await press('Escape');
-    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Save as template' }).click();
     // In-app navigation: a reload would reset the mock.
     await page.evaluate(() => { history.pushState(null, '', '/views'); dispatchEvent(new PopStateEvent('popstate')); });
