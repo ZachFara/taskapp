@@ -169,8 +169,8 @@
       {#snippet actions()}
         <IconButton icon="arrow-up" label="Previous issue" shortcut={shortcutFor('issue.detail.prev')} disabled={siblings.indexOf(key) < 1} onclick={() => step(-1)} />
         <IconButton icon="arrow-down" label="Next issue" shortcut={shortcutFor('issue.detail.next')} disabled={siblings.indexOf(key) < 0 || siblings.indexOf(key) >= siblings.length - 1} onclick={() => step(1)} />
-        <IconButton icon="pin" label={pin ? 'Unpin issue' : 'Pin issue'} shortcut={shortcutFor('issue.detail.pin')} pressed={!!pin} onclick={togglePin} />
-        <IconButton icon="archive" label={issue!.archived_at ? 'Restore issue' : 'Archive issue'} shortcut={shortcutFor('issue.detail.archive')} pressed={!!issue!.archived_at} onclick={toggleArchive} />
+        <IconButton icon="pin" label={pin ? 'Unpin issue' : 'Pin issue'} shortcut={shortcutFor('issue.pin')} pressed={!!pin} onclick={togglePin} />
+        <IconButton icon="archive" label={issue!.archived_at ? 'Restore issue' : 'Archive issue'} shortcut={shortcutFor('issue.archive')} pressed={!!issue!.archived_at} onclick={toggleArchive} />
         <IconButton icon="close" label="Close issue" shortcut="escape" onclick={close} />
       {/snippet}
     </PageHeader>

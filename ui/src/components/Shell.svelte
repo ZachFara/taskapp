@@ -34,7 +34,7 @@
   // The legend is read from the registry, so a rebound key or a new command shows up without touching this list.
   const legend: [string[], string][] = [
     [['move.down', 'move.up'], 'move'],
-    [['move.select'], 'select'],
+    [['select.toggle'], 'select'],
     [['move.open'], 'open'],
     [['issue.status'], 'status'],
     [['palette.open'], 'commands'],
