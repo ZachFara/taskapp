@@ -15,11 +15,11 @@ States: ASSIGNED (who) / FIXED (PR) / DEFERRED (why, where recorded) / UNASSIGNE
 | R2-6 | MCP instructions wrong about Linear | FX1 | FIXED (#118) |
 | R3-1 | description editor opens unfocused | FX3 | FIXED (#116) |
 | R3-3 | no recents in command menu | FX2 | FIXED (#117) |
-| R3-4 | shortcut tooltips missing | FX2 shell/sidebar FIXED (#117); FX4 pages FIXED (#115); FX3 views/detail FIXED (#116); GroupHeader +/collapse and view Tabs tooltips (src/ui) -> sweep |
+| R3-4 | shortcut tooltips missing | FIXED (FX5) |
 | R3-7 | mouse actions without a command | FX2 commands FIXED (#117); listeners FX3 (#116), FX4 (#115) | FIXED |
 | R3-9 | selection has no aria-selected; cmd-click opens panel | FX3 | FIXED (#116) |
 | R3-10 | test gap: open-issue guard in move/escape | FX2 | FIXED (#117) |
-| R4-01 | 1024 + side panel breaks layout | FX3 | PARTLY (#116: columns drop, no clip); panel overlay under 1100px needs Shell.svelte -> sweep |
+| R4-01 | 1024 + side panel breaks layout | FX3 | FIXED (FX5) |
 | R4-02 | table overflows at 1024 | FX3 | FIXED (#116) |
 | R4-03 | raw key names shown | FX2 | FIXED (#117) |
 | R4-04 | cheat sheet taller than the window | FX2 | FIXED (#117) |
@@ -27,7 +27,7 @@ States: ASSIGNED (who) / FIXED (PR) / DEFERRED (why, where recorded) / UNASSIGNE
 | R4-06 | settings: double and inconsistent headers | FX4 | FIXED (#115) |
 | R4-07 | settings rail height / scrolls | FX4 | FIXED (#115) |
 | R4-08 | properties settings bare buttons | FX4 | FIXED (#115) |
-| R4-09 | quick add ISO date chip, art collides, priority chip inverted | FX3 | FIXED (#116). ROOT CAUSE was detail/format.ts: priority names AND the detail picker's saved numbers were inverted -> sweep audits priority mapping everywhere |
+| R4-09 | quick add ISO date chip, art collides, priority chip inverted | FX3 | FIXED (#116 + FX5: one priority helper; p command and template picker had saved inverted numbers; detail panel and p command now refresh the list) |
 | R5-1 | quick add stores points when estimation is off | FX1 | FIXED (#118) |
 | R5-2 | Points offered/rendered when estimation is off | FX3 | FIXED (#116) |
 | R5-3 | points validation unbounded | FX1 | FIXED (#118) |
@@ -54,21 +54,21 @@ States: ASSIGNED (who) / FIXED (PR) / DEFERRED (why, where recorded) / UNASSIGNE
 | R3-6 | design gallery in the menu | FX2 | FIXED (#117; already dev-only, test added) |
 | R3-8 | setup first field not focused | FX4 | FIXED (#115) |
 | R3-9 detail | two Escs within 60 ms clear nothing (part of R3-9 text) | FX3 | ASSIGNED (R3-07/12/18/19 in R3.md are screenshot names, not findings) |
-| R4-10 | table header case, baseline, focus ring | FX3 | DEFERRED -> sweep |
-| R4-11 | timeline today flag overlap, hatched bars | FX3 | DEFERRED -> sweep |
-| R4-12 | calendar dead area, chip truncation | FX3 | DEFERRED -> sweep |
-| R4-13 | board empty right side, orphan icon | FX3 | DEFERRED -> sweep |
+| R4-10 | table header case, baseline, focus ring | FX3 | FIXED (FX5) |
+| R4-11 | timeline today flag overlap, hatched bars | FX3 | FIXED (FX5) |
+| R4-12 | calendar dead area, chip truncation | FX3 | FIXED (FX5) |
+| R4-13 | board empty right side, orphan icon | FX3 | FIXED (FX5) |
 | R4-14 | views page actions, "Gantt" naming | FX4 | FIXED (#115) |
 | R4-15 | projects page sparse | FX4 | FIXED (#115) |
 | R4-16 | cycles header glyph, heavy button | FX4 | FIXED (#115) |
-| R4-17 | "1 issues"; status swatches | FX4 | grammar FIXED (#115); swatches DEFERRED -> sweep decides |
+| R4-17 | "1 issues"; status swatches | FX4 | FIXED (#115 grammar; FX5 status rows show the category glyph, solid picker chip) |
 | R4-18 | project page three header layers, grey empty boxes | FX3 | FIXED (#116) |
 | R4-19 | inbox placeholder in nav | FX2 | FIXED (#117) |
-| R4-20 | display panel hugs the edge; group popover poor | FX3 | DEFERRED -> sweep |
-| R4-21 | toast bell, noise, spelled-out key | FX2 | FIXED (#117); ui/Toast.svelte info tone still draws a bell -> sweep |
-| R4-22 | icon inconsistencies | FX2 (sidebar, menu) FIXED (#117); issue page/detail project icon -> sweep |
-| R4-23 | issue page textarea grip, washed button, blank bands | FX3 | DEFERRED -> sweep |
-| R4-24 | setup layout imbalance, theme control | FX4 | DEFERRED -> sweep |
+| R4-20 | display panel hugs the edge; group popover poor | FX3 | FIXED (FX5) |
+| R4-21 | toast bell, noise, spelled-out key | FX2 | FIXED (FX5) |
+| R4-22 | icon inconsistencies | FIXED (FX5) |
+| R4-23 | issue page textarea grip, washed button, blank bands | FX3 | FIXED (FX5) |
+| R4-24 | setup layout imbalance, theme control | FX4 | FIXED (FX5) |
 | R4-25 | blank fields without placeholders, pill styles | FX4 | FIXED (#115) |
 | R5-4..R5-7 | `3 pt`/`3pts`/`.5pt`; reversed range error; Move button at 1024; "Set points" in menu when off | FX1 (parse, range), FX4 (#115 button), FX2 (#117 menu) | ASSIGNED / FIXED |
 
@@ -78,9 +78,9 @@ States: ASSIGNED (who) / FIXED (PR) / DEFERRED (why, where recorded) / UNASSIGNE
 | Step labels with counts in the toast ("Set status on 2 issues") | FX1 backend FIXED (#118); FX2 shows verbatim (#117) | FIXED once both land |
 | Time zone change in setup needs a restart | - | DEFERRED (noted in General settings by #115; After this plan) |
 | Remove-filter and view "More" menu items as commands | FX3 | FIXED (#116: chip remove is a focusable button with tooltip; More items via view commands) |
-| views_save raises no undo toast (FX2 ruling) | owner may overrule | NOTED for the owner |
+| views_save raises no undo toast (FX2 ruling) | owner may overrule | FIXED (FX5: filter and rename saves raise an undo toast; display toggles and layout stay quiet) |
 | Linear import never run live; packaged Mac app never launched | owner steps | qa-checklist |
-| R5 coverage gaps: DST by hand, MCP points tools, chart table vs backend, keyboard day stepping, sparklines | sweep / final walk | UNASSIGNED |
+| R5 coverage gaps: DST by hand, MCP points tools, chart table vs backend, keyboard day stepping, sparklines | sweep / final walk | chart table vs backend series, keyboard day stepping, sidebar sparkline: FIXED (FX5, tests). DST by hand, MCP points tools: still open |
 | Git push of export, reminders, gcal untouched by review | owner steps | qa-checklist |
 
 ## Sweep (FX5), after FX1 and FX3 report

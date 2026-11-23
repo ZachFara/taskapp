@@ -34,7 +34,7 @@ the PR from plan-2 to main, the licence, and the owner steps in docs/qa-checklis
 35. A status created by an import stays after the import is undone (archived issues reference it).
 
 ### Models (plan 2)
-The setting was 50% Sonnet, 50% Haiku. The actual split was about 41 Sonnet runs to 20 Haiku runs (two thirds Sonnet).
+The setting was 50% Sonnet, 50% Haiku. The actual split was 43 Sonnet runs to 20 Haiku runs (about two thirds Sonnet).
 Haiku did well on single-screen and single-file tasks with a complete brief (board, table, calendar, quick add,
 settings pages, templates UI, backend sweep). Sonnet took foundations, integration, reviews and fix tasks. Haiku tasks
 that stalled did so on missing context or on waiting rules, not on difficulty: two handed back without pushing, one
