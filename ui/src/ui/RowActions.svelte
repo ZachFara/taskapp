@@ -56,6 +56,8 @@
   .acts {
     position: absolute;
     right: var(--s-2);
+    background: var(--acts-bg, var(--active)); /* hides the text the buttons sit over; the host sets its own row colour */
+    border-radius: var(--r-ctl);
     display: flex;
     gap: var(--s-1);
     opacity: 0;

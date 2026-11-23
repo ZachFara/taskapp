@@ -71,6 +71,7 @@
     if (a === 'view') return ['Views', views.find((v) => String(v.id) === b)?.name ?? b];
     if (a === 'project') return ['Projects', projects.find((p) => p.slug === b)?.name ?? b];
     if (a === 'issue') return ['Issues', b];
+    if (a === 'event') return ['Events']; // the page heading names it
     return [LABELS[a] ?? a, ...(b ? [b[0].toUpperCase() + b.slice(1)] : [])];
   });
 

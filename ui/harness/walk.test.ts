@@ -284,4 +284,70 @@ describe('walk', { timeout: 20_000 }, () => {
     await page.waitForTimeout(300);
     await pw(palette()).toBeHidden();
   });
+
+  // In-app navigation, so the mock keeps what the test just wrote.
+  const go = async (path: string) => {
+    await page.evaluate((p) => { history.pushState(null, '', p); dispatchEvent(new PopStateEvent('popstate')); }, path);
+    await page.waitForTimeout(400);
+  };
+
+  it('P3 an event is created, linked to an issue, unlinked, and the unlink is undone', async () => {
+    await open('/events');
+    await page.getByRole('button', { name: 'New event' }).first().click();
+    await page.getByLabel('Event title').fill('Launch review');
+    await page.getByLabel('Date', { exact: true }).fill('2026-11-25');
+    await page.getByRole('checkbox', { name: 'All day' }).click();
+    await page.getByLabel('From').fill('10:00');
+    await page.getByLabel('To', { exact: true }).fill('11:30');
+    await page.getByRole('button', { name: 'Create event' }).click();
+    await page.waitForURL(/\/event\/\d+/);
+    await page.getByLabel('Link an issue').fill('Redesign');
+    await page.locator('.results button', { hasText: 'ABC-1' }).click();
+    await pw(page.getByRole('button', { name: 'Unlink ABC-1' })).toBeVisible();
+    const eventUrl = new URL(page.url()).pathname;
+    await go('/issue/ABC-1');
+    await pw(page.locator('section[aria-label=Events]')).toContainText('Launch review');
+    await go(eventUrl);
+    await page.getByRole('button', { name: 'Unlink ABC-1' }).click();
+    await pw(page.getByRole('button', { name: 'Unlink ABC-1' })).toHaveCount(0);
+    await press('Meta+z');
+    await pw(page.getByRole('button', { name: 'Unlink ABC-1' })).toBeVisible(); // the page reloads on undo
+  });
+
+  it('P3 a custom relation kind reads both ways and cannot be deleted while used', async () => {
+    await open('/settings/relations');
+    await page.getByLabel('Kind name').fill('Mentors');
+    await page.getByLabel('Forward label').fill('mentors');
+    await page.getByLabel('Reverse label').fill('is mentored by');
+    await page.getByRole('button', { name: 'Add kind' }).click();
+    await go('/issue/ABC-1');
+    await page.getByLabel('Relation kind').click();
+    await page.getByRole('option', { name: 'mentors', exact: true }).click();
+    await page.getByLabel('Find issue').fill('Migrate');
+    await page.locator('.results button', { hasText: 'ABC-4' }).click();
+    await go('/issue/ABC-4');
+    await pw(page.getByText('is mentored by').first()).toBeVisible();
+    await go('/settings/relations');
+    await page.getByRole('button', { name: 'Delete Mentors' }).click();
+    await page.getByRole('button', { name: 'Delete kind' }).click();
+    await pw(page.getByRole('alert')).toContainText('Mentors');
+    await pw(page.getByRole('button', { name: 'Delete kind' })).toHaveCount(0); // the dialog closed, the message shows
+  });
+
+  it('P3 a field switched off disappears from the issue panel and filters, and comes back', async () => {
+    await open('/settings/fields');
+    await page.getByLabel('Show Due').click();
+    await go('/issue/ABC-1');
+    await pw(page.getByText('Estimate', { exact: true })).toBeVisible();
+    expect(await page.getByText('Due', { exact: true }).count()).toBe(0);
+    await go('/view/1');
+    await page.getByRole('button', { name: 'Add filter' }).click();
+    await pw(page.getByRole('menuitem', { name: 'Project' })).toBeVisible();
+    expect(await page.getByRole('menuitem', { name: 'Due', exact: true }).count()).toBe(0);
+    await press('Escape');
+    await go('/settings/fields');
+    await page.getByLabel('Show Due').click();
+    await go('/issue/ABC-1');
+    await pw(page.getByText('Due', { exact: true })).toBeVisible();
+  });
 });

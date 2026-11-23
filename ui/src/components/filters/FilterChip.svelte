@@ -51,7 +51,7 @@
       {:else if choices.length}
         <ul class="opts">
           {#each choices as c (c.value)}
-            <li><Checkbox label={c.label} bind:checked={() => picked.includes(c.value), (on) => toggle(c.value, on)} /></li>
+            <li><label><Checkbox label={c.label} bind:checked={() => picked.includes(c.value), (on) => toggle(c.value, on)} />{c.label}</label></li>
           {/each}
         </ul>
       {:else if kind === 'Checkbox'}
@@ -90,5 +90,6 @@
   .x { padding: 0 var(--s-3); color: var(--muted); border-left: 1px solid var(--border); }
   .x:hover { color: var(--signal); }
   .editor { display: grid; gap: var(--s-4); }
+  .opts label { display: flex; align-items: center; gap: var(--s-4); }
   .opts { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); max-height: 260px; overflow: auto; }
 </style>

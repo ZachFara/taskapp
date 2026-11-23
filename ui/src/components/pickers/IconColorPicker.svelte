@@ -97,7 +97,7 @@
     display: inline-grid;
     place-items: center;
     padding: 0;
-    border: 1px solid var(--border);
+    border: 1px solid transparent; /* the outline shows on hover, so a column of them stays quiet */
     border-radius: var(--r-ctl);
     background: transparent;
     transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);

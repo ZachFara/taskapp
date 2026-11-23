@@ -37,6 +37,8 @@ describe('RelationKinds', () => {
     await clickLabel('Delete Mentors');
     await press(document.body, 'Delete kind');
     expect(target.querySelector('[role="alert"]')?.textContent).toMatch(/1 relations use Mentors/);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(document.body.textContent).not.toContain('Delete kind'); // the dialog is gone, so the message is not behind it
   });
 
   it('a duplicate name shows its message', async () => {
