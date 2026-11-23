@@ -107,7 +107,8 @@ pub fn run() {
             let helper_path = sync_loop::resolve_helper(bundled);
             let backup_dir =
                 tauri::async_runtime::block_on(settings::get::<String>(&db, "backup_dir"))?
-                    .map_or_else(|| dir.join("backups"), PathBuf::from);
+                    .and_then(|typed| settings::home_path(&typed).ok())
+                    .unwrap_or_else(|| dir.join("backups"));
             let tz = taskapp_core::workspace::system_tz();
             tauri::async_runtime::block_on(default_timezone(&db, &tz))?;
             app.manage(AppState {

@@ -1,7 +1,6 @@
 //! Tauri wrappers: one per command in `taskapp_commands`, generated from its list, plus the commands that
 //! need a sync crate (the app is the only place allowed to use those together).
 
-use std::path::Path;
 use std::sync::Arc;
 
 use crate::sync_loop::{Real, Syncer};
@@ -105,9 +104,9 @@ async fn export_snapshot(db: &Db) -> Result<()> {
         .await?
         .ok_or_else(|| Error::Invalid("choose an export directory first".into()))?;
     let remote = setting("export_remote").await?;
-    let dir = Path::new(&dir);
-    taskapp_export::write::write_snapshot(db, dir).await?;
-    taskapp_export::git::commit_and_push(dir, "export", remote.as_deref()).await?;
+    let dir = settings::home_path(&dir)?;
+    taskapp_export::write::write_snapshot(db, &dir).await?;
+    taskapp_export::git::commit_and_push(&dir, "export", remote.as_deref()).await?;
     Ok(())
 }
 

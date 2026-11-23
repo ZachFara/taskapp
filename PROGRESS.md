@@ -98,6 +98,10 @@ Added by the owner on 2026-11-22 (later, not built):
   duplicate (`RelationKind` in crates/core/src/model.rs), plus parent and sub-issue. Add more built-in kinds (for
   example "follows / precedes", "caused by", "part of") and let the workspace define its own named kinds with a
   forward and a reverse label, shown on both issues, usable in filters, the command menu, import and export.
+- **Backups and export overlap: decide, then maybe remove backups.** The Git export already keeps history as
+  commits (Git stores the differences), which is what the owner wants. Nightly database backups stay needed only
+  because the export leaves out the change history and work blocks and has no restore command. Once the export holds
+  everything and a restore command exists, remove the backups feature. Do not remove it before then.
 - **Split the `test-ui` CI job.** It now runs about 1,100 unit tests, 365 contract cases against a built devserver and
   the Playwright walk tests in one job; consider separate unit, contract and walk jobs (the walk job's cold-start
   `page.goto` timed out twice and forced a rerun).

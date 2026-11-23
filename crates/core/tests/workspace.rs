@@ -162,3 +162,26 @@ async fn settings_from_the_ui_are_checked_like_their_commands() -> R {
     settings::set_from_user(&db, "default_view_template", &Value::Null).await?;
     Ok(())
 }
+
+#[test]
+fn a_folder_typed_with_a_tilde_means_the_home_folder() {
+    use std::path::PathBuf;
+    use taskapp_core::settings::user_path;
+    let home = PathBuf::from("/Users/someone");
+    assert_eq!(
+        user_path("~/Documents/Cairn", &home).expect("tilde"),
+        home.join("Documents/Cairn")
+    );
+    assert_eq!(user_path("~", &home).expect("bare tilde"), home);
+    assert_eq!(
+        user_path(" /Volumes/disk/x ", &home).expect("absolute"),
+        PathBuf::from("/Volumes/disk/x")
+    );
+    // A relative path would resolve against the app's working folder (the disk root when opened from Finder).
+    let err = user_path("Documents/Cairn", &home)
+        .expect_err("relative")
+        .to_string();
+    assert!(err.contains("full path"), "{err}");
+    assert!(user_path("", &home).is_err());
+    assert!(user_path("~other/x", &home).is_err());
+}

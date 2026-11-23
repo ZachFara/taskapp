@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{ChangeSource, Db, Error, Result, rows, workspace};
@@ -124,4 +126,39 @@ fn check_one_of(key: &str, value: &serde_json::Value, allowed: &[&str]) -> Resul
             allowed.join(", ")
         )))
     }
+}
+
+/// The folder a person typed in a path setting: `~` and `~/...` mean the home folder; anything else must be a full
+/// path, because a relative one would resolve against the app's working folder (the disk root when opened from Finder).
+///
+/// # Errors
+///
+/// `Invalid` when the text is empty, relative, or names another user's home (`~name`).
+pub fn user_path(text: &str, home: &Path) -> Result<PathBuf> {
+    let text = text.trim();
+    if text == "~" {
+        return Ok(home.to_path_buf());
+    }
+    if let Some(rest) = text.strip_prefix("~/") {
+        return Ok(home.join(rest));
+    }
+    let path = Path::new(text);
+    if path.is_absolute() {
+        return Ok(path.to_path_buf());
+    }
+    Err(Error::Invalid(format!(
+        "\"{text}\" is not a full path: start it with / or ~/"
+    )))
+}
+
+/// [`user_path`] with the current user's home folder.
+///
+/// # Errors
+///
+/// As [`user_path`], and `Invalid` when the home folder is unknown.
+pub fn home_path(text: &str) -> Result<PathBuf> {
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .ok_or_else(|| Error::Invalid("the home folder is unknown".into()))?;
+    user_path(text, &home)
 }

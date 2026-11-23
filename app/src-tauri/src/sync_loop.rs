@@ -146,8 +146,9 @@ async fn export(db: &Db) -> Result<()> {
         .await?
         .ok_or_else(|| Error::Invalid("choose an export folder in Settings first".into()))?;
     let remote: Option<String> = settings::get(db, "export_remote").await?;
-    taskapp_export::write::write_snapshot(db, Path::new(&dir)).await?;
-    taskapp_export::git::commit_and_push(Path::new(&dir), "export", remote.as_deref()).await?;
+    let dir = settings::home_path(&dir)?;
+    taskapp_export::write::write_snapshot(db, &dir).await?;
+    taskapp_export::git::commit_and_push(&dir, "export", remote.as_deref()).await?;
     set_state(db, Step::Export, SyncState::Ok { at: Utc::now() }).await
 }
 
