@@ -105,8 +105,8 @@ walk-through. Briefs were files; every task opened one PR into plan-3; merges we
 ### How plan 3 was verified
 - CI green on every PR (12 checks after the split). Full suites also run locally once, by the integrator: Rust tests
   for core, export, commands, cli, mcp; 963 UI unit tests; 421 contract cases mock against devserver; 43 walk tests.
-- Final walk-through in a headless browser on the mock and on the real backend (throwaway database): ten flows, 116
-  screenshots per side, every one opened by the walker, a sample opened by the orchestrator; zero console errors.
+- Final walk-through in a headless browser on the mock and on the real backend (throwaway database): ten flows, 116 (mock) and 118 (real)
+  screenshots, every one opened by the walker, a sample opened by the orchestrator; zero console errors.
 - Release build of the Mac app from plan-3 succeeded with the icon bundled. The app was not launched.
 - Not verified: the installed Mac app; sync against a real remote; Reminders and Google Calendar (unchanged).
 
