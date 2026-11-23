@@ -170,7 +170,7 @@ describe('BoardView', () => {
     const el = card(root, 'BRD-1');
     expect(el.textContent).toContain('BRD-1');
     expect(el.textContent).toContain('Card 1');
-    expect(el.querySelector('[role="img"][data-level="3"]')).not.toBeNull();
+    expect(el.querySelector('[role="img"][data-level="2"]')).not.toBeNull();
   });
 
   it('click_focuses_card_and_ctrl_click_toggles_selection', async () => {

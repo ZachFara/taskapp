@@ -13,6 +13,7 @@
   import ViewEditor from './ViewEditor.svelte';
   import ProjectHeader from './project/ProjectHeader.svelte';
   import ProjectIssues from './project/ProjectIssues.svelte';
+  import { shortcutFor } from '../lib/commands/registry';
   import Milestones from './project/Milestones.svelte';
   import InsightsPanel from './insights/InsightsPanel.svelte';
 
@@ -84,10 +85,13 @@
     const pin = () => void togglePin();
     const ask = () => (confirming = true);
     const panel = () => (insights = !insights);
+    const rename = () => (renaming = true);
+    addEventListener('command:project.rename', rename);
     addEventListener('command:project.pin', pin);
     addEventListener('command:project.archive', ask);
     addEventListener('command:insights.toggle', panel);
     return () => {
+      removeEventListener('command:project.rename', rename);
       removeEventListener('command:project.pin', pin);
       removeEventListener('command:project.archive', ask);
       removeEventListener('command:insights.toggle', panel);
@@ -95,7 +99,7 @@
   });
 </script>
 
-{#snippet crumb()}<span class="crumb">Projects <span aria-hidden="true">/</span> {project?.slug}</span>{/snippet}
+{#snippet crumb()}<span class="crumb">{project?.slug}</span>{/snippet}
 
 {#if project === undefined}
   <div class="load" aria-busy="true"><Skeleton /><Skeleton /><Skeleton /></div>
@@ -110,7 +114,7 @@
         {#if docHref}
           <Button icon="link" tooltip={{ label: 'Open the project doc' }} onclick={() => openExternal(docHref)}><span data-testid="open-obsidian">Open doc</span></Button>
         {/if}
-        <IconButton icon="edit" label="Rename project" onclick={() => (renaming = true)} />
+        <IconButton icon="edit" label="Rename project" shortcut={shortcutFor('project.rename')} onclick={() => (renaming = true)} />
         <IconButton icon="pin" label={pinned ? 'Unpin project' : 'Pin project'} pressed={pinned !== undefined} onclick={togglePin} />
         <IconButton icon="archive" label="Archive project" onclick={() => (confirming = true)} />
       {/snippet}

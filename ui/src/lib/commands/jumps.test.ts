@@ -17,7 +17,6 @@ afterEach(() => {
 
 describe('g jumps', () => {
   it.each([
-    ['i', '/inbox'],
     ['m', '/my'],
     ['v', '/views'],
     ['p', '/projects'],
@@ -28,6 +27,12 @@ describe('g jumps', () => {
     press('g');
     press(key);
     expect(navigate).toHaveBeenCalledWith(path);
+  });
+
+  it('g i goes nowhere: the Inbox is not offered', () => {
+    press('g');
+    press('i');
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('g d opens the design gallery in dev builds', () => {

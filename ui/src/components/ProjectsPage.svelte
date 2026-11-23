@@ -18,6 +18,12 @@
   let creating = $state(false);
   let name = $state('');
 
+  $effect(() => {
+    const open = () => (creating = true);
+    addEventListener('command:project.new', open);
+    return () => removeEventListener('command:project.new', open);
+  });
+
   async function load() {
     const list = await api.projects.list();
     const progress = await Promise.all(list.map((p) => api.projects.progress(p.id)));
@@ -65,7 +71,7 @@
             <td>
               <span class="prog"><span class="meter" aria-label={`${p.done} of ${p.total} done`}><span class="fill" style:width={`${p.total ? (p.done / p.total) * 100 : 0}%`}></span></span><span class="muted">{p.done} of {p.total}</span></span>
             </td>
-            <td class="muted">{p.target_date ? dayText(p.target_date) : '—'}</td>
+            <td class="muted">{p.target_date ? dayText(p.target_date) : 'No target'}</td>
             <td class="num">{p.total}</td>
           </tr>
         {/each}
@@ -86,8 +92,12 @@
 
 <style>
   .body { padding: 0 var(--s-7) var(--s-7); }
-  .timeline { color: var(--muted); text-decoration: none; font-weight: 500; }
-  .timeline:hover { color: var(--ink); }
+  .timeline {
+    display: inline-flex; align-items: center; height: var(--ctl-h); padding: 0 var(--s-5);
+    border: 1px solid var(--control); border-radius: var(--r-ctl); background: var(--sheet);
+    color: var(--ink); font-weight: 500; text-decoration: none;
+  }
+  .timeline:hover { border-color: var(--muted); }
   .table { width: 100%; border-collapse: collapse; }
   th { text-align: left; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--border); }
   td { height: var(--row-h); padding: 0 var(--s-4); border-bottom: 1px solid var(--border); }

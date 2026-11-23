@@ -63,4 +63,12 @@ describe('Statuses', () => {
     await clickLabel('flag');
     expect(calls.filter((c) => c === 'statuses.update')).toHaveLength(1);
   });
+
+  it('issue counts agree with their number: 1 issue, not 1 issues', async () => {
+    const { target } = await mountSettings(Statuses);
+    const meta = [...target.querySelectorAll('.es-meta')].map((m) => m.textContent?.trim() ?? '');
+    expect(meta.length).toBeGreaterThan(0);
+    expect(meta.filter((t) => /^1 issues?$/.test(t))).toEqual(meta.filter((t) => t.startsWith('1 ')));
+    expect(meta.join(' ')).not.toMatch(/\b1 issues\b/);
+  });
 });

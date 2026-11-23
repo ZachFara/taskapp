@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SectionHead from './SectionHead.svelte';
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
   import type { Cycle } from '../../lib/bindings';
@@ -46,10 +47,7 @@
 </script>
 
 <div class="es">
-  <header class="es-head">
-    <h2>Cycles</h2>
-    <p>Fixed stretches of time, numbered in order. Cycles never overlap.</p>
-  </header>
+  <SectionHead lede="Fixed stretches of time, numbered in order. Cycles never overlap." />
 
   {#if cycles.length}
     <ul class="es-list">

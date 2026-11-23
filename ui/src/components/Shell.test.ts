@@ -6,6 +6,9 @@ import { createMockApi } from '../lib/api.mock';
 import Shell from './Shell.svelte';
 import { readFileSync } from 'node:fs';
 
+// Glyph assertions below are the Mac ones whatever machine runs them.
+beforeEach(() => void vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel'));
+
 // Run from ui/ (pnpm -C ui test), so the path is relative to the package root.
 const baseCss = readFileSync('src/styles/base.css', 'utf8');
 
@@ -71,10 +74,20 @@ describe('Shell', () => {
     await open();
     const legend = document.querySelector('footer.legend')!.textContent!;
     expect(legend).toContain('move');
-    expect(legend).toContain(shortcutFor('move.down'));
+    expect(legend).toContain(shortcutFor('move.down')!.toUpperCase());
+    expect(legend).not.toMatch(/mod\+|arrow|escape|enter/);
     expect(legend).toContain('⌘K');
     expect(legend).toContain('commands');
     expect(legend).toContain('status');
+  });
+
+  it('the_search_button_has_a_tooltip_naming_its_key', async () => {
+    await open();
+    document.querySelector<HTMLButtonElement>('[aria-label="Search or run a command"]')!.focus();
+    await settle();
+    const tip = document.querySelector('.cx-tip');
+    expect(tip?.textContent).toContain('Search or run a command');
+    expect(tip?.textContent).toContain('⌘K');
   });
 
   it('breadcrumb_marks_the_last_part_as_current', async () => {

@@ -133,9 +133,12 @@
       ['close', onClose], ['next', () => step(1)], ['prev', () => step(-1)],
       ['pin', togglePin], ['archive', toggleArchive], ['copyKey', copyKey],
     ];
+    const editDesc = () => (editingDesc = true);
+    addEventListener('command:issue.description.edit', editDesc);
     addEventListener('command:issue.detail.edit', edit);
     for (const [n, f] of on) addEventListener(`command:issue.detail.${n}`, f);
     return () => {
+      removeEventListener('command:issue.description.edit', editDesc);
       removeEventListener('command:issue.detail.edit', edit);
       for (const [n, f] of on) removeEventListener(`command:issue.detail.${n}`, f);
     };
@@ -225,6 +228,10 @@
   .error { margin: var(--s-5) var(--s-8) 0; color: var(--signal); font-weight: 600; }
   .loading { display: grid; gap: var(--s-5); padding: var(--s-8); }
   [data-mode='panel'] .cols { grid-template-columns: minmax(0, 1fr); }
-  [data-mode='panel'] aside { order: -1; border-left: 0; border-bottom: 1px solid var(--border); }
+  [data-mode='panel'] aside { border-left: 0; border-top: 1px solid var(--border); padding: var(--s-5) var(--s-7); }
+  [data-mode='panel'] .key, .crumb { white-space: nowrap; }
+  .detail :global(.top) { gap: var(--s-4); padding-inline: var(--s-5); }
+  .detail :global(.top h1) { flex: none; }
+  .detail :global(.actions) { gap: var(--s-2); }
   [data-mode='panel'] .hero, [data-mode='panel'] main { padding-inline: var(--s-7); }
 </style>

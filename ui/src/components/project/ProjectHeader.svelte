@@ -36,13 +36,24 @@
     editingDesc = false;
     onsaved(await api.projects.update({ ...project, description: desc.trim() || null }));
   }
+  // The command menu opens the same editor the button does, and focus follows so typing lands in it.
+  let hero: HTMLElement | undefined = $state();
+  $effect(() => {
+    const go = () => {
+      desc = project.description ?? '';
+      editingDesc = true;
+      queueMicrotask(() => hero?.querySelector('textarea')?.focus());
+    };
+    addEventListener('command:project.description.edit', go);
+    return () => removeEventListener('command:project.description.edit', go);
+  });
   let openDate = $state<string | null>(null);
   async function saveDate(field: 'start_date' | 'target_date', value: string) {
     onsaved(await api.projects.update({ ...project, [field]: value || null }));
   }
 </script>
 
-<div class="hero">
+<div class="hero" bind:this={hero}>
   <div class="art" aria-hidden="true"><Contour rings={11} size={260} /></div>
   <div class="main">
     <div class="title">
@@ -58,13 +69,13 @@
       {/if}
     </div>
 
-    {#if project.description}
-      <p class="desc" data-testid="description">{project.description}</p>
-    {:else if editingDesc}
+    {#if editingDesc}
       <form class="descform" onsubmit={saveDescription}>
         <TextArea label="Description" bind:value={desc} />
         <Button variant="primary" type="submit">Save</Button>
       </form>
+    {:else if project.description}
+      <p class="desc" data-testid="description">{project.description}</p>
     {:else}
       <div><Button icon="plus" onclick={() => { desc = ''; editingDesc = true; }}>Add description</Button></div>
     {/if}
@@ -110,7 +121,7 @@
   dt { font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--band-count); margin-bottom: var(--s-2); }
   dd { margin: 0; }
   .date { height: var(--ctl-h); padding: 0 var(--s-5); border: 1px solid var(--control); border-radius: var(--r-ctl); background: var(--sheet); color: var(--ink); font-weight: 600; }
-  .date.unset { color: var(--muted); font-weight: 400; }
+  .date.unset { color: var(--muted); font-weight: 400; background: transparent; border-style: dashed; }
   .date:hover { border-color: var(--muted); }
   .progress dd { display: grid; gap: var(--s-3); }
 </style>

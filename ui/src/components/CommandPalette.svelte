@@ -38,6 +38,8 @@
     keys?: string | string[];
     more?: boolean;
     checked?: boolean;
+    /** Set on rows that only navigate, so a recent one can be rebuilt without searching for it again. */
+    path?: string;
     run: () => void | Promise<void>;
   };
 
@@ -50,8 +52,26 @@
   let inputEl = $state<HTMLInputElement>();
   let seq = 0;
 
-  // Recently run ids, newest first; kept for the session.
-  const recent = (globalThis as { __cairnRecent?: string[] }).__cairnRecent ?? ((globalThis as { __cairnRecent?: string[] }).__cairnRecent = []);
+  // Recently chosen rows, newest first, kept across reloads. A row that only navigates keeps its path and label, since
+  // an issue is not in the root list until it is searched for again.
+  type Recent = { id: string; label: string; path?: string; icon?: string };
+  const KEY = 'cairn.recent';
+  const recent: Recent[] = (() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(KEY) ?? '[]');
+      return Array.isArray(raw) ? raw.filter((r) => typeof r?.id === 'string' && typeof r?.label === 'string') : [];
+    } catch {
+      return [];
+    }
+  })();
+  const remember = (row: Row) => {
+    recent.splice(0, recent.length, { id: row.id, label: row.label, path: row.path, icon: row.icon }, ...recent.filter((x) => x.id !== row.id).slice(0, 7));
+    try {
+      localStorage.setItem(KEY, JSON.stringify(recent));
+    } catch {
+      /* private mode or a full store: recents last for this session only */
+    }
+  };
 
   const issueByKey = () => /^\/issue\/([^/]+)/.exec(location.pathname)?.[1];
   // The app's live context knows the layout and the open panel; a bare mount (tests) falls back to reading the page.
@@ -128,12 +148,12 @@
   const targetRows = $derived.by((): Row[] => [
     ...found.map((i) => ({
       id: `issue:${i.id}`, label: `${i.key} ${i.title}`, group: 'Issues', category: statuses.find((s) => s.id === i.status_id)?.category,
-      run: nav(`/issue/${i.key}`),
+      path: `/issue/${i.key}`, run: nav(`/issue/${i.key}`),
     })),
-    ...views.map((v) => ({ id: `view:${v.id}`, label: v.name, group: 'Views', entity: { icon: v.icon ?? 'icon:view', color: v.color }, icon: v.icon ? undefined : 'layers', run: nav(`/view/${v.id}`) })),
-    ...projects.map((p) => ({ id: `project:${p.id}`, label: p.name, group: 'Projects', icon: 'project', run: nav(`/project/${p.slug}`) })),
-    ...cycles.map((c) => ({ id: `cycle:${c.id}`, label: c.name ?? `Cycle ${c.number}`, group: 'Cycles', icon: 'cycle', run: nav('/cycles') })),
-    ...labels.map((l) => ({ id: `label:${l.id}`, label: l.name, group: 'Labels', entity: { icon: l.icon ?? 'icon:tag', color: l.color }, run: nav('/settings/labels') })),
+    ...views.map((v) => ({ id: `view:${v.id}`, label: v.name, group: 'Views', entity: { icon: v.icon ?? 'icon:view', color: v.color }, icon: v.icon ? undefined : 'layers', path: `/view/${v.id}`, run: nav(`/view/${v.id}`) })),
+    ...projects.map((p) => ({ id: `project:${p.id}`, label: p.name, group: 'Projects', icon: 'project', path: `/project/${p.slug}`, run: nav(`/project/${p.slug}`) })),
+    ...cycles.map((c) => ({ id: `cycle:${c.id}`, label: c.name ?? `Cycle ${c.number}`, group: 'Cycles', icon: 'cycle', path: '/cycles', run: nav('/cycles') })),
+    ...labels.map((l) => ({ id: `label:${l.id}`, label: l.name, group: 'Labels', entity: { icon: l.icon ?? 'icon:tag', color: l.color }, path: '/settings/labels', run: nav('/settings/labels') })),
   ]);
 
   const parsed = $derived.by(() => {
@@ -162,10 +182,15 @@
       if (parsed) rows = [{ id: 'parsed', label: parsed.label, group: 'Preview', icon: 'check', run: async () => { await parsed.run?.(); onclose(); } }, ...rows];
     } else rows = [...commandRows(), ...targetRows];
     const q = query.trim();
-    const ranked = parsed || !q ? rows : rank(q, rows.map((r) => ({ ...r, keywords: [r.label, ...(r.keywords ?? [])] })), recent) as Row[];
+    const ranked = parsed || !q ? rows : rank(q, rows.map((r) => ({ ...r, keywords: [r.label, ...(r.keywords ?? [])] })), recent.map((r) => r.id)) as Row[];
     const out: { name: string; rows: Row[] }[] = [];
     if (!top && !q) {
-      const recents = recent.flatMap((id) => rows.filter((r) => r.id === id)).slice(0, 4);
+      const recents = recent
+        .flatMap((r): Row[] => {
+          const live = rows.find((x) => x.id === r.id);
+          return live ? [live] : r.path ? [{ id: r.id, label: r.label, icon: r.icon, group: 'Recent', path: r.path, run: nav(r.path) }] : [];
+        })
+        .slice(0, 5);
       if (recents.length) out.push({ name: 'Recent', rows: recents });
     }
     for (const r of ranked) {
@@ -206,7 +231,7 @@
     if (!row) return;
     const isPage = row.id.startsWith('page:') || row.id === 'parsed';
     if (!isPage) {
-      recent.splice(0, recent.length, row.id, ...recent.filter((x) => x !== row.id).slice(0, 7));
+      remember(row);
     }
     // A command that opens a page keeps the menu; a plain command closes it first so focus returns to the screen.
     if (!isPage && !(row.more)) onclose();

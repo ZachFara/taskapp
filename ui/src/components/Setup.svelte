@@ -88,7 +88,7 @@
 
     <label class="row">
       <span>Workspace name</span>
-      <TextInput label="Workspace name" bind:value={name} placeholder="Home" invalid={tried && !nameOk} />
+      <TextInput label="Workspace name" bind:value={name} placeholder="Home" invalid={tried && !nameOk} autofocus />
     </label>
 
     <label class="row">

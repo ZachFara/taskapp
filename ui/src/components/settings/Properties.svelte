@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SectionHead from './SectionHead.svelte';
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
   import { projects, propertyDefs, refreshAll } from '../../lib/stores.svelte';
@@ -8,7 +9,7 @@
   import Dialog from '../../ui/Dialog.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
   import IconButton from '../../ui/IconButton.svelte';
-  import Popover from '../../ui/Popover.svelte';
+  import Select from '../../ui/Select.svelte';
   import TextInput from '../../ui/TextInput.svelte';
   import './entities.css';
 
@@ -24,8 +25,9 @@
   let newScope = $state<number | null>(null);
   let optionDraft = $state<Record<string, string>>({});
 
-  const scopeName = (id: number | null) => projects.find((p) => p.id === id)?.name ?? 'All projects';
   const scopes = $derived([{ id: null as number | null, name: 'All projects' }, ...projects]);
+  const kindItems = kinds.map((k) => ({ value: k, label: k }));
+  const scopeItems = $derived(scopes.map((s) => ({ value: String(s.id ?? 'null'), label: s.name })));
 
   onMount(() => refreshAll());
 
@@ -86,24 +88,8 @@
   });
 </script>
 
-{#snippet choice(label: string, current: string, items: { id: string; text: string }[], pick: (id: string) => void, prefix: string)}
-  <Popover>
-    {#snippet trigger(props)}
-      <button {...props} class="choice" type="button" aria-label={label}>{current}</button>
-    {/snippet}
-    <div class="menu" role="group" aria-label={label}>
-      {#each items as it (it.id)}
-        <button type="button" aria-label={`${prefix} ${it.text}`} aria-pressed={it.text === current} onclick={() => pick(it.id)}>{it.text}</button>
-      {/each}
-    </div>
-  </Popover>
-{/snippet}
-
 <div class="es">
-  <header class="es-head">
-    <h2>Properties</h2>
-    <p>Your own fields on every issue. A property can cover all projects or just one.</p>
-  </header>
+  <SectionHead lede="Your own fields on every issue. A property can cover all projects or just one." />
 
   {#if propertyDefs.length}
     <ul class="es-list">
@@ -112,8 +98,8 @@
           <div class="es-row">
             <div class="es-name" onchange={(e) => rename(d, e)}><TextInput label={`Name of ${d.name}`} value={d.name} /></div>
             <span class="es-meta">{d.key}</span>
-            {@render choice(`Kind of ${d.name}`, d.kind, kinds.map((k) => ({ id: k, text: k })), (k) => write(() => api.properties.changeKind(d.key, k as PropertyKind, hasOptions(k as PropertyKind) ? d.options : [])), 'Kind')}
-            {@render choice(`Scope of ${d.name}`, scopeName(d.project_id), scopes.map((s) => ({ id: String(s.id), text: s.name })), (id) => write(() => api.properties.setScope(d.key, id === 'null' ? null : Number(id))), 'Scope')}
+            <Select label={`Kind of ${d.name}`} items={kindItems} bind:value={() => d.kind, (k) => write(() => api.properties.changeKind(d.key, k as PropertyKind, hasOptions(k as PropertyKind) ? d.options : []))} />
+            <Select label={`Scope of ${d.name}`} items={scopeItems} bind:value={() => String(d.project_id ?? 'null'), (id) => write(() => api.properties.setScope(d.key, id === 'null' ? null : Number(id)))} />
             <div class="es-tools">
               <IconButton icon="arrow-up" label={`Move ${d.name} up`} disabled={i === 0} onclick={() => move(d, -1)} />
               <IconButton icon="arrow-down" label={`Move ${d.name} down`} disabled={i === propertyDefs.length - 1} onclick={() => move(d, 1)} />
@@ -129,7 +115,7 @@
                   <IconButton icon="close" label={`Remove option ${o.value}`} onclick={() => setOptions(d, d.options.filter((_, k) => k !== j))} />
                 </div>
               {/each}
-              <form class="opt" onsubmit={(e) => { e.preventDefault(); addOption(d); }}>
+              <form class="opt opt-add" onsubmit={(e) => { e.preventDefault(); addOption(d); }}>
                 <div class="es-name"><TextInput label={`New option of ${d.name}`} placeholder="New option" bind:value={() => optionDraft[d.key] ?? '', (v) => (optionDraft[d.key] = v)} /></div>
                 <Button type="submit">Add option</Button>
               </form>
@@ -145,8 +131,8 @@
   <form class="es-add" onsubmit={(e) => { e.preventDefault(); add(); }}>
     <div class="es-name"><TextInput label="New property name" placeholder="Name" bind:value={newName} /></div>
     <div class="es-name"><TextInput label="New property key" placeholder="key_name" bind:value={newKey} /></div>
-    {@render choice('New property kind', newKind, kinds.map((k) => ({ id: k, text: k })), (k) => (newKind = k as PropertyKind), 'Kind')}
-    {@render choice('New property scope', scopeName(newScope), scopes.map((s) => ({ id: String(s.id), text: s.name })), (id) => (newScope = id === 'null' ? null : Number(id)), 'Scope')}
+    <Select label="New property kind" items={kindItems} bind:value={() => newKind, (k) => (newKind = k as PropertyKind)} />
+    <Select label="New property scope" items={scopeItems} bind:value={() => String(newScope ?? 'null'), (id) => (newScope = id === 'null' ? null : Number(id))} />
     <Button variant="primary" type="submit">Add property</Button>
   </form>
   {#if error}<p class="es-err" role="alert">{error}</p>{/if}
@@ -164,13 +150,5 @@
   .item .es-row { border-bottom: 0; }
   .opts { display: grid; gap: var(--s-2); padding: var(--s-2) var(--s-4) var(--s-5) var(--s-10); border-left: 3px solid var(--band-2); margin-left: var(--s-5); }
   .opt { display: flex; align-items: center; gap: var(--s-4); max-width: 420px; }
-  .choice {
-    height: var(--row-h-compact); padding: 0 var(--s-5); border: 1px solid var(--control); border-radius: var(--r-ctl);
-    background: var(--sheet); color: var(--ink); font-weight: 500; white-space: nowrap;
-  }
-  .choice:hover { border-color: var(--muted); }
-  .menu { display: grid; gap: var(--s-1); }
-  .menu button { text-align: left; height: var(--row-h-compact); padding: 0 var(--s-5); border: 0; border-radius: var(--r-ctl); background: transparent; }
-  .menu button:hover { background: var(--active); }
-  .menu button[aria-pressed='true'] { background: var(--selection); font-weight: 600; }
+  .opt-add :global(.field) { border-color: var(--control); background: var(--sheet); }
 </style>

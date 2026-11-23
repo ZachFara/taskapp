@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SectionHead from './SectionHead.svelte';
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
   import Button from '../../ui/Button.svelte';
@@ -15,6 +16,12 @@
     enabled = ((await api.settings.get('export_enabled')) as boolean | null) === true;
     dir = ((await api.settings.get('export_dir')) as string | null) ?? '';
     remote = ((await api.settings.get('export_remote')) as string | null) ?? '';
+  });
+
+  $effect(() => {
+    const run = () => void save();
+    addEventListener('command:settings.save', run);
+    return () => removeEventListener('command:settings.save', run);
   });
 
   async function save() {
@@ -44,10 +51,7 @@
   }
 </script>
 
-<div class="st-head">
-  <h2>Export</h2>
-  <p class="st-lede">Keep a plain-file copy of every task in a folder, optionally pushed to a Git remote.</p>
-</div>
+<SectionHead lede="Keep a plain-file copy of every task in a folder, optionally pushed to a Git remote." />
 
 <form class="st-card" onsubmit={(e) => { e.preventDefault(); void save(); }}>
   <span class="st-status" data-state={enabled ? 'ok' : undefined} data-status>
@@ -60,11 +64,11 @@
   <div class="st-form">
     <div class="st-field">
       <span>Export directory</span>
-      <TextInput label="Export directory" bind:value={dir} />
+      <TextInput label="Export directory" placeholder="A folder such as ~/Documents/Cairn" bind:value={dir} />
     </div>
     <div class="st-field">
       <span>Git remote (optional)</span>
-      <TextInput label="Export remote" bind:value={remote} />
+      <TextInput label="Export remote" placeholder="git@github.com:you/cairn-tasks.git" bind:value={remote} />
     </div>
   </div>
   <div class="st-actions">

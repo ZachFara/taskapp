@@ -30,6 +30,11 @@
     name = m?.name ?? '';
     date = m?.target_date ?? '';
   }
+  $effect(() => {
+    const go = () => start();
+    addEventListener('command:milestone.new', go);
+    return () => removeEventListener('command:milestone.new', go);
+  });
   async function save(e: Event) {
     e.preventDefault();
     const clean = name.trim();

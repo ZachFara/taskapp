@@ -47,4 +47,12 @@ describe('Labels', () => {
     await add(target, 'urgent');
     expect(target.querySelector('[role="alert"]')?.textContent).toMatch(/exists/);
   });
+
+  it('row actions name themselves in a tooltip on hover', async () => {
+    const { target } = await mountSettings(Labels);
+    const del = target.querySelector<HTMLButtonElement>('button[aria-label^="Delete "]')!;
+    del.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse' }));
+    await new Promise((r) => setTimeout(r, 700));
+    expect(document.querySelector('.cx-tip')?.textContent).toMatch(/^Delete /);
+  });
 });

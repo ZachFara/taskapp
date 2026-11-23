@@ -155,3 +155,32 @@ describe('Sidebar icons', () => {
     expect(document.querySelectorAll('[aria-label="Projects"] path.spark')).toHaveLength(fixtures.projects.length);
   });
 });
+
+describe('Sidebar without an inbox', () => {
+  it('lists no Inbox link and keeps My issues', async () => {
+    await open();
+    const links = [...document.querySelectorAll('nav a')].map((a) => a.textContent?.trim());
+    expect(links).not.toContain('Inbox');
+    expect(links).toContain('My issues');
+  });
+});
+
+describe('Sidebar tooltips', () => {
+  const tip = async (el: Element | null) => {
+    (el as HTMLElement).focus();
+    await settle();
+    return document.querySelector('.cx-tip')?.textContent ?? '';
+  };
+
+  it('a pin button names its action', async () => {
+    await open();
+    expect(await tip(document.querySelector('[aria-label="Pin Alpha"]'))).toContain('Pin Alpha');
+  });
+
+  it('a section link shows the go-to key', async () => {
+    await open();
+    const t = await tip([...document.querySelectorAll('nav a')].find((a) => a.textContent?.includes('My issues'))!);
+    expect(t).toContain('My issues');
+    expect(t).toMatch(/G\s*M|GM/);
+  });
+});

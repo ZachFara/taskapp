@@ -43,4 +43,9 @@ describe('Backups', () => {
     expect(buttons.some((text) => /restore/i.test(text))).toBe(false);
     expect(calls).not.toContain('backup.restore');
   });
+
+  it('the blank backup directory field shows a placeholder', async () => {
+    const { target } = await mountSettings(Backups);
+    expect(target.querySelector<HTMLInputElement>('input[aria-label="Backup directory"]')!.placeholder).not.toBe('');
+  });
 });

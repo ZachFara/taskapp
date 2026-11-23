@@ -11,6 +11,7 @@
   import Menu from '../ui/Menu.svelte';
   import MenuItem from '../ui/MenuItem.svelte';
   import PriorityGlyph from '../ui/PriorityGlyph.svelte';
+  import { humanDate, PRIORITIES, priorityGlyph } from './detail/format';
   import { pointsOn, readEstimation, SCALES, type Estimation, type ScaleName } from './insights/estimation';
 
   // `project_slug` and `status_id` prefill from the screen that opened the dialog (a group band, a project page).
@@ -27,7 +28,7 @@
     status_id?: number | null;
   } = $props();
 
-  const PRIORITY = ['None', 'Low', 'Medium', 'High', 'Urgent'];
+  const PRIORITY = PRIORITIES;
   const DUE_WORDS = String.raw`(?:today|tomorrow|next week|(?:mon|tue|wed|thu|fri|sat|sun)\w*|\d{4}-\d{2}-\d{2}|in \d+ (?:day|days|week|weeks))`;
 
   let open = $state(true);
@@ -63,8 +64,8 @@
   const chips = $derived(
     [
       template && { key: 'template', label: `/${template.slug}` },
-      parsed?.due && { key: 'due', label: `Due ${parsed.due.Date ?? parsed.due.DateTime?.utc}` },
-      parsed?.start_date && { key: 'start', label: `Start ${parsed.start_date}` },
+      parsed?.due && { key: 'due', label: `Due ${humanDate(parsed.due.Date ?? parsed.due.DateTime!.utc.slice(0, 10))}` },
+      parsed?.start_date && { key: 'start', label: `Start ${humanDate(parsed.start_date)}` },
       parsed?.priority != null && { key: 'priority', label: PRIORITY[parsed.priority] ?? `P${parsed.priority}` },
       parsed?.project_slug && { key: 'project', label: `#${parsed.project_slug}` },
       ...(parsed?.label_names ?? []).map((l) => ({ key: 'labels', label: `@${l}` })),
@@ -208,7 +209,7 @@
         <Menu>
           {#snippet trigger(props)}
             <button {...props} class="chip" type="button" data-chip data-kind={c.key} aria-label={`Edit ${c.key}: ${c.label}`}>
-              {#if c.key === 'priority'}<PriorityGlyph level={parsed?.priority ?? 0} size={12} />{/if}
+              {#if c.key === 'priority'}<PriorityGlyph level={priorityGlyph(parsed?.priority ?? 0)} size={12} />{/if}
               {c.label}
             </button>
           {/snippet}
@@ -265,8 +266,8 @@
 </Dialog>
 
 <style>
-  .stage { position: absolute; right: calc(var(--s-7) * -1); top: calc(var(--s-7) * -1); color: var(--stone); opacity: 0.35; pointer-events: none; }
-  .field-wrap { position: relative; }
+  .stage { position: absolute; right: calc(var(--s-7) * -1); top: calc(var(--s-7) * -1); color: var(--stone); opacity: 0.12; z-index: 0; pointer-events: none; }
+  .field-wrap { position: relative; z-index: 1; }
   .title {
     width: 100%;
     height: calc(var(--ctl-h) + var(--s-6));
@@ -287,7 +288,7 @@
   .option[data-active] { background: var(--active); }
   .slug { font-weight: 700; color: var(--accent); }
   .name { color: var(--muted); }
-  .chips { display: flex; flex-wrap: wrap; gap: var(--s-3); }
+  .chips { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: var(--s-3); }
   .chip { display: inline-flex; align-items: center; gap: var(--s-3); height: var(--row-h-compact); padding: 0 var(--s-4); border: 1px solid var(--control); border-radius: var(--r-round); background: var(--raised); color: var(--ink); font-size: var(--fs-sm); font-weight: 600; transition: background var(--dur-1) var(--ease); }
   .chip:hover { background: var(--active); }
   .error { margin: 0; color: var(--signal); font-size: var(--fs-sm); font-weight: 500; }

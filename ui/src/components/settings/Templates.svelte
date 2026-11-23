@@ -10,8 +10,8 @@
   import EmptyState from '../../ui/EmptyState.svelte';
   import EntityIcon from '../../ui/EntityIcon.svelte';
   import IconColorPicker from '../pickers/IconColorPicker.svelte';
+  import SectionHead from './SectionHead.svelte';
   import IconButton from '../../ui/IconButton.svelte';
-  import PageHeader from '../../ui/PageHeader.svelte';
   import Select from '../../ui/Select.svelte';
   import Skeleton from '../../ui/Skeleton.svelte';
   import TextArea from '../../ui/TextArea.svelte';
@@ -164,11 +164,11 @@
   const remaining = (i: number) => draft.subs.length - 1 - i;
 </script>
 
-<PageHeader title="Templates" icon="icon:layers">
+<SectionHead lede="A template prefills an issue and can add sub-issues.">
   {#snippet actions()}
     <Button variant="primary" icon="plus" tooltip={{ label: 'New template' }} onclick={startNew}>New template</Button>
   {/snippet}
-</PageHeader>
+</SectionHead>
 
 <div class="tpl">
   <section class="rail" aria-label="Templates">

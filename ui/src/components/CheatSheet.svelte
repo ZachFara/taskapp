@@ -28,6 +28,7 @@
 
 <Dialog bind:open title="Keyboard shortcuts" size="lg">
   <TextInput bind:value={query} label="Filter shortcuts" placeholder="Filter shortcuts" type="search" />
+  <div class="scroll">
   <div class="sheet">
     {#each sections as s (s.group)}
       <section>
@@ -51,10 +52,13 @@
       <p class="empty">No shortcuts match "{query.trim()}"</p>
     {/each}
   </div>
+  </div>
 </Dialog>
 
 <style>
-  .sheet { columns: 3; column-gap: var(--s-7); margin-top: var(--s-5); }
+  /* The dialog sits near the top; the list scrolls inside it and the filter above stays in view. */
+  .scroll { max-height: 50vh; margin-top: var(--s-5); overflow-y: auto; }
+  .sheet { columns: 3; column-gap: var(--s-7); }
   .sheet > :global(*) { break-inside: avoid; }
   section { display: grid; gap: var(--s-2); margin-bottom: var(--s-5); }
   h3 {

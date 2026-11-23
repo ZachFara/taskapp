@@ -11,6 +11,7 @@
   let statuses = $state<Status[]>([]);
   let collapsed = $state(false);
   let add = $state<HTMLElement>();
+  let sec = $state<HTMLElement>();
 
   $effect(() => {
     rev;
@@ -20,9 +21,16 @@
   const done = $derived(children.filter((c) => cat(c) === 'Completed').length);
   const attach = (child: Issue) => child.id !== issue.id && act(api.issues.update(child.id, { parent_id: issue.id }));
   const create = (t: string) => act(api.issues.create({ title: t, parent_id: issue.id, project_id: issue.project_id }));
+  // The command menu focuses the same control the section's button does.
+  $effect(() => {
+    const go = () => { collapsed = false; queueMicrotask(() => sec?.querySelector<HTMLElement>('.add input')?.focus()); };
+    addEventListener('command:issue.subissue.add', go);
+    return () => removeEventListener('command:issue.subissue.add', go);
+  });
 </script>
 
-<section aria-label="Sub-issues">
+
+<section aria-label="Sub-issues" bind:this={sec}>
   <SectionHeading name="Sub-issues" count={children.length} {collapsed} ontoggle={() => (collapsed = !collapsed)} onadd={() => add?.querySelector('input')?.focus()} />
   {#if !collapsed}
     {#if children.length}

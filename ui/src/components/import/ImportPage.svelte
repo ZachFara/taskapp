@@ -5,7 +5,7 @@
   import { runUndo } from '../undoState.svelte';
   import { parseCsv } from './csv';
   import Button from '../../ui/Button.svelte';
-  import PageHeader from '../../ui/PageHeader.svelte';
+  import SectionHead from '../settings/SectionHead.svelte';
   import Select from '../../ui/Select.svelte';
   import Tabs from '../../ui/Tabs.svelte';
   import TextInput from '../../ui/TextInput.svelte';
@@ -151,7 +151,9 @@
 {/snippet}
 
 <section class="import">
-  <PageHeader title="Import" icon="icon:download" tabs={tabsSlot} />
+  <SectionHead lede="Bring issues in from a CSV file. The plan is previewed before anything is written.">
+  {#snippet actions()}{@render tabsSlot()}{/snippet}
+</SectionHead>
 
   {#if source === 'csv'}
     <div class="step">

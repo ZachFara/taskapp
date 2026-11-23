@@ -41,7 +41,10 @@
 
 <svelte:window onpopstate={() => (path = location.pathname)} />
 
-<PageHeader title="Settings" icon="icon:settings" />
+<div class="page">
+<PageHeader icon="icon:settings">
+  {#snippet title()}<span class="crumb">Settings /</span> {current?.label ?? 'Settings'}{/snippet}
+</PageHeader>
 <div class="settings">
   <nav aria-label="Settings sections">
     <ul>
@@ -69,8 +72,12 @@
     {/if}
   </section>
 </div>
+</div>
 
 <style>
+  /* The page fills the shell's main area: the header and rail stay put, only the content pane scrolls. */
+  .page { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+  .crumb { color: var(--muted); font-weight: 500; }
   .settings { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); flex: 1; min-height: 0; }
   nav {
     background: var(--raised);
