@@ -189,6 +189,11 @@
   --dur-1: calc(80ms * var(--motion-scale));
   --dur-2: calc(140ms * var(--motion-scale));
   --dur-3: calc(220ms * var(--motion-scale));
+  --dur-4: calc(200ms * var(--motion-scale)); /* a layer arriving: dialogs, the command menu */
+  --dur-out: calc(120ms * var(--motion-scale)); /* a layer leaving is quicker than it arrived */
+  --dur-page: calc(160ms * var(--motion-scale));
+  --dur-stagger: calc(12ms * var(--motion-scale));
+  --ease-spring: cubic-bezier(0.2, 0.9, 0.3, 1.2);
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --delay-tooltip: 500ms;

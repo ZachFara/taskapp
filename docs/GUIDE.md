@@ -452,8 +452,11 @@ folder, remote and switch, the default view template.
 
 ### Motion
 
-Dialogs, the command menu, menus, popovers and tooltips fade and move a few pixels as they arrive, toasts slide up,
-and the issue panel slides in from the right. Nothing animates when a page first opens. Settings > General > Animation
+Dialogs and the command menu scale up and rise over a fading backdrop, and the command menu's rows and pages slide
+in. Menus, popovers, tooltips, toasts and the issue panel animate out as well as in. The issue panel slides from the
+right and dims the list; changing page rises the sheet's content (the issue page slides in); sections, sidebar groups
+and chevrons ease open and shut; the layout tab underline slides; a row flashes when its status or priority changes
+and when quick add creates it. Nothing animates when the app first opens. Settings > General > Animation
 speed sets how long this takes (Off, Fast, Normal, Slow). Keys are never delayed by it: a key typed during an animation
 lands where it should. The command menu has "Faster animations" and "Slower animations" too.
 

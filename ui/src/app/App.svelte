@@ -16,6 +16,7 @@
   import Sidebar from '../components/Sidebar.svelte';
   import ImageViewer from '../components/ImageViewer.svelte';
   import UndoToast from '../components/UndoToast.svelte';
+  import { fresh } from '../lib/motion.svelte';
   import { dismiss, onWrote, undoToast } from '../components/undoState.svelte';
 
   let path = $state(location.pathname);
@@ -102,6 +103,10 @@
     return () => on.forEach(([n, f]) => removeEventListener(n, f));
   });
 
+  // The panel keeps showing the issue it had while it slides out.
+  let shownKey = $state<string | null>(null);
+  $effect(() => { if (panelKey !== null) shownKey = panelKey; });
+
   // Moving to another page leaves the panel behind.
   $effect(() => {
     path;
@@ -133,6 +138,7 @@
 
   async function created({ issue }: { issue: { key: string } }) {
     const key = issue.key;
+    fresh.key = key; // its row flashes once when it appears
     overlay = null;
     // The write's own toast names the backend's step; wait for it, then say what was made.
     await onWrote();
@@ -145,11 +151,11 @@
 {#if setup === 'needed'}
   <Setup ondone={() => (setup = 'done')} />
 {:else if setup === 'done'}
-  <Shell {crumb} panelOpen={panelKey !== null} onsearch={() => ((palettePage = undefined), (paletteIssues = false), (overlay = 'palette'))}>
+  <Shell {crumb} route={path} panelOpen={panelKey !== null} onsearch={() => ((palettePage = undefined), (paletteIssues = false), (overlay = 'palette'))}>
     {#snippet sidebar()}<Sidebar route={path} />{/snippet}
     {#snippet panel()}
-      {#if panelKey !== null}
-        {#key panelKey}<IssueDetail params={{ key: panelKey }} mode="panel" onclose={closePanel} onopen={(k) => navigate(`/issue/${k}`)} />{/key}
+      {#if shownKey !== null}
+        {#key shownKey}<IssueDetail params={{ key: shownKey }} mode="panel" onclose={closePanel} onopen={(k) => navigate(`/issue/${k}`)} />{/key}
       {/if}
     {/snippet}
     {#if Page}
@@ -162,7 +168,7 @@
   <RestoreDialog bind:open={restoreOpen} onrestored={restored} />
 
   {#if overlay === 'palette'}
-    <CommandPalette page={palettePage} issues={paletteIssues} onclose={() => (overlay = null)} oncreate={() => (overlay = 'quickadd')} />
+    <CommandPalette page={palettePage} issues={paletteIssues} onclose={() => overlay === 'palette' && (overlay = null)} oncreate={() => (overlay = 'quickadd')} />
   {:else if overlay === 'quickadd'}
     <QuickAdd onclose={() => (overlay = null)} oncreated={created} />
   {/if}

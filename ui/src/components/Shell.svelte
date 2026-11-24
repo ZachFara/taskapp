@@ -2,6 +2,8 @@
   import RowDialogHost from './RowDialogHost.svelte';
   import type { Snippet } from 'svelte';
   import { onMount } from 'svelte';
+  import { cubicOut } from 'svelte/easing';
+  import { fly } from 'svelte/transition';
   import { api } from '../lib/api';
   import type { SyncStatus } from '../lib/bindings';
   import { shortcutFor } from '../lib/commands';
@@ -14,7 +16,7 @@
   import Splitter from './Splitter.svelte';
   import { clampWidth, readFlag, readWidth, writeFlag, writeWidth } from '../lib/paneSize';
   import '../lib/interfaceSize.svelte'; // applies the saved interface size before the first paint
-  import '../lib/motion.svelte'; // applies the saved animation speed before the first paint
+  import { ms, replay } from '../lib/motion.svelte'; // also applies the saved animation speed before the first paint
 
   // The frame: sidebar and top bar are one field, the page is a sheet set into it, the issue panel docks inside the sheet.
   let {
@@ -24,7 +26,8 @@
     crumb = [],
     panelOpen = false,
     onsearch,
-  }: { sidebar?: Snippet; panel?: Snippet; children: Snippet; crumb?: string[]; panelOpen?: boolean; onsearch?: () => void } = $props();
+    route = '',
+  }: { sidebar?: Snippet; panel?: Snippet; children: Snippet; crumb?: string[]; panelOpen?: boolean; onsearch?: () => void; route?: string } = $props();
 
   let sync = $state<SyncStatus | null>(null);
   const syncError = $derived(
@@ -44,10 +47,15 @@
   const sideWidth = () => sideW ?? (parseFloat(getComputedStyle(side).getPropertyValue('--sidebar-w')) || SIDE.def);
   let sheet: HTMLElement;
   let panelEl: HTMLElement;
-  // The panel slides in when opened after first paint; a page that opens with it shows it at once.
-  let settled = $state(false);
-  onMount(() => (settled = true));
-  const slideIn = (node: HTMLElement) => { if (settled) node.classList.add('enter'); };
+  // A page change replays a quick rise on the sheet's content (the issue page slides in from the right instead).
+  let mainEl: HTMLElement;
+  let shown = route;
+  $effect(() => {
+    if (route === shown) return;
+    shown = route;
+    mainEl.style.setProperty('--cx-px', route.startsWith('/issue/') ? '24px' : '0px');
+    replay(mainEl, 'cx-page');
+  });
   // The panel may take 70% of the sheet at most, so the list keeps room.
   const clampSide = (w: number) => clampWidth(w, SIDE.min, SIDE.max);
   const clampPanel = (w: number) => clampWidth(w, PANEL.min, sheet.clientWidth * 0.7);
@@ -129,9 +137,9 @@
     {@render sidebar?.()}
     <div class="edge side"><Splitter label="Resize sidebar" clamp={clampSide} fromPointer={(x) => x / zoom()} onchange={setSide} onreset={() => setSide(null)} /></div>
   </aside>
-  <div class="sheet" bind:this={sheet}>
+  <div class="sheet" bind:this={sheet} data-panel={panelOpen ? '' : undefined}>
     <div class="main">
-      <main>{@render children()}</main>
+      <main bind:this={mainEl}>{@render children()}</main>
       <RowDialogHost />
       <footer class="legend">
         {#each hints as h (h.text)}
@@ -147,7 +155,7 @@
       </footer>
     </div>
     {#if panelOpen}
-      <aside class="panel" use:slideIn bind:this={panelEl} style:--panel-w={panelW === null ? null : `${panelW}px`}>
+      <aside class="panel" in:fly={{ x: 40, duration: ms('--dur-3'), easing: cubicOut }} out:fly={{ x: 40, duration: ms('--dur-out') }} bind:this={panelEl} style:--panel-w={panelW === null ? null : `${panelW}px`}>
         <div class="edge panel-edge">
           <Splitter label="Resize panel" clamp={clampPanel} fromPointer={(x) => (sheet.getBoundingClientRect().right - x) / zoom()} onchange={setPanel} onreset={() => setPanel(null)} />
         </div>
@@ -195,8 +203,9 @@
   .dot { width: var(--s-4); height: var(--s-4); border-radius: var(--r-round); background: var(--positive); }
   .dot.error { background: var(--signal); }
   .panel { position: relative; flex: none; width: var(--panel-w); min-height: 0; display: flex; flex-direction: column; background: var(--raised); border-left: 1px solid var(--border); overflow: hidden; }
-  /* A transform, not a width: the list beside it keeps its layout while the panel arrives. */
-  .panel.enter { animation: cx-panel-in var(--dur-3) var(--ease); }
+  /* The panel moves by transform (fly), not width: the list beside it keeps its layout, and dims a little. */
+  .main { transition: opacity var(--dur-3) var(--ease); }
+  .sheet[data-panel] .main { opacity: 0.85; }
   /* Narrow window: the panel floats over the sheet so the list keeps its width. */
   @media (max-width: 1100px) {
     .panel { position: absolute; top: 0; right: 0; bottom: 0; z-index: var(--z-sticky); box-shadow: var(--shadow-float); }

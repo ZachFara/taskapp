@@ -108,7 +108,7 @@ describe('CommandPalette', () => {
     press('Enter');
     await settle();
     expect(ran).toHaveBeenCalledWith('ctx', [a.id, b.id]);
-    expect(onclose).toHaveBeenCalled();
+    await vi.waitFor(() => expect(onclose).toHaveBeenCalled());
   });
 
   it('a start page opens the menu straight at that page with an empty query', async () => {
@@ -141,7 +141,7 @@ describe('CommandPalette', () => {
     press('Enter');
     await settle();
     expect(picked).toHaveBeenCalledWith('Beta');
-    expect(onclose).toHaveBeenCalled();
+    await vi.waitFor(() => expect(onclose).toHaveBeenCalled());
   });
 
   it('escape_closes_one_level_then_the_menu', async () => {
@@ -153,8 +153,7 @@ describe('CommandPalette', () => {
     expect(document.querySelector('.crumb')).toBeNull();
     expect(onclose).not.toHaveBeenCalled();
     press('Escape');
-    await settle();
-    expect(onclose).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(onclose).toHaveBeenCalledTimes(1)); // after the exit animation
   });
 
   it('issue_search_result_navigates', async () => {
@@ -170,6 +169,11 @@ describe('CommandPalette', () => {
     const i = await api.issues.create({ title: 'Quokka recents' });
     await type('quokka');
     press('Enter');
+    await settle();
+    // Running a row closes the menu (it leaves after its exit animation), so open a fresh one for the next pick.
+    unmount(app!);
+    document.body.innerHTML = '';
+    app = mount(CommandPalette, { target: document.body, props: { onclose, oncreate } });
     await settle();
     await type('zebra plain');
     press('Enter');

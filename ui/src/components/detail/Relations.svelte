@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api } from '../../lib/api';
   import type { Issue, Relation, RelationKindDef } from '../../lib/bindings';
+  import Collapse from '../../ui/Collapse.svelte';
   import SectionHeading from './SectionHeading.svelte';
   import IconButton from '../../ui/IconButton.svelte';
   import Select from '../../ui/Select.svelte';
@@ -53,7 +54,7 @@
 
 <section aria-label="Relations" bind:this={sec}>
   <SectionHeading name="Relations" count={rows.length} {collapsed} ontoggle={() => (collapsed = !collapsed)} />
-  {#if !collapsed}
+  <Collapse open={!collapsed}>
     {#if !rows.length}<p class="none">No relations</p>{/if}
     <ul>
       {#each rows as r (`${r.rel.from}-${r.rel.to}-${r.rel.kind}`)}
@@ -67,7 +68,7 @@
       <Select label="Relation kind" bind:value={choice} {items} />
       <IssuePicker selfId={issue.id} label="Find issue" pick={add} />
     </div>
-  {/if}
+  </Collapse>
 </section>
 
 <style>

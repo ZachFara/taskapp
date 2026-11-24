@@ -30,7 +30,7 @@
   <Tooltip label={collapsed ? 'Expand group' : 'Collapse group'} shortcut={shortcutFor('group.collapse')}>
     {#snippet children(tp)}
       <button {...tp} class="toggle" type="button" aria-expanded={!collapsed} aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`} onclick={ontoggle}>
-        <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={12} />
+        <span class="chev" data-collapsed={collapsed}><Icon name="chevron-down" size={12} /></span>
         {#if category}<StatusGlyph {category} {icon} {color} />{:else}{@render leading?.()}{/if}
         <span class="name">{name}</span>
         <span class="count">{count}</span>
@@ -56,6 +56,8 @@
   .toggle, .add { border: 0; background: transparent; color: inherit; padding: 0; }
   .toggle { flex: 1; display: flex; align-items: center; gap: var(--s-5); height: 100%; text-align: left; font-weight: 700; letter-spacing: -0.005em; }
   .toggle :global(.icon) { color: var(--band-count); }
+  .chev { display: flex; transition: transform var(--dur-2) var(--ease); }
+  .chev[data-collapsed='true'] { transform: rotate(-90deg); }
   .count { font-weight: 600; color: var(--band-count); }
   .add { display: flex; color: var(--band-count); border-radius: var(--r-ctl); }
   .add:hover { color: var(--band-ink); }

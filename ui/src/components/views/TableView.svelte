@@ -11,6 +11,7 @@
   import { workspaceZone, dayText, dueDay, isOverdue } from './dates';
   import EmptyState from '../../ui/EmptyState.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
+  import { flash } from '../../lib/motion.svelte';
   import IconButton from '../../ui/IconButton.svelte';
     import { fixedOn } from '../../lib/fields.svelte';
     import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
@@ -447,7 +448,7 @@
           {/if}
           {#if !collapsed.has(g.name)}
             {#each g.rows as issue (issue.id)}
-              <tr data-key={issue.key} data-id={issue.id} aria-selected={rowSelected(issue)} data-focused={issue.id === activeRowId ? '' : undefined}>
+              <tr use:flash={{ id: issue.id, sig: `${issue.status_id}:${issue.priority}`, key: issue.key }} data-key={issue.key} data-id={issue.id} aria-selected={rowSelected(issue)} data-focused={issue.id === activeRowId ? '' : undefined}>
                 <th scope="row" class="key-cell">{issue.key}</th>
                 {#each cols as col, c (col.id)}
                   {@const isEditing = editing !== null && visibleIds[editing.row] === issue.id && editing.col === c}
