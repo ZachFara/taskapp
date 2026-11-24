@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api } from '../../lib/api';
   import type { Change, Issue } from '../../lib/bindings';
+  import Collapse from '../../ui/Collapse.svelte';
   import SectionHeading from './SectionHeading.svelte';
   import { dateOf, humanDate } from './format';
 
@@ -24,7 +25,7 @@
 
 <section aria-label="History">
   <SectionHeading name="Activity" count={changes.length} {collapsed} ontoggle={() => (collapsed = !collapsed)} />
-  {#if !collapsed}
+  <Collapse open={!collapsed}>
     {#each days as [day, list] (day)}
       <h4>{humanDate(day)}</h4>
       <ul>
@@ -35,7 +36,7 @@
     {:else}
       <p class="none">No changes yet. Created {humanDate(dateOf(issue.created_at))}.</p>
     {/each}
-  {/if}
+  </Collapse>
 </section>
 
 <style>

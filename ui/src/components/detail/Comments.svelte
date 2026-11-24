@@ -2,6 +2,7 @@
   import { api } from '../../lib/api';
   import type { Comment, Issue } from '../../lib/bindings';
   import Button from '../../ui/Button.svelte';
+  import Collapse from '../../ui/Collapse.svelte';
   import SectionHeading from './SectionHeading.svelte';
   import TextArea from '../../ui/TextArea.svelte';
   import { humanDate } from './format';
@@ -28,7 +29,7 @@
 
 <section aria-label="Comments" bind:this={sec}>
   <SectionHeading name="Comments" count={comments.length} {collapsed} ontoggle={() => (collapsed = !collapsed)} />
-  {#if !collapsed}
+  <Collapse open={!collapsed}>
     {#each comments as c (c.id)}
       <article class="comment">
         <time datetime={c.created_at}>{humanDate(c.created_at.slice(0, 10))} {c.created_at.slice(11, 16)}</time>
@@ -41,7 +42,7 @@
       <TextArea label="New comment" images rows={3} placeholder="Leave a comment (markdown)" bind:value={draft} />
       <Button variant="primary" disabled={!draft.trim()} onclick={() => { act(api.comments.addComment(issue.id, draft)); draft = ''; }}>Comment</Button>
     </div>
-  {/if}
+  </Collapse>
 </section>
 
 <style>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api } from '../../lib/api';
   import type { Issue, Status } from '../../lib/bindings';
+  import Collapse from '../../ui/Collapse.svelte';
   import SectionHeading from './SectionHeading.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import { pct } from './format';
@@ -33,7 +34,7 @@
 
 <section aria-label="Sub-issues" bind:this={sec}>
   <SectionHeading name="Sub-issues" count={children.length} {collapsed} ontoggle={() => (collapsed = !collapsed)} onadd={() => add?.querySelector('input')?.focus()} />
-  {#if !collapsed}
+  <Collapse open={!collapsed}>
     {#if children.length}
       <div class="progress" role="progressbar" aria-label="Sub-issue progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={pct(done, children.length)}>
         <span class="bar" style:width={`${pct(done, children.length)}%`}></span>
@@ -50,7 +51,7 @@
     <div class="add" bind:this={add}>
       <IssuePicker selfId={issue.id} label="New sub-issue title" placeholder="Add a sub-issue: type a title and press Enter, or pick one" pick={attach} {create} />
     </div>
-  {/if}
+  </Collapse>
 </section>
 
 <style>

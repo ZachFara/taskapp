@@ -5,6 +5,7 @@
 
   let {
     open = $bindable(false),
+    onclosed,
     title,
     label,
     size = 'sm',
@@ -13,6 +14,8 @@
     actions,
   }: {
     open?: boolean;
+    /** Called once the closing animation has ended and the dialog is gone. */
+    onclosed?: () => void;
     /** Omit for a bare dialog (command menu, cheat sheet); then pass `label` for the accessible name. */
     title?: string;
     label?: string;
@@ -23,7 +26,7 @@
   } = $props();
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root bind:open onOpenChangeComplete={(o) => !o && onclosed?.()}>
   <Dialog.Portal>
     <Dialog.Overlay class="cx-overlay" />
     <Dialog.Content class="cx-dialog" data-size={size} aria-label={title ? undefined : label}>
@@ -40,7 +43,7 @@
 </Dialog.Root>
 
 <style>
-  :global(.cx-overlay) { position: fixed; inset: 0; z-index: var(--z-dialog); background: var(--overlay); animation: cx-fade var(--dur-2) var(--ease); }
+  :global(.cx-overlay) { position: fixed; inset: 0; z-index: var(--z-dialog); background: var(--overlay); }
   :global(.cx-dialog) {
     position: fixed;
     z-index: var(--z-dialog);
@@ -56,7 +59,6 @@
     border: 1px solid var(--control);
     border-radius: var(--r-pop);
     box-shadow: var(--shadow-float);
-    animation: cx-in-centred var(--dur-2) var(--ease);
   }
   :global(.cx-dialog[data-size='md']) { width: min(var(--dialog-md), calc(100% - var(--s-9))); }
   :global(.cx-dialog[data-size='lg']) { width: min(var(--dialog-lg), calc(100% - var(--s-9))); }

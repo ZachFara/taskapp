@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { motion, readSpeed, setSpeed, stepSpeed, SPEEDS } from './motion.svelte';
+import { flash, fresh, motion, ms, readSpeed, replay, setSpeed, stepSpeed, SPEEDS } from './motion.svelte';
 
 const root = () => document.documentElement;
 const reduce = (on: boolean) =>
@@ -57,5 +57,45 @@ describe('animation speed', () => {
   it('falls back to Normal for a stored value it does not know', () => {
     localStorage.setItem('cairn.animationSpeed', 'warp');
     expect(readSpeed()).toBe('normal');
+  });
+});
+
+describe('motion helpers', () => {
+  // jsdom does not resolve var() or calc(), so the probe's computed duration is stood in by scale * base.
+  const resolve = (base: number) =>
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(() => ({ animationDuration: `${base * SPEEDS[motion.speed]}ms` }) as CSSStyleDeclaration);
+
+  it('ms reads a duration token, and is 0 when animation is Off', () => {
+    resolve(120);
+    expect(ms('--dur-out')).toBe(120);
+    setSpeed('off');
+    expect(ms('--dur-out')).toBe(0);
+    vi.restoreAllMocks();
+  });
+
+  it('ms reads seconds too', () => {
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(() => ({ animationDuration: '0.22s' }) as CSSStyleDeclaration);
+    expect(ms('--dur-3')).toBeCloseTo(220);
+    vi.restoreAllMocks();
+  });
+
+  it('replay restarts the class', () => {
+    const el = document.createElement('div');
+    el.className = 'cx-page';
+    replay(el, 'cx-page');
+    expect(el.classList.contains('cx-page')).toBe(true);
+  });
+
+  it('flash plays for the fresh issue once, and when the same issue changes, not when the row shows another issue', () => {
+    const el = document.createElement('div');
+    fresh.key = 'ABC-1';
+    const a = flash(el, { id: 1, sig: '1:0', key: 'ABC-1' });
+    expect(el.classList.contains('cx-flash')).toBe(true);
+    expect(fresh.key).toBeNull();
+    el.classList.remove('cx-flash');
+    a.update({ id: 2, sig: '1:0' }); // a recycled row
+    expect(el.classList.contains('cx-flash')).toBe(false);
+    a.update({ id: 2, sig: '2:0' }); // same issue, new status
+    expect(el.classList.contains('cx-flash')).toBe(true);
   });
 });

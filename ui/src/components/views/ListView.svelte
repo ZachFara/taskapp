@@ -10,6 +10,7 @@
   import EntityIcon from '../../ui/EntityIcon.svelte';
   import Icon from '../../ui/Icon.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
+  import { flash } from '../../lib/motion.svelte';
   import CommandButton from '../CommandButton.svelte';
   import IssueMenu from './IssueMenu.svelte';
   import IconButton from '../../ui/IconButton.svelte';
@@ -352,6 +353,7 @@
           <li
             class="row"
             role="row"
+            use:flash={{ id: i.id, sig: `${i.status_id}:${i.priority}`, key: i.key }}
             aria-selected={chosen}
             data-key={i.key}
             data-id={i.id}

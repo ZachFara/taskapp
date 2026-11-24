@@ -27,7 +27,8 @@ import { createKeys } from './keys';
 import { inScope, keysOf, listCommands, rankOf, type Command, type Ctx } from './registry';
 
 /** bits-ui menus, selects and popovers all carry cx-surface while open. */
-const OPEN_LAYER = '[role=dialog], [role=menu], .cx-surface';
+// A layer in its exit animation (data-state=closed) no longer owns the keys.
+const OPEN_LAYER = '[role=dialog]:not([data-state=closed]), [role=menu]:not([data-state=closed]), .cx-surface:not([data-state=closed])';
 
 /** A key on a command that only has a page opens the command menu at that page. */
 const open = (c: Command, ctx: Ctx, count: number) =>

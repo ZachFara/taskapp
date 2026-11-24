@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import Collapse from '../ui/Collapse.svelte';
   import { navigate } from '../app/routes';
   import { api } from '../lib/api';
   import { openExternal } from '../lib/openExternal';
@@ -116,7 +117,7 @@
     <Tooltip label={`${closed[id] ? 'Expand' : 'Collapse'} ${title}`}>
       {#snippet children(props)}
         <button {...props} class="head" type="button" aria-expanded={!closed[id]} onclick={() => (closed[id] = !closed[id])}>
-          <Icon name={closed[id] ? 'chevron-right' : 'chevron-down'} size={12} />
+          <span class="chev" data-collapsed={!!closed[id]}><Icon name="chevron-down" size={12} /></span>
           <span>{title}</span>
           <em>{count}</em>
         </button>
@@ -143,7 +144,7 @@
   {@const f = r.folder}
   <li class="row" {...attrs(section, 'folder', f.id, f.name, r, !r.shut)}>
     <RowActions button={false} label={f.name} actions={rowActs({ kind: 'folder', id: f.id, name: f.name })}>
-      <button class="item folder" type="button" aria-expanded={!r.shut} onclick={() => setShut(f.id, !r.shut)}><Icon name={r.shut ? 'chevron-right' : 'chevron-down'} size={12} /><span class="t">{f.name}</span><em>{r.count}</em></button>
+      <button class="item folder" type="button" aria-expanded={!r.shut} onclick={() => setShut(f.id, !r.shut)}><span class="chev" data-collapsed={r.shut}><Icon name="chevron-down" size={12} /></span><span class="t">{f.name}</span><em>{r.count}</em></button>
     </RowActions>
   </li>
 {/snippet}
@@ -221,22 +222,22 @@
 
   <section aria-label="Pinned">
     {@render head('pinned', 'Pinned', pins.length, 'pin')}
-    {#if !closed.pinned}{@render rowsOf('pin', pinRows, pinLeaf)}{/if}
+    <Collapse open={!closed.pinned}>{@render rowsOf('pin', pinRows, pinLeaf)}</Collapse>
   </section>
 
   <section aria-label="Views">
     {@render head('views', 'Views', views.length, 'view')}
-    {#if !closed.views}{@render rowsOf('view', viewRows, viewLeaf)}{/if}
+    <Collapse open={!closed.views}>{@render rowsOf('view', viewRows, viewLeaf)}</Collapse>
   </section>
 
   <section aria-label="Projects">
     {@render head('projects', 'Projects', projects.length, 'project')}
-    {#if !closed.projects}{@render rowsOf('project', projectRows, projectLeaf, allProjects)}{/if}
+    <Collapse open={!closed.projects}>{@render rowsOf('project', projectRows, projectLeaf, allProjects)}</Collapse>
   </section>
 
   <section aria-label="Cycles">
     {@render head('cycles', 'Cycles', cycles.length, 'cycle')}
-    {#if !closed.cycles}{@render rowsOf('cycle', cycleRows, cycleLeaf, allCycles)}{/if}
+    <Collapse open={!closed.cycles}>{@render rowsOf('cycle', cycleRows, cycleLeaf, allCycles)}</Collapse>
   </section>
 
   <ul class="top">
@@ -249,6 +250,8 @@
 </nav>
 
 <style>
+  .chev { display: flex; transition: transform var(--dur-2) var(--ease); }
+  .chev[data-collapsed='true'] { transform: rotate(-90deg); }
   nav { display: flex; flex-direction: column; gap: var(--s-2); min-height: 100%; padding: 0 var(--s-4) var(--s-4); color: var(--frame-ink); font-size: var(--fs-md); }
   ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-1); }
   .bottom { margin-top: auto; padding-top: var(--s-4); }

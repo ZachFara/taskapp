@@ -7,6 +7,7 @@
   import type { Cycle, Issue, Label } from '../lib/bindings';
   import { listCommands, sectionOf, shortcutFor, type Command, type CommandPage, type Ctx } from '../lib/commands';
   import { rank } from '../lib/commands/match';
+  import { replay } from '../lib/motion.svelte';
   import { selection } from '../lib/selection.svelte';
   import { issues, projects, statuses, views } from '../lib/stores.svelte';
   import EntityIcon from '../ui/EntityIcon.svelte';
@@ -44,6 +45,15 @@
     run: () => void | Promise<void>;
   };
 
+  // `open` ends the menu's life with its exit animation; `onclose` tells the app once that has played.
+  let open = $state(true);
+  // Focus goes back at once, so keys typed during the exit animation reach the screen, not the leaving field.
+  const prevFocus = document.activeElement as HTMLElement | null;
+  const close = () => {
+    open = false;
+    inputEl?.blur();
+    prevFocus?.isConnected && prevFocus.focus?.();
+  };
   let query = $state('');
   let active = $state(0);
   // Search issues only (opened by `/` or the "Search issues…" row): no commands, no views, no projects.
@@ -53,6 +63,19 @@
   let cycles = $state<Cycle[]>([]);
   let labels = $state<Label[]>([]);
   let inputEl = $state<HTMLInputElement>();
+  let listEl = $state<HTMLElement>();
+  // Rows stagger in once, as the menu opens; typing must not replay it. A page change slides the list sideways.
+  let opening = $state(true);
+  onMount(() => { const t = setTimeout(() => (opening = false), 400); return () => clearTimeout(t); });
+  let depth = 0;
+  $effect(() => {
+    const d = stack.length;
+    if (listEl && d !== depth) {
+      listEl.style.setProperty('--cx-px', d > depth ? '24px' : '-24px');
+      replay(listEl, 'cx-page');
+    }
+    depth = d;
+  });
   let seq = 0;
 
   // Recently chosen rows, newest first, kept across reloads. A row that only navigates keeps its path and label, since
@@ -187,10 +210,10 @@
             const again = (await Promise.resolve(top.cmd.page!(ctx()))) as Page;
             stack[stack.length - 1] = { ...top, page: { ...again, items: await again.items } };
             await tick();
-          } else onclose();
+          } else close();
         },
       }));
-      if (parsed) rows = [{ id: 'parsed', label: parsed.label, group: 'Preview', icon: 'check', run: async () => { await parsed.run?.(); onclose(); } }, ...rows];
+      if (parsed) rows = [{ id: 'parsed', label: parsed.label, group: 'Preview', icon: 'check', run: async () => { await parsed.run?.(); close(); } }, ...rows];
     } else rows = issuesOnly ? issueRows : [...commandRows(), ...targetRows];
     const q = query.trim();
     // Issues come from the backend already matched, so they are listed as found and never re-ranked by letters.
@@ -247,11 +270,11 @@
       remember(row);
     }
     // A command that opens a page keeps the menu; a plain command closes it first so focus returns to the screen.
-    if (!isPage && !(row.more)) onclose();
+    if (!isPage && !(row.more)) close();
     await row.run();
   }
 
-  const back = () => (stack.length ? (stack.pop(), (query = '')) : onclose());
+  const back = () => (stack.length ? (stack.pop(), (query = '')) : close());
 
   function onkeydown(e: KeyboardEvent) {
     const n = flat.length;
@@ -277,7 +300,7 @@
   const numbered = $derived((index = 0, groups.map((g) => ({ ...g, rows: g.rows.map((r) => ({ r, n: index++ })) }))));
 </script>
 
-<Dialog.Root open onOpenChange={(o) => !o && onclose()}>
+<Dialog.Root bind:open onOpenChangeComplete={(o) => !o && onclose()}>
   <Dialog.Portal>
     <Dialog.Overlay class="cp-overlay" />
     <Dialog.Content
@@ -306,7 +329,7 @@
         />
         <Kbd keys="Esc" />
       </div>
-      <div class="list" id="cp-list" role="listbox" aria-multiselectable={stack.at(-1)?.page.multi || undefined}>
+      <div class="list" class:opening bind:this={listEl} id="cp-list" role="listbox" aria-multiselectable={stack.at(-1)?.page.multi || undefined}>
         {#each numbered as g (g.name)}
           <div role="group" aria-label={g.name}>
             <h4 class:ctx={g.name === contextTitle}>{g.name}</h4>
@@ -314,6 +337,7 @@
               <!-- Mouse down must not steal focus from the field. -->
               <div
                 id="cp-{n}"
+                style:--i={n}
                 class="row"
                 class:cur={n === active}
                 role="option"
@@ -355,13 +379,13 @@
 </Dialog.Root>
 
 <style>
-  :global(.cp-overlay) { position: fixed; inset: 0; z-index: var(--z-dialog); background: var(--overlay); animation: cx-fade var(--dur-2) var(--ease); }
+  :global(.cp-overlay) { position: fixed; inset: 0; z-index: var(--z-dialog); background: var(--overlay); }
   :global(.cp) {
     position: fixed; z-index: var(--z-dialog); top: 14%; left: 50%; transform: translateX(-50%);
     width: min(640px, calc(100% - var(--s-9)));
     display: grid; grid-template-rows: auto minmax(0, 1fr) auto; max-height: 68vh;
     background: var(--sheet); color: var(--ink); border: 1px solid var(--control); border-radius: 0;
-    box-shadow: var(--shadow-float); font-family: var(--font); animation: cx-in-centred var(--dur-2) var(--ease);
+    box-shadow: var(--shadow-float); font-family: var(--font);
   }
   :global(.cp-sr) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .field { display: flex; align-items: center; gap: var(--s-4); padding: var(--s-5) var(--s-6); border-bottom: 1px solid var(--control); color: var(--muted); }
@@ -371,7 +395,8 @@
   .list { overflow-y: auto; padding-bottom: var(--s-2); }
   h4 { margin: 0; padding: var(--s-2) var(--s-6); background: var(--band-1); color: var(--band-ink); font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
   h4.ctx { background: var(--band-3); }
-  .row { display: flex; align-items: center; gap: var(--s-5); height: var(--row-h); padding: 0 var(--s-6); border-left: 3px solid transparent; font-size: var(--fs-md); cursor: default; }
+  .row { display: flex; align-items: center; gap: var(--s-5); height: var(--row-h); padding: 0 var(--s-6); border-left: 3px solid transparent; font-size: var(--fs-md); cursor: default; transition: background var(--dur-1) var(--ease); }
+  .opening .row { animation: cx-row-in var(--dur-4) var(--ease) backwards; animation-delay: calc(min(var(--i), 8) * var(--dur-stagger)); }
   .row.cur { background: var(--selection); border-left-color: var(--accent); }
   .ico { display: grid; place-items: center; width: var(--icon); color: var(--muted); }
   .lab { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }

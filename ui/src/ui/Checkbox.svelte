@@ -35,6 +35,7 @@
   :global(.cx-check[data-state='checked']), :global(.cx-check[data-state='indeterminate']) {
     background: var(--accent);
     border-color: var(--accent);
+    animation: cx-pop var(--dur-2) var(--ease-spring);
   }
   :global(.cx-check[data-disabled]) { opacity: 0.45; cursor: default; }
 </style>
