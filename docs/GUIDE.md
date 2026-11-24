@@ -9,7 +9,7 @@ Contents: [What it is](#what-cairn-is) - [First run](#first-run) - [The screen](
 [Selection and bulk edit](#selection-and-bulk-edit) - [Undo and redo](#undo-and-redo) - [Views](#views) -
 [Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) - [Events](#events) -
 [Points and insights](#points-and-insights) - [Custom properties](#custom-properties) -
-[Statuses, labels, icons, colours](#statuses-labels-icons-and-colours) - [Templates](#issue-templates) -
+[Statuses, labels, icons, colours](#statuses-labels-icons-and-colours) - [Templates](#issue-templates) - [Images](#images) -
 [Import, export, backups](#import-export-and-backups) - [Restore](#restore) - [Reminders and Google Calendar](#reminders-and-google-calendar) -
 [Settings](#settings) - [Command menu](#the-command-menu) - [Keyboard reference](#keyboard-reference) -
 [CLI](#cli-reference) - [MCP](#mcp-tools-reference) - [How do I ...](#how-do-i-) - [Limits](#limits-and-not-built-yet)
@@ -347,6 +347,22 @@ fields (status, priority, project, labels, estimate, points, properties) and sub
 fields). Creating from a template makes the issue and its sub-issues as one undo step. Use it with `/slug ...` in
 quick-add, `taskapp template apply <id> [title]`, or MCP `apply_template`.
 
+## Images
+
+Paste an image (a screenshot, a copied picture) into a description or a comment box, or drop an image file on it: it is
+stored and `![name](attachment:3)` is written at the cursor. **Attach image** under the box (also in the command menu while
+you are in a box) opens a file picker for the same thing. Pasted text works as before. PNG, JPEG, GIF and WebP up to
+10 MB; the file's own bytes decide the type, so SVG and anything else is refused with a message and nothing is inserted.
+The same picture added twice is stored once. Click a picture to see it larger. Pictures from the web are never shown
+(they would tell the site you opened the issue); only `attachment:` images are.
+
+Files live in an `attachments` folder next to the database. A GitHub export copies the pictures that some description
+or comment still uses into `attachments/` (listed in `attachments.yaml`), and a restore, rebuild or pull brings them back.
+Backups: the nightly and snapshot copies also copy new pictures into `attachments/` inside the backup folder (one copy
+per picture, never pruned); a database restore from a backup needs that folder copied back next to the database.
+Adding a picture is not an undo step (the text edit that uses it is). A picture nothing refers to any more stays on disk;
+a cleanup command is not built yet.
+
 ## Import, export and backups
 
 - **CSV import** (Settings > Import, or first run): choose a file (header row first), map each column to a field
@@ -617,6 +633,7 @@ These appear in the command menu (when they apply) and have no shortcut.
 
 | Command id | Name | Keys | What it does |
 |---|---|---|---|
+| `image.attach` | Attach image | (none) | Choose an image file for the description or comment box you used last. |
 | `app.reload` | Reload | (none) | Reload the window. |
 | `pane.sidebar.reset` | Reset sidebar width | (none) | Back to the default sidebar width. |
 | `pane.panel.reset` | Reset issue panel width | (none) | Back to the default issue panel width. |

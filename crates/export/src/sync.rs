@@ -329,12 +329,7 @@ async fn apply_dir(db: &Db, dir: &Path) -> Result<Applied> {
             Err(e) => out.warnings.push(format!("{}: {e}", f.key)),
         }
     }
-    out.warnings.extend(
-        add_kinds(db, dir)
-            .await
-            .err()
-            .map(|e| format!("relation kinds: {e}")),
-    );
+    out.warnings.extend(add_extras(db, dir).await);
     for (f, _, _) in &incoming {
         let Some(&id) = local.get(&number_of(&f.key)?.to_string()) else {
             continue;
@@ -352,6 +347,19 @@ async fn apply_dir(db: &Db, dir: &Path) -> Result<Applied> {
     Ok(out)
 }
 
+/// Relation kinds and images the files carry; what fails is reported, the rest still applies.
+async fn add_extras(db: &Db, dir: &Path) -> Vec<String> {
+    let kinds = add_kinds(db, dir)
+        .await
+        .err()
+        .map(|e| format!("relation kinds: {e}"));
+    let images = add_images(db, dir)
+        .await
+        .err()
+        .map(|e| format!("images: {e}"));
+    kinds.into_iter().chain(images).collect()
+}
+
 /// Custom relation kinds the file names and this database lacks; nothing is ever removed.
 async fn add_kinds(db: &Db, dir: &Path) -> Result<()> {
     let have = relation_kinds::list(db).await?;
@@ -360,6 +368,15 @@ async fn add_kinds(db: &Db, dir: &Path) -> Result<()> {
             relation_kinds::create(db, &k.name, &k.forward, &k.reverse, k.symmetric, SRC).await?;
         }
     }
+    Ok(())
+}
+
+/// Images the files name and this database lacks, under the ids the text points at. An id this machine already
+/// uses keeps its own image (shortcut: ids are not remapped, so two machines that paste at once can clash).
+async fn add_images(db: &Db, dir: &Path) -> Result<()> {
+    let mut tx = db.pool.begin().await?;
+    crate::rebuild::restore_attachments(db, &mut tx, dir).await?;
+    tx.commit().await?;
     Ok(())
 }
 

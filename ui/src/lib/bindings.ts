@@ -585,6 +585,20 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	attachmentsAdd: (bytes: number[], mime: string, options?: InvokeOptions) => __TAURI_INVOKE<Attachment>("attachments_add", { bytes, mime }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	attachmentsGet: (id: AttachmentId, options?: InvokeOptions) => __TAURI_INVOKE<AttachmentData>("attachments_get", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	foldersList: (options?: InvokeOptions) => __TAURI_INVOKE<ViewFolder[]>("folders_list", undefined, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -915,6 +929,23 @@ export type AppliedTemplate = {
 	sub_issues: Issue[],
 	skipped: string[],
 };
+
+/**  A stored image; its bytes come from `attachments::get`. */
+export type Attachment = {
+	id: AttachmentId,
+	sha256: string,
+	mime: string,
+	bytes: number,
+	created_at: string,
+};
+
+/**  An image's bytes and type, as `attachments_get` returns them. */
+export type AttachmentData = {
+	mime: string,
+	bytes: number[],
+};
+
+export type AttachmentId = number;
 
 export type Bar = {
 	issue_id: IssueId,

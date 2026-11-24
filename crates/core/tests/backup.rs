@@ -291,3 +291,22 @@ async fn restore_keeps_a_copy_of_the_database_it_replaces() -> R {
     assert_eq!(issue_count(&Db::open(&copies[0]).await?).await?, 4);
     Ok(())
 }
+
+#[tokio::test]
+async fn nightly_copies_pasted_images_beside_it() -> R {
+    let (live, backups) = (TempDir::new()?, TempDir::new()?);
+    let db = open_with_three_issues(live.path()).await?;
+    let a = taskapp_core::attachments::add(&db, b"\x89PNG\r\n\x1a\nx", "image/png").await?;
+    let now = Utc
+        .with_ymd_and_hms(2026, 11, 21, 9, 0, 0)
+        .single()
+        .ok_or("date")?;
+    backup::nightly(&db, backups.path(), now).await?;
+    assert!(
+        backups
+            .path()
+            .join(format!("attachments/{}.png", a.sha256))
+            .is_file()
+    );
+    Ok(())
+}

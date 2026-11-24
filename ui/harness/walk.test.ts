@@ -357,4 +357,24 @@ describe('walk', { timeout: 20_000 }, () => {
     await go('/issue/ABC-1');
     await pw(page.getByText('Due', { exact: true })).toBeVisible();
   });
+  it('IMAGES pasting an image into a description shows it in the description', async () => {
+    await open('/issue/ABC-1');
+    await page.getByRole('button', { name: 'Edit description' }).click();
+    const box = page.getByRole('textbox', { name: 'Description text' });
+    await box.focus();
+    // A real 1x1 PNG, pasted as the clipboard would carry it.
+    await box.evaluate((el) => {
+      const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
+      const data = new DataTransfer();
+      data.items.add(new File([png], 'shot.png', { type: 'image/png' }));
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    });
+    await pw(box).toHaveValue(/!\[shot\]\(attachment:\d+\)/);
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    const img = page.getByRole('region', { name: 'Description' }).locator('img[data-attachment]');
+    await pw(img).toHaveAttribute('src', /^blob:/);
+    await page.waitForFunction(() => (document.querySelector('img[data-attachment]') as HTMLImageElement)?.naturalWidth > 0);
+    await img.click();
+    await pw(page.getByRole('dialog', { name: 'Image' }).locator('img')).toBeVisible();
+  });
 });

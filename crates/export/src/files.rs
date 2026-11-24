@@ -229,6 +229,15 @@ pub struct ViewFile {
     pub folder_id: Option<i64>,
 }
 
+/// One entry of `attachments.yaml`. The id is kept because markdown points at it; the image itself is
+/// `attachments/<sha256>.<ext>`, and its type and size are read from its bytes.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct AttachmentFile {
+    pub id: i64,
+    pub sha256: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
 /// One entry of `view_folders.yaml`. The id is kept because views point at it.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct ViewFolderFile {

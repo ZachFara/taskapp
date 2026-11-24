@@ -11,18 +11,19 @@ use std::{future::Future, path::PathBuf};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::Value;
 use taskapp_core::{
-    Applied, AppliedTemplate, Bar, BulkPatch, Change, ChangeSource, Comment, CommentId, Cycle,
-    CycleId, Db, Error, Event, EventId, EventInput, FolderSection, ImportPlan, Issue, IssueId,
-    IssuePatch, IssueStats, IssueTemplate, Label, LabelId, Measure, Milestone, MilestoneId,
-    NewIssue, ParsedQuickAdd, Pin, PinId, PinKind, Placement, ProgressScope, ProgressSeries,
-    Project, ProjectId, ProjectStatus, ProjectStatusCategory, ProjectStatusId, PropertyAppliesTo,
-    PropertyDef, PropertyKind, Relation, RelationKind, RelationKindDef, Reschedule, ResolvedPin,
-    Result, SavedView, SelectOption, Status, StatusCategory, StatusId, SyncState, SyncStatus,
-    TemplateId, TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewFolder, ViewFolderId,
-    ViewId, ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks,
-    bulk, comments, cycles, events, history, import, insights, issues, labels, pins,
-    project_statuses, projects, properties, quickadd, relation_kinds, relations, schedule, search,
-    settings, statuses, templates, undo, view_folders, view_templates, views, workspace,
+    Applied, AppliedTemplate, Attachment, AttachmentData, AttachmentId, Bar, BulkPatch, Change,
+    ChangeSource, Comment, CommentId, Cycle, CycleId, Db, Error, Event, EventId, EventInput,
+    FolderSection, ImportPlan, Issue, IssueId, IssuePatch, IssueStats, IssueTemplate, Label,
+    LabelId, Measure, Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId, PinKind,
+    Placement, ProgressScope, ProgressSeries, Project, ProjectId, ProjectStatus,
+    ProjectStatusCategory, ProjectStatusId, PropertyAppliesTo, PropertyDef, PropertyKind, Relation,
+    RelationKind, RelationKindDef, Reschedule, ResolvedPin, Result, SavedView, SelectOption,
+    Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus,
+    VelocityPeriod, ViewDef, ViewFolder, ViewFolderId, ViewId, ViewTemplate, ViewTemplateId,
+    WorkBlock, WorkBlockId, WorkspaceStatus, attachments, backup, blocks, bulk, comments, cycles,
+    events, history, import, insights, issues, labels, pins, project_statuses, projects,
+    properties, quickadd, relation_kinds, relations, schedule, search, settings, statuses,
+    templates, undo, view_folders, view_templates, views, workspace,
 };
 
 pub struct AppState {
@@ -303,6 +304,11 @@ macro_rules! with_commands {
             }
             views_delete(s, id: ViewId) -> () { views::delete(&s.db, id).await }
             views_reorder(s, ids: Vec<ViewId>) -> () { views::reorder(&s.db, &ids).await }
+            attachments_add(s, bytes: Vec<u8>, mime: String) -> Attachment {
+                attachments::add(&s.db, &bytes, &mime).await
+            }
+            attachments_get(s, id: AttachmentId) -> AttachmentData { attachments::get(&s.db, id).await }
+
             folders_list(s) -> Vec<ViewFolder> { view_folders::list(&s.db).await }
             folders_items(s) -> Vec<Placement> { view_folders::placements(&s.db).await }
             folders_create(s, section: FolderSection, parent_id: Option<ViewFolderId>, name: String) -> ViewFolder {

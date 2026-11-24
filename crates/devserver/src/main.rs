@@ -99,6 +99,8 @@ fn router(state: Arc<AppState>, port: u16, origin: String) -> Router {
     // Non-JSON bodies get 415 from the `Json` extractor, so a cross-site form post always needs a preflight.
     Router::new()
         .route("/rpc/{name}", post(rpc))
+        // An image is a JSON array of numbers: 10 MB of bytes is about 40 MB of text.
+        .layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024))
         .layer(middleware::from_fn(move |req: Request, next: Next| {
             let hosts = hosts.clone();
             async move {

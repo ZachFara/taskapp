@@ -14,6 +14,7 @@
   import Setup from '../components/Setup.svelte';
   import Shell from '../components/Shell.svelte';
   import Sidebar from '../components/Sidebar.svelte';
+  import ImageViewer from '../components/ImageViewer.svelte';
   import UndoToast from '../components/UndoToast.svelte';
   import { dismiss, onWrote, undoToast } from '../components/undoState.svelte';
 
@@ -167,6 +168,7 @@
   {/if}
   <CheatSheet bind:open={cheat} />
   <div class="toasts"><UndoToast /></div>
+  <ImageViewer />
 {/if}
 
 <style>
