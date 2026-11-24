@@ -2,7 +2,7 @@
   import type { Issue, IssuePatch } from '../../lib/bindings';
   import Button from '../../ui/Button.svelte';
   import TextArea from '../../ui/TextArea.svelte';
-  import { openLinks, renderMarkdown } from './markdown';
+  import { images, openLinks, renderMarkdown } from './markdown';
 
   // `editing` lives in the screen so Esc can close it before the panel; Esc discards the draft.
   let { issue, save, editing = $bindable(false) }: { issue: Issue; save: (p: IssuePatch) => void; editing?: boolean } = $props();
@@ -33,13 +33,13 @@
       <Button variant={preview ? 'primary' : 'quiet'} onclick={() => (preview = true)}>Preview</Button>
     </div>
     {#if preview}
-      <div class="md" aria-label="Description preview" use:openLinks>{@html renderMarkdown(draft)}</div>
+      <div class="md" aria-label="Description preview" use:openLinks use:images={draft}>{@html renderMarkdown(draft)}</div>
     {:else}
-      <TextArea label="Description text" rows={8} bind:value={draft} />
+      <TextArea label="Description text" images rows={8} bind:value={draft} />
     {/if}
     <div class="acts"><Button variant="primary" onclick={commit}>Save</Button><Button onclick={() => (editing = false)}>Cancel</Button></div>
   {:else}
-    <button type="button" class="md view" aria-label="Edit description" onclick={() => (editing = true)} use:openLinks>
+    <button type="button" class="md view" aria-label="Edit description" onclick={() => (editing = true)} use:openLinks use:images={issue.description}>
       {#if issue.description}{@html renderMarkdown(issue.description)}{:else}<span class="hint">Add a description</span>{/if}
     </button>
   {/if}
@@ -55,4 +55,5 @@
   .md :global(p) { margin: 0 0 var(--s-4); }
   .md :global(code) { background: var(--active); border-radius: var(--r-sm); padding: 0 var(--s-2); }
   .md :global(a) { color: var(--accent); text-decoration: underline; }
+  .md :global(img) { max-width: 100%; border-radius: var(--r-sm); cursor: zoom-in; }
 </style>

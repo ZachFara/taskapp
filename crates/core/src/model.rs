@@ -25,7 +25,8 @@ ids!(
     WorkBlockId,
     PinId,
     TemplateId,
-    EventId
+    EventId,
+    AttachmentId
 );
 
 /// A patch field that can also be cleared: absent is `None`, set to null is `Some(None)`.
@@ -334,6 +335,23 @@ pub struct Comment {
     pub body: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+/// A stored image; its bytes come from `attachments::get`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct Attachment {
+    pub id: AttachmentId,
+    pub sha256: String,
+    pub mime: String,
+    pub bytes: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+/// An image's bytes and type, as `attachments_get` returns them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct AttachmentData {
+    pub mime: String,
+    pub bytes: Vec<u8>,
 }
 
 /// One edit for a whole selection: the patch, labels to add or remove, and a relation from each issue to `add_relation.1`.

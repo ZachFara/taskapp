@@ -1,4 +1,9 @@
-use std::{path::Path, str::FromStr, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
+};
 
 use sqlx::{
     SqlitePool,
@@ -7,9 +12,13 @@ use sqlx::{
 
 use crate::Result;
 
+static PRIVATE_DIRS: AtomicU64 = AtomicU64::new(0);
+
 #[derive(Clone)]
 pub struct Db {
     pub pool: SqlitePool,
+    /// Where pasted images are kept: `attachments` next to the database file; a private temp folder for an in-memory one.
+    pub files: PathBuf,
 }
 
 impl Db {
@@ -24,7 +33,8 @@ impl Db {
             .journal_mode(SqliteJournalMode::Wal)
             .busy_timeout(Duration::from_millis(5000))
             .foreign_keys(true);
-        Db::connect(SqlitePoolOptions::new(), opts).await
+        let files = path.parent().unwrap_or(Path::new(".")).join("attachments");
+        Db::connect(SqlitePoolOptions::new(), opts, files).await
     }
 
     /// A private in-memory database. One connection, kept alive, because each connection would otherwise
@@ -38,17 +48,26 @@ impl Db {
             .max_connections(1)
             .idle_timeout(None)
             .max_lifetime(None);
-        Db::connect(pool, opts).await
+        let files = std::env::temp_dir().join(format!(
+            "taskapp-attachments-{}-{}",
+            std::process::id(),
+            PRIVATE_DIRS.fetch_add(1, Ordering::Relaxed)
+        ));
+        Db::connect(pool, opts, files).await
     }
 
-    async fn connect(pool: SqlitePoolOptions, opts: SqliteConnectOptions) -> Result<Db> {
+    async fn connect(
+        pool: SqlitePoolOptions,
+        opts: SqliteConnectOptions,
+        files: PathBuf,
+    ) -> Result<Db> {
         let pool = pool.connect_with(opts).await?;
         sqlx::migrate!("./migrations")
             .run(&pool)
             .await
             .map_err(sqlx::Error::from)?;
         crate::palette::map_legacy_colors(&pool).await?;
-        Ok(Db { pool })
+        Ok(Db { pool, files })
     }
 
     /// SQLite's `data_version`: it changes when another connection commits a write.

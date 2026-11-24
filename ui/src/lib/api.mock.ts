@@ -6,6 +6,7 @@ import { parseQuickadd } from './api.mock.quickadd';
 import * as insights from './api.mock.insights';
 import { stepLabel } from './api.mock.stepLabel';
 import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
+import { attachmentsApi } from './api.mock.attachments';
 import { foldersApi } from './api.mock.folders';
 import { scrubDef, seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
@@ -867,6 +868,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return null;
       },
     },
+    attachments: attachmentsApi(fail),
     comments: {
       list: async (issue) => comments.filter((c) => c.issue_id === issue),
       addComment: async (issue, body) => {

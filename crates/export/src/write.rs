@@ -4,13 +4,13 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::FromRow;
-use taskapp_core::{Db, Result, settings};
+use taskapp_core::{Db, Result, attachments, settings};
 
 use crate::files::{
-    CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow,
-    MilestoneRow, PinRow, ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow,
-    ViewFile, ViewFolderFile, ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir, read_plain,
-    render_issue, safe_name,
+    AttachmentFile, CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile,
+    LabelRow, MilestoneRow, PinRow, ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow,
+    StatusRow, ViewFile, ViewFolderFile, ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir,
+    read_plain, render_issue, safe_name,
 };
 
 pub struct ExportStats {
@@ -59,7 +59,62 @@ pub async fn write_snapshot(db: &Db, dir: &Path) -> Result<ExportStats> {
     for sub in MANAGED_DIRS {
         stats.files_removed += remove_stale(dir, sub, &files)?;
     }
+    stats.files_written += write_images(db, dir).await?;
     Ok(stats)
+}
+
+/// Copies the images some text still points at into `attachments/` and lists them in `attachments.yaml`; an
+/// image nothing points at any more is dropped from the folder (the database keeps it).
+async fn write_images(db: &Db, dir: &Path) -> Result<u32> {
+    let folder = dir.join("attachments");
+    let mut written = 0;
+    let mut kept = std::collections::HashSet::new();
+    let mut manifest = Vec::new();
+    for a in attachments::referenced(db).await? {
+        let Ok(data) = attachments::get(db, a.id).await else {
+            continue;
+        };
+        let name = attachments::inspect(&data.bytes)?.file();
+        let path = folder.join(&name);
+        if fs::symlink_metadata(&path).is_err() {
+            plain_dir(dir, "attachments")?;
+            fs::create_dir_all(&folder)?;
+            fs::write(&path, &data.bytes)?;
+            written += 1;
+        } else if !fs::symlink_metadata(&path)?.is_file() {
+            return Err(taskapp_core::Error::Invalid(format!(
+                "attachments/{name} in the export is not a regular file"
+            )));
+        }
+        kept.insert(name);
+        manifest.push(AttachmentFile {
+            id: a.id.0,
+            sha256: a.sha256,
+            created_at: a.created_at,
+        });
+    }
+    let text = yaml(&manifest)?;
+    let path = dir.join("attachments.yaml");
+    if fs::symlink_metadata(&path).is_ok_and(|m| !m.is_file()) {
+        return Err(invalid(
+            "attachments.yaml in the export is not a regular file",
+        ));
+    }
+    if read_plain(&path).is_ok_and(|old| old == text) {
+        return Ok(written);
+    }
+    fs::write(&path, text)?;
+    if plain_dir(dir, "attachments")? {
+        for entry in fs::read_dir(&folder)? {
+            let entry = entry?;
+            if entry.file_type()?.is_file()
+                && !kept.contains(entry.file_name().to_string_lossy().as_ref())
+            {
+                fs::remove_file(entry.path())?;
+            }
+        }
+    }
+    Ok(written)
 }
 
 fn remove_stale(dir: &Path, sub: &str, files: &BTreeMap<String, String>) -> Result<u32> {

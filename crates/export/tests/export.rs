@@ -903,3 +903,55 @@ async fn project_status_priority_labels_and_properties_survive_export_and_rebuil
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn images_in_use_are_exported_and_rebuilt() -> R {
+    let db = Db::open_in_memory().await?;
+    let png = b"\x89PNG\r\n\x1a\nused".to_vec();
+    let jpg = b"\xff\xd8\xffunused".to_vec();
+    let used = taskapp_core::attachments::add(&db, &png, "image/png").await?;
+    let unused = taskapp_core::attachments::add(&db, &jpg, "image/jpeg").await?;
+    let desc = format!("see ![shot](attachment:{})", used.id.0);
+    issues::create(
+        &db,
+        NewIssue {
+            title: "T".into(),
+            description: Some(desc),
+            ..NewIssue::default()
+        },
+        SRC,
+    )
+    .await?;
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    assert!(
+        src.path()
+            .join(format!("attachments/{}.png", used.sha256))
+            .is_file()
+    );
+    assert!(
+        !src.path()
+            .join(format!("attachments/{}.jpg", unused.sha256))
+            .exists()
+    );
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("new.db")).await?;
+    let got = taskapp_core::attachments::get(&rebuilt, used.id).await?;
+    assert_eq!(got.bytes, png);
+    assert!(
+        dst.path()
+            .join(format!("attachments/{}.png", used.sha256))
+            .is_file()
+    );
+    // A link in place of the image file is refused.
+    let target = src.path().join("outside.png");
+    fs::write(&target, &png)?;
+    let file = src.path().join(format!("attachments/{}.png", used.sha256));
+    fs::remove_file(&file)?;
+    std::os::unix::fs::symlink(&target, &file)?;
+    assert!(
+        rebuild::rebuild(src.path(), &dst.path().join("again.db"))
+            .await
+            .is_err()
+    );
+    Ok(())
+}

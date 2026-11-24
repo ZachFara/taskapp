@@ -7,12 +7,12 @@ use std::{
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use sqlx::{Sqlite, Transaction};
-use taskapp_core::{Db, Error, IssueId, Result, ViewDef, search};
+use taskapp_core::{Db, Error, IssueId, Result, ViewDef, attachments, search};
 
 use crate::files::{
-    CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow,
-    PinRow, ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow, ViewFile,
-    ViewFolderFile, ViewTemplateFile, invalid, parse_issue, plain_dir, read_plain,
+    AttachmentFile, CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile,
+    LabelRow, PinRow, ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow,
+    ViewFile, ViewFolderFile, ViewTemplateFile, invalid, parse_issue, plain_dir, read_plain,
 };
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -46,7 +46,7 @@ pub async fn rebuild(dir: &Path, db_path: &Path) -> Result<Db> {
 pub async fn restore_into(db: &Db, dir: &Path) -> Result<()> {
     let mut tx = db.pool.begin().await?;
     wipe(&mut tx).await?;
-    restore_tables(&mut tx, dir).await?;
+    restore_tables(db, &mut tx, dir).await?;
     restore_issues(&mut tx, dir).await?;
     tx.commit().await?;
     // reindex rebuilds every search row at once; the id argument is not used.
@@ -78,6 +78,7 @@ pub async fn apply_local(db: &Db, dir: &Path) -> Result<()> {
 async fn wipe(tx: &mut Tx<'_>) -> Result<()> {
     for sql in [
         "DELETE FROM changes",
+        "DELETE FROM attachments",
         "DELETE FROM event_issues",
         "DELETE FROM events",
         "DELETE FROM relations",
@@ -108,7 +109,7 @@ async fn wipe(tx: &mut Tx<'_>) -> Result<()> {
 /// `(number, frontmatter, description, comments)` for one issue file.
 type IssueEntry = (i64, IssueFront, String, Vec<CommentText>);
 
-async fn restore_tables(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+async fn restore_tables(db: &Db, tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     restore_settings(tx, dir).await?;
     restore_statuses(tx, dir).await?;
     restore_labels(tx, dir).await?;
@@ -122,6 +123,7 @@ async fn restore_tables(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     restore_views(tx, dir).await?;
     restore_pins(tx, dir).await?;
     restore_issue_templates(tx, dir).await?;
+    restore_attachments(db, tx, dir).await?;
     Ok(())
 }
 
@@ -648,4 +650,47 @@ async fn insert_comment(tx: &mut Tx<'_>, number: i64, c: &CommentText) -> Result
     .execute(&mut **tx)
     .await?;
     Ok(())
+}
+
+/// Brings the exported images back: each is read from `attachments/`, checked by its bytes and hash, and
+/// stored under its old id, because markdown points at the id. The file name comes from the hash, not the manifest.
+pub(crate) async fn restore_attachments(db: &Db, tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let list: Vec<AttachmentFile> = read_list(&dir.join("attachments.yaml"))?;
+    for a in list {
+        let bytes = read_image(dir, &a.sha256)?;
+        let img = attachments::inspect(&bytes)?;
+        if img.sha256 != a.sha256 {
+            return Err(invalid(format!(
+                "attachment {} does not match its hash",
+                a.id
+            )));
+        }
+        attachments::write_file(db, &img, &bytes)?;
+        sqlx::query("INSERT OR IGNORE INTO attachments (id, sha256, file, mime, bytes, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind(a.id)
+            .bind(&img.sha256)
+            .bind(img.file())
+            .bind(img.mime)
+            .bind(i64::try_from(bytes.len()).map_err(invalid)?)
+            .bind(a.created_at)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
+}
+
+/// The bytes of `attachments/<sha256>.<ext>`; the hash is checked to be plain hex so it cannot name another path.
+fn read_image(dir: &Path, sha256: &str) -> Result<Vec<u8>> {
+    if sha256.len() != 64 || !sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(invalid(format!("{sha256:?} is not an image hash")));
+    }
+    for ext in ["png", "jpg", "gif", "webp"] {
+        let path = dir.join("attachments").join(format!("{sha256}.{ext}"));
+        if fs::symlink_metadata(&path).is_ok_and(|m| m.is_file()) {
+            return Ok(fs::read(path)?);
+        }
+    }
+    Err(invalid(format!(
+        "attachments/{sha256} is missing from the export"
+    )))
 }

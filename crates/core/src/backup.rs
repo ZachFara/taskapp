@@ -28,6 +28,7 @@ pub async fn snapshot(db: &Db, dir: &Path, reason: &str) -> Result<PathBuf> {
     );
     let path = folder.join(name);
     vacuum_into(db, &path).await?;
+    copy_images(db, dir)?;
     Ok(path)
 }
 
@@ -51,7 +52,29 @@ pub async fn nightly(db: &Db, dir: &Path, now: DateTime<Utc>) -> Result<Option<P
     }
     vacuum_into(db, &partial).await?;
     fs::rename(&partial, &path)?;
+    copy_images(db, dir)?;
     Ok(Some(path))
+}
+
+/// Pasted images are not in the database file: copies any the backup folder lacks into `<dir>/attachments/`.
+/// Files are named by content, so one copy serves every backup and nothing is ever pruned.
+fn copy_images(db: &Db, dir: &Path) -> Result<()> {
+    let Ok(entries) = fs::read_dir(&db.files) else {
+        return Ok(());
+    };
+    let to = dir.join("attachments");
+    for e in entries {
+        let e = e?;
+        let target = to.join(e.file_name());
+        if e.file_type()?.is_file()
+            && !target.exists()
+            && e.path().extension() != Some("partial".as_ref())
+        {
+            fs::create_dir_all(&to)?;
+            fs::copy(e.path(), target)?;
+        }
+    }
+    Ok(())
 }
 
 /// Keeps the newest 14 nightly and 30 snapshot files and deletes the rest. Returns the deleted paths.

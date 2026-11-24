@@ -9,7 +9,7 @@
   import Popover from '../../ui/Popover.svelte';
   import TextInput from '../../ui/TextInput.svelte';
   import { humanDate } from '../detail/format';
-  import { openLinks, renderMarkdown } from '../detail/markdown';
+  import { images, openLinks, renderMarkdown } from '../detail/markdown';
   import ProgressSummary from '../insights/ProgressSummary.svelte';
 
   let { project, progress, renaming = $bindable(false), onsaved }: {
@@ -72,11 +72,11 @@
 
     {#if editingDesc}
       <form class="descform" onsubmit={saveDescription}>
-        <TextArea label="Description" bind:value={desc} />
+        <TextArea label="Description" images bind:value={desc} />
         <Button variant="primary" type="submit">Save</Button>
       </form>
     {:else if project.description}
-      <div class="desc md" data-testid="description" use:openLinks>{@html renderMarkdown(project.description)}</div>
+      <div class="desc md" data-testid="description" use:openLinks use:images={project.description}>{@html renderMarkdown(project.description)}</div>
     {:else}
       <div><Button icon="plus" onclick={() => { desc = ''; editingDesc = true; }}>Add description</Button></div>
     {/if}
@@ -125,4 +125,5 @@
   .date.unset { color: var(--muted); font-weight: 400; background: transparent; border-style: dashed; }
   .date:hover { border-color: var(--muted); }
   .progress dd { display: grid; gap: var(--s-3); }
+  .md :global(img), .desc :global(img) { max-width: 100%; border-radius: var(--r-sm); cursor: zoom-in; }
 </style>

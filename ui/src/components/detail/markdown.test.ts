@@ -118,3 +118,35 @@ describe('openLinks', () => {
     host.remove();
   });
 });
+
+describe('images', () => {
+  it('shows only attachment:<number> as an image, with no source of its own', () => {
+    const img = dom(renderMarkdown('![shot](attachment:12)')).querySelector('img')!;
+    expect(img.dataset.attachment).toBe('12');
+    expect(img.getAttribute('alt')).toBe('shot');
+    expect(img.hasAttribute('src')).toBe(false);
+    expect(img.getAttribute('loading')).toBe('lazy');
+  });
+
+  it.each([
+    '![x](javascript:alert(1))',
+    '![x](data:image/png;base64,AAAA)',
+    '![x](https://example.com/a.png)',
+    '![x](http://example.com/a.png)',
+    '![x](attachment:abc)',
+    '![x](attachment:1x)',
+    '![x](attachment:)',
+    '<img src="https://example.com/a.png">',
+    '<img src="data:image/png;base64,AAAA" onerror="alert(1)">',
+    '<img src="attachment:3">',
+  ])('never renders %s as an image', (md) => {
+    const d = dom(renderMarkdown(md));
+    expect(d.querySelector('img')).toBeNull();
+    expect(d.innerHTML).not.toMatch(/onerror/);
+  });
+
+  it('strips a source typed by hand off an attachment image', () => {
+    const img = dom(renderMarkdown('<img data-attachment="4" src="https://example.com/a.png">')).querySelector('img')!;
+    expect(img.hasAttribute('src')).toBe(false);
+  });
+});
