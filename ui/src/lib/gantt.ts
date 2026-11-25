@@ -3,8 +3,6 @@ import type { Bar, Issue, Milestone, Project, Status, StatusCategory } from './b
 // Pixels per day. shortcut: fixed widths, upgrade to fit-to-width when a view is rarely wider than the screen.
 export const ZOOMS = { Day: 40, Week: 14, Month: 4, Quarter: 1.5 } as const;
 export type Zoom = keyof typeof ZOOMS;
-/** Days between axis ticks. shortcut: month and quarter are 30 and 90 days, not calendar boundaries. */
-export const TICK_DAYS: Record<Zoom, number> = { Day: 1, Week: 7, Month: 30, Quarter: 90 };
 
 export const addDays = (date: string, n: number) => {
   const d = new Date(`${date}T00:00:00Z`);
@@ -156,7 +154,32 @@ export const saturdays = (start: string, days: number) =>
   Array.from({ length: days }, (_, k) => k).filter((k) => new Date(`${addDays(start, k)}T00:00:00Z`).getUTCDay() === 6);
 
 const fmt = (o: Intl.DateTimeFormatOptions) => (date: string) => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...o }).format(new Date(`${date}T00:00:00Z`));
-const dayFmt = (d: string) => `${fmt({ weekday: 'short' })(d)} ${+d.slice(8)}`;
 const weekFmt = fmt({ month: 'short', day: 'numeric' });
-const monthFmt = fmt({ month: 'short', year: 'numeric' });
-export const tickLabel = (date: string, z: Zoom) => (z === 'Day' ? dayFmt(date) : z === 'Week' ? weekFmt(date) : monthFmt(date));
+const monthShort = fmt({ month: 'short' });
+const monthLong = fmt({ month: 'long', year: 'numeric' });
+
+export type Tick = { k: number; label: string; sub?: string; weekend?: boolean };
+export type Band = { k: number; len: number; label: string };
+
+/**
+ * The axis as two rows of whole calendar units, `k` in days from `start`. Ticks: every day (Day), every Monday (Week),
+ * every 1st (Month, Quarter). Bands above them: months (Day, Week) or years (Month, Quarter). One tick per unit, so labels
+ * cannot collide as long as a unit is wider than its label: a day is 40px, a week 98, a month 45 or more.
+ */
+export function axis(start: string, days: number, z: Zoom): { ticks: Tick[]; bands: Band[] } {
+  const ticks: Tick[] = [];
+  const bands: Band[] = [];
+  const byMonth = z === 'Day' || z === 'Week';
+  for (let k = 0; k < days; k++) {
+    const d = addDays(start, k);
+    const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
+    const dom = +d.slice(8);
+    if (z === 'Day') ticks.push({ k, label: String(dom), sub: fmt({ weekday: 'short' })(d), weekend: dow === 0 || dow === 6 });
+    else if (z === 'Week' && dow === 1) ticks.push({ k, label: weekFmt(d) });
+    else if ((z === 'Month' || z === 'Quarter') && dom === 1) ticks.push({ k, label: monthShort(d) });
+    const first = byMonth ? dom === 1 : d.slice(5) === '01-01';
+    if (k === 0 || first) bands.push({ k, len: 0, label: byMonth ? monthLong(d) : d.slice(0, 4) });
+  }
+  bands.forEach((b, i) => (b.len = (bands[i + 1]?.k ?? days) - b.k));
+  return { ticks, bands };
+}
