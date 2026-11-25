@@ -5,7 +5,7 @@
   import { api } from '../lib/api';
   import { openExternal } from '../lib/openExternal';
   import type { Snippet } from 'svelte';
-  import type { Cycle, FolderSection, PinKind, Project, ResolvedPin, SavedView } from '../lib/bindings';
+  import type { Cycle, FolderSection, PinKind, Project, ResolvedPin, SavedView, ViewFolder } from '../lib/bindings';
   import { folders, placements, projects, projectStatuses, refreshAll, views } from '../lib/stores.svelte';
   import { buildRows, canNest, type FolderRow, type TreeRow } from '../lib/folderTree';
   import { dnd, dragRows, type Drop, type Src } from '../lib/pointerDrag.svelte';
@@ -21,6 +21,7 @@
   import Menu from '../ui/Menu.svelte';
   import MenuItem from '../ui/MenuItem.svelte';
   import { runRow } from '../lib/rowUi.svelte';
+  import { sidebarPrefs } from '../lib/sidebarPrefs.svelte';
   import { labelFor } from '../lib/commands';
   import { shortcutFor } from '../lib/commands';
   import ProjectSpark from './insights/ProjectSpark.svelte';
@@ -86,11 +87,20 @@
   // Each section is a tree: folders (nested) and the items placed in them.
   const tree = <T extends { id: number }>(section: FolderSection, items: T[]) => buildRows(section, folders, placements, items, { shut, placed: true });
   const pinRows = $derived(tree('pin', pins.map((r) => ({ id: r.pin.id, r }))));
-  const viewRows = $derived(tree('view', views.filter((v) => v.entity !== 'project')));
-  // Project views list under Projects, after the projects; they are not placed in folders.
-  const projectViews = $derived(views.filter((v) => v.entity === 'project'));
+  // Issue views and project views share the section and its folders.
+  const viewRows = $derived(tree('view', views));
   const projectRows = $derived(tree('project', projects));
   const cycleRows = $derived(tree('cycle', cycles));
+
+  /** The rows inside a folder, as the real tree draws them (a shut folder has none), and the folder's own depth. */
+  function contents(f: ViewFolder) {
+    const items = f.section === 'view' ? views : f.section === 'project' ? projects : f.section === 'cycle' ? cycles : [];
+    const all = buildRows(f.section, folders, placements, items, { shut, placed: true });
+    const at = all.findIndex((x) => x.type === 'folder' && x.folder.id === f.id);
+    const rest = at < 0 ? [] : all.slice(at + 1);
+    const end = rest.findIndex((x) => x.depth <= all[at].depth);
+    return { inner: end < 0 ? rest : rest.slice(0, end), base: at < 0 ? 0 : all[at].depth };
+  }
 
   /** What the drag needs to know about a row: what it is, where it sits, and the line or highlight to draw. */
   const attrs = (section: FolderSection, type: 'item' | 'folder', id: number, label: string, r: { container: number | null; pos: number; depth: number }, open = false) => ({
@@ -131,15 +141,15 @@
         <button {...props} class="aff" type="button" aria-label={`${title} menu`}><Icon name="more" size={12} /></button>
       {/snippet}
       <MenuItem label={labelFor('folder.new') ?? 'New folder'} icon="folder" onSelect={() => runRow('folder.new', { section })} />
-      {#if section === 'project'}<MenuItem label={labelFor('view.newProject') ?? 'New project view'} icon="layers" onSelect={() => runRow('view.newProject', undefined)} />{/if}
+      {#if section === 'view'}<MenuItem label={labelFor('view.newProject') ?? 'New project view'} icon="layers" onSelect={() => runRow('view.newProject', undefined)} />{/if}
     </Menu>
   </div>
   {/snippet}
   {#if section === 'project'}
-    <!-- Right-click on the Projects header makes a project view. -->
+    <!-- Right-click on the Projects header: list every project here or only link "All projects". -->
     <ContextMenu>
       {#snippet area()}{@render bar()}{/snippet}
-      <MenuItem label={labelFor('view.newProject') ?? 'New project view'} icon="layers" onSelect={() => runRow('view.newProject', undefined)} />
+      <MenuItem label="Show projects in the sidebar" icon={sidebarPrefs.showProjects ? 'check' : undefined} onSelect={() => runRow('sidebar.showProjects', undefined)} />
     </ContextMenu>
   {:else}{@render bar()}{/if}
 {/snippet}
@@ -155,7 +165,7 @@
 {#snippet folderRow(r: FolderRow, section: FolderSection)}
   {@const f = r.folder}
   <li class="row" {...attrs(section, 'folder', f.id, f.name, r, !r.shut)}>
-    <RowActions button={false} label={f.name} actions={rowActs({ kind: 'folder', id: f.id, name: f.name })}>
+    <RowActions button={false} label={f.name} actions={rowActs({ kind: 'folder', id: f.id, name: f.name }, isPinned('Folder', String(f.id)))}>
       <button class="item folder" type="button" aria-expanded={!r.shut} onclick={() => setShut(f.id, !r.shut)}><span class="chev" data-collapsed={r.shut}><Icon name="chevron-down" size={12} /></span><span class="t">{f.name}</span><em>{r.count}</em></button>
     </RowActions>
   </li>
@@ -178,8 +188,30 @@
   </ContextMenu>
 {/snippet}
 
+<!-- A pinned folder: its own row, then the live contents of the folder (the same rows and open state as in its section). -->
+{#snippet pinnedFolder(r: ResolvedPin, row: TreeRow<unknown>)}
+  {@const id = Number(r.pin.target)}
+  {@const f = folders.find((x) => x.id === id)}
+  {#if f}
+    {@const { inner, base } = contents(f)}
+    <li class="row" {...attrs('pin', 'item', r.pin.id, r.label, row)}>
+      <RowActions button={false} label={`${r.label} (pinned)`} actions={rowActs({ kind: 'pin', id: r.pin.id, name: r.label })}>
+        <button class="item folder" type="button" aria-expanded={!shut[id]} onclick={() => setShut(id, !shut[id])}><span class="chev" data-collapsed={!!shut[id]}><Icon name="chevron-down" size={12} /></span><Icon name="pin" /><span class="t">{r.label}</span></button>
+      </RowActions>
+    </li>
+    {#each inner as x (x.type === 'folder' ? `f${x.folder.id}` : `i${x.item.id}`)}
+      {@const rel = { ...x, depth: x.depth - base }}
+      {#if x.type === 'folder'}{@render folderRow(rel as FolderRow, f.section)}
+      {:else if f.section === 'view'}{@render viewLeaf(x.item as SavedView, rel)}
+      {:else if f.section === 'project'}{@render projectLeaf(x.item as Project, rel)}
+      {:else}{@render cycleLeaf(x.item as Cycle, rel)}{/if}
+    {/each}
+  {/if}
+{/snippet}
+
 {#snippet pinLeaf(p: { r: ResolvedPin }, row: TreeRow<unknown>)}
   {@const r = p.r}
+  {#if r.pin.kind === 'Folder'}{@render pinnedFolder(r, row)}{:else}
   <li class="row" class:archived={r.archived} {...attrs('pin', 'item', r.pin.id, r.label, row)}>
     <RowActions button={false} label={`${r.label} (pinned)`} actions={rowActs({ kind: 'pin', id: r.pin.id, name: r.label })}>
       <a class="item" class:on={route === r.route} aria-current={route === r.route ? 'page' : undefined} href={r.route} onclick={(e) => (e.preventDefault(), open(r.route))}><Icon name="pin" /><span class="t">{r.label}</span></a>
@@ -190,6 +222,7 @@
       {/snippet}
     </Tooltip>
   </li>
+  {/if}
 {/snippet}
 
 {#snippet viewLeaf(v: SavedView, row: TreeRow<unknown>)}
@@ -197,21 +230,9 @@
   <li class="row" {...attrs('view', 'item', v.id, v.name, row)}>
     <RowActions button={false} label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, isPinned('View', String(v.id)))}>
       <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`, color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
-      <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{v.name}</span></a>
+      <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{v.name}</span>{#if v.entity === 'project'}<span class="st" title="Project view"><Icon name="project" size={12} /></span>{/if}</a>
     </RowActions>
   </li>
-{/snippet}
-
-{#snippet projectViewRows()}
-  {#each projectViews as v (v.id)}
-    {@const href = `/view/${v.id}`}
-    <li class="row" data-project-view={v.id}>
-      <RowActions button={false} label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, isPinned('View', String(v.id)), false)}>
-        <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`, color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
-        <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{v.name}</span></a>
-      </RowActions>
-    </li>
-  {/each}
 {/snippet}
 
 {#snippet projectLeaf(p: Project, row: TreeRow<unknown>)}
@@ -257,7 +278,9 @@
 
   <section aria-label="Projects">
     {@render head('projects', 'Projects', projects.length, 'project')}
-    <Collapse open={!closed.projects}>{@render rowsOf('project', projectRows, projectLeaf, allProjects, projectViewRows)}</Collapse>
+    <Collapse open={!closed.projects}>
+      {#if sidebarPrefs.showProjects}{@render rowsOf('project', projectRows, projectLeaf, allProjects)}{:else}<ul>{@render allProjects()}</ul>{/if}
+    </Collapse>
   </section>
 
   <section aria-label="Cycles">

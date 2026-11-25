@@ -1094,6 +1094,9 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           } else if (pin.kind === 'Cycle') {
             const c = cycles.find((x) => String(x.number) === t);
             hit = c ? [c.name ?? `Cycle ${c.number}`, false, `/cycles#${c.number}`] : null;
+          } else if (pin.kind === 'Folder') {
+            const f = folders.find((x) => String(x.id) === t);
+            hit = f ? [f.name, false, '/views'] : null;
           } else hit = [t, false, t];
           return hit ? [{ pin, label: pin.title ?? hit[0], archived: hit[1], route: hit[2] }] : [];
         });

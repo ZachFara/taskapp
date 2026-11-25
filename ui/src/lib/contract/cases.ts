@@ -488,6 +488,9 @@ export const cases: Case[] = [
   call('folders: the folders are back', 'folders_list'),
   call('folders: move a view to the top level', 'folders_place_item', { section: 'view', id: 1, folder_id: null, index: null }),
   call('folders: where everything sits after', 'folders_items'),
+  call('folders: pin a folder', 'pins_pin', { kind: 'Folder', target: '1', title: null }),
+  call('folders: pin a folder that is gone drops out', 'pins_pin', { kind: 'Folder', target: '99', title: null }),
+  call('folders: the pinned folder resolves by name', 'pins_list_resolved'),
 
   // Workspace: last, because setup changes the issue key for everything after it
   call('workspace: status of the seeded workspace', 'workspace_status'),

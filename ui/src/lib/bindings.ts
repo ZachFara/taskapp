@@ -1232,7 +1232,7 @@ export type Pin = {
 
 export type PinId = number;
 
-export type PinKind = "Issue" | "Project" | "View" | "Cycle" | "Note" | "Url";
+export type PinKind = "Issue" | "Project" | "View" | "Cycle" | "Note" | "Url" | "Folder";
 
 /**  Where one pin, view, project or cycle sits: the folder (`None` is the section's top level) and its place there. */
 export type Placement = {

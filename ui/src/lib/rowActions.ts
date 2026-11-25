@@ -8,7 +8,7 @@ export type Kind = 'view' | 'project' | 'cycle' | 'label' | 'template' | 'folder
 export type Target = { kind: Kind; id: number; name: string };
 type Change = { name?: string; icon?: string | null; color?: string | null } & Partial<Pick<Project, 'status_id' | 'priority' | 'label_ids' | 'properties'>>;
 
-const PIN: Partial<Record<Kind, PinKind>> = { view: 'View', project: 'Project', cycle: 'Cycle' };
+const PIN: Partial<Record<Kind, PinKind>> = { view: 'View', project: 'Project', cycle: 'Cycle', folder: 'Folder' };
 /** The sidebar section whose folders an entity can sit in. */
 export const SECTION: Partial<Record<Kind, FolderSection>> = { view: 'view', project: 'project', cycle: 'cycle', pin: 'pin' };
 
@@ -64,7 +64,7 @@ export async function duplicate(t: Target) {
   changed();
 }
 
-/** Pins or unpins the entity on the sidebar; a project is pinned by its slug. */
+/** Pins or unpins the entity on the sidebar; a project is pinned by its slug, a folder by its id. */
 export async function togglePin(t: Target) {
   const kind = PIN[t.kind];
   if (!kind) return;

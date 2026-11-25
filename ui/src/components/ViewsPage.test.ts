@@ -47,6 +47,21 @@ describe('ViewsPage', () => {
     expect(target.textContent).toContain('No folder');
   });
 
+  it('filters_issue_and_project_views', async () => {
+    const base = fixtures.views![0];
+    const mock = createMockApi({ ...fixtures, views: [{ ...base, id: 1, name: 'Bugs', entity: 'issue' }, { ...base, id: 2, name: 'Roadmap', entity: 'project' }] });
+    const { target } = await open(mock);
+    const ids = () => [...target.querySelectorAll('[data-view-id]')].map((r) => r.getAttribute('data-view-id'));
+    expect(ids()).toEqual(['1', '2']);
+    const tab = (name: string) => [...target.querySelectorAll<HTMLElement>('[role=tab]')].find((t) => t.textContent?.trim() === name)!;
+    tab('Projects').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    tab('Projects').click();
+    await vi.waitFor(() => expect(ids()).toEqual(['2']));
+    tab('Issues').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    tab('Issues').click();
+    await vi.waitFor(() => expect(ids()).toEqual(['1']));
+  });
+
   it('delete_view_asks_before_removing', async () => {
     const { mock, target } = await open();
     const del = vi.spyOn(mock.views, 'delete');

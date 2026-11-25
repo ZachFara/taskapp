@@ -409,6 +409,7 @@ pub enum PinKind {
     Cycle,
     Note,
     Url,
+    Folder,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
