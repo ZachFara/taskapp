@@ -232,6 +232,39 @@ async fn status(db: &Db, cmd: StatusCmd) -> Result<Value> {
     }
 }
 
+/// Creates a saved view, or replaces the one with `id` keeping the icon and colour the user gave it.
+async fn save_view(
+    db: &Db,
+    name: &str,
+    def: &str,
+    id: Option<i64>,
+    entity: String,
+) -> Result<Value> {
+    let def: ViewDef = serde_json::from_str(def).map_err(|e| Error::Invalid(e.to_string()))?;
+    let entity = serde_json::from_value(Value::String(entity))
+        .map_err(|_| Error::Invalid("entity is `issue` or `project`".into()))?;
+    let look = match id {
+        Some(id) => views::list(db)
+            .await?
+            .into_iter()
+            .find(|v| v.id == ViewId(id))
+            .map(|v| taskapp_core::palette::Look {
+                icon: v.icon,
+                color: v.color,
+            }),
+        None => None,
+    };
+    let saved = views::save_as(
+        db,
+        id.map(ViewId),
+        (name, entity),
+        def,
+        look.unwrap_or_default(),
+        SRC,
+    );
+    val(saved.await?)
+}
+
 async fn view(db: &Db, cmd: ViewCmd) -> Result<Value> {
     let (def, id) = match cmd {
         ViewCmd::Query { def, id } => (def, id),
@@ -242,21 +275,7 @@ async fn view(db: &Db, cmd: ViewCmd) -> Result<Value> {
             def,
             id,
             entity,
-        } => {
-            let def: ViewDef =
-                serde_json::from_str(&def).map_err(|e| Error::Invalid(e.to_string()))?;
-            let entity = serde_json::from_value(Value::String(entity))
-                .map_err(|_| Error::Invalid("entity is `issue` or `project`".into()))?;
-            let saved = views::save_as(
-                db,
-                id.map(ViewId),
-                (&name, entity),
-                def,
-                taskapp_core::palette::Look::default(),
-                SRC,
-            );
-            return val(saved.await?);
-        }
+        } => return save_view(db, &name, &def, id, entity).await,
         ViewCmd::SaveAsTemplate { view_id, name } => {
             let t = view_templates::from_view(db, ViewId(view_id), name.as_deref(), SRC);
             return val(t.await?);

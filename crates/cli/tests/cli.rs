@@ -599,3 +599,37 @@ fn a_status_then_a_view_filtered_on_it_can_be_created() {
             .success()
     );
 }
+
+#[test]
+fn replacing_a_view_keeps_its_icon() {
+    let (_d, db) = fresh();
+    let def = r#"{"filter":null,"sorts":[],"group_by":null,"layout":"List","columns":[],"include_archived":false}"#;
+    let made = run_json(&db, &["view", "save", "Mine", "--def", def]);
+    let id = made["id"].as_i64().expect("id");
+    let conn = rusqlite_free_icon(&db, id);
+    assert!(conn);
+    let again = run_json(
+        &db,
+        &[
+            "view",
+            "save",
+            "Mine",
+            "--def",
+            def,
+            "--id",
+            &id.to_string(),
+        ],
+    );
+    assert_eq!(again["icon"], "icon:moon");
+}
+
+/// Sets an icon on a view straight in the database file (the CLI has no icon command).
+fn rusqlite_free_icon(db: &Path, id: i64) -> bool {
+    std::process::Command::new("sqlite3")
+        .arg(db)
+        .arg(format!(
+            "UPDATE views SET icon = 'icon:moon' WHERE id = {id}"
+        ))
+        .status()
+        .is_ok_and(|s| s.success())
+}
