@@ -643,6 +643,7 @@ fn pin_kind(name: &str) -> Result<PinKind> {
         "cycle" => PinKind::Cycle,
         "note" => PinKind::Note,
         "url" => PinKind::Url,
+        "folder" => PinKind::Folder,
         _ => return Err(Error::Invalid(format!("unknown pin kind: {name}"))),
     })
 }

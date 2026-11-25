@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setApi, type Api } from '../lib/api';
 import { createMockApi, fixtures } from '../lib/api.mock';
 import { remove } from '../lib/rowActions';
+import { refreshAll } from '../lib/stores.svelte';
 import { rowUi } from '../lib/rowUi.svelte';
+import { sidebarPrefs } from '../lib/sidebarPrefs.svelte';
 import Sidebar from './Sidebar.svelte';
 
 const def = { filter: null, sorts: [], group_by: null, layout: 'List' as const, columns: [], include_archived: false };
@@ -46,7 +48,10 @@ async function open(api: Api = createMockApi(seed)) {
   app = mount(Sidebar, { target: document.body });
   await settle();
 }
-beforeEach(() => vi.stubGlobal('open', vi.fn()));
+beforeEach(() => {
+  vi.stubGlobal('open', vi.fn());
+  sidebarPrefs.showProjects = true; // the list most tests use; the tests of the switch turn it off
+});
 afterEach(() => {
   unmount(app);
   vi.unstubAllGlobals();
@@ -343,5 +348,59 @@ describe('Sidebar tooltips', () => {
     const t = await tip([...document.querySelectorAll('nav a')].find((a) => a.textContent?.includes('My issues'))!);
     expect(t).toContain('My issues');
     expect(t).toMatch(/G\s*M|GM/);
+  });
+});
+
+describe('Sidebar project views, pinned folders and the projects switch', () => {
+  const pv = { id: 9, name: 'Roadmap', def, position: 3, icon: null, color: null, entity: 'project' as const };
+  const withViews = (extra: object = {}) => createMockApi({ ...seed, views: [...seed.views, pv], ...extra });
+  afterEach(() => localStorage.clear());
+
+  it('a project view sits among the views, not under Projects', async () => {
+    await open(withViews());
+    expect(names('[aria-label=Views]')).toEqual(['Alpha', 'Beta', 'Gamma', 'Roadmap']);
+    expect(document.querySelector('[aria-label=Projects] [data-project-view]')).toBeNull();
+    expect(row('Roadmap').querySelector('[title="Project view"]')).not.toBeNull();
+    expect(row('Alpha').querySelector('[title="Project view"]')).toBeNull();
+  });
+
+  it('a project view moves into a view folder by drag', async () => {
+    const api = withViews({ viewFolders: [folder(1, 'Work')] });
+    await open(api);
+    dragOnto('Roadmap', 'Work');
+    await settle();
+    expect((await api.folders.items()).find((p) => p.section === 'view' && p.id === 9)!.folder_id).toBe(1);
+    expect(row('Roadmap').getAttribute('style')).toContain('--depth: 1');
+  });
+
+  it('projects are hidden by default and a right-click switch shows them, remembered on this device', async () => {
+    sidebarPrefs.showProjects = false;
+    await open();
+    const first = fixtures.projects[0].name;
+    expect(names('[aria-label=Projects]')).toEqual(['All projects']);
+    document.querySelector('[aria-label=Projects] .head')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    flushSync();
+    await vi.waitFor(() => menuItem(/^Show projects in the sidebar$/).click());
+    await settle();
+    expect(names('[aria-label=Projects]')).toContain(first);
+    expect(localStorage.getItem('sidebar.showProjects')).toBe('1');
+  });
+
+  it('a pinned folder lists its views live, and a pinned project view shows in Pinned', async () => {
+    const api = withViews({ viewFolders: [folder(1, 'Work')], views: [...seed.views, pv].map((v) => ({ ...v, folder_id: v.id === 9 ? 1 : null, template_id: null })) });
+    await open(api);
+    await pick('Work', /^Pin Work$/);
+    await pick('Roadmap', /^Pin Roadmap$/);
+    const pinned = () => [...document.querySelectorAll('[aria-label=Pinned] .row')].map((r) => r.textContent?.replace(/\s+/g, ' ').trim());
+    expect(pinned()).toEqual(expect.arrayContaining([expect.stringContaining('Work'), expect.stringContaining('Roadmap')]));
+    // the folder's contents are in Pinned too, not only the pin of the view
+    expect(pinned().filter((t) => t?.includes('Roadmap'))).toHaveLength(2);
+    // live: a view added to the folder shows up without pinning again
+    await api.folders.placeItem('view', 1, 1, null);
+    await refreshAll();
+    await settle();
+    expect(pinned().filter((t) => t?.includes('Alpha'))).toHaveLength(1);
+    await pick('Work', /^Unpin Work$/);
+    expect(pinned().filter((t) => t?.includes('Alpha'))).toHaveLength(0);
   });
 });

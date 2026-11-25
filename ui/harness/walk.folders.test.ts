@@ -44,9 +44,11 @@ afterAll(async () => {
   if (vite?.pid) try { process.kill(-vite.pid); } catch { /* already gone */ }
 });
 
-async function open(path = '/view/1') {
+async function open(path = '/view/1', showProjects = true) {
   await page?.close();
   page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  // The sidebar lists every project only when the device switch is on.
+  await page.addInitScript((on) => on && localStorage.setItem('sidebar.showProjects', '1'), showProjects);
   page.setDefaultTimeout(Number(process.env.WALK_TIMEOUT ?? 5_000)); // WALK_TIMEOUT: more time on a loaded machine
   await page.goto(base + path);
   await page.locator('aside.sidebar').waitFor();
@@ -97,5 +99,27 @@ describe('walk folders', { timeout: 40_000 }, () => {
     await page.getByRole('menuitem', { name: 'Live' }).click();
     await page.waitForTimeout(200);
     expect(await depth('Website relaunch', 'Projects')).toBe('1');
+  });
+
+  it('a folder and a project view are pinned, and the project view is dragged into a view folder', async () => {
+    await open('/views', false);
+    await pw(side().locator('[aria-label=Projects] li.row')).toHaveCount(1); // only "All projects"
+    await page.getByRole('button', { name: 'New view' }).first().click();
+    await page.getByRole('tab', { name: 'Projects' }).click();
+    await page.getByRole('button', { name: 'Create view' }).click();
+    await page.waitForURL(/\/view\/\d+/);
+    const name = (await page.locator('h1').first().textContent())!.trim();
+    await newFolder('Views', 'Work');
+    await row('Work', 'Views').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Pin Work' }).click();
+    await row(name, 'Views').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: `Pin ${name}` }).click();
+    await pw(row('Work', 'Pinned')).toBeVisible();
+    await pw(row(name, 'Pinned').first()).toBeVisible();
+    await drag(name, 'Work', 'Views');
+    expect(await depth(name, 'Views')).toBe('1');
+    // the pinned folder shows it too, one step in
+    await pw(side().locator('[aria-label=Pinned] li.row', { hasText: name })).toHaveCount(2);
+    await page.screenshot({ path: resolve(uiDir, '../.scratch/sidebar2-walk.png') });
   });
 });

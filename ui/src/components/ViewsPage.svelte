@@ -19,6 +19,7 @@
   import PageHeader from '../ui/PageHeader.svelte';
   import Pill from '../ui/Pill.svelte';
   import Select from '../ui/Select.svelte';
+  import Tabs from '../ui/Tabs.svelte';
   import TextInput from '../ui/TextInput.svelte';
 
   // The layout is stored as Gantt; users see it as Timeline.
@@ -32,9 +33,9 @@
   let folders = $state<ViewFolder[]>([]);
   let places = $state<Placement[]>([]);
   // Folders first, nested, then each folder's views; the views of no folder come last.
-  const tree = $derived(buildRows('view', folders, places, views.filter((v) => v.entity !== 'project'), { placed: true }));
-  // Project views have no folders: they list in the Projects section.
-  const projectViews = $derived(views.filter((v) => v.entity === 'project'));
+  let show = $state('all');
+  const shown = $derived(views.filter((v) => show === 'all' || v.entity === (show === 'projects' ? 'project' : 'issue')));
+  const tree = $derived(buildRows('view', folders, places, shown, { placed: true, hideEmpty: show !== 'all' }));
   const firstLoose = $derived(tree.findIndex((r) => r.type === 'item' && r.depth === 0));
   let pinned = $state<Set<string>>(new Set());
   let loaded = $state(false);
@@ -106,12 +107,13 @@
 
 {#snippet viewRow(v: SavedView)}
   <li class="row" data-view-id={v.id}>
-    <RowActions label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, pinned.has(`/view/${v.id}`), v.entity !== 'project')}>
+    <RowActions label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, pinned.has(`/view/${v.id}`))}>
       <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? 'icon:layers', color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
       <span class="grow">
         <ListRow onpick={() => navigate(`/view/${v.id}`)}>
           <span class="name">{v.name}</span>
           <Pill>{layoutName(v.def.layout)}</Pill>
+          {#if v.entity === 'project'}<Pill>Project</Pill>{/if}
           {#if pinned.has(`/view/${v.id}`)}<Pill>Pinned</Pill>{/if}
         </ListRow>
       </span>
@@ -131,6 +133,7 @@
       {#snippet action()}<Button variant="primary" icon="plus" onclick={() => (creating = true)}>New view</Button>{/snippet}
     </EmptyState>
   {:else}
+    <Tabs bind:value={show} label="Show" segmented tabs={[{ id: 'all', label: 'All views' }, { id: 'issues', label: 'Issue views' }, { id: 'projects', label: 'Project views' }]} />
     {#each tree as r, i (r.type === 'folder' ? `f${r.folder.id}` : `v${r.item.id}`)}
       {#if r.type === 'folder'}
         <h2 class="section" data-folder-id={r.folder.id} style:margin-left={`calc(${r.depth} * var(--s-8))`}>{r.folder.name}</h2>
@@ -139,11 +142,6 @@
         <ul class="rows" style:margin-left={`calc(${r.depth} * var(--s-8))`}>{@render viewRow(r.item)}</ul>
       {/if}
     {/each}
-  {/if}
-
-  {#if projectViews.length}
-    <h2 class="section" data-section="project-views">Project views</h2>
-    <ul class="rows">{#each projectViews as v (v.id)}{@render viewRow(v)}{/each}</ul>
   {/if}
 
   {#if tpls}

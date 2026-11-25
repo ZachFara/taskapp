@@ -42,7 +42,7 @@ const ACTIONS: Record<Kind, string[]> = {
   cycle: ['cycle.rename', 'cycle.pin', 'icon.change', 'cycle.delete'],
   label: ['label.rename', 'icon.change', 'label.delete'],
   template: ['template.rename', 'icon.change', 'template.delete'],
-  folder: ['folder.newInside', 'folder.rename', 'folder.delete'],
+  folder: ['folder.newInside', 'folder.rename', 'folder.pin', 'folder.delete'],
   pin: ['pin.unpin'],
 };
 
@@ -59,14 +59,13 @@ function moveMenu(t: Target): RowAction {
 }
 
 /** The actions a row of this entity offers, each one a registry command run with the row as its target. */
-/** `move` is false for a project view, which lives in the Projects section and has no folder. */
-export function rowActs(t: Target, pinned = false, move = true): RowAction[] {
+export function rowActs(t: Target, pinned = false): RowAction[] {
   const acts = ACTIONS[t.kind].map((id) => {
     const verb = id.split('.')[1];
     const label = verb === 'pin' ? `${pinned ? 'Unpin' : 'Pin'} ${t.name}` : `${VERB[verb]} ${t.name}`;
     return { id, label, icon: commandById(id)?.icon ?? 'more', danger: verb === 'delete', run: () => runRow(id, t) };
   });
   // Before the last action, which is the destructive one.
-  if (move && (t.kind === 'folder' || SECTION[t.kind])) acts.splice(acts.length - 1, 0, moveMenu(t));
+  if ((t.kind === 'folder' || SECTION[t.kind])) acts.splice(acts.length - 1, 0, moveMenu(t));
   return acts;
 }
