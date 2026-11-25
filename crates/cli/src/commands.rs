@@ -531,6 +531,15 @@ async fn label(db: &Db, cmd: LabelCmd) -> Result<Value> {
         LabelCmd::Create { name, color, icon } => {
             val(labels::create(db, &name, &color, icon, SRC).await?)
         }
+        LabelCmd::Add { key, label } => {
+            let found = labels::list(db)
+                .await?
+                .into_iter()
+                .find(|l| l.name.eq_ignore_ascii_case(&label));
+            let found = found.ok_or_else(|| Error::NotFound(format!("label {label}")))?;
+            labels::add_label(db, issue_id(db, &key).await?, found.id, SRC).await?;
+            val(issues::get_by_key(db, &key).await?)
+        }
     }
 }
 

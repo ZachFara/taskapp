@@ -633,3 +633,17 @@ fn rusqlite_free_icon(db: &Path, id: i64) -> bool {
         .status()
         .is_ok_and(|s| s.success())
 }
+
+#[test]
+fn a_label_is_put_on_an_issue_by_its_name() {
+    let (_d, db) = fresh();
+    run_json(&db, &["add", "Write the docs"]);
+    let label = run_json(&db, &["label", "create", "By AI", "purple"]);
+    let issue = run_json(&db, &["label", "add", "ABC-1", "by ai"]);
+    assert_eq!(issue["label_ids"], serde_json::json!([label["id"]]));
+    assert!(
+        !run(&db, &["label", "add", "ABC-1", "nope"])
+            .status
+            .success()
+    );
+}

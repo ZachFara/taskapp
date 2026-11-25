@@ -488,6 +488,11 @@ enum LabelCmd {
         #[arg(long)]
         icon: Option<String>,
     },
+    /// Put a label on an issue, by the label's name (any case).
+    Add {
+        key: String,
+        label: String,
+    },
 }
 
 #[derive(Subcommand)]
