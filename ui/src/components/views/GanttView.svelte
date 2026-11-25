@@ -359,9 +359,10 @@
 
   .lines { position: relative; }
   .line { position: relative; display: grid; grid-template-columns: var(--left) minmax(var(--plane-w), 1fr); height: var(--row-h-compact); border-bottom: 1px solid var(--grid); }
-  .line.alt .label { background: color-mix(in srgb, var(--ink) 3.5%, var(--sheet)); }
-  .line:hover { background: var(--tint); }
-  .line:hover .label { background: color-mix(in srgb, var(--ink) 7%, var(--sheet)); }
+  .line { --row-bg: var(--sheet); }
+  .line.alt { --row-bg: color-mix(in srgb, var(--ink) 3.5%, var(--sheet)); }
+  .line:hover { --row-bg: color-mix(in srgb, var(--ink) 7%, var(--sheet)); background: var(--tint); }
+  .line.alt .label, .line:hover .label { background: var(--row-bg); }
   .line[data-kind='group'] { background: var(--band-1); }
   .line.band { background: var(--band-2); }
   .line.todo { cursor: grab; }
@@ -385,12 +386,11 @@
   .stripe { position: absolute; left: 0; right: 0; height: var(--row-h-compact); background: var(--tint); }
   .weekend { position: absolute; top: 0; bottom: 0; background: var(--tint); border-left: 1px solid var(--grid); }
   .today { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--signal); opacity: 0.7; z-index: 1; }
-  .arrows { position: absolute; top: 0; left: 0; color: var(--muted); z-index: 1; opacity: 0.7; }
-  .arrows path { fill: none; stroke: currentColor; stroke-width: 1; stroke-linejoin: round; }
+  .arrows { position: absolute; top: 0; left: 0; color: var(--muted); z-index: 1; }
+  .arrows path { fill: none; stroke: currentColor; stroke-width: 1; stroke-linejoin: round; opacity: 0.7; }
   .arrows path.critical { color: var(--signal); }
-  .arrows path.dim { opacity: 0.25; }
-  .arrows path.hot { color: var(--ink); stroke-width: 1.75; }
-  .arrows path.hot.critical { color: var(--signal); }
+  .arrows path.dim { opacity: 0.3; }
+  .arrows path.hot, .arrows path.hot.critical { color: var(--accent); stroke-width: 2; opacity: 1; }
   .arrows :global(marker path) { fill: currentColor; stroke: none; }
 
   /* A bar is its status colour (--bc) as a tint with a stronger edge; the title sits inside or just right of it. */
@@ -398,11 +398,11 @@
   .bar:hover { filter: brightness(1.15); }
   .bar.dragging { cursor: grabbing; outline: 2px solid var(--focus); }
   .bar .name { padding: 0 var(--s-4); font-size: var(--fs-xs); font-weight: 500; white-space: nowrap; overflow: hidden; pointer-events: none; }
-  .bar .name.out { position: absolute; left: 100%; margin-left: var(--s-7); padding: 0; overflow: visible; color: var(--muted); }
+  .bar .name.out { position: absolute; left: 100%; margin-left: var(--s-7); padding: 0; overflow: visible; color: var(--muted); text-shadow: 0 0 var(--s-1) var(--row-bg), 0 0 var(--s-1) var(--row-bg), 0 0 var(--s-2) var(--row-bg), 0 0 var(--s-2) var(--row-bg), 0 0 var(--s-2) var(--row-bg), 0 0 var(--s-2) var(--row-bg), 0 0 var(--s-3) var(--row-bg), 0 0 var(--s-3) var(--row-bg); }
   .bar[data-category='Completed'], .bar[data-category='Canceled'] { opacity: 0.55; }
   .bar[data-category='Canceled'] .name { text-decoration: line-through; }
-  /* Estimated: no due date, the end is a guess, so it is faded and dashed with diagonal stripes. */
-  .bar.estimated { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--bc) 20%, var(--sheet)) 0 var(--s-3), color-mix(in srgb, var(--bc) 15%, var(--sheet)) var(--s-3) var(--s-5)); border-style: dashed; border-left-style: solid; }
+  /* Estimated (no due date): a real bar, its last third fading out and ending in a dotted edge. */
+  .bar.estimated { background: linear-gradient(90deg, transparent 66%, color-mix(in srgb, var(--sheet) 60%, transparent)), color-mix(in srgb, var(--bc) 30%, var(--sheet)); border-right-style: dotted; }
   /* On the critical path: a signal edge all round, fill unchanged. */
   .bar.critical { border-color: var(--signal); border-left-color: var(--signal); box-shadow: 0 0 0 1px color-mix(in srgb, var(--signal) 45%, transparent); }
   .bar.rollup { height: var(--s-4); top: var(--s-6); background: var(--ink); border: 0; cursor: default; border-radius: 0; }
