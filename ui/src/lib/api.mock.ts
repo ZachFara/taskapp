@@ -322,7 +322,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     const issue: Issue = {
       id: number, key: `${settings.get('issue_prefix')}-${number}`, title: (input.title ?? '').trim(),
       description: input.description ?? '',
-      status_id: input.status_id ?? [...s.statuses].sort((a, b) => a.position - b.position)[0].id,
+      // The chosen starting status, else the first (also when the chosen one was deleted), as the backend.
+      status_id: input.status_id ?? (s.statuses.find((st) => st.id === settings.get('default_status')) ?? [...s.statuses].sort((a, b) => a.position - b.position)[0]).id,
       priority: input.priority ?? 0, project_id: input.project_id ?? null, milestone_id: input.milestone_id ?? null,
       parent_id: input.parent_id ?? null, cycle_id: input.cycle_id ?? null, label_ids: [...new Set(input.label_ids ?? [])].sort((a, b) => a - b),
       start_date: input.start_date ?? null, due: input.due ?? null, estimate_minutes: input.estimate_minutes ?? null, points: input.points ?? null,
@@ -1142,6 +1143,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       get: async (key) => settings.get(key) ?? null,
       set: async (key, value) => {
         if (key === 'issue_fields') checkIssueFields(value);
+        if (key === 'default_status' && !(typeof value === 'number' && s.statuses.some((st) => st.id === value)))
+          fail('Invalid', `setting default_status must be ${typeof value === 'number' ? 'an existing status' : 'a status id'}`);
         const allowed = choices[key];
         if (allowed && !(typeof value === 'string' && allowed.includes(value))) fail('Invalid', `setting ${key} must be one of ${allowed.join(', ')}`);
         return nothing(settings.set(key, value));

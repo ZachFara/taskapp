@@ -331,6 +331,9 @@ are also off whenever Estimation (General) has no points. The list is the `issue
 
 ## Statuses, labels, icons and colours
 
+**New issues start in** (top of Settings > Statuses) picks the status an issue gets when none is given: quick add,
+templates and imports. Unset, or if that status is deleted, new issues start in the first status.
+
 - **Statuses** (Settings > Statuses): grouped by category; add a name with an icon and colour; delete asks which status to
   move that status's issues to. Each status shows its own icon and colour (from the same picker) wherever its glyph appears;
   without one it shows the default circle for its category: backlog dashed, unstarted empty, started half-filled, completed

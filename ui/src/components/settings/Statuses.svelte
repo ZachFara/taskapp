@@ -9,6 +9,7 @@
   import Dialog from '../../ui/Dialog.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
   import IconButton from '../../ui/IconButton.svelte';
+  import Select from '../../ui/Select.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import TextInput from '../../ui/TextInput.svelte';
   import './entities.css';
@@ -29,7 +30,17 @@
   const users = (s: Status) => issues.filter((i) => i.status_id === s.id).length;
   const others = $derived(statuses.filter((s) => s.id !== doomed?.id));
 
-  onMount(() => refreshAll());
+  // The status a new issue gets when none is given (quick add, templates, imports); unset means the first status.
+  let start = $state('');
+  onMount(async () => {
+    await refreshAll();
+    const v = await api.settings.get('default_status');
+    start = typeof v === 'number' && statuses.some((s) => s.id === v) ? String(v) : String(statuses[0]?.id ?? '');
+  });
+  const setStart = (v: string) => {
+    start = v;
+    void write(() => api.settings.set('default_status', Number(v)));
+  };
 
   // Every write goes through here so a refused write shows its message and the store stays in step.
   async function write(action: () => Promise<unknown>) {
@@ -76,6 +87,10 @@
 
 <div class="es">
   <SectionHead lede="The stages work moves through. Each status belongs to a category, and the category decides how it counts." />
+  <label class="start">
+    <span>New issues start in</span>
+    <Select label="New issues start in" items={statuses.map((s) => ({ value: String(s.id), label: s.name }))} bind:value={() => start, setStart} />
+  </label>
 
   {#each categories as c (c)}
     <section aria-label={c}>
@@ -145,3 +160,8 @@
     <Button variant="danger" disabled={target === null} onclick={confirmDelete}>Delete status</Button>
   {/snippet}
 </Dialog>
+
+<style>
+  .start { display: flex; align-items: center; gap: var(--s-5); max-width: 28rem; margin-bottom: var(--s-6); }
+  .start span { flex: none; font-weight: 600; }
+</style>
