@@ -40,18 +40,6 @@ fn today(s: &AppState) -> Result<NaiveDate> {
     Ok(Utc::now().with_timezone(&tz).date_naive())
 }
 
-/// The issues a saved view currently shows.
-async fn view_issues(s: &AppState, id: ViewId) -> Result<Vec<Issue>> {
-    let view = views::list(&s.db).await?.into_iter().find(|v| v.id == id);
-    views::query(
-        &s.db,
-        &view
-            .ok_or_else(|| Error::NotFound(format!("view {}", id.0)))?
-            .def,
-    )
-    .await
-}
-
 /// Every issue, archived included.
 fn all_issues_def() -> ViewDef {
     ViewDef {
@@ -286,11 +274,12 @@ macro_rules! with_commands {
             }
             relation_kinds_delete(s, id: RelationKind) -> () { relation_kinds::delete(&s.db, &id, ChangeSource::Ui).await }
 
-            schedule_bars(s, view_id: ViewId) -> Vec<Bar> {
-                Ok(view_issues(s, view_id).await?.iter().filter_map(schedule::bar_for).collect())
+            // They take the definition, not a saved view: a project page shows a view that is never saved.
+            schedule_bars(s, def: ViewDef) -> Vec<Bar> {
+                Ok(views::query(&s.db, &def).await?.iter().filter_map(schedule::bar_for).collect())
             }
-            schedule_critical_path(s, view_id: ViewId) -> Vec<IssueId> {
-                Ok(schedule::critical_path(&view_issues(s, view_id).await?, &relations::all_blocking(&s.db).await?))
+            schedule_critical_path(s, def: ViewDef) -> Vec<IssueId> {
+                Ok(schedule::critical_path(&views::query(&s.db, &def).await?, &relations::all_blocking(&s.db).await?))
             }
             schedule_shift_dependents(s, moved: Reschedule) -> Vec<Reschedule> {
                 let all = views::query(&s.db, &all_issues_def()).await?;

@@ -947,8 +947,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       kindsList: kinds.list, kindsCreate: kinds.create, kindsUpdate: kinds.update, kindsDelete: kinds.delete,
     },
     schedule: {
-      bars: async (viewId) => viewIssues(viewId).flatMap((i) => barFor(i) ?? []),
-      criticalPath: async (viewId) => criticalPath(viewIssues(viewId)),
+      bars: async (d) => query(d).flatMap((i) => barFor(i) ?? []),
+      criticalPath: async (d) => criticalPath(query(d)),
       shiftDependents: async (moved) => shiftDependents(moved),
     },
     views: {

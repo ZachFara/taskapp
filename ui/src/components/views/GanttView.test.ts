@@ -38,6 +38,13 @@ const chain = () => [dated(1, '2026-12-01', '2026-12-03'), dated(2, '2026-12-05'
 const block = () => api.relations.add({ from: 1, to: 2, kind: 'blocks' });
 
 describe('GanttView', () => {
+  it('a view that was never saved (a project page) still draws its bars', async () => {
+    const unsaved: SavedView = { id: -1, name: 'Project', def: { ...def, filter: { Cond: { field: { Fixed: 'Project' }, op: 'Eq', value: 1 } } }, position: 0 };
+    await show(chain(), { view: unsaved });
+    await vi.waitFor(() => expect(bar('issue-1')).not.toBeNull());
+    expect(bar('issue-2')).not.toBeNull();
+  });
+
   it('drag_confirms_and_applies_shift', async () => {
     await show(chain());
     await block();

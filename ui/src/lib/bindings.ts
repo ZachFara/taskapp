@@ -529,14 +529,14 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	scheduleBars: (viewId: ViewId, options?: InvokeOptions) => __TAURI_INVOKE<Bar[]>("schedule_bars", { viewId }, options),
+	scheduleBars: (def: ViewDef, options?: InvokeOptions) => __TAURI_INVOKE<Bar[]>("schedule_bars", { def }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
 	 * # Errors
 	 * As that command.
 	 */
-	scheduleCriticalPath: (viewId: ViewId, options?: InvokeOptions) => __TAURI_INVOKE<IssueId[]>("schedule_critical_path", { viewId }, options),
+	scheduleCriticalPath: (def: ViewDef, options?: InvokeOptions) => __TAURI_INVOKE<IssueId[]>("schedule_critical_path", { def }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 

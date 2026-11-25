@@ -60,18 +60,17 @@
   const projectOf = (id?: number) => projectList.find((p) => p.id === id);
 
   async function load() {
-    const id = view?.id ?? null;
     const own = view?.entity === 'project';
     const [issues, projects, statuses] = await Promise.all([
       own ? Promise.resolve([] as Issue[]) : api.views.query(mode === 'issues' && view ? view.def : ALL),
       own ? api.views.queryProjects(view!.def).then((r) => r.map((x) => x.project)) : api.projects.list(),
       api.statuses.list(),
     ]);
-    const live = mode === 'issues' && id !== null;
+    const live = mode === 'issues' && view !== null && view !== undefined;
     const [bars, critical, rels] = live
       ? await Promise.all([
-          api.schedule.bars(id!),
-          api.schedule.criticalPath(id!),
+          api.schedule.bars(view.def),
+          api.schedule.criticalPath(view.def),
           // shortcut: one call per issue, upgrade when a view holds thousands of issues
           Promise.all(issues.map((i) => api.relations.forIssue(i.id))).then((r) => r.flat()),
         ])
