@@ -109,7 +109,7 @@ async fn label_ids(tx: &mut SqliteConnection, id: i64) -> Result<Vec<LabelId>> {
     Ok(ids.into_iter().map(LabelId).collect())
 }
 
-async fn find(tx: &mut SqliteConnection, id: ProjectId) -> Result<Project> {
+pub(crate) async fn find(tx: &mut SqliteConnection, id: ProjectId) -> Result<Project> {
     let r = sqlx::query(&format!("SELECT {COLS} FROM projects WHERE id = ?"))
         .bind(id.0)
         .fetch_optional(&mut *tx)

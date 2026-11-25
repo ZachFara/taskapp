@@ -277,6 +277,9 @@ enum ViewCmd {
         def: String,
         #[arg(long)]
         id: Option<i64>,
+        /// What a new view lists: `issue` (default) or `project`. A saved view keeps its own.
+        #[arg(long, default_value = "issue")]
+        entity: String,
     },
 }
 

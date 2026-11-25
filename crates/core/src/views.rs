@@ -3,12 +3,12 @@ use sqlx::{Row, SqliteConnection, query::Query, sqlite::SqliteArguments, sqlite:
 
 use crate::{
     ChangeSource, Db, Error, FieldRef, Filter, FixedField, Issue, IssueId, IssueStats, Op,
-    PropertyDef, PropertyKind, Result, SavedView, Sort, ViewDef, ViewFolderId, ViewId,
-    ViewTemplateId,
+    ProjectId, ProjectRow, PropertyAppliesTo, PropertyDef, PropertyKind, Result, SavedView, Sort,
+    ViewDef, ViewEntity, ViewFolderId, ViewId, ViewTemplateId,
     history::{self, Edit},
     issues,
     palette::{self, Look},
-    rows,
+    projects, rows,
 };
 
 /// Filters come from saved JSON; a limit keeps a hostile one from overflowing the stack.
@@ -36,6 +36,23 @@ impl Col {
 struct Ctx<'a> {
     defs: &'a [PropertyDef],
     binds: Vec<Value>,
+    entity: ViewEntity,
+}
+
+impl ViewEntity {
+    /// The table a view of this entity lists.
+    fn table(self) -> &'static str {
+        match self {
+            Self::Issue => "issues",
+            Self::Project => "projects",
+        }
+    }
+    fn word(self) -> &'static str {
+        match self {
+            Self::Issue => "issue",
+            Self::Project => "project",
+        }
+    }
 }
 
 fn scalar(v: &Value) -> Result<Value> {
@@ -60,7 +77,7 @@ impl Ctx<'_> {
             let FieldRef::Fixed(x) = f else {
                 unreachable!()
             };
-            return fixed_col(*x);
+            return fixed_col(self.entity, *x);
         };
         let def = self
             .defs
@@ -68,7 +85,7 @@ impl Ctx<'_> {
             .find(|d| &d.key == key)
             .ok_or_else(|| Error::Invalid("unknown property".into()))?;
         Ok(Col {
-            sql: "json_extract(issues.properties, ?)".into(),
+            sql: format!("json_extract({}.properties, ?)", self.entity.table()),
             bind: Some(Value::String(format!("$.\"{key}\""))),
             text: !matches!(def.kind, PropertyKind::Number | PropertyKind::Checkbox),
             multi: def.kind == PropertyKind::MultiSelect,
@@ -107,8 +124,10 @@ impl Ctx<'_> {
     fn cond(&mut self, field: &FieldRef, op: Op, value: &Value) -> Result<String> {
         match field {
             FieldRef::Fixed(FixedField::Label) => return self.label(op, value),
-            FieldRef::Fixed(FixedField::Archived) => return archived(op, value),
-            FieldRef::Fixed(FixedField::RelationKind) => return self.relation_kind(op, value),
+            FieldRef::Fixed(FixedField::Archived) => return archived(self.entity, op, value),
+            FieldRef::Fixed(FixedField::RelationKind) if self.entity == ViewEntity::Issue => {
+                return self.relation_kind(op, value);
+            }
             _ => {}
         }
         let c = self.col(field)?;
@@ -135,9 +154,10 @@ impl Ctx<'_> {
         if c.multi {
             self.binds.extend(c.bind.clone());
             self.binds.push(v);
-            return Ok(
-                "EXISTS (SELECT 1 FROM json_each(issues.properties, ?) WHERE value = ?)".into(),
-            );
+            return Ok(format!(
+                "EXISTS (SELECT 1 FROM json_each({}.properties, ?) WHERE value = ?)",
+                self.entity.table()
+            ));
         }
         if !c.text {
             return Err(Error::Invalid(
@@ -182,14 +202,18 @@ impl Ctx<'_> {
     }
 
     fn label(&mut self, op: Op, value: &Value) -> Result<String> {
-        const ANY: &str = "EXISTS (SELECT 1 FROM issue_labels WHERE issue_id = issues.id";
+        let any = if self.entity == ViewEntity::Issue {
+            "EXISTS (SELECT 1 FROM issue_labels WHERE issue_id = issues.id"
+        } else {
+            "EXISTS (SELECT 1 FROM project_labels WHERE project_id = projects.id"
+        };
         let (negate, items) = match op {
             Op::Eq | Op::Contains => (false, vec![scalar(value)?]),
             Op::Neq => (true, vec![scalar(value)?]),
             Op::In => (false, as_list(value)?.clone()),
             Op::NotIn => (true, as_list(value)?.clone()),
-            Op::IsEmpty => return Ok(format!("NOT {ANY})")),
-            Op::IsNotEmpty => return Ok(format!("{ANY})")),
+            Op::IsEmpty => return Ok(format!("NOT {any})")),
+            Op::IsNotEmpty => return Ok(format!("{any})")),
             _ => return Err(Error::Invalid("unsupported operator for labels".into())),
         };
         if items.is_empty() {
@@ -200,7 +224,7 @@ impl Ctx<'_> {
             self.binds.push(scalar(i)?);
         }
         let not = if negate { "NOT " } else { "" };
-        Ok(format!("{not}{ANY} AND label_id IN ({m}))"))
+        Ok(format!("{not}{any} AND label_id IN ({m}))"))
     }
 
     fn relation_kind(&mut self, op: Op, value: &Value) -> Result<String> {
@@ -239,12 +263,15 @@ impl Ctx<'_> {
             let dir = if s.descending { "DESC" } else { "ASC" };
             parts.push(format!("{a} IS NULL, {b} {dir}"));
         }
-        parts.push("issues.id".into());
+        parts.push(format!("{}.id", self.entity.table()));
         Ok(parts.join(", "))
     }
 }
 
-fn fixed_col(x: FixedField) -> Result<Col> {
+fn fixed_col(entity: ViewEntity, x: FixedField) -> Result<Col> {
+    if entity == ViewEntity::Project {
+        return project_col(x);
+    }
     let (sql, text) = match x {
         FixedField::Title => ("issues.title", true),
         FixedField::Status => ("issues.status_id", false),
@@ -278,15 +305,48 @@ fn fixed_col(x: FixedField) -> Result<Col> {
             "(SELECT COUNT(*) FROM comments c WHERE c.issue_id = issues.id)",
             false,
         ),
+        FixedField::ProjectStatus => (
+            "(SELECT status_id FROM projects WHERE id = issues.project_id)",
+            false,
+        ),
         FixedField::Label => return Err(Error::Invalid("cannot sort by label".into())),
         FixedField::RelationKind => {
             return Err(Error::Invalid("cannot sort by relation kind".into()));
+        }
+        FixedField::TargetDate | FixedField::Progress | FixedField::IssueCount => {
+            return Err(Error::Invalid("a project field, not an issue field".into()));
         }
     };
     Ok(Col::fixed(sql, text))
 }
 
-fn archived(op: Op, value: &Value) -> Result<String> {
+fn project_col(x: FixedField) -> Result<Col> {
+    let (sql, text) = match x {
+        FixedField::Title => ("projects.name", true),
+        FixedField::Status => ("projects.status_id", false),
+        FixedField::StatusCategory => (
+            "(SELECT category FROM project_statuses WHERE id = projects.status_id)",
+            false,
+        ),
+        FixedField::Priority => ("projects.priority", false),
+        FixedField::StartDate => ("projects.start_date", false),
+        FixedField::TargetDate => ("projects.target_date", false),
+        FixedField::Archived => ("projects.archived_at", false),
+        FixedField::IssueCount => (
+            "(SELECT COUNT(*) FROM issues i WHERE i.project_id = projects.id AND i.archived_at IS NULL)",
+            false,
+        ),
+        // The sum is NULL for a project without issues; zero is what its bar shows.
+        FixedField::Progress => (
+            "(SELECT COALESCE(100.0 * SUM(s.category = 'completed') / NULLIF(COUNT(*), 0), 0) FROM issues i JOIN statuses s ON s.id = i.status_id WHERE i.project_id = projects.id AND i.archived_at IS NULL)",
+            false,
+        ),
+        _ => return Err(Error::Invalid("not a project field".into())),
+    };
+    Ok(Col::fixed(sql, text))
+}
+
+fn archived(entity: ViewEntity, op: Op, value: &Value) -> Result<String> {
     let want = match (op, value) {
         (Op::Eq, Value::Bool(b)) => *b,
         (Op::Neq, Value::Bool(b)) => !*b,
@@ -297,7 +357,8 @@ fn archived(op: Op, value: &Value) -> Result<String> {
         }
     };
     Ok(format!(
-        "issues.archived_at IS {}NULL",
+        "{}.archived_at IS {}NULL",
+        entity.table(),
         if want { "NOT " } else { "" }
     ))
 }
@@ -342,16 +403,27 @@ pub(crate) fn scrub(def: &mut ViewDef, gone: &dyn Fn(&str) -> bool) {
 ///
 /// Fails with `Invalid` on a bad operator or value, or a filter nested too deeply.
 pub fn compile(def: &ViewDef, defs: &[PropertyDef]) -> Result<(String, Vec<Value>)> {
+    compile_for(ViewEntity::Issue, def, defs)
+}
+
+/// As [`compile`] for either entity; a project view selects only the project ids.
+fn compile_for(
+    entity: ViewEntity,
+    def: &ViewDef,
+    defs: &[PropertyDef],
+) -> Result<(String, Vec<Value>)> {
     // A reference to a property that no longer exists is dropped, not an error: the view would stay broken.
     let mut def = def.clone();
     scrub(&mut def, &|k| !defs.iter().any(|d| d.key == k));
     let mut ctx = Ctx {
         defs,
         binds: vec![],
+        entity,
     };
+    let table = entity.table();
     let mut wheres = vec![];
     if !def.include_archived {
-        wheres.push("issues.archived_at IS NULL".to_string());
+        wheres.push(format!("{table}.archived_at IS NULL"));
     }
     if let Some(f) = &def.filter {
         wheres.push(ctx.filter(f, 0)?);
@@ -362,11 +434,12 @@ pub fn compile(def: &ViewDef, defs: &[PropertyDef]) -> Result<(String, Vec<Value
     } else {
         wheres.join(" AND ")
     };
+    let cols = match entity {
+        ViewEntity::Issue => issues::ISSUE_COLS,
+        ViewEntity::Project => "projects.id",
+    };
     Ok((
-        format!(
-            "SELECT {} FROM issues WHERE {wheres} ORDER BY {order}",
-            issues::ISSUE_COLS
-        ),
+        format!("SELECT {cols} FROM {table} WHERE {wheres} ORDER BY {order}"),
         ctx.binds,
     ))
 }
@@ -386,11 +459,15 @@ fn bind_value<'q>(
     }
 }
 
-async fn property_defs(db: &Db) -> Result<Vec<PropertyDef>> {
-    let rows =
-        sqlx::query("SELECT key, name, kind, options, project_id, position FROM property_defs")
-            .fetch_all(&db.pool)
-            .await?;
+/// The property definitions a view of `entity` can use: issue views take every one, as before.
+async fn property_defs(db: &Db, entity: ViewEntity) -> Result<Vec<PropertyDef>> {
+    let rows = sqlx::query(
+        "SELECT key, name, kind, options, project_id, position, applies_to FROM property_defs
+         WHERE ? = 'issue' OR applies_to IN ('projects', 'both')",
+    )
+    .bind(entity.word())
+    .fetch_all(&db.pool)
+    .await?;
     let parse = |e: serde_json::Error| Error::Invalid(format!("property definition: {e}"));
     rows.iter()
         .map(|r| {
@@ -405,8 +482,11 @@ async fn property_defs(db: &Db) -> Result<Vec<PropertyDef>> {
                     .try_get::<Option<i64>, _>("project_id")?
                     .map(crate::ProjectId),
                 position: r.try_get("position")?,
-                // Issue views only look at the issue side.
-                applies_to: crate::PropertyAppliesTo::Issues,
+                applies_to: match r.try_get::<String, _>("applies_to")?.as_str() {
+                    "projects" => PropertyAppliesTo::Projects,
+                    "both" => PropertyAppliesTo::Both,
+                    _ => PropertyAppliesTo::Issues,
+                },
             })
         })
         .collect()
@@ -416,7 +496,7 @@ async fn property_defs(db: &Db) -> Result<Vec<PropertyDef>> {
 ///
 /// Fails on a database error or an invalid view definition.
 pub async fn query(db: &Db, def: &ViewDef) -> Result<Vec<Issue>> {
-    let (sql, binds) = compile(def, &property_defs(db).await?)?;
+    let (sql, binds) = compile(def, &property_defs(db, ViewEntity::Issue).await?)?;
     let mut q = sqlx::query(&sql);
     for b in &binds {
         q = bind_value(q, b);
@@ -425,13 +505,42 @@ pub async fn query(db: &Db, def: &ViewDef) -> Result<Vec<Issue>> {
     issues::issues_from_rows(&mut *db.pool.acquire().await?, &rows).await
 }
 
+/// The projects a project view shows, in order, each with its issue counts.
+///
+/// # Errors
+///
+/// As [`query`].
+pub async fn projects_query(db: &Db, def: &ViewDef) -> Result<Vec<ProjectRow>> {
+    let (sql, binds) = compile_for(
+        ViewEntity::Project,
+        def,
+        &property_defs(db, ViewEntity::Project).await?,
+    )?;
+    let mut q = sqlx::query(&sql);
+    for b in &binds {
+        q = bind_value(q, b);
+    }
+    let mut out = vec![];
+    for r in q.fetch_all(&db.pool).await? {
+        let id = ProjectId(r.try_get(0)?);
+        let (issue_done, issue_total) = projects::progress(db, id).await?;
+        let project = projects::find(&mut *db.pool.acquire().await?, id).await?;
+        out.push(ProjectRow {
+            project,
+            issue_total,
+            issue_done,
+        });
+    }
+    Ok(out)
+}
+
 /// Sub-issue, relation and comment counts for the issues `def` shows, in the same order as [`query`].
 ///
 /// # Errors
 ///
 /// As [`query`].
 pub async fn stats(db: &Db, def: &ViewDef) -> Result<Vec<IssueStats>> {
-    let (sql, binds) = compile(def, &property_defs(db).await?)?;
+    let (sql, binds) = compile(def, &property_defs(db, ViewEntity::Issue).await?)?;
     let sql = sql.replacen(
         &format!("SELECT {} FROM", issues::ISSUE_COLS),
         "SELECT issues.id,
@@ -467,6 +576,8 @@ fn view_from_row(r: &SqliteRow) -> Result<SavedView> {
     Ok(SavedView {
         id: ViewId(r.try_get("id")?),
         name: r.try_get("name")?,
+        entity: serde_json::from_value(Value::String(r.try_get("entity")?))
+            .map_err(|e| Error::Invalid(format!("saved view: {e}")))?,
         def: serde_json::from_str(&def).map_err(|e| Error::Invalid(format!("saved view: {e}")))?,
         position: r.try_get("position")?,
         icon: r.try_get("icon")?,
@@ -483,7 +594,7 @@ fn view_from_row(r: &SqliteRow) -> Result<SavedView> {
 /// Fails on a database error or a stored definition that no longer parses.
 pub async fn list(db: &Db) -> Result<Vec<SavedView>> {
     sqlx::query(
-        "SELECT id, name, definition, position, icon, color, template_id, folder_id FROM views ORDER BY position, id",
+        "SELECT id, name, entity, definition, position, icon, color, template_id, folder_id FROM views ORDER BY position, id",
     )
     .fetch_all(&db.pool)
     .await?
@@ -506,6 +617,22 @@ pub async fn save(
     look: Look,
     src: ChangeSource,
 ) -> Result<SavedView> {
+    save_as(db, id, (name, ViewEntity::Issue), def, look, src).await
+}
+
+/// As [`save`], with what a new view lists. An existing view keeps its entity.
+///
+/// # Errors
+///
+/// As [`save`].
+pub async fn save_as(
+    db: &Db,
+    id: Option<ViewId>,
+    (name, entity): (&str, ViewEntity),
+    def: ViewDef,
+    look: Look,
+    src: ChangeSource,
+) -> Result<SavedView> {
     let json = serde_json::to_string(&def).map_err(|e| Error::Invalid(e.to_string()))?;
     let Look { icon, color } = look;
     if let Some(icon) = &icon {
@@ -523,10 +650,10 @@ pub async fn save(
             update_view(&mut tx, src, id, name, &json, &look).await?;
             id.0
         }
-        None => insert_view(&mut tx, src, name, &json, &look).await?,
+        None => insert_view(&mut tx, src, (name, entity), &json, &look).await?,
     };
     let row = sqlx::query(
-        "SELECT id, name, definition, position, icon, color, template_id, folder_id FROM views WHERE id = ?",
+        "SELECT id, name, entity, definition, position, icon, color, template_id, folder_id FROM views WHERE id = ?",
     )
     .bind(id)
     .fetch_one(&mut *tx)
@@ -586,15 +713,16 @@ async fn update_view(
 async fn insert_view(
     tx: &mut SqliteConnection,
     src: ChangeSource,
-    name: &str,
+    (name, entity): (&str, ViewEntity),
     json: &str,
     look: &Look,
 ) -> Result<i64> {
     let id = sqlx::query(
-        "INSERT INTO views (name, definition, position, icon, color)
-         VALUES (?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM views), ?, ?)",
+        "INSERT INTO views (name, entity, definition, position, icon, color)
+         VALUES (?, ?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM views), ?, ?)",
     )
     .bind(name)
+    .bind(entity.word())
     .bind(json)
     .bind(look.icon.as_deref())
     .bind(look.color.as_deref())

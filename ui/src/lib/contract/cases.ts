@@ -10,6 +10,7 @@ const fixed = (f: string) => ({ Fixed: f });
 const prop = (p: string) => ({ Property: p });
 const def = (extra: Record<string, unknown> = {}) => ({ filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false, ...extra });
 const query = (name: string, d: Record<string, unknown>): Case => ({ name, cmd: 'views_query', args: { def: def(d) } });
+const pquery = (name: string, d: Record<string, unknown>): Case => ({ name, cmd: 'views_query_projects', args: { def: def(d) } });
 const filter = (name: string, f: unknown, extra: Record<string, unknown> = {}) => query(name, { filter: f, ...extra });
 const call = (name: string, cmd: string, args: Record<string, unknown> = {}): Case => ({ name, cmd, args });
 const importPlan = (external_id: string, title: string, status: string | null = null) => ({
@@ -67,7 +68,7 @@ export const cases: Case[] = [
   query('sort: custom property', { sorts: [{ field: prop('effort'), descending: true }] }),
   call('group: save a grouped board view', 'views_save', { id: null, name: 'By project', def: def({ group_by: fixed('Project'), layout: 'Board' }), icon: 'icon:folder', color: 'teal' }),
   call('group: saved view lists its definition', 'views_list'),
-  call('group: reorder views', 'views_reorder', { ids: [5, 4, 1, 2, 3] }),
+  call('group: reorder views', 'views_reorder', { ids: [7, 6, 5, 4, 1, 2, 3] }),
   call('group: bad view colour is Invalid', 'views_save', { id: null, name: 'Bad', def: def(), icon: null, color: 'teal2' }),
 
   // View display settings and templates
@@ -88,10 +89,10 @@ export const cases: Case[] = [
   call('templates: new view from a template', 'views_create_from_template', { template_id: 4, name: null }),
   call('templates: new view with its own name', 'views_create_from_template', { template_id: 1, name: 'Board two' }),
   call('templates: unknown template is NotFound', 'views_create_from_template', { template_id: 99, name: null }),
-  call('templates: save a view as a template', 'views_save_as_template', { view_id: 6, name: null }),
+  call('templates: save a view as a template', 'views_save_as_template', { view_id: 8, name: null }),
   call('templates: unknown view is NotFound', 'views_save_as_template', { view_id: 99, name: null }),
-  call('templates: edit a view made from a template', 'views_save', { id: 7, name: 'Mine 2', def: def(), icon: null, color: null }),
-  call('templates: reset to the template', 'views_reset_to_template', { view_id: 7 }),
+  call('templates: edit a view made from a template', 'views_save', { id: 9, name: 'Mine 2', def: def(), icon: null, color: null }),
+  call('templates: reset to the template', 'views_reset_to_template', { view_id: 9 }),
   call('templates: reset needs a template', 'views_reset_to_template', { view_id: 1 }),
   call('templates: set the default', 'settings_set', { key: 'default_view_template', value: 4 }),
   call('templates: delete unlinks views and clears the default', 'view_templates_delete', { id: 4 }),
@@ -442,7 +443,7 @@ export const cases: Case[] = [
   query('properties: a stale reference still queries', { filter: cond(prop('zone'), 'Eq', 'a'), sorts: [{ field: prop('zone'), descending: false }] }),
   call('properties: undo restores views and templates', 'history_undo'),
   call('properties: the view mentions it again', 'views_list'),
-  call('views: delete', 'views_delete', { id: 5 }),
+  call('views: delete', 'views_delete', { id: 7 }),
   call('views: delete unknown is NotFound', 'views_delete', { id: 99 }),
   call('views: list after delete', 'views_list'),
   call('views: undo the delete', 'history_undo'),
@@ -564,4 +565,38 @@ export const cases: Case[] = [
   call('events: delete is one undo step', 'history_undo_status'),
   call('events: undo the delete', 'history_undo'),
   call('events: the links came back', 'events_get', { id: 1 }),
+
+  // Project views: the same definition, project fields
+  call('pviews: seeded project views have their entity', 'views_list'),
+  call('pviews: a project view is saved with its entity', 'views_save_project', { id: null, name: 'Live projects', def: def({ layout: 'Board', group_by: fixed('Status'), filter: cond(fixed('StatusCategory'), 'NotIn', ['completed', 'cancelled']) }), icon: null, color: null }),
+  call('pviews: an issue view still defaults', 'views_save', { id: null, name: 'Plain', def: def(), icon: null, color: null }),
+  call('pviews: saving a project view again keeps its entity', 'views_save', { id: 5, name: 'Project board 2', def: def({ layout: 'Table' }), icon: null, color: null }),
+  call('pviews: the list shows both', 'views_list'),
+  pquery('pviews: every project, archived hidden', {}),
+  pquery('pviews: archived included', { include_archived: true }),
+  pquery('pviews: Status In', { filter: cond(fixed('Status'), 'In', [2]) }),
+  pquery('pviews: StatusCategory Eq', { filter: cond(fixed('StatusCategory'), 'Eq', 'planned') }),
+  pquery('pviews: Priority Eq', { filter: cond(fixed('Priority'), 'Eq', 3) }),
+  pquery('pviews: Title Contains', { filter: cond(fixed('Title'), 'Contains', 'app') }),
+  pquery('pviews: TargetDate empty', { filter: cond(fixed('TargetDate'), 'IsEmpty') }),
+  pquery('pviews: TargetDate Gte', { filter: cond(fixed('TargetDate'), 'Gte', '2000-01-01') }),
+  pquery('pviews: StartDate not empty', { filter: cond(fixed('StartDate'), 'IsNotEmpty') }),
+  pquery('pviews: IssueCount Gt', { filter: cond(fixed('IssueCount'), 'Gt', 0) }),
+  pquery('pviews: Progress Gte', { filter: cond(fixed('Progress'), 'Gte', 1) }),
+  pquery('pviews: Label In', { filter: cond(fixed('Label'), 'In', [3]) }),
+  pquery('pviews: Label empty', { filter: cond(fixed('Label'), 'IsEmpty') }),
+  pquery('pviews: a projects property', { filter: cond(prop('sponsor'), 'Eq', 'sam') }),
+  pquery('pviews: an issues-only property is dropped', { filter: cond(prop('effort'), 'Eq', 3) }),
+  pquery('pviews: Not and Or', { filter: { Not: { Or: [cond(fixed('Status'), 'Eq', 2), cond(fixed('Priority'), 'Eq', 0)] } } }),
+  pquery('pviews: sort by target date', { sorts: [{ field: fixed('TargetDate'), descending: false }] }),
+  pquery('pviews: sort by priority descending', { sorts: [{ field: fixed('Priority'), descending: true }] }),
+  pquery('pviews: sort by title descending', { sorts: [{ field: fixed('Title'), descending: true }] }),
+  pquery('pviews: sort by progress then issue count', { sorts: [{ field: fixed('Progress'), descending: true }, { field: fixed('IssueCount'), descending: false }] }),
+  pquery('pviews: sort by a projects property', { sorts: [{ field: prop('sponsor'), descending: false }] }),
+  pquery('pviews: an issue field is Invalid', { filter: cond(fixed('Cycle'), 'IsEmpty') }),
+  query('pviews: an issue view filters by its project status', { filter: cond(fixed('ProjectStatus'), 'In', [2]) }),
+  query('pviews: an issue view sorts by its project status', { sorts: [{ field: fixed('ProjectStatus'), descending: false }] }),
+  query('pviews: a project field on an issue view is Invalid', { filter: cond(fixed('TargetDate'), 'IsEmpty') }),
+  call('pviews: undo the last save', 'history_undo'),
+  call('pviews: the list after undo', 'views_list'),
 ];

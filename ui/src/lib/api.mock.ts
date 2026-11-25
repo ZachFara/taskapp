@@ -11,8 +11,8 @@ import { foldersApi } from './api.mock.folders';
 import { scrubDef, seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
   AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, Event, EventInput, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
-  NewIssue, Pin, Placement, Project, ProjectStatus, ProjectStatusCategory, PropertyAppliesTo, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
-  TemplateInput, Value, ViewDef, ViewFolder, ViewTemplate, WorkBlock,
+  NewIssue, Pin, Placement, Project, ProjectRow, ProjectStatus, ProjectStatusCategory, PropertyAppliesTo, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
+  TemplateInput, Value, ViewDef, ViewEntity, ViewFolder, ViewTemplate, WorkBlock,
 } from './bindings';
 
 export type MockSeed = {
@@ -197,13 +197,36 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     void rows.splice(rows.indexOf(find(rows, id, what)), 1);
   const category = (i: Issue) => s.statuses.find((st) => st.id === i.status_id)?.category;
 
+  const projectStatusOf = (p: Project) => projectStatuses.find((x) => x.id === p.status_id);
+  const progressOf = (id: number): [number, number] => {
+    const rows = s.issues.filter((i) => i.project_id === id && !i.archived_at);
+    return [rows.filter((i) => category(i) === 'Completed').length, rows.length];
+  };
+  // What a project view can filter and sort by (core: views::project_col); creation and update times have no column yet.
+  function projectValue(p: Project, f: FieldRef): Value {
+    if (f.Property !== undefined) {
+      if (!s.propertyDefs.some((d) => d.key === f.Property && d.applies_to !== 'Issues')) fail('Invalid', 'unknown property');
+      return p.properties[f.Property] ?? null;
+    }
+    const [done, total] = progressOf(p.id);
+    const by: Partial<Record<FixedField, Value>> = {
+      Title: p.name, Status: p.status_id, StatusCategory: projectStatusOf(p)?.category.toLowerCase() ?? null, Priority: p.priority,
+      Label: p.label_ids, StartDate: p.start_date, TargetDate: p.target_date, Archived: p.archived_at !== null,
+      IssueCount: total, Progress: total ? (100 * done) / total : 0,
+    };
+    if (!(f.Fixed! in by)) fail('Invalid', 'not a project field');
+    return by[f.Fixed!]!;
+  }
+
   function fieldValue(i: Issue, f: FieldRef): Value {
     const prop = f.Property;
     if (prop !== undefined) {
       if (!s.propertyDefs.some((d) => d.key === prop)) fail('Invalid', 'unknown property');
       return i.properties[prop] ?? null;
     }
-    const by: Record<FixedField, Value> = {
+    if (f.Fixed === 'TargetDate' || f.Fixed === 'Progress' || f.Fixed === 'IssueCount') fail('Invalid', 'a project field, not an issue field');
+    const by: Record<Exclude<FixedField, 'TargetDate' | 'Progress' | 'IssueCount'>, Value> = {
+      ProjectStatus: s.projects.find((x) => x.id === i.project_id)?.status_id ?? null,
       Title: i.title, Status: i.status_id, StatusCategory: category(i)?.toLowerCase() ?? null, Priority: i.priority,
       Project: i.project_id, Milestone: i.milestone_id, Cycle: i.cycle_id, Label: i.label_ids,
       Parent: i.parent_id, StartDate: i.start_date, DueDate: dueDay(i), Estimate: i.estimate_minutes, Points: i.points,
@@ -214,18 +237,18 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       RelationKind: relations.filter((r) => r.from === i.id || r.to === i.id).map((r) => r.kind),
       CommentCount: comments.filter((c) => c.issue_id === i.id).length,
     };
-    return by[f.Fixed!];
+    return by[f.Fixed as keyof typeof by];
   }
 
   const isEmpty = (v: Value) => v === null || v === '' || (Array.isArray(v) && v.length === 0);
   const eq = (have: Value, want: Value) =>
     Array.isArray(have) && !Array.isArray(want) ? have.includes(want) : have === want;
-  const holds = (i: Issue, f: Filter): boolean => {
-    if (f.And) return f.And.every((x) => holds(i, x));
-    if (f.Or) return f.Or.some((x) => holds(i, x));
-    if (f.Not) return !holds(i, f.Not);
+  const holds = <T,>(i: T, f: Filter, get: (r: T, f: FieldRef) => Value): boolean => {
+    if (f.And) return f.And.every((x) => holds(i, x, get));
+    if (f.Or) return f.Or.some((x) => holds(i, x, get));
+    if (f.Not) return !holds(i, f.Not, get);
     const { field, op, value: want } = f.Cond!;
-    const have = fieldValue(i, field);
+    const have = get(i, field);
     const list = Array.isArray(want) ? want : [want];
     const cmp = (test: (a: number | string, b: number | string) => boolean) =>
       have !== null && want !== null && typeof have === typeof want && test(have as string, want as string);
@@ -246,14 +269,14 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       case 'IsNotEmpty': return !isEmpty(have);
     }
   };
-  const query = (stored: ViewDef) => {
+  // Filter, then sort (nulls last in either direction), like core's compiled query; `get` reads a field of a row.
+  function arrange<T extends { id: number; archived_at: string | null }>(all: T[], stored: ViewDef, defs: PropertyDef[], get: (r: T, f: FieldRef) => Value) {
     // A reference to a property that no longer exists is dropped, like core does.
-    const def = scrubDef(stored, (k) => !s.propertyDefs.some((d) => d.key === k));
-    const rows = s.issues.filter((i) => (def.include_archived || !i.archived_at) && (!def.filter || holds(i, def.filter)));
+    const def = scrubDef(stored, (k) => !defs.some((d) => d.key === k));
+    const rows = all.filter((i) => (def.include_archived || !i.archived_at) && (!def.filter || holds(i, def.filter, get)));
     for (const { field, descending } of [...def.sorts].reverse()) {
-      // nulls sort last in either direction
       rows.sort((a, b) => {
-        const [x, y] = [fieldValue(a, field), fieldValue(b, field)];
+        const [x, y] = [get(a, field), get(b, field)];
         if (x === y) return 0;
         if (x === null) return 1;
         if (y === null) return -1;
@@ -261,8 +284,26 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       });
     }
     return rows;
-  };
+  }
+  const query = (stored: ViewDef) => arrange(s.issues, stored, s.propertyDefs, fieldValue);
+  const queryProjects = (stored: ViewDef): ProjectRow[] =>
+    arrange(s.projects, stored, s.propertyDefs.filter((d) => d.applies_to !== 'Issues'), projectValue).map((project) => {
+      const [issue_done, issue_total] = progressOf(project.id);
+      return { project, issue_total, issue_done };
+    });
 
+  // A new view lists `entity`; an existing one keeps what it lists.
+  const saveView = async (id: number | null, name: string, d: ViewDef, icon: string | null, color: string | null, entity: ViewEntity) => {
+    checkIcon(icon);
+    const key = colorKey(color);
+    if (id === null) {
+      const v = { id: next(views), name, entity, def: withDisplay(d), position: Math.max(-1, ...views.map((x) => x.position)) + 1, icon: icon ?? null, color: key, template_id: null, folder_id: null };
+      views.push(v);
+      return v;
+    }
+    const v = find(views, id, 'view');
+    return Object.assign(v, { name, def: withDisplay(d), icon: icon ?? v.icon, color: key ?? v.color });
+  };
   const viewIssues = (id: number) => query(find(views, id, 'view').def);
   const checkIssue = (i: Issue, props: Record<string, Value>) => {
     if (!i.title.trim()) fail('Invalid', 'title is empty');
@@ -752,10 +793,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         s.issues.forEach((i) => i.project_id === id && (i.project_id = null));
         return null;
       },
-      progress: async (id) => {
-        const rows = s.issues.filter((i) => i.project_id === id && !i.archived_at);
-        return [rows.filter((i) => category(i) === 'Completed').length, rows.length];
-      },
+      progress: async (id) => progressOf(id),
       listMilestones: async (project) => milestones.filter((m) => m.project_id === project),
       createMilestone: async (project, name, targetDate) => {
         const m = { id: next(milestones), project_id: find(s.projects, project, 'project').id, name, target_date: targetDate };
@@ -914,6 +952,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     },
     views: {
       query: async (d) => query(d),
+      queryProjects: async (d) => queryProjects(d),
       list: async () => views,
       stats: async (d) =>
         query(d).map((i) => {
@@ -924,20 +963,11 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
             comments: comments.filter((c) => c.issue_id === i.id).length,
           };
         }),
-      save: async (id, name, d, icon, color) => {
-        checkIcon(icon);
-        const key = colorKey(color);
-        if (id === null) {
-          const v = { id: next(views), name, def: withDisplay(d), position: views.length, icon: icon ?? null, color: key, template_id: null, folder_id: null };
-          views.push(v);
-          return v;
-        }
-        const v = find(views, id, 'view');
-        return Object.assign(v, { name, def: withDisplay(d), icon: icon ?? v.icon, color: key ?? v.color });
-      },
+      save: (id, name, d, icon, color) => saveView(id, name, d, icon, color, 'issue'),
+      saveProject: (id, name, d, icon, color) => saveView(id, name, d, icon, color, 'project'),
       createFromTemplate: async (templateId, name) => {
         const t = find(viewTemplates, templateId, 'view template');
-        const v = { id: next(views), name: name ?? t.name, def: withDisplay(t.def), position: views.length, icon: t.icon, color: t.color, template_id: t.id, folder_id: null };
+        const v = { id: next(views), name: name ?? t.name, entity: 'issue' as const, def: withDisplay(t.def), position: Math.max(-1, ...views.map((x) => x.position)) + 1, icon: t.icon, color: t.color, template_id: t.id, folder_id: null };
         views.push(v);
         return v;
       },
@@ -1207,7 +1237,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     'projects.create projects.update projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink templates.create templates.update templates.delete templates.apply ' +
     'labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
-    'relations.add relations.remove relation.kindsCreate relation.kindsUpdate relation.kindsDelete views.save views.delete views.reorder folders.create folders.rename folders.delete folders.place folders.placeItem views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
+    'relations.add relations.remove relation.kindsCreate relation.kindsUpdate relation.kindsDelete views.save views.saveProject views.delete views.reorder folders.create folders.rename folders.delete folders.place folders.placeItem views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
     'view.templatesCreate view.templatesUpdate view.templatesDelete pins.pin pins.unpin pins.reorder pins.set import.apply'
   ).split(' ');
   for (const name of mutating) {
@@ -1236,8 +1266,12 @@ export const projectStatusSeed: ProjectStatus[] = (
 
 const project = (id: number, slug: string, name: string): Project =>
   ({ id, slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null, status_id: 1, priority: 0, label_ids: [], properties: {} });
+const day = (n: number) => addDays(new Date().toISOString().slice(0, 10), n);
+// The last two are under way with dates (the devserver seed does the same); the first has none.
 const projects: Project[] = [
-  project(1, 'website', 'Website relaunch'), project(2, 'mobile', 'Mobile app'), project(3, 'office', 'Office move'),
+  project(1, 'website', 'Website relaunch'),
+  { ...project(2, 'mobile', 'Mobile app'), status_id: 2, priority: 3, start_date: day(-3), target_date: day(45) },
+  { ...project(3, 'office', 'Office move'), status_id: 2, priority: 2, start_date: day(-14), target_date: day(30) },
 ];
 
 const labels: Label[] = (
@@ -1249,7 +1283,6 @@ const labels: Label[] = (
 
 // Everything dated is relative to today (UTC), so the workspace always has overdue and this-week work.
 // The devserver seed (crates/devserver/src/seed.rs) builds the same data; the contract tests compare the two.
-const day = (n: number) => addDays(new Date().toISOString().slice(0, 10), n);
 const cycles: Cycle[] = [
   { id: 1, number: 1, name: 'Sprint 1', start_date: day(-6), end_date: day(7), icon: null, color: null },
   { id: 2, number: 2, name: 'Sprint 2', start_date: day(8), end_date: day(21), icon: null, color: null },
@@ -1342,8 +1375,8 @@ const templates: IssueTemplate[] = [
 ];
 
 // The views the migration seeds, with icons and the groupings the screens expect, plus one for the week ahead.
-const view = (id: number, name: string, layout: Layout, group_by: FieldRef | null, filter: Filter, icon: string): SavedView => ({
-  id, name, position: id - 1, icon: `icon:${icon}`, color: null,
+const view = (id: number, name: string, layout: Layout, group_by: FieldRef | null, filter: Filter | null, icon: string, entity: ViewEntity = 'issue'): SavedView => ({
+  id, name, entity, position: id - 1, icon: `icon:${icon}`, color: null,
   def: withDisplay({ filter, group_by, layout }), template_id: null, folder_id: null,
 });
 const category = (op: 'In' | 'Neq', value: Value): Filter => ({ Cond: { field: { Fixed: 'StatusCategory' }, op, value } });
@@ -1353,6 +1386,9 @@ const views: SavedView[] = [
   view(3, 'Timeline: all projects', 'Gantt', { Fixed: 'Project' }, category('Neq', 'completed'), 'timeline'),
   // shortcut: the 7 days are fixed when the data is made; saved filters have no relative dates yet.
   view(4, 'This week', 'List', null, { And: [category('In', ['unstarted', 'started']), { Cond: { field: { Fixed: 'DueDate' }, op: 'Lte', value: day(7) } }] }, 'calendar'),
+  // Two project views; their fields are project fields (the devserver seed makes the same two).
+  view(5, 'Project board', 'Board', { Fixed: 'Status' }, null, 'board', 'project'),
+  view(6, 'Project timeline', 'Gantt', null, { Cond: { field: { Fixed: 'StatusCategory' }, op: 'NotIn', value: ['completed', 'cancelled'] } }, 'timeline', 'project'),
 ];
 
 export const fixtures: MockSeed = {

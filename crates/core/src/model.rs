@@ -462,6 +462,14 @@ pub enum FixedField {
     CommentCount,
     /// Filter only: the issue has a relation of the given kind id(s), on either end.
     RelationKind,
+    /// An issue's project status; on a project view, use `Status`.
+    ProjectStatus,
+    /// Project views only.
+    TargetDate,
+    /// Project views only: the percent of the project's issues that are completed.
+    Progress,
+    /// Project views only: the project's issues, archived ones left out.
+    IssueCount,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -577,10 +585,28 @@ impl Default for ViewDef {
     }
 }
 
+/// What a saved view lists. A project view's fields are project fields.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum ViewEntity {
+    #[default]
+    Issue,
+    Project,
+}
+
+/// A project as a project view lists it, with its issue counts (archived issues left out).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct ProjectRow {
+    pub project: Project,
+    pub issue_total: u32,
+    pub issue_done: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct SavedView {
     pub id: ViewId,
     pub name: String,
+    pub entity: ViewEntity,
     pub def: ViewDef,
     pub position: i32,
     pub icon: Option<String>,

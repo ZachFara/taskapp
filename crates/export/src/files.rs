@@ -209,6 +209,14 @@ pub struct PropertyFile {
     pub applies_to: String,
 }
 
+fn issue_entity() -> String {
+    "issue".into()
+}
+
+fn is_issue(entity: &String) -> bool {
+    entity == "issue"
+}
+
 fn applies_to_issues() -> String {
     "issues".into()
 }
@@ -217,6 +225,9 @@ fn applies_to_issues() -> String {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct ViewFile {
     pub name: String,
+    /// `issue` or `project`; left out for an issue view, so older exports stay as they were.
+    #[serde(default = "issue_entity", skip_serializing_if = "is_issue")]
+    pub entity: String,
     pub position: i64,
     pub definition: Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
