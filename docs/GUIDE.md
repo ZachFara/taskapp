@@ -235,6 +235,25 @@ saved automatically (after a short pause). Filter changes show an "Undo" toast.
   their due date. Drag an issue from the "Issues to schedule" side list onto a day to set its due date, or onto a time
   slot to create a one-hour work block. Drag items to move or resize them.
 
+## Project views
+
+A saved view can list projects instead of issues. It opens at `/view/<id>` like any view and has the same five layouts,
+filter chips, Group, Sort and Display.
+
+- **Make one.** Views page > New view > choose Projects; the command menu "New project view"; right-click the
+  Projects heading in the sidebar > New project view. On the Projects page, "Save as view" keeps its current filters,
+  sort and grouping as a project view (a table). A project view shows in the sidebar under Projects, after the
+  projects (it has no folders), and on the Views page under "Project views". From outside: `taskapp view save NAME --def JSON --entity project`.
+- **Fields.** Name, Status, Status category, Priority, Labels, Start, Target, Progress (percent of issues done),
+  Issues (count) and custom properties that apply to projects. Issue views can also filter by "Project status".
+- **Layouts.** List: status, priority, name, then the fields, in bands when grouped. Table: the columns chosen in
+  Display. Board: a column per project status (or priority, or a select property, from Group); dragging a card to
+  another column sets that field, one undo step. Timeline: a bar from start to target date per project, milestones as
+  diamonds and a today line; drag a bar or its ends to change the dates. Calendar: a month grid with a chip on each
+  project's start and target day. Clicking a row, card, bar label or chip opens the project.
+- **Display.** Which fields show, compact rows, empty groups and "Show archived" (archived projects are hidden by default).
+- **Not available.** Templates and Insights are for issue views; a project's created and updated times are not fields yet.
+
 ## Projects, milestones, cycles
 
 - **Projects.** Projects page > New project (name, slug). Settings > Projects also adds and deletes. A project page
@@ -684,6 +703,8 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `view.duplicate` | Save as new view | (none) | Save as new view. |
 | `view.group.open` | Group by… | (none) | Open Group by. |
 | `view.new` | New view | (none) | New view. |
+| `view.newProject` | New project view | (none) | New view that lists projects. |
+| `projects.saveAsView` | Save projects as view | (none) | On the Projects page: save its filters, sort and grouping as a project view. |
 | `view.pin` | Pin or unpin view | (none) | Pin or unpin the view. |
 | `view.rename` | Rename view | (none) | Rename the view. |
 | `view.resetToTemplate` | Reset to template | (none) | Put the view back to its template. |

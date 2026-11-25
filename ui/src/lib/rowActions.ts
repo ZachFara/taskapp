@@ -1,6 +1,6 @@
 import { api } from './api';
 import { folders, refreshAll } from './stores.svelte';
-import type { FolderSection, PinKind, Project } from './bindings';
+import type { FolderSection, PinKind, Project, ViewEntity } from './bindings';
 import { templates } from '../components/display/templatesApi';
 
 /** What a row action acts on. `id` is the entity's own id (a project's id, not its slug). */
@@ -54,10 +54,13 @@ export async function remove(t: Target) {
   changed();
 }
 
+/** The save call for a new view of this entity: a project view needs its own, so it lists projects. */
+export const saveNew = (entity: ViewEntity) => (entity === 'project' ? api.views.saveProject : api.views.save);
+
 /** Copies a saved view under "<name> copy", as the view toolbar does. */
 export async function duplicate(t: Target) {
   const v = (await api.views.list()).find((x) => x.id === t.id);
-  if (v) await api.views.save(null, `${v.name} copy`, v.def, v.icon, v.color);
+  if (v) await saveNew(v.entity)(null, `${v.name} copy`, v.def, v.icon, v.color);
   changed();
 }
 

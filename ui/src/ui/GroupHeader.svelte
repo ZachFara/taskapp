@@ -38,9 +38,11 @@
       </button>
     {/snippet}
   </Tooltip>
-  <Tooltip label="Add issue to group" shortcut={shortcutFor('group.add')}>
-    {#snippet children(tp)}<button {...tp} class="add" type="button" aria-label={`Add to ${name}`} onclick={onadd}><Icon name="plus" /></button>{/snippet}
-  </Tooltip>
+  {#if onadd}
+    <Tooltip label="Add issue to group" shortcut={shortcutFor('group.add')}>
+      {#snippet children(tp)}<button {...tp} class="add" type="button" aria-label={`Add to ${name}`} onclick={onadd}><Icon name="plus" /></button>{/snippet}
+    </Tooltip>
+  {/if}
 </div>
 
 <style>

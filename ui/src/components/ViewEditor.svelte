@@ -3,7 +3,7 @@
   // change as a partial ViewDef; the page decides when to save.
   import { onMount, untrack, type Snippet } from 'svelte';
   import { api } from '../lib/api';
-  import type { FieldRef, FixedField, ViewDef } from '../lib/bindings';
+  import type { FieldRef, FixedField, ViewDef, ViewEntity } from '../lib/bindings';
   import Button from '../ui/Button.svelte';
   import IconButton from '../ui/IconButton.svelte';
   import Menu from '../ui/Menu.svelte';
@@ -20,12 +20,15 @@
   import { fixedOn } from '../lib/fields.svelte';
   import { buildFilter, newChip, splitFilter, type Chip } from './filters/model';
 
-  let { def, onchange, clearSignal = 0 }: { def: ViewDef; onchange: (patch: Partial<ViewDef>) => void; clearSignal?: number } = $props();
+  let { def, onchange, clearSignal = 0, entity = 'issue' }: { def: ViewDef; onchange: (patch: Partial<ViewDef>) => void; clearSignal?: number; entity?: ViewEntity } = $props();
+  const project = untrack(() => entity === 'project');
+  // The issue-field switches in Settings do not apply to projects.
+  const on = (f: FixedField | undefined) => project || fixedOn(f);
 
   const start = untrack(() => splitFilter(def.filter));
   let chips = $state<Chip[]>(start.chips);
   let advanced = $state(start.advanced);
-  let data = $state<Data>({ statuses: [], projects: [], defs: [], cycles: [], labels: [], relationKinds: [] });
+  let data = $state<Data>({ statuses: [], projects: [], defs: [], cycles: [], labels: [], relationKinds: [], projectStatuses: [] });
   let openId = $state<number | null>(null);
   let groupOpen = $state(false);
   let sortOpen = $state(false);
@@ -41,12 +44,12 @@
     return () => on.forEach(([n, f]) => removeEventListener(`command:${n}`, f));
   });
   onMount(async () => {
-    const [statuses, projects, defs, cycles, labels, relationKinds] = await Promise.all([
-      api.statuses.list(), api.projects.list(), api.properties.listDefs(), api.cycles.list(), api.labels.list(), api.relation.kindsList(),
+    const [statuses, projects, defs, cycles, labels, relationKinds, projectStatuses] = await Promise.all([
+      api.statuses.list(), api.projects.list(), api.properties.listDefs(), api.cycles.list(), api.labels.list(), api.relation.kindsList(), api.project.statusesList(),
     ]);
-    data = { statuses, projects, defs: defs.filter((d) => d.applies_to !== 'Projects'), cycles, labels, relationKinds };
+    data = { statuses, projects, defs: defs.filter((d) => (project ? d.applies_to !== 'Issues' : d.applies_to !== 'Projects')), cycles, labels, relationKinds, projectStatuses };
   });
-  const lookup = $derived(makeLookup(data));
+  const lookup = $derived(makeLookup(data, entity));
 
   // "Clear filters" from the page empties the chips too.
   let seen = untrack(() => clearSignal);
@@ -58,9 +61,12 @@
   });
 
   const commit = () => onchange({ filter: buildFilter($state.snapshot(advanced), $state.snapshot(chips)) });
-  const quick: FixedField[] = ['Status', 'StatusCategory', 'Project', 'Label', 'Priority', 'DueDate', 'RelationKind'];
+  // A project view's own field lists: the fields of a project, not of an issue.
+  const quick: FixedField[] = project
+    ? ['Status', 'StatusCategory', 'Priority', 'Label', 'StartDate', 'TargetDate', 'Progress', 'IssueCount']
+    : ['Status', 'StatusCategory', 'Project', 'ProjectStatus', 'Label', 'Priority', 'DueDate', 'RelationKind'];
   const addable = $derived<{ field: FieldRef; name: string }[]>([
-    ...quick.filter(fixedOn).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
+    ...quick.filter(on).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
     ...data.defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name })),
   ]);
   function add(field: FieldRef) {
@@ -80,11 +86,14 @@
     commit();
   };
 
+  const plain: FixedField[] = project ? ['Title', 'Status', 'StatusCategory', 'Priority', 'StartDate', 'TargetDate', 'Progress', 'IssueCount'] : ['Status', 'StatusCategory', 'Priority', 'Project', 'Cycle', 'DueDate', 'Points', 'Title'];
   const allFields = $derived([
-    ...(['Status', 'StatusCategory', 'Priority', 'Project', 'Cycle', 'DueDate', 'Points', 'Title'] as FixedField[]).filter(fixedOn).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
+    ...plain.filter(on).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
     ...data.defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name })),
   ]);
   const fieldItems = $derived(allFields.map((f) => ({ value: fieldKey(f.field), label: f.name })));
+  // Only these can group a project view: a status, the priority, or a select property.
+  const groupItems = $derived(project ? fieldItems.filter((f) => ['F:Status', 'F:StatusCategory', 'F:Priority'].includes(f.value) || data.defs.some((d) => d.kind === 'Select' && f.value === `P:${d.key}`)) : fieldItems);
   const sort = $derived(def.sorts[0] ?? null);
   const setGroup = (k: string) => onchange({ group_by: k ? parseField(k) : null });
   const setSort = (k: string) => onchange({ sorts: k ? [{ field: parseField(k), descending: sort?.descending ?? false }] : [] });
@@ -97,7 +106,7 @@
   </Tooltip>
 {/snippet}
 {#snippet addBtn()}<Button icon="filter">Add filter</Button>{/snippet}
-{#snippet groupBtn()}<Button icon="group">Group{def.group_by && fixedOn(def.group_by.Fixed) ? `: ${lookup.name(def.group_by)}` : ''}</Button>{/snippet}
+{#snippet groupBtn()}<Button icon="group">Group{def.group_by && on(def.group_by.Fixed) ? `: ${lookup.name(def.group_by)}` : ''}</Button>{/snippet}
 {#snippet sortBtn()}<Button icon="sort">Sort{sort ? `: ${lookup.name(sort.field)}` : ''}</Button>{/snippet}
 {#snippet displayBtn()}<Button icon="eye">Display</Button>{/snippet}
 
@@ -120,7 +129,7 @@
     {#if def.layout !== 'Calendar'}
     <Popover bind:open={groupOpen}>
       {#snippet trigger(props)}<span {...props} class="trig">{@render tip('Group', 'view.group.open', groupBtn)}</span>{/snippet}
-      <OptionList label="Group by" none="No grouping" value={def.group_by ? fieldKey(def.group_by) : null} options={fieldItems.map((f) => ({ id: f.value, name: f.label }))} onpick={(id) => { setGroup(id === null ? '' : String(id)); groupOpen = false; }} />
+      <OptionList label="Group by" none="No grouping" value={def.group_by ? fieldKey(def.group_by) : null} options={groupItems.map((f) => ({ id: f.value, name: f.label }))} onpick={(id) => { setGroup(id === null ? '' : String(id)); groupOpen = false; }} />
     </Popover>
     {/if}
     <Popover bind:open={sortOpen}>
@@ -132,7 +141,7 @@
     </Popover>
     <Popover bind:open={displayOpen}>
       {#snippet trigger(props)}<span {...props} class="trig">{@render tip('Display', 'view.display.open', displayBtn)}</span>{/snippet}
-      <DisplayPanel {def} {onchange} />
+      <DisplayPanel {def} {onchange} {entity} />
     </Popover>
   </div>
 </div>

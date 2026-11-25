@@ -2,6 +2,7 @@
   import FieldValue from '../display/FieldValue.svelte';
   import { emptyCtx, loadCtx, type Ctx } from '../display/types';
   import { untrack } from 'svelte';
+  import { navigate } from '../../app/routes';
   import { api } from '../../lib/api';
   import type { Issue, IssuePatch, Milestone, Project, Relation, Reschedule, SavedView, Status, ViewDef } from '../../lib/bindings';
   import { shortcutFor } from '../../lib/commands/registry';
@@ -18,7 +19,8 @@
   // The projects route mounts this without a view, which selects projects mode. `today` is a prop so tests are not clock-bound.
   let {
     view = null,
-    mode = view ? 'issues' : 'projects',
+    // A project view lays out its own projects, not issues.
+    mode = view && view.entity !== 'project' ? 'issues' : 'projects',
     today = localDay(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone),
     embedded = view !== null,
   }: { view?: SavedView | null; mode?: 'issues' | 'projects'; today?: string; embedded?: boolean } = $props();
@@ -59,7 +61,12 @@
 
   async function load() {
     const id = view?.id ?? null;
-    const [issues, projects, statuses] = await Promise.all([api.views.query(mode === 'issues' && view ? view.def : ALL), api.projects.list(), api.statuses.list()]);
+    const own = view?.entity === 'project';
+    const [issues, projects, statuses] = await Promise.all([
+      own ? Promise.resolve([] as Issue[]) : api.views.query(mode === 'issues' && view ? view.def : ALL),
+      own ? api.views.queryProjects(view!.def).then((r) => r.map((x) => x.project)) : api.projects.list(),
+      api.statuses.list(),
+    ]);
     const live = mode === 'issues' && id !== null;
     const [bars, critical, rels] = live
       ? await Promise.all([
@@ -71,7 +78,7 @@
       : [[], [], []];
     const shown = mode === 'issues' ? new Set(issues.map((i) => i.project_id)) : new Set(projects.map((p) => p.id));
     const milestones: Milestone[] = (await Promise.all(projects.filter((p) => shown.has(p.id)).map((p) => api.projects.listMilestones(p.id)))).flat();
-    ctx = await loadCtx(view?.def);
+    ctx = own ? emptyCtx : await loadCtx(view?.def);
     allIssues = issues;
     projectList = projects;
     // Each relation comes back from both of its issues.
@@ -239,7 +246,7 @@
           {#each rows as r (r.id)}
             {@const p = projectOf(r.projectId)}
             <div class="line" data-kind={r.kind} role="listitem" data-issue={r.issueId}>
-              <div class="label" data-kind={r.kind} data-label={r.id} style="padding-left:calc(var(--s-6) + {r.indent} * var(--s-7))">
+              <div class="label" data-kind={r.kind} data-label={r.id} data-slug={view?.entity === 'project' ? p?.slug : undefined} onclick={() => view?.entity === 'project' && p && navigate(`/project/${p.slug}`)} style="padding-left:calc(var(--s-6) + {r.indent} * var(--s-7))">
                 {#if r.kind === 'group' && p}<EntityIcon icon={p.icon} color={p.color} size={14} />
                 {:else if r.category}<StatusGlyph category={r.category} icon={r.icon} color={r.color} size={14} />
                 {:else if r.kind === 'milestone'}<span class="stone" aria-hidden="true"></span>{/if}
@@ -292,7 +299,7 @@
       </div>
     </div>
     {#if loaded && !hasBars}
-      <div class="empty-layer"><EmptyState title="Nothing scheduled" hint="Give issues a start date and a due date, or drag one from the Unscheduled band onto a day." /></div>
+      <div class="empty-layer">{#if mode === 'projects'}<EmptyState title="Nothing scheduled" hint="Give projects a start date and a target date." />{:else}<EmptyState title="Nothing scheduled" hint="Give issues a start date and a due date, or drag one from the Unscheduled band onto a day." />{/if}</div>
     {/if}
   </div>
 

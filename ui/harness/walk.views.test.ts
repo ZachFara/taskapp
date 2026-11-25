@@ -345,4 +345,19 @@ describe('walk project', { timeout: 25_000 }, () => {
     await page.getByRole('button', { name: 'Rename', exact: true }).click();
     await pw(page.locator('.toast')).toContainText('Renamed view to Renamed once');
   });
+
+  it('PV-1 a project view as a board: drag a project to another status, then the timeline', async () => {
+    await open('/views');
+    await page.getByRole('button', { name: 'New view' }).first().click();
+    await page.getByRole('tab', { name: 'Projects' }).click();
+    await page.getByRole('button', { name: 'Create view' }).click();
+    await page.waitForURL(/\/view\/\d+/);
+    await page.getByRole('tab', { name: 'Board' }).click();
+    const card = page.locator('[data-slug="website"]');
+    await pw(card).toBeVisible();
+    await card.dragTo(page.locator('[data-column="Paused"]'));
+    await pw(page.locator('[data-column="Paused"] [data-slug="website"]')).toBeVisible();
+    await page.getByRole('tab', { name: 'Timeline' }).click();
+    await pw(page.locator('[data-row^="project-"]').first()).toBeVisible();
+  });
 });
