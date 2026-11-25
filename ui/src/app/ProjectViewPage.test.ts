@@ -46,24 +46,24 @@ describe('a project view page', () => {
 });
 
 describe('where project views show', () => {
-  it('the sidebar lists them under Projects, not under Views', async () => {
+  it('the sidebar lists them among the views, not under Projects', async () => {
     setApi(createMockApi(seed()));
     const live = mount(Sidebar, { target: document.body });
-    await vi.waitFor(() => expect(document.querySelector('[data-project-view="2"]')).not.toBeNull());
-    const under = (label: string) => [...document.querySelectorAll(`[aria-label="${label}"] a`)].map((a) => a.textContent);
-    expect(under('Projects')).toContain('Projects one');
-    expect(under('Views')).toEqual(['Issues one']);
+    const under = (label: string) => [...document.querySelectorAll(`[aria-label="${label}"] a`)].map((a) => a.textContent?.trim());
+    await vi.waitFor(() => expect(under('Views')).toEqual(expect.arrayContaining(['Issues one', 'Projects one'])));
+    expect(under('Projects')).not.toContain('Projects one');
     unmount(live);
   });
 
-  it('the Views page groups them as Project views', async () => {
+  it('the Views page lists both kinds and its Project views tab shows only project views', async () => {
     setApi(createMockApi(seed()));
     const live = mount(ViewsPage, { target: document.body });
-    await vi.waitFor(() => expect(document.querySelector('[data-section="project-views"]')).not.toBeNull());
-    const list = document.querySelector('[data-section="project-views"]')!.nextElementSibling!;
-    expect(list.textContent).toContain('Projects one');
-    expect(list.textContent).not.toContain('Issues one');
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Projects one'));
+    expect(document.body.textContent).toContain('Issues one');
+    [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find((t) => t.textContent?.trim() === 'Project views')!.click();
     flushSync();
+    await vi.waitFor(() => expect(document.body.textContent).not.toContain('Issues one'));
+    expect(document.body.textContent).toContain('Projects one');
     unmount(live);
   });
 

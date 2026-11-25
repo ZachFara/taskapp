@@ -192,8 +192,8 @@ describe('issue panel', () => {
     press('k', { metaKey: true });
     await settle();
     press('Escape', {}, q('[role=dialog] input')!);
-    await settle();
-    expect(q('[role=dialog]')).toBeNull();
+    // The menu animates out before it unmounts.
+    await vi.waitFor(() => expect(q('[role=dialog]')).toBeNull());
     expect(q('aside.panel')).not.toBeNull();
   });
 
