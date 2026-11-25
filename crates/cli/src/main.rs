@@ -188,6 +188,12 @@ enum IssueCmd {
         /// Remove the points.
         #[arg(long)]
         clear_points: bool,
+        /// Start date, YYYY-MM-DD.
+        #[arg(long)]
+        start: Option<String>,
+        /// Estimate in minutes.
+        #[arg(long)]
+        estimate: Option<u32>,
     },
     Get {
         key: String,

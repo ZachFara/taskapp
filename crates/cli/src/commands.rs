@@ -150,6 +150,8 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         clear_due,
         points,
         clear_points,
+        start,
+        estimate,
     } = cmd
     else {
         unreachable!("issue_update is only called with Update");
@@ -174,6 +176,8 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         } else {
             points.map(Some)
         },
+        start_date: start.as_deref().map(date).transpose()?.map(Some),
+        estimate_minutes: estimate.map(Some),
         ..IssuePatch::default()
     };
     val(issues::update(db, id, patch, SRC).await?)

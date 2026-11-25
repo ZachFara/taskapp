@@ -647,3 +647,23 @@ fn a_label_is_put_on_an_issue_by_its_name() {
             .success()
     );
 }
+
+#[test]
+fn update_sets_the_start_date_and_estimate() {
+    let (_d, db) = fresh();
+    run_json(&db, &["add", "Plan it"]);
+    let issue = run_json(
+        &db,
+        &[
+            "issue",
+            "update",
+            "ABC-1",
+            "--start",
+            "2026-12-01",
+            "--estimate",
+            "960",
+        ],
+    );
+    assert_eq!(issue["start_date"], "2026-12-01");
+    assert_eq!(issue["estimate_minutes"], 960);
+}
