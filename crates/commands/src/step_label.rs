@@ -92,7 +92,7 @@ pub fn step_label(name: &str, args: &Value, out: Option<&Value>) -> String {
         "relation_kinds_create" => "Created relation kind".into(),
         "relation_kinds_update" => "Edited relation kind".into(),
         "relation_kinds_delete" => "Deleted relation kind".into(),
-        "views_save" => {
+        "views_save" | "views_save_project" => {
             let view = args["name"].as_str().unwrap_or_default();
             if args["id"].is_null() {
                 format!("Saved view {view}")

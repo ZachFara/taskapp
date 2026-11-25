@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../lib/api';
-  import type { Layout, Placement, SavedView, ViewFolder } from '../lib/bindings';
+  import type { Layout, Placement, SavedView, ViewEntity, ViewFolder } from '../lib/bindings';
   import { buildRows } from '../lib/folderTree';
   import { navigate } from '../app/routes';
   import NewViewDialog from './display/NewViewDialog.svelte';
@@ -32,11 +32,14 @@
   let folders = $state<ViewFolder[]>([]);
   let places = $state<Placement[]>([]);
   // Folders first, nested, then each folder's views; the views of no folder come last.
-  const tree = $derived(buildRows('view', folders, places, views, { placed: true }));
+  const tree = $derived(buildRows('view', folders, places, views.filter((v) => v.entity !== 'project'), { placed: true }));
+  // Project views have no folders: they list in the Projects section.
+  const projectViews = $derived(views.filter((v) => v.entity === 'project'));
   const firstLoose = $derived(tree.findIndex((r) => r.type === 'item' && r.depth === 0));
   let pinned = $state<Set<string>>(new Set());
   let loaded = $state(false);
   let creating = $state(false);
+  let newEntity = $state<ViewEntity>('issue');
 
   // Templates are null until the backend exposes them; then the section is hidden.
   let tpls = $state<ViewTemplate[] | null>(null);
@@ -88,11 +91,14 @@
   onMount(() => {
     load();
     // The command menu's "New view" lands here from another route (see defs/create/view.new.ts).
-    const open = () => (creating = true);
+    const open = () => ((newEntity = 'issue'), (creating = true));
+    const openProject = () => ((newEntity = 'project'), (creating = true));
     addEventListener('command:view.new', open);
+    addEventListener('command:view.newProject', openProject);
     addEventListener('rows:changed', load);
     return () => {
       removeEventListener('command:view.new', open);
+      removeEventListener('command:view.newProject', openProject);
       removeEventListener('rows:changed', load);
     };
   });
@@ -100,7 +106,7 @@
 
 {#snippet viewRow(v: SavedView)}
   <li class="row" data-view-id={v.id}>
-    <RowActions label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, pinned.has(`/view/${v.id}`))}>
+    <RowActions label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, pinned.has(`/view/${v.id}`), v.entity !== 'project')}>
       <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? 'icon:layers', color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
       <span class="grow">
         <ListRow onpick={() => navigate(`/view/${v.id}`)}>
@@ -115,7 +121,7 @@
 
 <PageHeader title="Views" icon="icon:layers">
   {#snippet actions()}
-    <Button variant="primary" icon="plus" onclick={() => (creating = true)}>New view</Button>
+    <Button variant="primary" icon="plus" onclick={() => ((newEntity = 'issue'), (creating = true))}>New view</Button>
   {/snippet}
 </PageHeader>
 
@@ -133,6 +139,11 @@
         <ul class="rows" style:margin-left={`calc(${r.depth} * var(--s-8))`}>{@render viewRow(r.item)}</ul>
       {/if}
     {/each}
+  {/if}
+
+  {#if projectViews.length}
+    <h2 class="section" data-section="project-views">Project views</h2>
+    <ul class="rows">{#each projectViews as v (v.id)}{@render viewRow(v)}{/each}</ul>
   {/if}
 
   {#if tpls}
@@ -162,7 +173,7 @@
   {/if}
 </main>
 
-<NewViewDialog bind:open={creating} />
+<NewViewDialog bind:open={creating} bind:entity={newEntity} />
 
 
 <Dialog bind:open={editOpen} title={editLayout ? 'Edit template' : 'Rename template'}>

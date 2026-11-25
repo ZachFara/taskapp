@@ -385,6 +385,7 @@ async fn views(db: &Db) -> Result<Vec<ViewFile>> {
     type Row = (
         String,
         String,
+        String,
         i64,
         Option<String>,
         Option<String>,
@@ -392,15 +393,16 @@ async fn views(db: &Db) -> Result<Vec<ViewFile>> {
         Option<i64>,
     );
     let rows = sqlx::query_as::<_, Row>(
-        "SELECT name, definition, position, icon, color, template_id, folder_id FROM views ORDER BY position, id",
+        "SELECT name, entity, definition, position, icon, color, template_id, folder_id FROM views ORDER BY position, id",
     )
     .fetch_all(&db.pool)
     .await?;
     rows.into_iter()
         .map(
-            |(name, definition, position, icon, color, template_id, folder_id)| {
+            |(name, entity, definition, position, icon, color, template_id, folder_id)| {
                 Ok(ViewFile {
                     name,
+                    entity,
                     position,
                     definition: serde_json::from_str(&definition).map_err(invalid)?,
                     icon,

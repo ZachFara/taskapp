@@ -4,7 +4,7 @@
   import type { Label, Placement, Project, ProjectStatus, PropertyDef, ViewFolder } from '../lib/bindings';
   import { buildRows } from '../lib/folderTree';
   import Icon from '../ui/Icon.svelte';
-  import { arrange, glyphCategory, noFilters, type Group, type Sort } from '../lib/projectFields';
+  import { arrange, glyphCategory, noFilters, viewDefOf, type Group, type Sort } from '../lib/projectFields';
   import { PRIORITIES, priorityGlyph } from '../lib/priority';
   import Button from '../ui/Button.svelte';
   import Dialog from '../ui/Dialog.svelte';
@@ -14,6 +14,7 @@
   import { rowActs, rowUi } from '../lib/rowUi.svelte';
   import { patch } from '../lib/rowActions';
   import { navigate } from '../app/routes';
+  import { refreshAll } from '../lib/stores.svelte';
   import { dayText } from './views/dates';
   import PageHeader from '../ui/PageHeader.svelte';
   import Pill from '../ui/Pill.svelte';
@@ -49,10 +50,18 @@
   const shown = (v: unknown) => (v === undefined || v === null || v === '' ? '' : Array.isArray(v) ? v.join(', ') : v === true ? 'Yes' : v === false ? 'No' : String(v));
   const any = (label: string) => ({ value: '', label });
 
+  // A project view with the page's current filters, sort and grouping; it opens as a table.
+  async function saveAsView() {
+    const v = await api.views.saveProject(null, filtered ? 'Projects view' : 'All projects', viewDefOf(sort, group, { ...noFilters, status: num(fStatus), priority: num(fPriority), label: num(fLabel) }), null, null);
+    await refreshAll();
+    navigate(`/view/${v.id}`);
+  }
+
   $effect(() => {
     const open = () => (creating = true);
     addEventListener('command:project.new', open);
-    return () => removeEventListener('command:project.new', open);
+    addEventListener('command:projects.saveAsView', saveAsView);
+    return () => (removeEventListener('command:project.new', open), removeEventListener('command:projects.saveAsView', saveAsView));
   });
 
   async function load() {
@@ -85,6 +94,7 @@
 <PageHeader title="Projects" icon="icon:project">
   {#snippet actions()}
     <a class="timeline" href="/projects/timeline">All projects timeline</a>
+    <Button icon="layers" onclick={saveAsView}>Save as view</Button>
     <Button variant="primary" icon="plus" onclick={() => (creating = true)}>New project</Button>
   {/snippet}
 </PageHeader>

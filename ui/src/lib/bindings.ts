@@ -564,7 +564,21 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	viewsQueryProjects: (def: ViewDef, options?: InvokeOptions) => __TAURI_INVOKE<ProjectRow[]>("views_query_projects", { def }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	viewsSave: (id: ViewId | null, name: string, def: ViewDef, icon: string | null, color: string | null, options?: InvokeOptions) => __TAURI_INVOKE<SavedView>("views_save", { id, name, def, icon, color }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewsSaveProject: (id: ViewId | null, name: string, def: ViewDef, icon: string | null, color: string | null, options?: InvokeOptions) => __TAURI_INVOKE<SavedView>("views_save_project", { id, name, def, icon, color }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -1055,7 +1069,15 @@ export type Filter = ({ And: Filter[] }) & { Cond?: never; Not?: never; Or?: nev
 
 export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "Points" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount" | 
 /**  Filter only: the issue has a relation of the given kind id(s), on either end. */
-"RelationKind";
+"RelationKind" | 
+/**  An issue's project status; on a project view, use `Status`. */
+"ProjectStatus" | 
+/**  Project views only. */
+"TargetDate" | 
+/**  Project views only: the percent of the project's issues that are completed. */
+"Progress" | 
+/**  Project views only: the project's issues, archived ones left out. */
+"IssueCount";
 
 /**  The sidebar section a folder belongs to; its items live in the table of the same name. */
 export type FolderSection = "pin" | "view" | "project" | "cycle";
@@ -1298,6 +1320,13 @@ export type Project = {
 
 export type ProjectId = number;
 
+/**  A project as a project view lists it, with its issue counts (archived issues left out). */
+export type ProjectRow = {
+	project: Project,
+	issue_total: number,
+	issue_done: number,
+};
+
 export type ProjectStatus = {
 	id: ProjectStatusId,
 	name: string,
@@ -1367,6 +1396,7 @@ export type ResolvedPin = {
 export type SavedView = {
 	id: ViewId,
 	name: string,
+	entity: ViewEntity,
 	def: ViewDef,
 	position: number,
 	icon: string | null,
@@ -1495,6 +1525,9 @@ export type ViewDef = {
 	card_fields?: FieldRef[],
 	show_weekends?: boolean,
 };
+
+/**  What a saved view lists. A project view's fields are project fields. */
+export type ViewEntity = "issue" | "project";
 
 /**  A sidebar folder. It holds items of its own section and folders of that section, nested by `parent_id`. */
 export type ViewFolder = {

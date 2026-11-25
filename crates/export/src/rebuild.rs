@@ -409,9 +409,10 @@ async fn restore_views(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         // Parsing here rejects a definition the app could not run.
         serde_json::from_value::<ViewDef>(v.definition.clone()).map_err(invalid)?;
         sqlx::query(
-            "INSERT INTO views (name, definition, position, icon, color, template_id, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO views (name, entity, definition, position, icon, color, template_id, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(v.name)
+        .bind(v.entity)
         .bind(v.definition.to_string())
         .bind(v.position)
         .bind(v.icon)

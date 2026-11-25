@@ -86,7 +86,9 @@
   // Each section is a tree: folders (nested) and the items placed in them.
   const tree = <T extends { id: number }>(section: FolderSection, items: T[]) => buildRows(section, folders, placements, items, { shut, placed: true });
   const pinRows = $derived(tree('pin', pins.map((r) => ({ id: r.pin.id, r }))));
-  const viewRows = $derived(tree('view', views));
+  const viewRows = $derived(tree('view', views.filter((v) => v.entity !== 'project')));
+  // Project views list under Projects, after the projects; they are not placed in folders.
+  const projectViews = $derived(views.filter((v) => v.entity === 'project'));
   const projectRows = $derived(tree('project', projects));
   const cycleRows = $derived(tree('cycle', cycles));
 
@@ -113,6 +115,7 @@
 </script>
 
 {#snippet head(id: string, title: string, count: number, section: FolderSection)}
+  {#snippet bar()}
   <div class="row">
     <Tooltip label={`${closed[id] ? 'Expand' : 'Collapse'} ${title}`}>
       {#snippet children(props)}
@@ -128,8 +131,17 @@
         <button {...props} class="aff" type="button" aria-label={`${title} menu`}><Icon name="more" size={12} /></button>
       {/snippet}
       <MenuItem label={labelFor('folder.new') ?? 'New folder'} icon="folder" onSelect={() => runRow('folder.new', { section })} />
+      {#if section === 'project'}<MenuItem label={labelFor('view.newProject') ?? 'New project view'} icon="layers" onSelect={() => runRow('view.newProject', undefined)} />{/if}
     </Menu>
   </div>
+  {/snippet}
+  {#if section === 'project'}
+    <!-- Right-click on the Projects header makes a project view. -->
+    <ContextMenu>
+      {#snippet area()}{@render bar()}{/snippet}
+      <MenuItem label={labelFor('view.newProject') ?? 'New project view'} icon="layers" onSelect={() => runRow('view.newProject', undefined)} />
+    </ContextMenu>
+  {:else}{@render bar()}{/if}
 {/snippet}
 
 {#snippet navLink(href: string, icon: string, text: string, id: string, on: boolean)}
@@ -150,12 +162,13 @@
 {/snippet}
 
 <!-- One section's rows. `leaf` draws an item's row; the blank space below takes the right-click menu and the drop to the top level. -->
-{#snippet rowsOf(section: FolderSection, rows: TreeRow<any>[], leaf: Snippet<[any, TreeRow<any>]>, lead?: Snippet)}
+{#snippet rowsOf(section: FolderSection, rows: TreeRow<any>[], leaf: Snippet<[any, TreeRow<any>]>, lead?: Snippet, tail?: Snippet)}
   <ul>
     {@render lead?.()}
     {#each rows as r (r.type === 'folder' ? `f${r.folder.id}` : `i${r.item.id}`)}
       {#if r.type === 'folder'}{@render folderRow(r, section)}{:else}{@render leaf(r.item, r)}{/if}
     {/each}
+    {@render tail?.()}
   </ul>
   <ContextMenu>
     {#snippet area()}
@@ -187,6 +200,18 @@
       <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{v.name}</span></a>
     </RowActions>
   </li>
+{/snippet}
+
+{#snippet projectViewRows()}
+  {#each projectViews as v (v.id)}
+    {@const href = `/view/${v.id}`}
+    <li class="row" data-project-view={v.id}>
+      <RowActions button={false} label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, isPinned('View', String(v.id)), false)}>
+        <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`, color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
+        <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{v.name}</span></a>
+      </RowActions>
+    </li>
+  {/each}
 {/snippet}
 
 {#snippet projectLeaf(p: Project, row: TreeRow<unknown>)}
@@ -232,7 +257,7 @@
 
   <section aria-label="Projects">
     {@render head('projects', 'Projects', projects.length, 'project')}
-    <Collapse open={!closed.projects}>{@render rowsOf('project', projectRows, projectLeaf, allProjects)}</Collapse>
+    <Collapse open={!closed.projects}>{@render rowsOf('project', projectRows, projectLeaf, allProjects, projectViewRows)}</Collapse>
   </section>
 
   <section aria-label="Cycles">

@@ -36,7 +36,8 @@ export function stepLabel(name: string, args: unknown[], out: unknown): string {
     case 'relation_kinds_create': return 'Created relation kind';
     case 'relation_kinds_update': return 'Edited relation kind';
     case 'relation_kinds_delete': return 'Deleted relation kind';
-    case 'views_save': return args[0] === null || args[0] === undefined ? `Saved view ${args[1]}` : `Changed display of ${args[1]}`;
+    case 'views_save':
+    case 'views_save_project': return args[0] === null || args[0] === undefined ? `Saved view ${args[1]}` : `Changed display of ${args[1]}`;
     default: return generic(name);
   }
 }

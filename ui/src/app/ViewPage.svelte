@@ -13,6 +13,11 @@
   import GanttView from '../components/views/GanttView.svelte';
   import ListView from '../components/views/ListView.svelte';
   import TableView from '../components/views/TableView.svelte';
+  import ProjectBoardView from '../components/views/ProjectBoardView.svelte';
+  import ProjectCalendarView from '../components/views/ProjectCalendarView.svelte';
+  import ProjectListView from '../components/views/ProjectListView.svelte';
+  import ProjectTableView from '../components/views/ProjectTableView.svelte';
+  import { saveNew } from '../lib/rowActions';
   import Button from '../ui/Button.svelte';
   import Dialog from '../ui/Dialog.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
@@ -37,6 +42,10 @@
   let { params }: { params: { id: string; layout?: string } } = $props();
   const byLayout: Record<Layout, Component<any>> = {
     List: ListView, Table: TableView, Board: BoardView, Gantt: GanttView, Calendar: CalendarView,
+  };
+  // A project view lays out projects: the same five layouts, written for them (the timeline is the issue one in project mode).
+  const projectLayouts: Record<Layout, Component<any>> = {
+    List: ProjectListView, Table: ProjectTableView, Board: ProjectBoardView, Gantt: GanttView, Calendar: ProjectCalendarView,
   };
   const layoutTabs = $derived([
     { id: 'List', label: 'List', icon: 'list', cmd: 'list' }, { id: 'Board', label: 'Board', icon: 'board', cmd: 'board' },
@@ -89,6 +98,7 @@
     load();
   });
 
+  const isProject = $derived(view?.entity === 'project');
   const layout = $derived<Layout>((override as Layout) ?? def?.layout ?? 'List');
   // Commands scope their keys by layout; the timeline does not announce itself, and tabs can change without a route change.
   $effect(() => selection.setLayout(({ List: 'list', Table: 'table', Board: 'board', Gantt: 'timeline', Calendar: 'calendar' } as const)[layout]));
@@ -153,7 +163,7 @@
   }
   async function saveAsNew() {
     if (!view || !def) return;
-    const v = await api.views.save(null, `${name} copy`, { ...def, layout }, view.icon, view.color);
+    const v = await saveNew(view.entity)(null, `${name} copy`, { ...def, layout }, view.icon, view.color);
     await refreshAll();
     navigate(`/view/${v.id}`);
   }
@@ -182,7 +192,7 @@
   // Count for the empty state; the layout components run the same query for their own rows.
   $effect(() => {
     const d = shown?.def;
-    if (d) api.views.query(d).then((r) => (rows = r.length));
+    if (d) (isProject ? api.views.queryProjects(d) : api.views.query(d)).then((r) => (rows = r.length));
   });
 
   onMount(() => {
@@ -222,7 +232,7 @@
     closeQuick();
     change({ filter: null });
   }
-  const Shown = $derived(byLayout[layout]);
+  const Shown = $derived((isProject ? projectLayouts : byLayout)[layout]);
 </script>
 
 {#if live}
@@ -231,7 +241,7 @@
     <PageHeader title={name} icon={view?.icon ?? 'icon:layers'} color={view?.color ?? undefined}>
       {#snippet iconEdit()}<IconColorPicker label={`Icon and colour of ${name}`} value={{ icon: view?.icon ?? 'icon:layers', color: view?.color ?? null }} onchange={changeLook} bind:open={iconOpen} />{/snippet}
       {#snippet tabs()}<Tabs tabs={layoutTabs} bind:value={() => layout, setLayout} />{/snippet}
-      {#snippet filters()}{#key `${live.id}:${editorKey}`}<ViewEditor def={live.def} onchange={change} {clearSignal} />{/key}{/snippet}
+      {#snippet filters()}{#key `${live.id}:${editorKey}`}<ViewEditor def={live.def} onchange={change} {clearSignal} entity={live.entity} />{/key}{/snippet}
       {#snippet actions()}
         <Popover bind:open={renaming}>
           {#snippet trigger(props)}<span {...props} class="trig"><IconButton icon="edit" label="Rename view" shortcut={shortcutFor('view.rename')} onclick={() => (draft = name)} /></span>{/snippet}
@@ -241,39 +251,39 @@
           </form>
         </Popover>
         <IconButton icon="filter" label="Quick filter" shortcut={shortcutFor('view.quickFilter')} pressed={quickOpen} onclick={() => (quickOpen ? closeQuick() : (quickOpen = true))} />
-        <IconButton icon="target" label="Insights" shortcut="shift+i" pressed={insights} onclick={() => (insights = !insights)} />
+        {#if !isProject}<IconButton icon="target" label="Insights" shortcut="shift+i" pressed={insights} onclick={() => (insights = !insights)} />{/if}
         <IconButton icon="pin" label={pinId === null ? 'Pin view' : 'Unpin view'} shortcut={shortcutFor('view.pin')} pressed={pinId !== null} onclick={togglePin} />
         <Menu>
           {#snippet trigger(props)}<span {...props} class="trig"><IconButton icon="more" label="More" /></span>{/snippet}
           <MenuItem label="Save as new view" icon="copy" onSelect={saveAsNew} />
           <MenuItem label="New view..." icon="plus" onSelect={() => (creating = true)} />
-          <MenuItem label="Save as template" icon="bookmark" onSelect={saveAsTemplate} />
+          {#if !isProject}<MenuItem label="Save as template" icon="bookmark" onSelect={saveAsTemplate} />{/if}
           {#if view?.template_id != null}
             <MenuItem label="Reset to template" icon="undo" onSelect={resetToTemplate} />
           {/if}
           <MenuItem label="Delete view" icon="trash" danger onSelect={() => (confirmDelete = true)} />
         </Menu>
-        <CommandButton command="issue.create" variant="primary" />
+        <CommandButton command={isProject ? 'project.new' : 'issue.create'} variant="primary" />
       {/snippet}
     </PageHeader>
     {#if quickOpen}
-      <QuickFilter bind:text={quickText} bind:chips={quickChips} saveable={quickFilter !== null} onsave={saveQuick} onclose={closeQuick} />
+      <QuickFilter bind:text={quickText} bind:chips={quickChips} saveable={quickFilter !== null} onsave={saveQuick} onclose={closeQuick} entity={live.entity} />
     {/if}
     <div class="cols">
     <main class="body">
       {#if rows === 0 && filtered}
-        <EmptyState title="Nothing matches these filters" hint="Loosen a filter or clear them all to see every issue in this view.">
+        <EmptyState title="Nothing matches these filters" hint={`Loosen a filter or clear them all to see every ${isProject ? 'project' : 'issue'} in this view.`}>
           {#snippet action()}<Button onclick={clearFilters}>Clear filters</Button>{/snippet}
         </EmptyState>
       {:else}
         <div class="pane" role="presentation" onclick={pick}><Shown view={shown} embedded /></div>
       {/if}
     </main>
-    {#if insights && view}<InsightsPanel kind="view" id={view.id} title={name} onclose={() => (insights = false)} />{/if}
+    {#if insights && view && !isProject}<InsightsPanel kind="view" id={view.id} title={name} onclose={() => (insights = false)} />{/if}
     </div>
     </div>
   {/key}
-  <NewViewDialog bind:open={creating} current={live} />
+  <NewViewDialog bind:open={creating} current={live} entity={live.entity} />
   <Dialog bind:open={confirmDelete} title={`Delete "${name}"?`} description="The saved view goes away. Issues are not touched.">
     {#snippet actions()}<Button variant="danger" onclick={remove}>Delete</Button>{/snippet}
   </Dialog>

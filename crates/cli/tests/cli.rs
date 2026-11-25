@@ -401,6 +401,21 @@ fn setup_sets_the_key_for_new_issues() {
 }
 
 #[test]
+fn a_project_view_is_saved_from_the_command_line() {
+    let (_d, db) = fresh();
+    let def = r#"{"filter":null,"sorts":[],"group_by":{"Fixed":"Status"},"layout":"Board","columns":[],"include_archived":false}"#;
+    let v = run_json(
+        &db,
+        &["view", "save", "Mine", "--def", def, "--entity", "project"],
+    );
+    assert_eq!(v["entity"], "project");
+    assert_eq!(
+        run_json(&db, &["view", "save", "Plain", "--def", def])["entity"],
+        "issue"
+    );
+}
+
+#[test]
 fn view_templates_from_the_command_line() {
     let (_d, db) = fresh();
     let t = run_json(&db, &["view", "save-as-template", "1", "--name", "ABC t"]);

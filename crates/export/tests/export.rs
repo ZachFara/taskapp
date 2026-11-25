@@ -149,6 +149,15 @@ async fn seed_rest(db: &Db, docs: IssueId, ship: IssueId) -> R {
         SRC,
     )
     .await?;
+    views::save_as(
+        db,
+        None,
+        ("Active projects", taskapp_core::ViewEntity::Project),
+        ViewDef::default(),
+        taskapp_core::palette::Look::default(),
+        SRC,
+    )
+    .await?;
     pins::pin(db, PinKind::Url, "https://example.com", Some("Site".into())).await?;
     settings::set(db, "gcal_enabled", &true).await?;
     Ok(())

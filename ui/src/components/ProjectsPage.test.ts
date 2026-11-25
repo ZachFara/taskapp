@@ -79,6 +79,6 @@ describe('ProjectsPage fields', () => {
     await vi.waitFor(() => expect([...target.querySelectorAll('th')].map((h) => h.textContent)).toContain('Sponsor'));
     const heads = [...target.querySelectorAll('thead th')].map((h) => h.textContent);
     expect(heads.slice(0, 4)).toEqual(['Project', 'Status', 'Priority', 'Labels']);
-    expect(target.querySelector('tbody tr td:nth-child(2)')?.textContent).toContain('Planned');
+    expect([...target.querySelectorAll('tbody tr td:nth-child(2)')].map((c) => c.textContent)).toContain('Planned');
   });
 });

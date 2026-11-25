@@ -15,15 +15,15 @@ use taskapp_core::{
     ChangeSource, Comment, CommentId, Cycle, CycleId, Db, Error, Event, EventId, EventInput,
     FolderSection, ImportPlan, Issue, IssueId, IssuePatch, IssueStats, IssueTemplate, Label,
     LabelId, Measure, Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId, PinKind,
-    Placement, ProgressScope, ProgressSeries, Project, ProjectId, ProjectStatus,
+    Placement, ProgressScope, ProgressSeries, Project, ProjectId, ProjectRow, ProjectStatus,
     ProjectStatusCategory, ProjectStatusId, PropertyAppliesTo, PropertyDef, PropertyKind, Relation,
     RelationKind, RelationKindDef, Reschedule, ResolvedPin, Result, SavedView, SelectOption,
     Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus,
-    VelocityPeriod, ViewDef, ViewFolder, ViewFolderId, ViewId, ViewTemplate, ViewTemplateId,
-    WorkBlock, WorkBlockId, WorkspaceStatus, attachments, backup, blocks, bulk, comments, cycles,
-    events, history, import, insights, issues, labels, pins, project_statuses, projects,
-    properties, quickadd, relation_kinds, relations, schedule, search, settings, statuses,
-    templates, undo, view_folders, view_templates, views, workspace,
+    VelocityPeriod, ViewDef, ViewEntity, ViewFolder, ViewFolderId, ViewId, ViewTemplate,
+    ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, attachments, backup, blocks, bulk,
+    comments, cycles, events, history, import, insights, issues, labels, pins, project_statuses,
+    projects, properties, quickadd, relation_kinds, relations, schedule, search, settings,
+    statuses, templates, undo, view_folders, view_templates, views, workspace,
 };
 
 pub struct AppState {
@@ -299,8 +299,13 @@ macro_rules! with_commands {
 
             views_query(s, def: ViewDef) -> Vec<Issue> { views::query(&s.db, &def).await }
             views_list(s) -> Vec<SavedView> { views::list(&s.db).await }
+            views_query_projects(s, def: ViewDef) -> Vec<ProjectRow> { views::projects_query(&s.db, &def).await }
             views_save(s, id: Option<ViewId>, name: String, def: ViewDef, icon: Option<String>, color: Option<String>) -> SavedView {
                 views::save(&s.db, id, &name, def, taskapp_core::palette::Look { icon, color }, ChangeSource::Ui).await
+            }
+            // A new view lists projects; an existing one keeps what it lists.
+            views_save_project(s, id: Option<ViewId>, name: String, def: ViewDef, icon: Option<String>, color: Option<String>) -> SavedView {
+                views::save_as(&s.db, id, (&name, ViewEntity::Project), def, taskapp_core::palette::Look { icon, color }, ChangeSource::Ui).await
             }
             views_delete(s, id: ViewId) -> () { views::delete(&s.db, id).await }
             views_reorder(s, ids: Vec<ViewId>) -> () { views::reorder(&s.db, &ids).await }

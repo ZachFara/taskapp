@@ -18,7 +18,7 @@ const replace = <T>(list: T[], next: T[]) => void list.splice(0, list.length, ..
 /** Reloads every store from the backend; the current view's issues, or all issues when none is chosen. */
 export async function refreshAll(): Promise<void> {
   const savedViews = await api.views.list();
-  const current = savedViews.find((v) => v.id === currentViewId.value);
+  const current = savedViews.find((v) => v.id === currentViewId.value && v.entity !== 'project');
   const [i, st, p, d, f, pl, ps] = await Promise.all([
     api.views.query(
       current?.def ?? { filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false },

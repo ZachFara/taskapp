@@ -349,7 +349,7 @@ describe('walk', { timeout: 20_000 }, () => {
     expect(await page.getByText('Due', { exact: true }).count()).toBe(0);
     await go('/view/1');
     await page.getByRole('button', { name: 'Add filter' }).click();
-    await pw(page.getByRole('menuitem', { name: 'Project' })).toBeVisible();
+    await pw(page.getByRole('menuitem', { name: 'Project', exact: true })).toBeVisible();
     expect(await page.getByRole('menuitem', { name: 'Due', exact: true }).count()).toBe(0);
     await press('Escape');
     await go('/settings/fields');

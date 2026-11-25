@@ -237,13 +237,20 @@ async fn view(db: &Db, cmd: ViewCmd) -> Result<Value> {
         ViewCmd::Query { def, id } => (def, id),
         ViewCmd::Templates => return val(view_templates::list(db).await?),
         ViewCmd::List => return val(views::list(db).await?),
-        ViewCmd::Save { name, def, id } => {
+        ViewCmd::Save {
+            name,
+            def,
+            id,
+            entity,
+        } => {
             let def: ViewDef =
                 serde_json::from_str(&def).map_err(|e| Error::Invalid(e.to_string()))?;
-            let saved = views::save(
+            let entity = serde_json::from_value(Value::String(entity))
+                .map_err(|_| Error::Invalid("entity is `issue` or `project`".into()))?;
+            let saved = views::save_as(
                 db,
                 id.map(ViewId),
-                &name,
+                (&name, entity),
                 def,
                 taskapp_core::palette::Look::default(),
                 SRC,
