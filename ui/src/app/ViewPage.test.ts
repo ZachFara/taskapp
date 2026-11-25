@@ -81,6 +81,26 @@ describe('ViewPage', () => {
     await waitFor(async () => expect((await saved()).def.filter).toBeNull(), { timeout: 2000 });
   });
 
+  it('switching_to_another_view_shows_that_views_chips_and_saves_to_the_right_view', async () => {
+    mock = createMockApi({ ...fixtures, views: [] });
+    setApi(mock);
+    const [first, second] = await mock.statuses.list();
+    const only = (id: number) => def({ filter: { Cond: { field: { Fixed: 'Status' }, op: 'In', value: [id] } } });
+    await mock.views.save(null, 'One', only(first.id), null, null);
+    await mock.views.save(null, 'Two', only(second.id), null, null);
+    const [one, two] = await mock.views.list();
+    await refreshAll();
+    const r = render(ViewPage, { params: { id: String(one.id) } });
+    await screen.findByRole('button', { name: new RegExp(`^Status is any of ${first.name}`) });
+    await r.rerender({ params: { id: String(two.id) } });
+    // The chip is the new view's, not the one the page showed before.
+    await screen.findByRole('button', { name: new RegExp(`^Status is any of ${second.name}`) });
+    await new Promise((ok) => setTimeout(ok, 600));
+    const after = await mock.views.list();
+    expect(after.find((v) => v.id === one.id)!.def.filter).toEqual(only(first.id).filter);
+    expect(after.find((v) => v.id === two.id)!.def.filter).toEqual(only(second.id).filter);
+  });
+
   it('quick_filter_narrows_without_saving_until_saved', async () => {
     const user = userEvent.setup();
     await open();

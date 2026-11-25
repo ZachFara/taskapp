@@ -116,12 +116,14 @@
   let loud = false;
   const save = () => {
     clearTimeout(timer);
+    // Taken now, not when the timer fires: by then the page may show another view.
+    const [v, d, n] = [view, def, name];
     timer = setTimeout(async () => {
-      if (!view || !def) return;
+      if (!v || !d) return;
       const say = loud;
       loud = false;
-      await api.views.save(view.id, name, def, view.icon, view.color);
-      if (say) announce(`Changed filter of ${name}`);
+      await api.views.save(v.id, n, d, v.icon, v.color);
+      if (say) announce(`Changed filter of ${n}`);
     }, SAVE_DELAY);
   };
   function change(patch: Partial<ViewDef>) {
@@ -229,7 +231,7 @@
     <PageHeader title={name} icon={view?.icon ?? 'icon:layers'} color={view?.color ?? undefined}>
       {#snippet iconEdit()}<IconColorPicker label={`Icon and colour of ${name}`} value={{ icon: view?.icon ?? 'icon:layers', color: view?.color ?? null }} onchange={changeLook} bind:open={iconOpen} />{/snippet}
       {#snippet tabs()}<Tabs tabs={layoutTabs} bind:value={() => layout, setLayout} />{/snippet}
-      {#snippet filters()}{#key editorKey}<ViewEditor def={live.def} onchange={change} {clearSignal} />{/key}{/snippet}
+      {#snippet filters()}{#key `${live.id}:${editorKey}`}<ViewEditor def={live.def} onchange={change} {clearSignal} />{/key}{/snippet}
       {#snippet actions()}
         <Popover bind:open={renaming}>
           {#snippet trigger(props)}<span {...props} class="trig"><IconButton icon="edit" label="Rename view" shortcut={shortcutFor('view.rename')} onclick={() => (draft = name)} /></span>{/snippet}
