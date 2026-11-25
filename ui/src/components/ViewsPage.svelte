@@ -133,7 +133,7 @@
       {#snippet action()}<Button variant="primary" icon="plus" onclick={() => (creating = true)}>New view</Button>{/snippet}
     </EmptyState>
   {:else}
-    <Tabs bind:value={show} label="Show" segmented tabs={[{ id: 'all', label: 'All' }, { id: 'issues', label: 'Issues' }, { id: 'projects', label: 'Projects' }]} />
+    <Tabs bind:value={show} label="Show" segmented tabs={[{ id: 'all', label: 'All views' }, { id: 'issues', label: 'Issue views' }, { id: 'projects', label: 'Project views' }]} />
     {#each tree as r, i (r.type === 'folder' ? `f${r.folder.id}` : `v${r.item.id}`)}
       {#if r.type === 'folder'}
         <h2 class="section" data-folder-id={r.folder.id} style:margin-left={`calc(${r.depth} * var(--s-8))`}>{r.folder.name}</h2>

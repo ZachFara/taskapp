@@ -44,8 +44,9 @@ The same screen has a second choice, "Restore from an export": see [Restore](#re
 ## The screen
 
 - **Sidebar (left).** Top: My issues. Then four collapsible sections with counts: Pinned, Views, Projects (with "All
-  projects"), Cycles (with "All cycles"). Bottom: Settings. Drag a pin or a view to reorder it. Hover a view, project
-  or cycle, open its "…" and choose Pin or Unpin. With "Sidebar sparklines" on (Settings > General) each project
+  projects"), Cycles (with "All cycles"). Bottom: Settings. Drag a pin or a view to reorder it. Right-click a view, folder,
+  project or cycle and choose Pin or Unpin. The Projects section shows only "All projects" until you right-click its
+  heading and choose "Show projects in the sidebar" (kept on this device); pinned projects always show under Pinned. With "Sidebar sparklines" on (Settings > General) each project
   shows a small progress line. The sidebar has no Inbox link; `/inbox` exists but only shows "Inbox arrives in a later
   release".
 - **Top bar.** The breadcrumb, the "Search or run a command" button (mod+k), a keyboard-shortcuts button and a theme
@@ -181,7 +182,8 @@ saved automatically (after a short pause). Filter changes show an "Undo" toast.
   folders, up to three deep. Make one from the section's "..." menu, by right-clicking empty space in the section, from
   a folder's menu ("New folder inside"), or from the command menu ("New folder", for the page you are on); name it in
   the dialog. Click a folder to collapse it; which folders are collapsed is remembered on this device only. A folder
-  only holds items of its own section. Rename or delete from the folder's right-click menu; deleting moves what is in
+  only holds items of its own section. A folder can be pinned (right-click > Pin): Pinned then shows it as a folder row
+  with its contents, always current, and unpinning leaves the folder as it was. Rename or delete from the folder's right-click menu; deleting moves what is in
   it up one level, it never deletes the contents. Three ways to move something, each one undo step:
   drag the row (press, move a few pixels, release; a ghost follows the pointer). Drop on a folder to put it inside
   (hold over a collapsed folder and it opens); drop between rows to reorder, where the line shows the place; drop in
@@ -241,9 +243,10 @@ A saved view can list projects instead of issues. It opens at `/view/<id>` like 
 filter chips, Group, Sort and Display.
 
 - **Make one.** Views page > New view > choose Projects; the command menu "New project view"; right-click the
-  Projects heading in the sidebar > New project view. On the Projects page, "Save as view" keeps its current filters,
-  sort and grouping as a project view (a table). A project view shows in the sidebar under Projects, after the
-  projects (it has no folders), and on the Views page under "Project views". From outside: `taskapp view save NAME --def JSON --entity project`.
+  Views heading's "..." menu in the sidebar > New project view. On the Projects page, "Save as view" keeps its current
+  filters, sort and grouping as a project view (a table). A project view shows in the sidebar among the other views
+  (marked with a small project icon) and sits in the same folders; the Views page lists both, with a filter All views /
+  Issue views / Project views. From outside: `taskapp view save NAME --def JSON --entity project`.
 - **Fields.** Name, Status, Status category, Priority, Labels, Start, Target, Progress (percent of issues done),
   Issues (count) and custom properties that apply to projects. Issue views can also filter by "Project status".
 - **Layouts.** List: status, priority, name, then the fields, in bands when grouped. Table: the columns chosen in
@@ -709,6 +712,8 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `view.newProject` | New project view | (none) | New view that lists projects. |
 | `projects.saveAsView` | Save projects as view | (none) | On the Projects page: save its filters, sort and grouping as a project view. |
 | `view.pin` | Pin or unpin view | (none) | Pin or unpin the view. |
+| `folder.pin` | Pin or unpin folder | (none) | Pin or unpin the folder; a pinned folder lists its contents under Pinned. |
+| `sidebar.showProjects` | Show projects in the sidebar | (none) | List every project under Projects, or only "All projects". |
 | `view.rename` | Rename view | (none) | Rename the view. |
 | `view.resetToTemplate` | Reset to template | (none) | Put the view back to its template. |
 | `view.saveAsTemplate` | Save as template | (none) | Save the view as a template. |

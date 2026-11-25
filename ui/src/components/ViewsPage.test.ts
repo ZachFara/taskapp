@@ -54,11 +54,11 @@ describe('ViewsPage', () => {
     const ids = () => [...target.querySelectorAll('[data-view-id]')].map((r) => r.getAttribute('data-view-id'));
     expect(ids()).toEqual(['1', '2']);
     const tab = (name: string) => [...target.querySelectorAll<HTMLElement>('[role=tab]')].find((t) => t.textContent?.trim() === name)!;
-    tab('Projects').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-    tab('Projects').click();
+    tab('Project views').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    tab('Project views').click();
     await vi.waitFor(() => expect(ids()).toEqual(['2']));
-    tab('Issues').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-    tab('Issues').click();
+    tab('Issue views').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    tab('Issue views').click();
     await vi.waitFor(() => expect(ids()).toEqual(['1']));
   });
 

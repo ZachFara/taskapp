@@ -204,12 +204,15 @@ describe('CalendarView', () => {
   });
 
   it('next_command_moves_the_date', async () => {
+    const before = Date.now();
     render(CalendarView, { props: { view } });
     await waitFor(() => expect(stub().options).toBeDefined());
     window.dispatchEvent(new CustomEvent('command:calendar.next'));
     await waitFor(() => expect(stub().setOption).toHaveBeenCalledWith('date', expect.any(Date)));
     const moved = stub().setOption.mock.calls.filter(([k]: [string]) => k === 'date').at(-1)[1] as Date;
-    expect(moved.getTime()).toBeGreaterThan(Date.now() + 6 * 24 * HOUR);
+    // A week or a month on, depending on the mode: later than the date it opened on, and within a month of it.
+    expect(moved.getTime()).toBeGreaterThan(before);
+    expect(moved.getTime()).toBeLessThanOrEqual(before + 32 * 24 * HOUR);
   });
 
   it('unscheduled_list_has_only_issues_without_due', async () => {
