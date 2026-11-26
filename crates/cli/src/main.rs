@@ -194,6 +194,9 @@ enum IssueCmd {
         /// Estimate in minutes.
         #[arg(long)]
         estimate: Option<u32>,
+        /// Project id.
+        #[arg(long)]
+        project: Option<i64>,
     },
     Get {
         key: String,
