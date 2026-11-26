@@ -2,7 +2,7 @@
   // Temporary filters on a view page: they narrow what is shown and are never stored unless "Save to view" keeps them.
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
-  import type { FieldRef, FixedField } from '../../lib/bindings';
+  import type { FieldRef, FixedField, ViewEntity } from '../../lib/bindings';
   import Button from '../../ui/Button.svelte';
   import IconButton from '../../ui/IconButton.svelte';
   import Menu from '../../ui/Menu.svelte';
@@ -12,25 +12,26 @@
   import { fieldKey, makeLookup, type Data } from './lookup';
   import { newChip, type Chip } from './model';
 
-  let { text = $bindable(''), chips = $bindable([]), saveable, onsave, onclose }: {
-    text?: string; chips?: Chip[]; saveable: boolean; onsave: () => void; onclose: () => void;
+  let { text = $bindable(''), chips = $bindable([]), saveable, onsave, onclose, entity = 'issue' }: {
+    text?: string; chips?: Chip[]; saveable: boolean; onsave: () => void; onclose: () => void; entity?: ViewEntity;
   } = $props();
 
-  const quick: FixedField[] = ['Status', 'Priority', 'Project', 'Label', 'DueDate'];
-  let data = $state<Data>({ statuses: [], projects: [], defs: [], cycles: [], labels: [] });
+  const project = entity === 'project';
+  const quick: FixedField[] = project ? ['Status', 'Priority', 'Label', 'TargetDate'] : ['Status', 'Priority', 'Project', 'Label', 'DueDate'];
+  let data = $state<Data>({ statuses: [], projects: [], defs: [], cycles: [], labels: [], relationKinds: [], projectStatuses: [] });
   let openId = $state<number | null>(null);
   let addOpen = $state(false);
-  const lookup = $derived(makeLookup(data));
+  const lookup = $derived(makeLookup(data, entity));
   const addable = $derived<{ field: FieldRef; name: string }[]>([
     ...quick.map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
     ...data.defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name })),
   ]);
 
   onMount(async () => {
-    const [statuses, projects, defs, cycles, labels] = await Promise.all([
-      api.statuses.list(), api.projects.list(), api.properties.listDefs(), api.cycles.list(), api.labels.list(),
+    const [statuses, projects, defs, cycles, labels, projectStatuses] = await Promise.all([
+      api.statuses.list(), api.projects.list(), api.properties.listDefs(), api.cycles.list(), api.labels.list(), api.project.statusesList(),
     ]);
-    data = { statuses, projects, defs, cycles, labels };
+    data = { statuses, projects, defs: defs.filter((d) => (project ? d.applies_to !== 'Issues' : d.applies_to !== 'Projects')), cycles, labels, relationKinds: [], projectStatuses };
   });
 
   // Same chip rules as the saved filter: a pick-list field starts "any of", a text field "contains".

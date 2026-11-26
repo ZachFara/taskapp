@@ -366,3 +366,20 @@ async fn pull_applies_custom_relation_kinds_and_events() -> R {
     assert_eq!(events::list(&p.b, None, None).await?.len(), 1);
     Ok(())
 }
+
+#[tokio::test]
+async fn pull_brings_the_images_the_text_uses() -> R {
+    let p = Pair::new().await?;
+    let png = b"\x89PNG\r\n\x1a\nsync".to_vec();
+    let a = taskapp_core::attachments::add(&p.a, &png, "image/png").await?;
+    let patch = IssuePatch {
+        description: Some(format!("![x](attachment:{})", a.id.0)),
+        ..IssuePatch::default()
+    };
+    issues::update(&p.a, IssueId(1), patch, SRC).await?;
+    sync::export(&p.a, &p.dir_a, Some(p.remote())).await?;
+    let out = sync::pull_and_apply(&p.b, &p.dir_b, p.remote()).await?;
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert_eq!(taskapp_core::attachments::get(&p.b, a.id).await?.bytes, png);
+    Ok(())
+}

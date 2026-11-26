@@ -263,6 +263,17 @@ pub async fn create(db: &Db, new: NewIssue, src: ChangeSource) -> Result<Issue> 
     Ok(issue)
 }
 
+/// The workspace's chosen starting status, else the first one (also when the chosen one was deleted).
+async fn starting_status(tx: &mut SqliteConnection) -> Result<StatusId> {
+    let id = sqlx::query_scalar::<_, i64>(
+        "SELECT id FROM statuses ORDER BY id = (SELECT CAST(json_extract(value, '$') AS INTEGER) \
+         FROM settings WHERE key = 'default_status') DESC, position, id LIMIT 1",
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    id.map(StatusId)
+        .ok_or_else(|| Error::Invalid("no statuses exist".into()))
+}
 /// [`create`] inside the caller's transaction, which should be `BEGIN IMMEDIATE`.
 ///
 /// # Errors
@@ -278,14 +289,7 @@ pub async fn create_in(
     check_props(tx, None, new.properties.as_ref()).await?;
     let status = match new.status_id {
         Some(s) => s,
-        None => StatusId(
-            sqlx::query_scalar!(
-                r#"SELECT id AS "id!: i64" FROM statuses ORDER BY position, id LIMIT 1"#
-            )
-            .fetch_optional(&mut *tx)
-            .await?
-            .ok_or_else(|| Error::Invalid("no statuses exist".into()))?,
-        ),
+        None => starting_status(tx).await?,
     };
     let now = Utc::now();
     let created = new.created_at.unwrap_or(now);

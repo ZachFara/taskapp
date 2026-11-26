@@ -199,6 +199,15 @@ describe('ListView', () => {
     expect(selection.focused).toBe(1);
   });
 
+  it('hovered_row_more_button_opens_the_issue_menu', async () => {
+    const { target } = await open({ issues: [issue(1)] });
+    row(target, 1).click(); // focusing a row shows its actions, as hovering does
+    flushSync();
+    row(target, 1).querySelector<HTMLButtonElement>('button[aria-label="More actions for ABC-1"]')!.click();
+    flushSync();
+    await vi.waitFor(() => expect([...document.querySelectorAll('[role="menuitem"]')].some((e) => e.textContent?.includes('Rename issue'))).toBe(true));
+  });
+
   it('row_shows_labels_project_due_and_estimate', async () => {
     const proj = fixtures.projects[0];
     const labels = [{ id: 501, name: 'bug', color: 'red', color_hex: '#dd3c31', icon: null }];

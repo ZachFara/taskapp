@@ -44,7 +44,7 @@
 </script>
 
 <div class="es">
-  <SectionHead lede="Free-form tags you can put on any issue. Pick a colour and an icon so they read at a glance." />
+  <SectionHead lede="Free-form tags you can put on any issue or project. Pick a colour and an icon so they read at a glance." />
 
   {#if labels.length}
     <ul class="es-list">

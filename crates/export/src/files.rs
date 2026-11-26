@@ -73,6 +73,17 @@ pub struct StatusRow {
     pub icon: Option<String>,
 }
 
+/// One entry of `project_statuses.yaml`.
+#[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
+pub struct ProjectStatusRow {
+    pub name: String,
+    pub category: String,
+    pub position: i64,
+    pub color: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
 pub struct LabelRow {
     pub name: String,
@@ -102,6 +113,15 @@ pub struct CycleRow {
     pub icon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder_id: Option<i64>,
+    #[serde(default = "unplaced")]
+    pub position: i64,
+}
+
+/// The position a row has until it is placed by hand; an older export carries none.
+fn unplaced() -> i64 {
+    1_000_000
 }
 
 /// `events/<id>.yaml`. Times are local wall-clock text; `issues` are keys.
@@ -131,6 +151,8 @@ pub struct PinRow {
     pub target: String,
     pub title: Option<String>,
     pub position: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder_id: Option<i64>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
@@ -154,6 +176,21 @@ pub struct ProjectFile {
     pub icon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// The project status name; an older export without one gets the first status.
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub priority: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder_id: Option<i64>,
+    #[serde(default = "unplaced")]
+    pub position: i64,
+    #[sqlx(skip)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<String>,
+    #[sqlx(skip)]
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub properties: Map<String, Value>,
     #[sqlx(skip)]
     #[serde(default)]
     pub milestones: Vec<MilestoneRow>,
@@ -168,12 +205,29 @@ pub struct PropertyFile {
     pub options: Value,
     pub project: Option<String>,
     pub position: i64,
+    #[serde(default = "applies_to_issues")]
+    pub applies_to: String,
+}
+
+fn issue_entity() -> String {
+    "issue".into()
+}
+
+fn is_issue(entity: &String) -> bool {
+    entity == "issue"
+}
+
+fn applies_to_issues() -> String {
+    "issues".into()
 }
 
 /// One entry of `views.yaml`.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct ViewFile {
     pub name: String,
+    /// `issue` or `project`; left out for an issue view, so older exports stay as they were.
+    #[serde(default = "issue_entity", skip_serializing_if = "is_issue")]
+    pub entity: String,
     pub position: i64,
     pub definition: Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -182,6 +236,33 @@ pub struct ViewFile {
     pub color: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder_id: Option<i64>,
+}
+
+/// One entry of `attachments.yaml`. The id is kept because markdown points at it; the image itself is
+/// `attachments/<sha256>.<ext>`, and its type and size are read from its bytes.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct AttachmentFile {
+    pub id: i64,
+    pub sha256: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// One entry of `view_folders.yaml`. The id is kept because views point at it.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct ViewFolderFile {
+    pub id: i64,
+    pub name: String,
+    pub position: i64,
+    #[serde(default = "views_section")]
+    pub section: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<i64>,
+}
+
+fn views_section() -> String {
+    "view".into()
 }
 
 /// One entry of `view_templates.yaml`. The id is kept because views point at it.

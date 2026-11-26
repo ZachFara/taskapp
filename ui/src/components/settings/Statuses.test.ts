@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import Statuses from './Statuses.svelte';
 import { clickLabel, field, mountSettings, press, setField } from './testing';
 
@@ -9,6 +9,16 @@ async function add(target: Element, category: string, name: string) {
 }
 
 describe('Statuses', () => {
+  it('shows the starting status: the chosen one, else the first', async () => {
+    const trigger = (t: Element) => t.querySelector('[aria-label="New issues start in"]')!;
+    const first = await mountSettings(Statuses);
+    await vi.waitFor(() => expect(trigger(first.target).textContent).toContain('Backlog'));
+    document.body.innerHTML = '';
+    const chosen = await mountSettings(Statuses, { settings: { get: async (k: string) => (k === 'default_status' ? 3 : null) } });
+    const name = (await (chosen.api as unknown as { statuses: { list: () => Promise<{ id: number; name: string }[]> } }).statuses.list()).find((s) => s.id === 3)!.name;
+    await vi.waitFor(() => expect(trigger(chosen.target).textContent).toContain(name));
+  });
+
   it('shows every category as a band, in order', async () => {
     const { target } = await mountSettings(Statuses);
     const bands = [...target.querySelectorAll('.band .name')].map((n) => n.textContent);

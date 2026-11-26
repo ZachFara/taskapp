@@ -159,16 +159,13 @@
     field?.focus();
   }
 
-  $effect(() => {
-    if (!open) onclose();
-  });
   // Focus is set here rather than with `autofocus`, which the a11y rules reject.
   $effect(() => {
     field?.focus();
   });
 </script>
 
-<Dialog bind:open title="New issue">
+<Dialog bind:open onclosed={onclose} title="New issue">
   <div class="stage" aria-hidden="true"><Contour rings={7} size={180} /></div>
   <div class="field-wrap">
     <input

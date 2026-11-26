@@ -47,7 +47,7 @@ afterAll(async () => {
 async function open(path = '/view/1', viewport = { width: 1440, height: 900 }) {
   await page?.close();
   page = await browser.newPage({ viewport });
-  page.setDefaultTimeout(5_000);
+  page.setDefaultTimeout(Number(process.env.WALK_TIMEOUT ?? 5_000)); // WALK_TIMEOUT: more time on a loaded machine
   await page.goto(base + path);
   await page.locator('[data-key], aside.sidebar').first().waitFor();
   if (path.startsWith('/view/')) await page.locator('li[data-key], li[data-issue], tr[data-key]').first().waitFor();
@@ -181,6 +181,17 @@ describe('walk project', { timeout: 25_000 }, () => {
     await page.getByLabel('Project name').waitFor();
     await page.evaluate(() => dispatchEvent(new CustomEvent('command:milestone.new')));
     await page.getByLabel('Milestone name').waitFor();
+  });
+
+  it('a project status set from the command menu shows in the details plate and the Projects list', async () => {
+    await open('/project/website');
+    await press('Meta+k');
+    await page.keyboard.type('Set project status');
+    await palette().getByRole('option', { name: /Set project status/ }).first().click();
+    await palette().getByRole('option', { name: 'Paused' }).click();
+    await pw(page.getByLabel('Project details').getByText('Paused')).toBeVisible();
+    await press('g', 'p');
+    await pw(page.locator('tr[data-slug=website]').getByText('Paused')).toBeVisible();
   });
 
   // Priority means the same on every screen: whichever way it was set, the list, table, board and detail all say Urgent.
@@ -333,5 +344,20 @@ describe('walk project', { timeout: 25_000 }, () => {
     await page.getByLabel('View name').fill('Renamed once');
     await page.getByRole('button', { name: 'Rename', exact: true }).click();
     await pw(page.locator('.toast')).toContainText('Renamed view to Renamed once');
+  });
+
+  it('PV-1 a project view as a board: drag a project to another status, then the timeline', async () => {
+    await open('/views');
+    await page.getByRole('button', { name: 'New view' }).first().click();
+    await page.getByRole('tab', { name: 'Projects' }).click();
+    await page.getByRole('button', { name: 'Create view' }).click();
+    await page.waitForURL(/\/view\/\d+/);
+    await page.getByRole('tab', { name: 'Board' }).click();
+    const card = page.locator('[data-slug="website"]');
+    await pw(card).toBeVisible();
+    await card.dragTo(page.locator('[data-column="Paused"]'));
+    await pw(page.locator('[data-column="Paused"] [data-slug="website"]')).toBeVisible();
+    await page.getByRole('tab', { name: 'Timeline' }).click();
+    await pw(page.locator('[data-row^="project-"]').first()).toBeVisible();
   });
 });

@@ -113,8 +113,8 @@ describe('keys and overlays', () => {
     const input = q<HTMLInputElement>('[role=dialog] input')!;
     expect(input).not.toBeNull();
     press('Escape', {}, input);
-    await settle();
-    expect(q('[role=dialog]')).toBeNull();
+    // The menu animates out before it unmounts.
+    await vi.waitFor(() => expect(q('[role=dialog]')).toBeNull());
     expect(location.pathname).toBe('/settings/general');
   });
 
@@ -192,8 +192,8 @@ describe('issue panel', () => {
     press('k', { metaKey: true });
     await settle();
     press('Escape', {}, q('[role=dialog] input')!);
-    await settle();
-    expect(q('[role=dialog]')).toBeNull();
+    // The menu animates out before it unmounts.
+    await vi.waitFor(() => expect(q('[role=dialog]')).toBeNull());
     expect(q('aside.panel')).not.toBeNull();
   });
 

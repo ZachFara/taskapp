@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { askDelete } from '../../lib/rowUi.svelte';
+  import LabelPicker from './LabelPicker.svelte';
   import { api } from '../../lib/api';
   import type { Cycle, Issue, IssuePatch, Label, Milestone, Project, PropertyDef, Status, Value } from '../../lib/bindings';
   import Button from '../../ui/Button.svelte';
@@ -14,6 +16,7 @@
   import { fieldList, fieldOn } from '../../lib/fields.svelte';
   import PointsRow from '../insights/PointsRow.svelte';
   import PropertyRow from './PropertyRow.svelte';
+  import PropertyRows from './PropertyRows.svelte';
 
   let { issue, save, act, openRow = $bindable(null) }: {
     issue: Issue;
@@ -50,23 +53,34 @@
   const milestone = $derived(milestones.find((m) => m.id === issue.milestone_id));
   const cycleName = (c: Cycle) => c.name ?? `Cycle ${c.number}`;
   // A definition scoped to another project does not apply to this issue.
-  const visible = $derived(defs.filter((d) => d.project_id === null || d.project_id === issue.project_id));
+  const visible = $derived(defs.filter((d) => d.applies_to !== 'Projects' && (d.project_id === null || d.project_id === issue.project_id)));
   const due = $derived(dueParts(issue.due));
   const num = (v: string | number | null) => (v === null ? null : Number(v));
 
   let draft = $state('');
   const setProp = (key: string, value: Value) => act(api.properties.setValue(issue.id, key, value));
   const toggleLabel = (id: number, on: boolean) => act(on ? api.labels.addLabel(issue.id, id) : api.labels.removeLabel(issue.id, id));
+  // A label renamed or deleted elsewhere (the delete dialog, settings) shows here at once.
+  $effect(() => {
+    const reload = () => void api.labels.list().then((l) => (labels = l));
+    addEventListener('rows:changed', reload);
+    return () => removeEventListener('rows:changed', reload);
+  });
+  const createLabel = async (name: string) => {
+    const made = await api.labels.create(name, 'gray', null);
+    labels = [...labels, made];
+    toggleLabel(made.id, true);
+  };
 </script>
 
 {#snippet none()}<span class="none">None</span>{/snippet}
 
 <section class="plate" aria-label="Properties">
   <PropertyRow id="status" name="Status" cmd="issue.detail.status" bind:openRow>
-    {#snippet value()}{#if status}<StatusGlyph category={status.category} />{status.name}{:else}{@render none()}{/if}{/snippet}
+    {#snippet value()}{#if status}<StatusGlyph category={status.category} icon={status.icon} color={status.color} />{status.name}{:else}{@render none()}{/if}{/snippet}
     {#snippet editor(close)}
       <OptionList label="Status" value={issue.status_id} options={statuses} onpick={(id) => { close(); save({ status_id: num(id) }); }}>
-        {#snippet lead(o)}<StatusGlyph category={statuses.find((s) => s.id === o.id)!.category} />{/snippet}
+        {#snippet lead(o)}{@const st = statuses.find((s) => s.id === o.id)!}<StatusGlyph category={st.category} icon={st.icon} color={st.color} />{/snippet}
       </OptionList>
     {/snippet}
   </PropertyRow>
@@ -117,11 +131,7 @@
       {#each labels.filter((l) => issue.label_ids.includes(l.id)) as l (l.id)}<Pill color={l.color}>{l.name}</Pill>{:else}{@render none()}{/each}
     {/snippet}
     {#snippet editor()}
-      <ul class="checks" aria-label="Labels">
-        {#each labels as l (l.id)}
-          <li><Checkbox label={l.name} bind:checked={() => issue.label_ids.includes(l.id), (on) => toggleLabel(l.id, on)} /> {l.name}</li>
-        {:else}<li class="none">No labels yet</li>{/each}
-      </ul>
+      <LabelPicker {labels} selected={issue.label_ids} ontoggle={toggleLabel} oncreate={createLabel} ondelete={(l) => askDelete({ kind: 'label', id: l.id, name: l.name })} />
     {/snippet}
   </PropertyRow>
   {/snippet}
@@ -183,37 +193,7 @@
     {/if}
   {/each}
 
-  {#each visible as d (d.key)}
-    {@const v = issue.properties[d.key] ?? null}
-    <PropertyRow id={`prop:${d.key}`} name={d.name} bind:openRow>
-      {#snippet value()}
-        {#if d.kind === 'Checkbox'}{v === true ? 'Yes' : 'No'}
-        {:else if Array.isArray(v)}{#each v as x (x)}<Pill>{x}</Pill>{:else}{@render none()}{/each}
-        {:else if v === null || v === ''}{@render none()}{:else}{v}{/if}
-      {/snippet}
-      {#snippet editor(close)}
-        {#if d.kind === 'Select'}
-          <OptionList label={d.name} none="None" value={typeof v === 'string' ? v : null} options={d.options.map((o) => ({ id: o.value, name: o.value }))} onpick={(id) => { close(); setProp(d.key, id as string | null); }} />
-        {:else if d.kind === 'MultiSelect'}
-          {@const have = Array.isArray(v) ? v : []}
-          <ul class="checks" aria-label={d.name}>
-            {#each d.options as o (o.value)}
-              <li><Checkbox label={o.value} bind:checked={() => have.includes(o.value), (on) => setProp(d.key, on ? [...have, o.value] : have.filter((x) => x !== o.value))} /> {o.value}</li>
-            {/each}
-          </ul>
-        {:else if d.kind === 'Checkbox'}
-          <span class="inline"><Checkbox label={d.name} bind:checked={() => v === true, (on) => setProp(d.key, on)} /> {d.name}</span>
-        {:else if d.kind === 'Date'}
-          <TextInput type="date" label={d.name} value={typeof v === 'string' ? v : ''} oninput={(e) => { const t = (e.currentTarget as HTMLInputElement).value; if (isDate(t)) setProp(d.key, t || null); }} />
-        {:else}
-          <form class="stack" onsubmit={(e) => { e.preventDefault(); close(); setProp(d.key, draft.trim() === '' ? null : d.kind === 'Number' ? Number(draft) : draft); }}>
-            <TextInput type={d.kind === 'Number' ? 'number' : 'text'} label={`${d.name} value`} value={v === null ? '' : String(v)} oninput={(e) => (draft = (e.currentTarget as HTMLInputElement).value)} />
-            <Button type="submit" variant="primary">Set</Button>
-          </form>
-        {/if}
-      {/snippet}
-    </PropertyRow>
-  {/each}
+  <PropertyRows defs={visible} values={issue.properties} {setProp} bind:openRow />
 </section>
 
 <style>
@@ -221,6 +201,4 @@
   .none { color: var(--muted); font-weight: 400; }
   .stack { display: grid; gap: var(--s-4); }
   .inline { display: flex; align-items: center; gap: var(--s-4); }
-  .checks { list-style: none; display: grid; gap: var(--s-4); }
-  .checks li { display: flex; align-items: center; gap: var(--s-4); }
 </style>

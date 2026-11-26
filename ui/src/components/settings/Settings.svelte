@@ -9,6 +9,7 @@
   import General from './General.svelte';
   import ImportPage from '../import/ImportPage.svelte';
   import Labels from './Labels.svelte';
+  import ProjectStatuses from './ProjectStatuses.svelte';
   import Projects from './Projects.svelte';
   import Properties from './Properties.svelte';
   import Reminders from './Reminders.svelte';
@@ -23,6 +24,7 @@
   const sections: { id: string; label: string; icon: string; screen?: Component; action?: string }[] = [
     { id: 'general', label: 'General', icon: 'settings', screen: General },
     { id: 'statuses', label: 'Statuses', icon: 'circle', screen: Statuses },
+    { id: 'project-statuses', label: 'Project statuses', icon: 'project', screen: ProjectStatuses },
     { id: 'labels', label: 'Labels', icon: 'tag', screen: Labels },
     { id: 'projects', label: 'Projects', icon: 'project', screen: Projects },
     { id: 'cycles', label: 'Cycles', icon: 'cycle', screen: Cycles },

@@ -77,6 +77,7 @@ const USER_KEYS: &[&str] = &[
     "export_remote",
     "backup_dir",
     "default_view_template",
+    "default_status",
 ];
 
 /// Prefixes of keys the UI writes per item: `insights.<kind>.<id>` and `sidebar_*`.
@@ -110,6 +111,16 @@ pub async fn set_from_user(db: &Db, key: &str, value: &serde_json::Value) -> Res
         "theme" => check_one_of(key, value, &["system", "light", "dark"])?,
         "week_start" => check_one_of(key, value, &["sunday", "monday"])?,
         "issue_fields" => check_issue_fields(value)?,
+        "default_status" => {
+            let id = value.as_i64().ok_or_else(|| bad("a status id"))?;
+            if !crate::statuses::list(db)
+                .await?
+                .iter()
+                .any(|st| st.id.0 == id)
+            {
+                return Err(bad("an existing status"));
+            }
+        }
         "default_view_template" if !(value.is_null() || value.is_i64()) => {
             return Err(bad("a view template id or null"));
         }

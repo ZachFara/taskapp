@@ -25,6 +25,18 @@ async function open(mock = createMockApi(fixtures)) {
 }
 
 describe('ProjectsPage', () => {
+  it('shows the folders around the projects, nested and indented', async () => {
+    const mock = createMockApi({ ...fixtures, viewFolders: [{ id: 1, name: 'Work', position: 0, section: 'project', parent_id: null }, { id: 2, name: 'Sub', position: 1, section: 'project', parent_id: 1 }] });
+    const p = fixtures.projects[0];
+    await mock.folders.placeItem('project', p.id, 2, null);
+    const { target } = await open(mock);
+    const rows = [...target.querySelectorAll('tbody tr')];
+    const at = (sel: string) => rows.indexOf(target.querySelector(sel)!);
+    expect([at('[data-folder-id="1"]'), at('[data-folder-id="2"]'), at(`[data-slug="${p.slug}"]`)].every((i, k, a) => i >= 0 && (k === 0 || i > a[k - 1]))).toBe(true);
+    expect(target.querySelector<HTMLElement>('[data-folder-id="2"] td')!.style.paddingLeft).toContain('1 *');
+    expect(target.querySelector<HTMLElement>(`[data-slug="${p.slug}"] td`)!.style.paddingLeft).toContain('2 *');
+  });
+
   it('projects_table_has_a_row_per_project_and_timeline_link', async () => {
     const { target } = await open();
     const rows = target.querySelectorAll('tbody tr');
@@ -56,5 +68,17 @@ describe('ProjectsPage', () => {
     window.dispatchEvent(new CustomEvent('command:project.new'));
     flushSync();
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('New project');
+  });
+});
+
+describe('ProjectsPage fields', () => {
+  it('has status, priority and label columns and a project-scoped property column', async () => {
+    const mock = createMockApi(fixtures);
+    await mock.properties.createDef({ key: 'sponsor', name: 'Sponsor', kind: 'Text', options: [], project_id: null, position: 0, applies_to: 'Projects' });
+    const { target } = await open(mock);
+    await vi.waitFor(() => expect([...target.querySelectorAll('th')].map((h) => h.textContent)).toContain('Sponsor'));
+    const heads = [...target.querySelectorAll('thead th')].map((h) => h.textContent);
+    expect(heads.slice(0, 4)).toEqual(['Project', 'Status', 'Priority', 'Labels']);
+    expect([...target.querySelectorAll('tbody tr td:nth-child(2)')].map((c) => c.textContent)).toContain('Planned');
   });
 });

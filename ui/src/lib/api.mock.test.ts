@@ -209,3 +209,48 @@ describe('mock points and progress', () => {
     expect(s.days.map((d) => d.scope)).toEqual([34, ...Array(5).fill(39), ...Array(8).fill(36)]);
   });
 });
+
+describe('mock view folders', () => {
+  it('create, rename, place, nest and delete keep the items and undo restores them', async () => {
+    const api = createMockApi(fixtures, 'UTC');
+    const a = await api.folders.create('view', null, ' A ');
+    const b = await api.folders.create('view', null, 'B');
+    expect(a.name).toBe('A');
+    await expect(api.folders.create('view', null, ' ')).rejects.toMatchObject({ kind: 'Invalid' });
+    await expect(api.folders.rename(99, 'x')).rejects.toMatchObject({ kind: 'NotFound' });
+    await api.folders.place(b.id, null, 0);
+    expect((await api.folders.list()).map((f) => f.name)).toEqual(['B', 'A']);
+    await expect(api.folders.placeItem('view', 1, 99, null)).rejects.toMatchObject({ kind: 'NotFound' });
+    await expect(api.folders.placeItem('project', 1, a.id, null)).rejects.toMatchObject({ kind: 'Invalid' });
+    await api.folders.placeItem('view', 1, a.id, null);
+    await api.folders.delete(a.id);
+    expect((await api.views.list()).find((v) => v.id === 1)!.folder_id).toBeNull();
+    await api.history.undo();
+    expect((await api.views.list()).find((v) => v.id === 1)!.folder_id).toBe(a.id);
+  });
+
+  it('nests three deep, refuses a fourth level and a cycle, and deleting moves the inside up', async () => {
+    const api = createMockApi(fixtures, 'UTC');
+    const a = await api.folders.create('view', null, 'A');
+    const b = await api.folders.create('view', a.id, 'B');
+    const c = await api.folders.create('view', b.id, 'C');
+    await expect(api.folders.create('view', c.id, 'D')).rejects.toMatchObject({ kind: 'Invalid' });
+    await expect(api.folders.place(a.id, c.id, null)).rejects.toMatchObject({ kind: 'Invalid' });
+    await expect(api.folders.create('project', a.id, 'X')).rejects.toMatchObject({ kind: 'Invalid' });
+    await api.folders.placeItem('view', 1, c.id, null);
+    await api.folders.delete(b.id);
+    expect((await api.folders.list()).find((f) => f.id === c.id)!.parent_id).toBe(a.id);
+    await api.folders.delete(c.id);
+    expect((await api.folders.items()).find((p) => p.section === 'view' && p.id === 1)!.folder_id).toBe(a.id);
+  });
+
+  it('places projects, cycles and pins, in order', async () => {
+    const api = createMockApi(fixtures, 'UTC');
+    const f = await api.folders.create('project', null, 'F');
+    const [p1, p2] = fixtures.projects.map((p) => p.id);
+    await api.folders.placeItem('project', p2, f.id, null);
+    await api.folders.placeItem('project', p1, f.id, 0);
+    const inside = (await api.folders.items()).filter((p) => p.section === 'project' && p.folder_id === f.id);
+    expect(inside.sort((x, y) => x.position - y.position).map((p) => p.id)).toEqual([p1, p2]);
+  });
+});

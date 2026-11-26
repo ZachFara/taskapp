@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../lib/api';
-  import type { Layout, SavedView } from '../lib/bindings';
+  import type { Layout, Placement, SavedView, ViewEntity, ViewFolder } from '../lib/bindings';
+  import { buildRows } from '../lib/folderTree';
   import { navigate } from '../app/routes';
   import NewViewDialog from './display/NewViewDialog.svelte';
   import { defaultTemplateId, setDefaultTemplate, templates, type ViewTemplate } from './display/templatesApi';
@@ -18,6 +19,7 @@
   import PageHeader from '../ui/PageHeader.svelte';
   import Pill from '../ui/Pill.svelte';
   import Select from '../ui/Select.svelte';
+  import Tabs from '../ui/Tabs.svelte';
   import TextInput from '../ui/TextInput.svelte';
 
   // The layout is stored as Gantt; users see it as Timeline.
@@ -28,9 +30,17 @@
   }));
 
   let views = $state<SavedView[]>([]);
+  let folders = $state<ViewFolder[]>([]);
+  let places = $state<Placement[]>([]);
+  // Folders first, nested, then each folder's views; the views of no folder come last.
+  let show = $state('all');
+  const shown = $derived(views.filter((v) => show === 'all' || v.entity === (show === 'projects' ? 'project' : 'issue')));
+  const tree = $derived(buildRows('view', folders, places, shown, { placed: true, hideEmpty: show !== 'all' }));
+  const firstLoose = $derived(tree.findIndex((r) => r.type === 'item' && r.depth === 0));
   let pinned = $state<Set<string>>(new Set());
   let loaded = $state(false);
   let creating = $state(false);
+  let newEntity = $state<ViewEntity>('issue');
 
   // Templates are null until the backend exposes them; then the section is hidden.
   let tpls = $state<ViewTemplate[] | null>(null);
@@ -44,8 +54,10 @@
   let confirmingTpl = $state(false);
 
   async function load() {
-    const [list, pins] = await Promise.all([api.views.list(), api.pins.listResolved()]);
+    const [list, pins, fs, pl] = await Promise.all([api.views.list(), api.pins.listResolved(), api.folders.list(), api.folders.items()]);
     views = list;
+    folders = fs;
+    places = pl;
     pinned = new Set(pins.map((p) => p.route));
     loaded = true;
     [tpls, defaultId] = await Promise.all([templates().list(), defaultTemplateId()]);
@@ -80,19 +92,38 @@
   onMount(() => {
     load();
     // The command menu's "New view" lands here from another route (see defs/create/view.new.ts).
-    const open = () => (creating = true);
+    const open = () => ((newEntity = 'issue'), (creating = true));
+    const openProject = () => ((newEntity = 'project'), (creating = true));
     addEventListener('command:view.new', open);
+    addEventListener('command:view.newProject', openProject);
     addEventListener('rows:changed', load);
     return () => {
       removeEventListener('command:view.new', open);
+      removeEventListener('command:view.newProject', openProject);
       removeEventListener('rows:changed', load);
     };
   });
 </script>
 
+{#snippet viewRow(v: SavedView)}
+  <li class="row" data-view-id={v.id}>
+    <RowActions label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, pinned.has(`/view/${v.id}`))}>
+      <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? 'icon:layers', color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
+      <span class="grow">
+        <ListRow onpick={() => navigate(`/view/${v.id}`)}>
+          <span class="name">{v.name}</span>
+          <Pill>{layoutName(v.def.layout)}</Pill>
+          {#if v.entity === 'project'}<Pill>Project</Pill>{/if}
+          {#if pinned.has(`/view/${v.id}`)}<Pill>Pinned</Pill>{/if}
+        </ListRow>
+      </span>
+    </RowActions>
+  </li>
+{/snippet}
+
 <PageHeader title="Views" icon="icon:layers">
   {#snippet actions()}
-    <Button variant="primary" icon="plus" onclick={() => (creating = true)}>New view</Button>
+    <Button variant="primary" icon="plus" onclick={() => ((newEntity = 'issue'), (creating = true))}>New view</Button>
   {/snippet}
 </PageHeader>
 
@@ -102,22 +133,15 @@
       {#snippet action()}<Button variant="primary" icon="plus" onclick={() => (creating = true)}>New view</Button>{/snippet}
     </EmptyState>
   {:else}
-    <ul class="rows">
-      {#each views as v (v.id)}
-        <li class="row" data-view-id={v.id}>
-          <RowActions label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, pinned.has(`/view/${v.id}`))}>
-            <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? 'icon:layers', color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
-            <span class="grow">
-              <ListRow onpick={() => navigate(`/view/${v.id}`)}>
-                <span class="name">{v.name}</span>
-                <Pill>{layoutName(v.def.layout)}</Pill>
-                {#if pinned.has(`/view/${v.id}`)}<Pill>Pinned</Pill>{/if}
-              </ListRow>
-            </span>
-          </RowActions>
-        </li>
-      {/each}
-    </ul>
+    <Tabs bind:value={show} label="Show" segmented tabs={[{ id: 'all', label: 'All views' }, { id: 'issues', label: 'Issue views' }, { id: 'projects', label: 'Project views' }]} />
+    {#each tree as r, i (r.type === 'folder' ? `f${r.folder.id}` : `v${r.item.id}`)}
+      {#if r.type === 'folder'}
+        <h2 class="section" data-folder-id={r.folder.id} style:margin-left={`calc(${r.depth} * var(--s-8))`}>{r.folder.name}</h2>
+      {:else}
+        {#if folders.length && i === firstLoose}<h2 class="section">No folder</h2>{/if}
+        <ul class="rows" style:margin-left={`calc(${r.depth} * var(--s-8))`}>{@render viewRow(r.item)}</ul>
+      {/if}
+    {/each}
   {/if}
 
   {#if tpls}
@@ -147,7 +171,7 @@
   {/if}
 </main>
 
-<NewViewDialog bind:open={creating} />
+<NewViewDialog bind:open={creating} bind:entity={newEntity} />
 
 
 <Dialog bind:open={editOpen} title={editLayout ? 'Edit template' : 'Rename template'}>

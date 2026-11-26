@@ -48,7 +48,7 @@
   <PriorityGlyph {level} size={14} />
 {:else if field.Fixed === 'Status'}
   {@const status = ctx.statuses.find((s) => s.id === issue.status_id)}
-  <span class="with"><StatusGlyph category={status?.category ?? 'Backlog'} label={status?.name ?? 'Unknown'} /><span class="text">{status?.name}</span></span>
+  <span class="with"><StatusGlyph category={status?.category ?? 'Backlog'} icon={status?.icon} color={status?.color} label={status?.name ?? 'Unknown'} /><span class="text">{status?.name}</span></span>
 {:else if field.Fixed === 'Label'}
   {@const labels = issue.label_ids.flatMap((id) => ctx.labels.find((l) => l.id === id) ?? [])}
   <span class="chips">

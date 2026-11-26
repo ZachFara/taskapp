@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../lib/api';
-  import type { Cycle, Issue, SavedView, Status } from '../lib/bindings';
+  import type { Cycle, Issue, Placement, SavedView, Status, ViewFolder } from '../lib/bindings';
+  import { buildRows } from '../lib/folderTree';
   import Button from '../ui/Button.svelte';
   import Dialog from '../ui/Dialog.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
@@ -37,6 +38,8 @@
     pinned = new Set((await api.pins.listResolved()).filter((r) => r.pin.kind === 'Cycle').map((r) => r.pin.target));
   }
   let statuses = $state<Status[]>([]);
+  let folders = $state<ViewFolder[]>([]);
+  let places = $state<Placement[]>([]);
   let loaded = $state(false);
   let charts = $state(false);
   let bars = $state<{ label: string; value: number }[]>([]);
@@ -79,6 +82,7 @@
     // `finished` reads the statuses, so they load before the counts are made.
     statuses = await api.statuses.list();
     const list = await api.cycles.list();
+    [folders, places] = await Promise.all([api.folders.list(), api.folders.items()]);
     const issues = await Promise.all(list.map((c) => api.views.query(cycleView(c).def)));
     rows = list
       .map((c, i) => ({ ...c, band: bandOf(c, today), done: issues[i].filter(finished).length, total: issues[i].length}))
@@ -155,8 +159,12 @@
           </GroupHeader>
           {#if !collapsed[group.band]}
             <ul class="rows">
-              {#each group.items as c (c.id)}
-                <li class="row" data-cycle={c.id}>
+              {#each buildRows('cycle', folders, places, group.items, { hideEmpty: true }) as r (r.type === 'folder' ? `f${r.folder.id}` : `c${r.item.id}`)}
+               {#if r.type === 'folder'}
+                <li class="fold" data-folder-id={r.folder.id} style:padding-left={`calc(${r.depth} * var(--s-8))`}><Icon name="folder" size={12} />{r.folder.name}</li>
+               {:else}
+                {@const c = r.item}
+                <li class="row" data-cycle={c.id} style:padding-left={`calc(${r.depth} * var(--s-8))`}>
                   <RowActions label={title(c)} actions={rowActs({ kind: 'cycle', id: c.id, name: title(c) }, pinned.has(String(c.id)))}>
                     <IconColorPicker label={`Icon and colour of ${title(c)}`} value={{ icon: c.icon ?? 'icon:cycle', color: c.color }} onchange={(v) => patch({ kind: 'cycle', id: c.id, name: title(c) }, { icon: v.icon, color: v.color })} bind:open={() => rowUi.picking === `cycle:${c.id}`, (o) => (rowUi.picking = o ? `cycle:${c.id}` : null)} />
                     <span class="grow"><ListRow selected={opened === c.id} onpick={() => (opened = opened === c.id ? null : c.id)}>
@@ -176,6 +184,7 @@
                 {#if opened === c.id}
                   {#key c.id}<div class="issues"><ListView view={cycleView(c)} /></div>{/key}
                 {/if}
+               {/if}
               {/each}
             </ul>
           {/if}
@@ -205,6 +214,7 @@
 </Dialog>
 
 <style>
+  .fold { display: flex; align-items: center; gap: var(--s-4); height: var(--row-h); color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
   .body { padding: 0 var(--s-7) var(--s-7); display: grid; gap: var(--s-5); }
   .group { display: grid; }
   .rows { list-style: none; margin: 0; padding: 0; }

@@ -36,6 +36,8 @@ enum Cmd {
     #[command(subcommand)]
     View(ViewCmd),
     #[command(subcommand)]
+    Status(StatusCmd),
+    #[command(subcommand)]
     Property(PropertyCmd),
     #[command(subcommand)]
     Project(ProjectCmd),
@@ -186,6 +188,15 @@ enum IssueCmd {
         /// Remove the points.
         #[arg(long)]
         clear_points: bool,
+        /// Start date, YYYY-MM-DD.
+        #[arg(long)]
+        start: Option<String>,
+        /// Estimate in minutes.
+        #[arg(long)]
+        estimate: Option<u32>,
+        /// Project id.
+        #[arg(long)]
+        project: Option<i64>,
     },
     Get {
         key: String,
@@ -266,6 +277,32 @@ enum ViewCmd {
     DeleteTemplate {
         id: i64,
     },
+    /// List saved views with their definitions.
+    List,
+    /// Create a saved view from a JSON definition, or replace the one with `--id`.
+    Save {
+        name: String,
+        #[arg(long)]
+        def: String,
+        #[arg(long)]
+        id: Option<i64>,
+        /// What a new view lists: `issue` (default) or `project`. A saved view keeps its own.
+        #[arg(long, default_value = "issue")]
+        entity: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum StatusCmd {
+    List,
+    /// Create an issue status. Category: Backlog, Unstarted, Started, Completed or Canceled.
+    Create {
+        name: String,
+        #[arg(long)]
+        category: String,
+        #[arg(long, default_value = "gray")]
+        color: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -279,6 +316,9 @@ enum PropertyCmd {
         /// Select option value; repeat for several.
         #[arg(long = "option")]
         options: Vec<String>,
+        /// issues (default), projects or both.
+        #[arg(long, default_value = "issues")]
+        applies_to: String,
     },
     Rename {
         key: String,
@@ -313,6 +353,32 @@ enum ProjectCmd {
         icon: Option<String>,
         #[arg(long)]
         color: Option<String>,
+    },
+    /// Project statuses.
+    Statuses,
+    /// Create a project status. Category: Planned, Started, Paused, Completed or Cancelled.
+    StatusCreate {
+        name: String,
+        #[arg(long)]
+        category: String,
+        #[arg(long, default_value = "gray")]
+        color: String,
+    },
+    /// Change a project's status, priority, labels or a custom property value.
+    Set {
+        slug: String,
+        /// Project status name.
+        #[arg(long)]
+        status: Option<String>,
+        /// 0 none, 1 urgent, 2 high, 3 medium, 4 low.
+        #[arg(long)]
+        priority: Option<u8>,
+        /// Label name; repeat for several. Replaces the project's labels.
+        #[arg(long = "label")]
+        labels: Vec<String>,
+        /// Property key and JSON value, e.g. `--property owner '"sam"'`; `null` clears.
+        #[arg(long, num_args = 2, value_names = ["KEY", "JSON"])]
+        property: Vec<String>,
     },
 }
 
@@ -430,6 +496,11 @@ enum LabelCmd {
         color: String,
         #[arg(long)]
         icon: Option<String>,
+    },
+    /// Put a label on an issue, by the label's name (any case).
+    Add {
+        key: String,
+        label: String,
     },
 }
 

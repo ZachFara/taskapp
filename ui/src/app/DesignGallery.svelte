@@ -125,8 +125,8 @@
       </section>
 
       <section>
-        <h2>Status glyphs and priority rings</h2>
-        <p class="note">Cairn stones by stack height, contour rings by density. Sixteen is the working size; thirty-two is for review.</p>
+        <h2>Status circles and priority bars</h2>
+        <p class="note">Status circles by category, priority bars by level. Sixteen is the working size; thirty-two is for review.</p>
         <div class="glyphs">
           {#each categories as c (c)}
             <div class="g"><StatusGlyph category={c} size={16} /><StatusGlyph category={c} size={32} /><span>{c}</span></div>

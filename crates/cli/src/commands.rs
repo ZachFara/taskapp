@@ -11,13 +11,13 @@ use taskapp_core::{
     Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind,
     Relation, RelationKind, Result, SelectOption, StatusId, TemplateId, ViewDef, ViewId,
     ViewTemplateId, backup, comments, cycles, events, history, import, insights, issues, labels,
-    pins, projects, properties, quickadd, relations, search, templates, undo, view_templates,
-    views,
+    pins, project_statuses, projects, properties, quickadd, relations, search, statuses, templates,
+    undo, view_templates, views,
 };
 
 use crate::{
     Cmd, CommentCmd, CycleCmd, EventCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd, PinCmd,
-    ProjectCmd, PropertyCmd, RelationCmd, ScopeArgs, TemplateCmd, ViewCmd,
+    ProjectCmd, PropertyCmd, RelationCmd, ScopeArgs, StatusCmd, TemplateCmd, ViewCmd,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
@@ -32,6 +32,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Template(cmd) => template(db, cmd).await,
         Cmd::Insights(cmd) => insights(db, cmd).await,
         Cmd::Event(cmd) => event(db, cmd).await,
+        Cmd::Status(cmd) => status(db, cmd).await,
         cmd => run_group(db, dir, cmd).await,
     }
 }
@@ -57,6 +58,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Setup { .. }
         | Cmd::Template(_)
         | Cmd::Insights(_)
+        | Cmd::Status(_)
         | Cmd::Event(_) => handled_in_run(),
         Cmd::History { key } => {
             let id = issue_id(db, &key).await?;
@@ -148,6 +150,9 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         clear_due,
         points,
         clear_points,
+        start,
+        estimate,
+        project,
     } = cmd
     else {
         unreachable!("issue_update is only called with Update");
@@ -172,6 +177,9 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         } else {
             points.map(Some)
         },
+        start_date: start.as_deref().map(date).transpose()?.map(Some),
+        estimate_minutes: estimate.map(Some),
+        project_id: project.map(|p| Some(ProjectId(p))),
         ..IssuePatch::default()
     };
     val(issues::update(db, id, patch, SRC).await?)
@@ -214,10 +222,66 @@ async fn insights(db: &Db, cmd: InsightsCmd) -> Result<Value> {
     }
 }
 
+/// A category or other unit enum from its serialised name.
+fn named<T: serde::de::DeserializeOwned>(text: &str) -> Result<T> {
+    serde_json::from_value(json!(text)).map_err(|e| Error::Invalid(e.to_string()))
+}
+
+async fn status(db: &Db, cmd: StatusCmd) -> Result<Value> {
+    match cmd {
+        StatusCmd::List => val(statuses::list(db).await?),
+        StatusCmd::Create {
+            name,
+            category,
+            color,
+        } => val(statuses::create(db, &name, named(&category)?, &color, None, SRC).await?),
+    }
+}
+
+/// Creates a saved view, or replaces the one with `id` keeping the icon and colour the user gave it.
+async fn save_view(
+    db: &Db,
+    name: &str,
+    def: &str,
+    id: Option<i64>,
+    entity: String,
+) -> Result<Value> {
+    let def: ViewDef = serde_json::from_str(def).map_err(|e| Error::Invalid(e.to_string()))?;
+    let entity = serde_json::from_value(Value::String(entity))
+        .map_err(|_| Error::Invalid("entity is `issue` or `project`".into()))?;
+    let look = match id {
+        Some(id) => views::list(db)
+            .await?
+            .into_iter()
+            .find(|v| v.id == ViewId(id))
+            .map(|v| taskapp_core::palette::Look {
+                icon: v.icon,
+                color: v.color,
+            }),
+        None => None,
+    };
+    let saved = views::save_as(
+        db,
+        id.map(ViewId),
+        (name, entity),
+        def,
+        look.unwrap_or_default(),
+        SRC,
+    );
+    val(saved.await?)
+}
+
 async fn view(db: &Db, cmd: ViewCmd) -> Result<Value> {
     let (def, id) = match cmd {
         ViewCmd::Query { def, id } => (def, id),
         ViewCmd::Templates => return val(view_templates::list(db).await?),
+        ViewCmd::List => return val(views::list(db).await?),
+        ViewCmd::Save {
+            name,
+            def,
+            id,
+            entity,
+        } => return save_view(db, &name, &def, id, entity).await,
         ViewCmd::SaveAsTemplate { view_id, name } => {
             let t = view_templates::from_view(db, ViewId(view_id), name.as_deref(), SRC);
             return val(t.await?);
@@ -258,6 +322,7 @@ async fn property(db: &Db, dir: &Path, cmd: PropertyCmd) -> Result<Value> {
             name,
             kind: kind_name,
             options,
+            applies_to,
         } => {
             let def = PropertyDef {
                 key,
@@ -266,6 +331,7 @@ async fn property(db: &Db, dir: &Path, cmd: PropertyCmd) -> Result<Value> {
                 options: select_options(&options),
                 project_id: None,
                 position: 0,
+                applies_to: applies_to_of(&applies_to)?,
             };
             val(properties::create_def(db, def, SRC).await?)
         }
@@ -296,9 +362,81 @@ async fn property(db: &Db, dir: &Path, cmd: PropertyCmd) -> Result<Value> {
     }
 }
 
+fn applies_to_of(s: &str) -> Result<taskapp_core::PropertyAppliesTo> {
+    use taskapp_core::PropertyAppliesTo as A;
+    match s {
+        "issues" => Ok(A::Issues),
+        "projects" => Ok(A::Projects),
+        "both" => Ok(A::Both),
+        other => Err(Error::Invalid(format!(
+            "applies-to {other}: use issues, projects or both"
+        ))),
+    }
+}
+
+async fn project_set(
+    db: &Db,
+    slug: &str,
+    status: Option<String>,
+    priority: Option<u8>,
+    label_names: &[String],
+    property: &[String],
+) -> Result<Value> {
+    let mut p = projects::list(db)
+        .await?
+        .into_iter()
+        .find(|p| p.slug == slug)
+        .ok_or_else(|| Error::NotFound(format!("project {slug}")))?;
+    if let Some(name) = status {
+        let all = project_statuses::list(db).await?;
+        let found = all.iter().find(|s| s.name.eq_ignore_ascii_case(&name));
+        p.status_id = found
+            .ok_or_else(|| Error::NotFound(format!("project status {name}")))?
+            .id;
+    }
+    if let Some(n) = priority {
+        p.priority = n;
+    }
+    if !label_names.is_empty() {
+        let all = labels::list(db).await?;
+        p.label_ids = label_names
+            .iter()
+            .map(|n| {
+                all.iter()
+                    .find(|l| l.name.eq_ignore_ascii_case(n))
+                    .map(|l| l.id)
+                    .ok_or_else(|| Error::NotFound(format!("label {n}")))
+            })
+            .collect::<Result<_>>()?;
+    }
+    for kv in property.chunks(2) {
+        let value = serde_json::from_str::<Value>(&kv[1])
+            .map_err(|e| Error::Invalid(format!("value is not JSON: {e}")))?;
+        if value.is_null() {
+            p.properties.remove(&kv[0]);
+        } else {
+            p.properties.insert(kv[0].clone(), value);
+        }
+    }
+    val(projects::update(db, p, SRC).await?)
+}
+
 async fn project(db: &Db, cmd: ProjectCmd) -> Result<Value> {
     match cmd {
         ProjectCmd::List => val(projects::list(db).await?),
+        ProjectCmd::Statuses => val(project_statuses::list(db).await?),
+        ProjectCmd::StatusCreate {
+            name,
+            category,
+            color,
+        } => val(project_statuses::create(db, &name, named(&category)?, &color, None, SRC).await?),
+        ProjectCmd::Set {
+            slug,
+            status,
+            priority,
+            labels,
+            property,
+        } => project_set(db, &slug, status, priority, &labels, &property).await,
         ProjectCmd::Create {
             slug,
             name,
@@ -398,6 +536,15 @@ async fn label(db: &Db, cmd: LabelCmd) -> Result<Value> {
         LabelCmd::List => val(labels::list(db).await?),
         LabelCmd::Create { name, color, icon } => {
             val(labels::create(db, &name, &color, icon, SRC).await?)
+        }
+        LabelCmd::Add { key, label } => {
+            let found = labels::list(db)
+                .await?
+                .into_iter()
+                .find(|l| l.name.eq_ignore_ascii_case(&label));
+            let found = found.ok_or_else(|| Error::NotFound(format!("label {label}")))?;
+            labels::add_label(db, issue_id(db, &key).await?, found.id, SRC).await?;
+            val(issues::get_by_key(db, &key).await?)
         }
     }
 }
@@ -511,6 +658,7 @@ fn pin_kind(name: &str) -> Result<PinKind> {
         "cycle" => PinKind::Cycle,
         "note" => PinKind::Note,
         "url" => PinKind::Url,
+        "folder" => PinKind::Folder,
         _ => return Err(Error::Invalid(format!("unknown pin kind: {name}"))),
     })
 }

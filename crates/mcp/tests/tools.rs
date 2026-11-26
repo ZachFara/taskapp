@@ -21,12 +21,14 @@ const TOOL_NAMES: &[&str] = &[
     "list_properties",
     "create_property",
     "rename_property",
+    "set_property_applies_to",
     "change_property_kind",
     "delete_property",
     "set_property",
     "list_statuses",
     "create_status",
     "list_projects",
+    "list_project_statuses",
     "create_project",
     "create_milestone",
     "list_cycles",
@@ -671,4 +673,36 @@ fn pin_refuses_an_issue_that_does_not_exist() {
         "{:?}",
         r[0]
     );
+}
+
+#[test]
+fn project_status_priority_labels_and_properties_through_tools() {
+    let (_d, db) = tmp();
+    let r = session(
+        &db,
+        &[
+            ("create_project", json!({"slug": "p", "name": "P"})),
+            ("list_project_statuses", json!({})),
+            (
+                "create_property",
+                json!({"key": "sponsor", "name": "Sponsor", "kind": "Text", "applies_to": "Projects"}),
+            ),
+            ("create_label", json!({"name": "ops", "color": "red"})),
+            (
+                "update_project",
+                json!({"id": 1, "status_id": 2, "priority": 3, "label_ids": [1], "properties": {"sponsor": "sam"}}),
+            ),
+            ("update_project", json!({"id": 1, "priority": 9})),
+        ],
+    );
+    assert_eq!(
+        r[1].as_ref().expect("statuses").as_array().map(Vec::len),
+        Some(5)
+    );
+    assert_eq!(r[2].as_ref().expect("property")["applies_to"], "Projects");
+    let p = r[4].as_ref().expect("update");
+    assert_eq!((&p["status_id"], &p["priority"]), (&json!(2), &json!(3)));
+    assert_eq!(p["label_ids"], json!([1]));
+    assert_eq!(p["properties"]["sponsor"], "sam");
+    assert!(r[5].is_err(), "{:?}", r[5]);
 }

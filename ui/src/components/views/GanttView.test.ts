@@ -38,6 +38,13 @@ const chain = () => [dated(1, '2026-12-01', '2026-12-03'), dated(2, '2026-12-05'
 const block = () => api.relations.add({ from: 1, to: 2, kind: 'blocks' });
 
 describe('GanttView', () => {
+  it('a view that was never saved (a project page) still draws its bars', async () => {
+    const unsaved: SavedView = { id: -1, name: 'Project', def: { ...def, filter: { Cond: { field: { Fixed: 'Project' }, op: 'Eq', value: 1 } } }, position: 0 };
+    await show(chain(), { view: unsaved });
+    await vi.waitFor(() => expect(bar('issue-1')).not.toBeNull());
+    expect(bar('issue-2')).not.toBeNull();
+  });
+
   it('drag_confirms_and_applies_shift', async () => {
     await show(chain());
     await block();
@@ -84,7 +91,7 @@ describe('GanttView', () => {
 
   it('zoom_levels_switch', async () => {
     await show(chain());
-    const width = () => parseFloat(document.querySelector<HTMLElement>('.canvas')!.style.width);
+    const width = () => parseFloat(document.querySelector<HTMLElement>('.canvas')!.style.minWidth);
     const widths: number[] = [];
     for (const z of ['Day', 'Week', 'Month', 'Quarter']) {
       ([...document.querySelectorAll('[role=tab]')].find((b) => b.textContent?.trim() === z) as HTMLElement).focus();
@@ -207,14 +214,19 @@ describe('GanttView', () => {
     expect(zoom()).toBe('Month');
   });
 
-  it('axis_labels_stay_clear_of_the_today_flag', async () => {
+  it('axis_labels_never_overlap_and_the_today_flag_has_its_own_row', async () => {
     await show(chain(), { today: '2026-12-04' });
-    const today = parseFloat(document.querySelector<HTMLElement>('[data-testid="today"]')!.style.left);
-    const ticks = [...document.querySelectorAll<HTMLElement>('.axis .tick')];
-    const near = ticks.filter((t) => { const d = parseFloat(t.style.left) - today; return d > -56 && d < 28; });
-    expect(near.length).toBeGreaterThan(0);
-    for (const t of near) expect(t.textContent?.trim(), t.style.left).toBe('');
-    expect(ticks.some((t) => t.textContent?.trim())).toBe(true);
+    for (const z of ['Day', 'Week', 'Month', 'Quarter']) {
+      const tab = [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find((x) => x.textContent?.trim() === z)!;
+      tab.focus();
+      flushSync();
+      const xs = [...document.querySelectorAll<HTMLElement>('.axis .tick')].map((t) => parseFloat(t.style.left));
+      const dw = { Day: 40, Week: 14, Month: 4, Quarter: 1.5 }[z]!;
+      const min = z === 'Day' ? dw : z === 'Week' ? 7 * dw : 28 * dw;
+      expect(xs.length, z).toBeGreaterThan(0);
+      xs.slice(1).forEach((x, i) => expect(x - xs[i], z).toBeGreaterThanOrEqual(min));
+    }
+    expect(document.querySelector('.axis .flag .today-chip')).not.toBeNull();
   });
 
   it('today_marker_sits_on_its_day', async () => {

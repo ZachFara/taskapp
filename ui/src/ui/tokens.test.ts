@@ -46,9 +46,10 @@ describe('tokens.css', () => {
       }
     }
   });
-  it('uses the three motion durations', () => {
-    expect(css).toMatch(/--dur-1: 80ms/);
-    expect(css).toMatch(/--dur-2: 140ms/);
-    expect(css).toMatch(/--dur-3: 220ms/);
+  it('uses the three motion durations, each scaled by the animation speed', () => {
+    expect(css).toMatch(/--motion-scale: 1;/);
+    expect(css).toMatch(/--dur-1: calc\(80ms \* var\(--motion-scale\)\)/);
+    expect(css).toMatch(/--dur-2: calc\(140ms \* var\(--motion-scale\)\)/);
+    expect(css).toMatch(/--dur-3: calc\(220ms \* var\(--motion-scale\)\)/);
   });
 });

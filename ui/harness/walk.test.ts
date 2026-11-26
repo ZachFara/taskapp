@@ -47,7 +47,7 @@ afterAll(async () => {
 async function open(path = '/view/1', viewport = { width: 1440, height: 900 }) {
   await page?.close();
   page = await browser.newPage({ viewport });
-  page.setDefaultTimeout(5_000);
+  page.setDefaultTimeout(Number(process.env.WALK_TIMEOUT ?? 5_000)); // WALK_TIMEOUT: more time on a loaded machine
   await page.goto(base + path);
   await page.locator('[data-key], aside.sidebar').first().waitFor();
   if (path.startsWith('/view/')) await page.locator('li[data-key], li[data-issue]').first().waitFor();
@@ -152,6 +152,13 @@ describe('walk', { timeout: 20_000 }, () => {
     await pw(panel).toHaveCount(0);
   });
 
+  it('M1 c then typing at once: every character lands in the title while the dialog arrives', async () => {
+    await open();
+    await press('c');
+    await page.keyboard.type('Quick motion title');
+    await pw(page.getByLabel('Title, with quick-add tokens')).toHaveValue('Quick motion title');
+  });
+
   it('F6 the created toast has a readable Undo; u with nothing to undo is quiet', async () => {
     await open();
     await press('c');
@@ -223,14 +230,14 @@ describe('walk', { timeout: 20_000 }, () => {
     // Away from the template and back.
     await page.getByRole('tab', { name: 'List' }).click();
     await page.waitForTimeout(600);
-    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Reset to template' }).click();
     await pw(page.getByRole('tab', { name: 'Board' })).toHaveAttribute('aria-selected', 'true');
-    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('menuitem', { name: 'New view...' }).click();
     await pw(page.getByRole('dialog', { name: 'New view' }).getByRole('button', { name: /Copy of current view/ })).toBeVisible();
     await press('Escape');
-    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Save as template' }).click();
     // In-app navigation: a reload would reset the mock.
     await page.evaluate(() => { history.pushState(null, '', '/views'); dispatchEvent(new PopStateEvent('popstate')); });
@@ -342,12 +349,32 @@ describe('walk', { timeout: 20_000 }, () => {
     expect(await page.getByText('Due', { exact: true }).count()).toBe(0);
     await go('/view/1');
     await page.getByRole('button', { name: 'Add filter' }).click();
-    await pw(page.getByRole('menuitem', { name: 'Project' })).toBeVisible();
+    await pw(page.getByRole('menuitem', { name: 'Project', exact: true })).toBeVisible();
     expect(await page.getByRole('menuitem', { name: 'Due', exact: true }).count()).toBe(0);
     await press('Escape');
     await go('/settings/fields');
     await page.getByLabel('Show Due').click();
     await go('/issue/ABC-1');
     await pw(page.getByText('Due', { exact: true })).toBeVisible();
+  });
+  it('IMAGES pasting an image into a description shows it in the description', async () => {
+    await open('/issue/ABC-1');
+    await page.getByRole('button', { name: 'Edit description' }).click();
+    const box = page.getByRole('textbox', { name: 'Description text' });
+    await box.focus();
+    // A real 1x1 PNG, pasted as the clipboard would carry it.
+    await box.evaluate((el) => {
+      const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
+      const data = new DataTransfer();
+      data.items.add(new File([png], 'shot.png', { type: 'image/png' }));
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    });
+    await pw(box).toHaveValue(/!\[shot\]\(attachment:\d+\)/);
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    const img = page.getByRole('region', { name: 'Description' }).locator('img[data-attachment]');
+    await pw(img).toHaveAttribute('src', /^blob:/);
+    await page.waitForFunction(() => (document.querySelector('img[data-attachment]') as HTMLImageElement)?.naturalWidth > 0);
+    await img.click();
+    await pw(page.getByRole('dialog', { name: 'Image' }).locator('img')).toBeVisible();
   });
 });

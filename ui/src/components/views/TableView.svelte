@@ -11,6 +11,7 @@
   import { workspaceZone, dayText, dueDay, isOverdue } from './dates';
   import EmptyState from '../../ui/EmptyState.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
+  import { flash } from '../../lib/motion.svelte';
   import IconButton from '../../ui/IconButton.svelte';
     import { fixedOn } from '../../lib/fields.svelte';
     import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
@@ -150,12 +151,12 @@
     });
   });
 
-  type Group = { name: string; category: StatusCategory; status: boolean; priority?: number; rows: Issue[] };
-  const groupOf = (i: Issue): { name: string; category: StatusCategory; status: boolean; priority?: number } => {
+  type Group = { name: string; category: StatusCategory; status: boolean; icon?: string | null; color?: string | null; priority?: number; rows: Issue[] };
+  const groupOf = (i: Issue): { name: string; category: StatusCategory; status: boolean; icon?: string | null; color?: string | null; priority?: number } => {
     const field = groupBy;
     if (field?.Fixed === 'Status') {
       const st = statuses.find((s) => s.id === i.status_id);
-      return { name: st?.name ?? 'Unknown', category: st?.category ?? 'Backlog', status: true };
+      return { name: st?.name ?? 'Unknown', category: st?.category ?? 'Backlog', status: true, icon: st?.icon, color: st?.color };
     }
     if (field?.Fixed === 'Points') return { name: pointsName(i.points), category: 'Backlog' as StatusCategory, status: false };
     if (field?.Fixed === 'Priority') return { name: priorityName(i.priority), category: 'Backlog' as StatusCategory, status: false, priority: i.priority };
@@ -175,7 +176,7 @@
       byName.set(g.name, hit);
     }
     if ((def as DisplayDef).show_empty_groups && groupBy?.Fixed === 'Status')
-      for (const st of statuses) if (!byName.has(st.name)) byName.set(st.name, { name: st.name, category: st.category, status: true, rows: [], order: st.position });
+      for (const st of statuses) if (!byName.has(st.name)) byName.set(st.name, { name: st.name, category: st.category, status: true, icon: st.icon, color: st.color, rows: [], order: st.position });
     return [...byName.values()].sort((a, b) => a.order - b.order);
   });
   function groupOrder(i: Issue): number {
@@ -439,7 +440,7 @@
           {#if grouped}
             <tr class="band-row">
               <td colspan={cols.length + 1}>
-                <GroupHeader name={g.name || 'None'} count={g.rows.length} total={pointsTotal(g.rows, cols.map((c) => c.ref), ctx)} category={g.status ? g.category : undefined} tone={g.priority ? (Math.min(4, Math.max(1, g.priority)) as 1 | 2 | 3 | 4) : 1} collapsed={collapsed.has(g.name)} ontoggle={() => toggleGroup(g.name)}>
+                <GroupHeader name={g.name || 'None'} count={g.rows.length} total={pointsTotal(g.rows, cols.map((c) => c.ref), ctx)} category={g.status ? g.category : undefined} icon={g.icon} color={g.color} tone={g.priority ? (Math.min(4, Math.max(1, g.priority)) as 1 | 2 | 3 | 4) : 1} collapsed={collapsed.has(g.name)} ontoggle={() => toggleGroup(g.name)}>
                   {#snippet leading()}{#if g.priority !== undefined}<PriorityGlyph level={priorityGlyph(g.priority)} />{/if}{/snippet}
                 </GroupHeader>
               </td>
@@ -447,7 +448,7 @@
           {/if}
           {#if !collapsed.has(g.name)}
             {#each g.rows as issue (issue.id)}
-              <tr data-key={issue.key} data-id={issue.id} aria-selected={rowSelected(issue)} data-focused={issue.id === activeRowId ? '' : undefined}>
+              <tr use:flash={{ id: issue.id, sig: `${issue.status_id}:${issue.priority}`, key: issue.key }} data-key={issue.key} data-id={issue.id} aria-selected={rowSelected(issue)} data-focused={issue.id === activeRowId ? '' : undefined}>
                 <th scope="row" class="key-cell">{issue.key}</th>
                 {#each cols as col, c (col.id)}
                   {@const isEditing = editing !== null && visibleIds[editing.row] === issue.id && editing.col === c}

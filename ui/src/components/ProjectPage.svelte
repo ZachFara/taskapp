@@ -13,6 +13,7 @@
   import Tabs from '../ui/Tabs.svelte';
   import ViewEditor from './ViewEditor.svelte';
   import ProjectHeader from './project/ProjectHeader.svelte';
+  import ProjectDetails from './project/ProjectDetails.svelte';
   import ProjectIssues from './project/ProjectIssues.svelte';
   import { shortcutFor } from '../lib/commands/registry';
   import Milestones from './project/Milestones.svelte';
@@ -88,6 +89,13 @@
     void reload(slug);
   });
 
+  // A command-menu edit (status, priority, labels) lands on the backend; show it.
+  $effect(() => {
+    const again = () => void reload(slug);
+    addEventListener('rows:changed', again);
+    return () => removeEventListener('rows:changed', again);
+  });
+
   // The command registry fires these; the page owns the state they act on.
   $effect(() => {
     const pin = () => void togglePin();
@@ -135,6 +143,7 @@
     <div class="cols">
     <div class="scroll">
       <ProjectHeader {project} {progress} bind:renaming onsaved={(p) => (project = p)} />
+      <div class="details"><ProjectDetails {project} onsaved={(p) => (project = p)} /></div>
       <div class="ms">
         <Milestones projectId={project.id} {milestones} issues={rows} {statuses} onchange={() => reload(slug)} />
       </div>
@@ -160,6 +169,7 @@
   .page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
   .cols { flex: 1; min-height: 0; display: flex; }
   .scroll { flex: 1; min-height: 0; overflow-y: auto; }
+  .details { padding: var(--s-5) var(--s-7) 0; }
   .ms { padding: var(--s-7); }
   .toolbar { display: flex; align-items: center; gap: var(--s-7); flex-wrap: wrap; padding: 0 var(--s-7); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
   .crumb { font-size: var(--fs-lg); font-weight: 600; color: var(--muted); }

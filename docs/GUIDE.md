@@ -9,8 +9,8 @@ Contents: [What it is](#what-cairn-is) - [First run](#first-run) - [The screen](
 [Selection and bulk edit](#selection-and-bulk-edit) - [Undo and redo](#undo-and-redo) - [Views](#views) -
 [Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) - [Events](#events) -
 [Points and insights](#points-and-insights) - [Custom properties](#custom-properties) -
-[Statuses, labels, icons, colours](#statuses-labels-icons-and-colours) - [Templates](#issue-templates) -
-[Import, export, backups](#import-export-and-backups) - [Reminders and Google Calendar](#reminders-and-google-calendar) -
+[Statuses, labels, icons, colours](#statuses-labels-icons-and-colours) - [Templates](#issue-templates) - [Images](#images) -
+[Import, export, backups](#import-export-and-backups) - [Restore](#restore) - [Reminders and Google Calendar](#reminders-and-google-calendar) -
 [Settings](#settings) - [Command menu](#the-command-menu) - [Keyboard reference](#keyboard-reference) -
 [CLI](#cli-reference) - [MCP](#mcp-tools-reference) - [How do I ...](#how-do-i-) - [Limits](#limits-and-not-built-yet)
 
@@ -39,12 +39,14 @@ to bring tasks in. The same step can be done from the terminal: `taskapp setup "
 (MCP: `workspace_setup`). You can change the name, key and zone later in Settings > General. A new database starts
 with five statuses (Backlog, Todo, In Progress, Done, Canceled) and three saved views (Active, Board, Timeline: all
 projects).
+The same screen has a second choice, "Restore from an export": see [Restore](#restore).
 
 ## The screen
 
 - **Sidebar (left).** Top: My issues. Then four collapsible sections with counts: Pinned, Views, Projects (with "All
-  projects"), Cycles (with "All cycles"). Bottom: Settings. Drag a pin or a view to reorder it. Hover a view, project
-  or cycle and press the pin icon to pin or unpin it. With "Sidebar sparklines" on (Settings > General) each project
+  projects"), Cycles (with "All cycles"). Bottom: Settings. Drag a pin or a view to reorder it. Right-click a view, folder,
+  project or cycle and choose Pin or Unpin. The Projects section shows only "All projects" until you right-click its
+  heading and choose "Show projects in the sidebar" (kept on this device); pinned projects always show under Pinned. With "Sidebar sparklines" on (Settings > General) each project
   shows a small progress line. The sidebar has no Inbox link; `/inbox` exists but only shows "Inbox arrives in a later
   release".
 - **Top bar.** The breadcrumb, the "Search or run a command" button (mod+k), a keyboard-shortcuts button and a theme
@@ -176,6 +178,19 @@ saved automatically (after a short pause). Filter changes show an "Undo" toast.
 
 - **Make one.** Views page > New view, or the view menu > "New view..." (choose Blank, a copy of the current view, or
   a template), or "Save as new view" (copies the current one).
+- **Folders.** Every sidebar section (Pinned, Views, Projects, Cycles) can hold folders, and folders can sit inside
+  folders, up to three deep. Make one from the section's "..." menu, by right-clicking empty space in the section, from
+  a folder's menu ("New folder inside"), or from the command menu ("New folder", for the page you are on); name it in
+  the dialog. Click a folder to collapse it; which folders are collapsed is remembered on this device only. A folder
+  only holds items of its own section. A folder can be pinned (right-click > Pin): Pinned then shows it as a folder row
+  with its contents, always current, and unpinning leaves the folder as it was. Rename or delete from the folder's right-click menu; deleting moves what is in
+  it up one level, it never deletes the contents. Three ways to move something, each one undo step:
+  drag the row (press, move a few pixels, release; a ghost follows the pointer). Drop on a folder to put it inside
+  (hold over a collapsed folder and it opens); drop between rows to reorder, where the line shows the place; drop in
+  the "Move to top level" strip at the end of the section to take it out. Esc cancels the drag. Or right-click the row
+  and choose "Move to folder" (the folders are listed by depth, plus "Top level" and "New folder..."). Or open a view
+  or project and use the command menu's "Move to folder...". The Views, Projects and Cycles pages show the same
+  folders, nested and indented.
 - **Layouts.** Tabs in the header, or `v l` list, `v b` board, `v t` table, `v g` timeline, `v c` calendar.
 - **Filter.** "Add filter" (`f`) lists Status, Status category, Project, Label, Priority, Due and every custom property.
   Each filter is a chip: click it to change the operator and values; the x removes it. Operators: is, is not, is any
@@ -222,6 +237,26 @@ saved automatically (after a short pause). Filter changes show an "Undo" toast.
   their due date. Drag an issue from the "Issues to schedule" side list onto a day to set its due date, or onto a time
   slot to create a one-hour work block. Drag items to move or resize them.
 
+## Project views
+
+A saved view can list projects instead of issues. It opens at `/view/<id>` like any view and has the same five layouts,
+filter chips, Group, Sort and Display.
+
+- **Make one.** Views page > New view > choose Projects; the command menu "New project view"; right-click the
+  Views heading's "..." menu in the sidebar > New project view. On the Projects page, "Save as view" keeps its current
+  filters, sort and grouping as a project view (a table). A project view shows in the sidebar among the other views
+  (marked with a small project icon) and sits in the same folders; the Views page lists both, with a filter All views /
+  Issue views / Project views. From outside: `taskapp view save NAME --def JSON --entity project`.
+- **Fields.** Name, Status, Status category, Priority, Labels, Start, Target, Progress (percent of issues done),
+  Issues (count) and custom properties that apply to projects. Issue views can also filter by "Project status".
+- **Layouts.** List: status, priority, name, then the fields, in bands when grouped. Table: the columns chosen in
+  Display. Board: a column per project status (or priority, or a select property, from Group); dragging a card to
+  another column sets that field, one undo step. Timeline: a bar from start to target date per project, milestones as
+  diamonds and a today line; drag a bar or its ends to change the dates. Calendar: a month grid with a chip on each
+  project's start and target day. Clicking a row, card, bar label or chip opens the project.
+- **Display.** Which fields show, compact rows, empty groups and "Show archived" (archived projects are hidden by default).
+- **Not available.** Templates and Insights are for issue views; a project's created and updated times are not fields yet.
+
 ## Projects, milestones, cycles
 
 - **Projects.** Projects page > New project (name, slug). Settings > Projects also adds and deletes. A project page
@@ -230,6 +265,16 @@ saved automatically (after a short pause). Filter changes show an "Undo" toast.
   insights panel. Rename, pin and archive are in the header. Archiving asks first, keeps the issues, and can be
   restored. Fields: slug, name, description, doc link, start date, target date, icon, colour. A project can also scope
   a custom property.
+- **Project status, priority, labels and properties.** A project has a status of its own (Settings > Project statuses:
+  Planned, In progress, Paused, Done, Cancelled; add, rename, recolour, reorder, delete moves the projects to another
+  status), a priority (the same scale as issues), labels (the same labels) and any custom property set to apply to
+  projects. A "Project details" plate on the project page edits all of them; each edit is one undo step. In the command
+  menu on a project page: "Set project status", "Set project priority", "Add or remove project labels" and "Set project
+  property" (Select and Checkbox only). The Projects page shows Status, Priority, Labels and a column per project
+  property, and groups by status or priority, sorts, and filters by status, priority or label. The sidebar shows each
+  project's status glyph. CLI: `project statuses`, `project set <slug> --status --priority --label --property`; MCP:
+  `list_project_statuses`, and `update_project` takes `status_id`, `priority`, `label_ids`, `properties`. Export writes
+  `project_statuses.yaml` and the fields into each project file.
 - **Milestones.** On a project page, "Milestones": add a name and a date. An issue is assigned a milestone in the
   issue panel (after choosing the project) or with the "Change milestone" command. Milestones draw as markers on the timeline.
 - **Cycles.** Fixed, numbered, non-overlapping date ranges. Cycles page > New cycle (optional name, start, end), or
@@ -271,8 +316,8 @@ belong to many events. Times are wall-clock times with no zone.
 
 ## Custom properties
 
-Your own fields on every issue (or just one project's). Kinds: Text, Number, Date, Select, MultiSelect, Checkbox, Url,
-NoteLink. Create in Settings > Properties (name, key like `effort`, kind, scope, and options for Select kinds), or
+Your own fields on issues, on projects, or on both (or, for issues, just one project's). Kinds: Text, Number, Date, Select, MultiSelect, Checkbox, Url,
+NoteLink. Create in Settings > Properties (name, key like `effort`, kind, applies to (Issues, Projects or Both), scope, and options for Select kinds), or
 CLI `property create`, or MCP `create_property`. Set a value in the issue panel, in a table cell, with `a` (Select and
 Checkbox only), or CLI `property set`. Show a property in views through the Display panel; filter, group and sort on
 it. Changing a property's kind or deleting it takes a database snapshot first (and deleting removes every issue's
@@ -289,8 +334,14 @@ are also off whenever Estimation (General) has no points. The list is the `issue
 
 ## Statuses, labels, icons and colours
 
+**New issues start in** (top of Settings > Statuses) picks the status an issue gets when none is given: quick add,
+templates and imports. Unset, or if that status is deleted, new issues start in the first status.
+
 - **Statuses** (Settings > Statuses): grouped by category; add a name with an icon and colour; delete asks which status to
-  move that status's issues to.
+  move that status's issues to. Each status shows its own icon and colour (from the same picker) wherever its glyph appears;
+  without one it shows the default circle for its category: backlog dashed, unstarted empty, started half-filled, completed
+  filled with a check, canceled with a cross.
+- **Priority** shows as three bars of rising height: none faint, low one bar, medium two, high three, urgent three in red.
 - **Labels** (Settings > Labels): name, icon, colour. Add to issues with `l`, the panel, or `@name` in quick-add.
 - **Colours** are a fixed palette of 12 keys: gray, red, orange, amber, yellow, green, teal, cyan, blue, indigo, purple,
   pink. A `#rrggbb` value sent by CLI or MCP maps to the nearest key.
@@ -302,8 +353,9 @@ are also off whenever Estimation (General) has no points. The list is the `issue
 
 ## Hover actions and right-click menus
 
-- Point at a sidebar row (view, project, cycle), a view on the Views page, or an issue row in a list, and its actions
-  appear at the row's right edge. Tab to a row to show them from the keyboard. They do not move the row's contents.
+- Point at a sidebar row (view, project, cycle), a view on the Views page, or an issue row in a list, and a single "…"
+  button appears at its right edge. Tab to a row to show it from the keyboard. Clicking the rest of the row opens it as
+  before. The "…" opens the row's actions menu.
 - Right-click a sidebar row or a Views page row, or press Shift+F10 or the menu key on it, for the same actions as a
   menu. Views: rename, duplicate, pin or unpin, change icon, delete (delete asks first and keeps the issues).
   Projects and cycles: rename, pin or unpin, change icon, delete (the same confirm as Settings).
@@ -320,6 +372,22 @@ fields (status, priority, project, labels, estimate, points, properties) and sub
 fields). Creating from a template makes the issue and its sub-issues as one undo step. Use it with `/slug ...` in
 quick-add, `taskapp template apply <id> [title]`, or MCP `apply_template`.
 
+## Images
+
+Paste an image (a screenshot, a copied picture) into a description or a comment box, or drop an image file on it: it is
+stored and `![name](attachment:3)` is written at the cursor. **Attach image** under the box (also in the command menu while
+you are in a box) opens a file picker for the same thing. Pasted text works as before. PNG, JPEG, GIF and WebP up to
+10 MB; the file's own bytes decide the type, so SVG and anything else is refused with a message and nothing is inserted.
+The same picture added twice is stored once. Click a picture to see it larger. Pictures from the web are never shown
+(they would tell the site you opened the issue); only `attachment:` images are.
+
+Files live in an `attachments` folder next to the database. A GitHub export copies the pictures that some description
+or comment still uses into `attachments/` (listed in `attachments.yaml`), and a restore, rebuild or pull brings them back.
+Backups: the nightly and snapshot copies also copy new pictures into `attachments/` inside the backup folder (one copy
+per picture, never pruned); a database restore from a backup needs that folder copied back next to the database.
+Adding a picture is not an undo step (the text edit that uses it is). A picture nothing refers to any more stays on disk;
+a cleanup command is not built yet.
+
 ## Import, export and backups
 
 - **CSV import** (Settings > Import, or first run): choose a file (header row first), map each column to a field
@@ -333,20 +401,44 @@ quick-add, `taskapp template apply <id> [title]`, or MCP `apply_template`.
 - **Export** (Settings > Export): turn it on, choose a folder and optionally a Git remote, "Export now". It writes one
   markdown file per issue and commits and pushes it. Needs your own Git remote (see docs/github-setup.md). Not verified
   against a real repository. The export carries everything but secrets, machine-local settings and the raw change
-  history, including each issue's work blocks.
+  history, including each issue's work blocks. It also writes `local.yaml`: this machine's export folder, remote
+  (a password or token inside the address is removed) and backup folder, which a restore offers back but never forces.
 - **Two machines** (same remote on both): before it writes, an export fetches the remote. If another machine pushed
   first, nothing is overwritten; Settings > Export shows the message and "Pull and apply" fast-forwards the folder and
   applies the incoming issues in one undoable step, "Sync from remote". The newer edit (by updated time) wins per
   issue; conflicts are listed under "Last pull from the remote". New issues, comments, relations and work blocks are
   added. Statuses, labels, projects, settings and deletions are not carried over yet (docs/decisions/0017). If both
   machines have unpushed commits the export stops with a message; merge them in the export folder with git.
-- **Restore from an export**: `taskapp restore --from <export folder> --db <new database path>` builds a fresh database
-  from the files. It refuses to overwrite an existing database. Quit the app first and point `--db` at a path that does
-  not exist; then move it into place. Not yet proven on real data, which is why backups stay (docs/decisions/0017).
+- **Restore from an export**: in the app, see [Restore](#restore). From the terminal,
+  `taskapp restore --from <export folder> --db <new database path>` builds a fresh database from the files and refuses
+  to overwrite an existing one; quit the app first and point `--db` at a path that does not exist.
 - **Backups** (Settings > Backups): set a folder, "Snapshot now" writes a copy of the database to `snapshots/`; a nightly
   copy goes to `nightly/`. The newest 14 nightly and 30 snapshot files are kept. Before risky changes (property type
   change or delete, a bulk update over 10 items) a snapshot is taken. To restore: quit the app, then
   `taskapp backup restore <file> --yes`. `taskapp backup list --dir <folder>` lists backups.
+
+## Restore
+
+Loads a whole workspace back from an export, from inside the app. Two ways in: on the first-run screen choose
+"Restore from an export", or in a workspace that already has data open the command menu and run "Restore from
+export...". Type the export folder, or the Git address of the repository it was pushed to (`https://...`,
+`ssh://...` or `git@host:path`). An address is cloned with your own `git` and your own sign-in into the app's data
+folder; no password or token is ever stored. A folder with a link in it is refused.
+
+The command asks first: it replaces everything in the workspace, and it saves a backup of the current database
+(in the backup folder, `snapshots/`) before it replaces anything. A broken export changes nothing. Afterwards the export
+settings point at the restored folder (and the address it came from), so the next export continues the same history.
+"Also restore the export's remote and backup folder" applies `local.yaml`; leave it off to keep this machine's own.
+
+Comes back: issues with their descriptions, comments, labels, parents, relations (and custom relation kinds), work
+blocks, projects and milestones, cycles, events and their issue links, statuses, views and view templates, issue
+templates, pins, custom properties, the import log, and the settings the export carries (workspace name, key, time
+zone, theme, estimation and the like). Issue numbers stay; row ids inside the database are new.
+
+Never comes back: the change history behind undo (it names rows by internal id, so it could not be replayed safely;
+the old history is cleared on restore), the Google and Reminders sign-ins and tokens (connect them again in Settings), and anything in a setting named like a
+token, secret, path or remote, except what `local.yaml` offers. A restore that you did not ask for can be undone by
+restoring the backup it wrote (`taskapp backup restore`).
 
 ## Reminders and Google Calendar
 
@@ -361,7 +453,7 @@ quick-add, `taskapp template apply <id> [title]`, or MCP `apply_template`.
 
 ## Settings
 
-Settings is a list of sections: General, Statuses, Labels, Projects, Cycles, Fields, Properties, Relations, Templates, Import, Reminders,
+Settings is a list of sections: General, Statuses, Project statuses, Labels, Projects, Cycles, Fields, Properties, Relations, Templates, Import, Reminders,
 Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` saves the open page.
 
 | General setting | Values | Notes |
@@ -376,11 +468,22 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 | Progress charts | on or off | Burn-ups and sparklines on projects and cycles. |
 | Sidebar sparklines | on or off | A small progress line per project. |
 | Interface size | 100%, 110%, 115%, 125% | Scales the whole app on this device (not saved in the workspace). Default 110%. Applies at once. |
+| Animation speed | Off, Fast, Normal, Slow | Per device, like interface size. Default Normal; Off by default when the system asks for reduced motion. Applies at once. |
 
 Sidebar and issue panel widths are remembered per device. Drag an edge to resize; double-click it to reset.
 
 Other stored settings (not all with a screen): backup folder, Reminders list, Google Calendar choice and switch, export
 folder, remote and switch, the default view template.
+
+### Motion
+
+Dialogs and the command menu scale up and rise over a fading backdrop, and the command menu's rows and pages slide
+in. Menus, popovers, tooltips, toasts and the issue panel animate out as well as in. The issue panel slides from the
+right and dims the list; changing page rises the sheet's content (the issue page slides in); sections, sidebar groups
+and chevrons ease open and shut; the layout tab underline slides; a row flashes when its status or priority changes
+and when quick add creates it. Nothing animates when the app first opens. Settings > General > Animation
+speed sets how long this takes (Off, Fast, Normal, Slow). Keys are never delayed by it: a key typed during an animation
+lands where it should. The command menu has "Faster animations" and "Slower animations" too.
 
 ### Themes
 
@@ -558,9 +661,12 @@ These appear in the command menu (when they apply) and have no shortcut.
 
 | Command id | Name | Keys | What it does |
 |---|---|---|---|
+| `image.attach` | Attach image | (none) | Choose an image file for the description or comment box you used last. |
 | `app.reload` | Reload | (none) | Reload the window. |
 | `pane.sidebar.reset` | Reset sidebar width | (none) | Back to the default sidebar width. |
 | `pane.panel.reset` | Reset issue panel width | (none) | Back to the default issue panel width. |
+| `motion.faster` | Faster animations | (none) | One animation speed step faster (Normal, then Fast, then Off). |
+| `motion.slower` | Slower animations | (none) | One animation speed step slower (Normal, then Slow). |
 | `cycle.move_unfinished` | Move unfinished issues to the next cycle | (none) | Move unfinished issues of the cycle to the next cycle (Cycles page). |
 | `cycle.new` | New cycle | (none) | New cycle. |
 | `group.add` | Add issue to this group | (none) | Add an issue to this group. |
@@ -584,6 +690,7 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `settings.calendar` | Calendar | (none) | Open Settings, Calendar. |
 | `settings.cycles` | Cycles | (none) | Open Settings, Cycles. |
 | `settings.export` | Export | (none) | Open Settings, Export. |
+| `settings.restore` | Restore from export... | (none) | Replace this workspace with an export folder or Git repository, after a backup. |
 | `settings.export.pull` | Pull and apply from remote | (none) | On Settings, Export: pull the remote export and apply it. |
 | `settings.general` | General | (none) | Open Settings, General. |
 | `settings.import` | Import | (none) | Open Settings, Import. |
@@ -602,7 +709,11 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `view.duplicate` | Save as new view | (none) | Save as new view. |
 | `view.group.open` | Group by… | (none) | Open Group by. |
 | `view.new` | New view | (none) | New view. |
+| `view.newProject` | New project view | (none) | New view that lists projects. |
+| `projects.saveAsView` | Save projects as view | (none) | On the Projects page: save its filters, sort and grouping as a project view. |
 | `view.pin` | Pin or unpin view | (none) | Pin or unpin the view. |
+| `folder.pin` | Pin or unpin folder | (none) | Pin or unpin the folder; a pinned folder lists its contents under Pinned. |
+| `sidebar.showProjects` | Show projects in the sidebar | (none) | List every project under Projects, or only "All projects". |
 | `view.rename` | Rename view | (none) | Rename the view. |
 | `view.resetToTemplate` | Reset to template | (none) | Put the view back to its template. |
 | `view.saveAsTemplate` | Save as template | (none) | Save the view as a template. |
@@ -782,5 +893,5 @@ From PROGRESS.md "After this plan" and from reading the code:
   Interface size setting.
 - Single user, one Mac, one writer. No signed or notarized build and no licence yet.
 - A new database seeds the issue prefix `ZF` until setup runs.
-- Not verified against real accounts: Apple Reminders import, Google Calendar sync, GitHub export, a restore from the export.
+- Not verified against real accounts: Apple Reminders import, Google Calendar sync, GitHub export, a restore from a real export (proven only on throwaway data and a local bare repo).
 - The CLI cannot create statuses or milestones, change settings, or unarchive; the MCP server cannot read settings.

@@ -244,3 +244,20 @@ async fn insights_commands_take_the_wire_shapes() -> R {
     assert_eq!(issue["points"], json!(null));
     Ok(())
 }
+
+#[tokio::test]
+async fn attachments_round_trip_and_leave_no_undo_step() -> R {
+    let st = state().await;
+    let png: Vec<u8> = b"\x89PNG\r\n\x1a\nxx".to_vec();
+    let a = dispatch(
+        &st,
+        "attachments_add",
+        json!({"bytes": png, "mime": "image/png"}),
+    )
+    .await?;
+    let got = dispatch(&st, "attachments_get", json!({"id": a["id"]})).await?;
+    assert_eq!(got["bytes"], json!(png));
+    let undo = dispatch(&st, "history_undo_status", json!({})).await?;
+    assert_eq!(undo["undo"], json!(null), "{undo}");
+    Ok(())
+}

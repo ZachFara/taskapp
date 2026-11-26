@@ -80,13 +80,14 @@
     return new Date(asUtc - offsetMs(first, tz)).toISOString();
   }
 
-  const categoryOf = (i: Issue): StatusCategory => statuses.find((s) => s.id === i.status_id)?.category ?? 'Backlog';
+  const statusOf = (i: Issue) => statuses.find((s) => s.id === i.status_id);
+  const categoryOf = (i: Issue): StatusCategory => statusOf(i)?.category ?? 'Backlog';
   const isDue = (id: string) => id.startsWith('due-');
 
   function dueEvents(i: Issue) {
     const due: Due | null = i.due;
     if (!due) return [];
-    const extendedProps = { key: i.key, category: categoryOf(i), issue: i };
+    const extendedProps = { key: i.key, category: categoryOf(i), icon: statusOf(i)?.icon, color: statusOf(i)?.color, issue: i };
     const title = i.title;
     if ('Date' in due) {
       return [{ id: `due-${i.id}`, title, start: due.Date, allDay: true, editable: true, durationEditable: false, classNames: ['due'], extendedProps }];
@@ -106,7 +107,7 @@
         start: new Date(b.start_utc),
         end: new Date(b.end_utc),
         classNames: ['block'],
-        extendedProps: { key: issue?.key, category: issue ? categoryOf(issue) : 'Backlog', issue },
+        extendedProps: { key: issue?.key, category: issue ? categoryOf(issue) : 'Backlog', icon: issue ? statusOf(issue)?.icon : null, color: issue ? statusOf(issue)?.color : null, issue },
       };
     }),
     ...issues.flatMap(dueEvents),
@@ -336,7 +337,7 @@
         {#snippet eventContent(info: any)}
           {@const x = info.event.extendedProps}
           <span class="chip" data-key={x.key} title={x.key}>
-            {#if x.isEvent}<Icon name="calendar" size={12} />{:else if x.category}<StatusGlyph category={x.category} size={12} />{/if}
+            {#if x.isEvent}<Icon name="calendar" size={12} />{:else if x.category}<StatusGlyph category={x.category} icon={x.icon} color={x.color} size={12} />{/if}
             <span class="text">{info.event.title}</span>
             {#if x.issue}{#each chipFields as f (f.Property ?? f.Fixed)}<span class="fv"><FieldValue field={f} issue={x.issue} {ctx} /></span>{/each}{/if}
           </span>
@@ -352,7 +353,7 @@
         <ul aria-label="Unscheduled">
           {#each unscheduled as issue (issue.id)}
             <li draggable="true" tabindex="0" data-key={issue.key} ondragstart={(e) => e.dataTransfer?.setData('text/plain', String(issue.id))}>
-              <StatusGlyph category={categoryOf(issue)} size={14} />
+              <StatusGlyph category={categoryOf(issue)} icon={statusOf(issue)?.icon} color={statusOf(issue)?.color} size={14} />
               <span class="key">{issue.key}</span>
               <span class="text">{issue.title}</span>
             </li>

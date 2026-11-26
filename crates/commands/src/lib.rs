@@ -11,17 +11,19 @@ use std::{future::Future, path::PathBuf};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::Value;
 use taskapp_core::{
-    Applied, AppliedTemplate, Bar, BulkPatch, Change, ChangeSource, Comment, CommentId, Cycle,
-    CycleId, Db, Error, Event, EventId, EventInput, ImportPlan, Issue, IssueId, IssuePatch,
-    IssueStats, IssueTemplate, Label, LabelId, Measure, Milestone, MilestoneId, NewIssue,
-    ParsedQuickAdd, Pin, PinId, PinKind, ProgressScope, ProgressSeries, Project, ProjectId,
-    PropertyDef, PropertyKind, Relation, RelationKind, RelationKindDef, Reschedule, ResolvedPin,
-    Result, SavedView, SelectOption, Status, StatusCategory, StatusId, SyncState, SyncStatus,
-    TemplateId, TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewId, ViewTemplate,
-    ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, backup, blocks, bulk, comments,
-    cycles, events, history, import, insights, issues, labels, pins, projects, properties,
-    quickadd, relation_kinds, relations, schedule, search, settings, statuses, templates, undo,
-    view_templates, views, workspace,
+    Applied, AppliedTemplate, Attachment, AttachmentData, AttachmentId, Bar, BulkPatch, Change,
+    ChangeSource, Comment, CommentId, Cycle, CycleId, Db, Error, Event, EventId, EventInput,
+    FolderSection, ImportPlan, Issue, IssueId, IssuePatch, IssueStats, IssueTemplate, Label,
+    LabelId, Measure, Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId, PinKind,
+    Placement, ProgressScope, ProgressSeries, Project, ProjectId, ProjectRow, ProjectStatus,
+    ProjectStatusCategory, ProjectStatusId, PropertyAppliesTo, PropertyDef, PropertyKind, Relation,
+    RelationKind, RelationKindDef, Reschedule, ResolvedPin, Result, SavedView, SelectOption,
+    Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus,
+    VelocityPeriod, ViewDef, ViewEntity, ViewFolder, ViewFolderId, ViewId, ViewTemplate,
+    ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, attachments, backup, blocks, bulk,
+    comments, cycles, events, history, import, insights, issues, labels, pins, project_statuses,
+    projects, properties, quickadd, relation_kinds, relations, schedule, search, settings,
+    statuses, templates, undo, view_folders, view_templates, views, workspace,
 };
 
 pub struct AppState {
@@ -36,18 +38,6 @@ fn today(s: &AppState) -> Result<NaiveDate> {
         s.tz.parse()
             .map_err(|_| Error::Invalid(format!("unknown time zone {}", s.tz)))?;
     Ok(Utc::now().with_timezone(&tz).date_naive())
-}
-
-/// The issues a saved view currently shows.
-async fn view_issues(s: &AppState, id: ViewId) -> Result<Vec<Issue>> {
-    let view = views::list(&s.db).await?.into_iter().find(|v| v.id == id);
-    views::query(
-        &s.db,
-        &view
-            .ok_or_else(|| Error::NotFound(format!("view {}", id.0)))?
-            .def,
-    )
-    .await
 }
 
 /// Every issue, archived included.
@@ -170,9 +160,28 @@ macro_rules! with_commands {
             properties_set_scope(s, key: String, project: Option<ProjectId>) -> PropertyDef {
                 properties::set_scope(&s.db, &key, project, ChangeSource::Ui).await
             }
+            properties_set_applies_to(s, key: String, applies_to: PropertyAppliesTo) -> PropertyDef {
+                properties::set_applies_to(&s.db, &key, applies_to, ChangeSource::Ui).await
+            }
             properties_delete_def(s, key: String) -> () { properties::delete_def(&s.db, &key, ChangeSource::Ui).await }
             properties_set_value(s, issue: IssueId, key: String, value: Option<Value>) -> Issue {
                 properties::set_value(&s.db, issue, &key, value, ChangeSource::Ui).await
+            }
+
+            project_statuses_list(s) -> Vec<ProjectStatus> { project_statuses::list(&s.db).await }
+            project_statuses_create(s, name: String, category: ProjectStatusCategory, color: String, icon: Option<String>)
+                -> ProjectStatus {
+                project_statuses::create(&s.db, &name, category, &color, icon, ChangeSource::Ui).await
+            }
+            project_statuses_update(s, id: ProjectStatusId, name: Option<String>, color: Option<String>, icon: Option<String>)
+                -> ProjectStatus {
+                project_statuses::update(&s.db, id, name, taskapp_core::palette::Look { icon, color }, ChangeSource::Ui).await
+            }
+            project_statuses_reorder(s, ids_in_order: Vec<ProjectStatusId>) -> () {
+                project_statuses::reorder(&s.db, &ids_in_order, ChangeSource::Ui).await
+            }
+            project_statuses_delete(s, id: ProjectStatusId, move_projects_to: ProjectStatusId) -> () {
+                project_statuses::delete(&s.db, id, move_projects_to, ChangeSource::Ui).await
             }
 
             projects_list(s) -> Vec<Project> { projects::list(&s.db).await }
@@ -265,11 +274,12 @@ macro_rules! with_commands {
             }
             relation_kinds_delete(s, id: RelationKind) -> () { relation_kinds::delete(&s.db, &id, ChangeSource::Ui).await }
 
-            schedule_bars(s, view_id: ViewId) -> Vec<Bar> {
-                Ok(view_issues(s, view_id).await?.iter().filter_map(schedule::bar_for).collect())
+            // They take the definition, not a saved view: a project page shows a view that is never saved.
+            schedule_bars(s, def: ViewDef) -> Vec<Bar> {
+                Ok(views::query(&s.db, &def).await?.iter().filter_map(schedule::bar_for).collect())
             }
-            schedule_critical_path(s, view_id: ViewId) -> Vec<IssueId> {
-                Ok(schedule::critical_path(&view_issues(s, view_id).await?, &relations::all_blocking(&s.db).await?))
+            schedule_critical_path(s, def: ViewDef) -> Vec<IssueId> {
+                Ok(schedule::critical_path(&views::query(&s.db, &def).await?, &relations::all_blocking(&s.db).await?))
             }
             schedule_shift_dependents(s, moved: Reschedule) -> Vec<Reschedule> {
                 let all = views::query(&s.db, &all_issues_def()).await?;
@@ -278,11 +288,36 @@ macro_rules! with_commands {
 
             views_query(s, def: ViewDef) -> Vec<Issue> { views::query(&s.db, &def).await }
             views_list(s) -> Vec<SavedView> { views::list(&s.db).await }
+            views_query_projects(s, def: ViewDef) -> Vec<ProjectRow> { views::projects_query(&s.db, &def).await }
             views_save(s, id: Option<ViewId>, name: String, def: ViewDef, icon: Option<String>, color: Option<String>) -> SavedView {
                 views::save(&s.db, id, &name, def, taskapp_core::palette::Look { icon, color }, ChangeSource::Ui).await
             }
+            // A new view lists projects; an existing one keeps what it lists.
+            views_save_project(s, id: Option<ViewId>, name: String, def: ViewDef, icon: Option<String>, color: Option<String>) -> SavedView {
+                views::save_as(&s.db, id, (&name, ViewEntity::Project), def, taskapp_core::palette::Look { icon, color }, ChangeSource::Ui).await
+            }
             views_delete(s, id: ViewId) -> () { views::delete(&s.db, id).await }
             views_reorder(s, ids: Vec<ViewId>) -> () { views::reorder(&s.db, &ids).await }
+            attachments_add(s, bytes: Vec<u8>, mime: String) -> Attachment {
+                attachments::add(&s.db, &bytes, &mime).await
+            }
+            attachments_get(s, id: AttachmentId) -> AttachmentData { attachments::get(&s.db, id).await }
+
+            folders_list(s) -> Vec<ViewFolder> { view_folders::list(&s.db).await }
+            folders_items(s) -> Vec<Placement> { view_folders::placements(&s.db).await }
+            folders_create(s, section: FolderSection, parent_id: Option<ViewFolderId>, name: String) -> ViewFolder {
+                view_folders::create(&s.db, section, parent_id, &name, ChangeSource::Ui).await
+            }
+            folders_rename(s, id: ViewFolderId, name: String) -> ViewFolder {
+                view_folders::rename(&s.db, id, &name, ChangeSource::Ui).await
+            }
+            folders_delete(s, id: ViewFolderId) -> () { view_folders::delete(&s.db, id, ChangeSource::Ui).await }
+            folders_place(s, id: ViewFolderId, parent_id: Option<ViewFolderId>, index: Option<u32>) -> () {
+                view_folders::place_folder(&s.db, id, parent_id, index, ChangeSource::Ui).await
+            }
+            folders_place_item(s, section: FolderSection, id: i64, folder_id: Option<ViewFolderId>, index: Option<u32>) -> () {
+                view_folders::place_item(&s.db, section, id, folder_id, index, ChangeSource::Ui).await
+            }
             views_stats(s, def: ViewDef) -> Vec<IssueStats> { views::stats(&s.db, &def).await }
             views_create_from_template(s, template_id: ViewTemplateId, name: Option<String>) -> SavedView {
                 view_templates::create_view(&s.db, template_id, name.as_deref(), ChangeSource::Ui).await

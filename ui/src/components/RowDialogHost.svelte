@@ -5,7 +5,7 @@
 
   // Mounted once by the shell: every row action's rename or delete dialog opens here.
   const d = $derived(rowUi.dialog);
-  const text = { view: 'Its issues stay.', project: 'Its milestones go with it. Issues in it stay but lose the project.', cycle: 'Issues in it stay but leave the cycle.', label: 'Issues keep their other labels.', template: 'Issues made from it stay.' } as const;
+  const text = { view: 'Its issues stay.', project: 'Its milestones go with it. Issues in it stay but lose the project.', cycle: 'Issues in it stay but leave the cycle.', label: 'Issues keep their other labels.', template: 'Issues made from it stay.', folder: 'What is in it moves up one level.', pin: 'What it points at stays.' } as const;
   function confirm(v: string) {
     const cur = rowUi.dialog;
     rowUi.dialog = null;

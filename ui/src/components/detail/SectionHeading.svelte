@@ -14,7 +14,7 @@
 
 <div class="heading" data-section-heading={name}>
   <button type="button" class="toggle" aria-expanded={!collapsed} aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`} onclick={ontoggle}>
-    <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={12} />
+    <span class="chev" data-collapsed={collapsed}><Icon name="chevron-down" size={12} /></span>
     <span class="name">{name}</span>
     <span class="count">{count}</span>
   </button>
@@ -42,5 +42,7 @@
     font-weight: 600;
     text-align: start;
   }
+  .chev { display: flex; transition: transform var(--dur-2) var(--ease); }
+  .chev[data-collapsed='true'] { transform: rotate(-90deg); }
   .count { color: var(--muted); font-weight: 500; }
 </style>

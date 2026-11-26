@@ -23,8 +23,8 @@ Review everything at `/design` (every token and primitive, every state, light an
   the tooltip); tooltips carry the action name and its shortcut.
 - Do not: hex, rgb(), px font sizes, raw ms; a bare `<button>`, `<input>`, `<select>`; a shadow on anything that does
   not float; a keydown listener in a component (bind keys through the command registry); a monospace font.
-- Status is a `StatusGlyph` (stack of three stones: how many are solid), priority a `PriorityGlyph` (rings; urgent
-  has a core and the signal colour). Group headers use `GroupHeader`, whose band step follows the status category.
+- Status is a `StatusGlyph` (category circles, or the status's own icon and colour), priority a `PriorityGlyph` (three
+  bars of rising height; urgent is all three in the signal colour). Group headers use `GroupHeader`, whose band step follows the status category.
 - Frame surfaces set `data-on-frame` so the focus ring uses `--focus-frame`.
 
 ## Primitive notes (follow-ups)

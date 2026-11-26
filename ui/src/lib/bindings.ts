@@ -179,6 +179,13 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	propertiesSetAppliesTo: (key: string, appliesTo: PropertyAppliesTo, options?: InvokeOptions) => __TAURI_INVOKE<PropertyDef>("properties_set_applies_to", { key, appliesTo }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	propertiesDeleteDef: (key: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("properties_delete_def", { key }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -187,6 +194,41 @@ export const commands = {
 	 * As that command.
 	 */
 	propertiesSetValue: (issue: IssueId, key: string, value: Value | null, options?: InvokeOptions) => __TAURI_INVOKE<Issue>("properties_set_value", { issue, key, value }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	projectStatusesList: (options?: InvokeOptions) => __TAURI_INVOKE<ProjectStatus[]>("project_statuses_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	projectStatusesCreate: (name: string, category: ProjectStatusCategory, color: string, icon: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ProjectStatus>("project_statuses_create", { name, category, color, icon }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	projectStatusesUpdate: (id: ProjectStatusId, name: string | null, color: string | null, icon: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ProjectStatus>("project_statuses_update", { id, name, color, icon }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	projectStatusesReorder: (idsInOrder: ProjectStatusId[], options?: InvokeOptions) => __TAURI_INVOKE<null>("project_statuses_reorder", { idsInOrder }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	projectStatusesDelete: (id: ProjectStatusId, moveProjectsTo: ProjectStatusId, options?: InvokeOptions) => __TAURI_INVOKE<null>("project_statuses_delete", { id, moveProjectsTo }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -487,14 +529,14 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
-	scheduleBars: (viewId: ViewId, options?: InvokeOptions) => __TAURI_INVOKE<Bar[]>("schedule_bars", { viewId }, options),
+	scheduleBars: (def: ViewDef, options?: InvokeOptions) => __TAURI_INVOKE<Bar[]>("schedule_bars", { def }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
 	 * # Errors
 	 * As that command.
 	 */
-	scheduleCriticalPath: (viewId: ViewId, options?: InvokeOptions) => __TAURI_INVOKE<IssueId[]>("schedule_critical_path", { viewId }, options),
+	scheduleCriticalPath: (def: ViewDef, options?: InvokeOptions) => __TAURI_INVOKE<IssueId[]>("schedule_critical_path", { def }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -522,7 +564,21 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	viewsQueryProjects: (def: ViewDef, options?: InvokeOptions) => __TAURI_INVOKE<ProjectRow[]>("views_query_projects", { def }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	viewsSave: (id: ViewId | null, name: string, def: ViewDef, icon: string | null, color: string | null, options?: InvokeOptions) => __TAURI_INVOKE<SavedView>("views_save", { id, name, def, icon, color }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	viewsSaveProject: (id: ViewId | null, name: string, def: ViewDef, icon: string | null, color: string | null, options?: InvokeOptions) => __TAURI_INVOKE<SavedView>("views_save_project", { id, name, def, icon, color }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -537,6 +593,69 @@ export const commands = {
 	 * As that command.
 	 */
 	viewsReorder: (ids: ViewId[], options?: InvokeOptions) => __TAURI_INVOKE<null>("views_reorder", { ids }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	attachmentsAdd: (bytes: number[], mime: string, options?: InvokeOptions) => __TAURI_INVOKE<Attachment>("attachments_add", { bytes, mime }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	attachmentsGet: (id: AttachmentId, options?: InvokeOptions) => __TAURI_INVOKE<AttachmentData>("attachments_get", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	foldersList: (options?: InvokeOptions) => __TAURI_INVOKE<ViewFolder[]>("folders_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	foldersItems: (options?: InvokeOptions) => __TAURI_INVOKE<Placement[]>("folders_items", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	foldersCreate: (section: FolderSection, parentId: ViewFolderId | null, name: string, options?: InvokeOptions) => __TAURI_INVOKE<ViewFolder>("folders_create", { section, parentId, name }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	foldersRename: (id: ViewFolderId, name: string, options?: InvokeOptions) => __TAURI_INVOKE<ViewFolder>("folders_rename", { id, name }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	foldersDelete: (id: ViewFolderId, options?: InvokeOptions) => __TAURI_INVOKE<null>("folders_delete", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	foldersPlace: (id: ViewFolderId, parentId: ViewFolderId | null, index: number | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("folders_place", { id, parentId, index }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	foldersPlaceItem: (section: FolderSection, id: number, folderId: ViewFolderId | null, index: number | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("folders_place_item", { section, id, folderId, index }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -798,6 +917,15 @@ export const commands = {
 	 *  Fails when no export directory or remote is set, the histories diverged, or git fails.
 	 */
 	exportPull: (options?: InvokeOptions) => __TAURI_INVOKE<Applied>("export_pull", undefined, options),
+	/**
+	 *  Replaces this workspace with an export: a folder, or a Git URL (https or ssh) cloned with the machine's
+	 *  own git into `clone_to` (default: the app data folder). A backup of the current database is written
+	 *  first. Afterwards the export settings point at the restored folder. Returns that folder.
+	 * 
+	 *  # Errors
+	 *  Fails on a bad source, a failed clone or an export that does not parse; the workspace is unchanged then.
+	 */
+	restoreFromExport: (source: string, cloneTo: string | null, applyLocal: boolean, options?: InvokeOptions) => __TAURI_INVOKE<string>("restore_from_export", { source, cloneTo, applyLocal }, options),
 };
 
 /* Types */
@@ -815,6 +943,23 @@ export type AppliedTemplate = {
 	sub_issues: Issue[],
 	skipped: string[],
 };
+
+/**  A stored image; its bytes come from `attachments::get`. */
+export type Attachment = {
+	id: AttachmentId,
+	sha256: string,
+	mime: string,
+	bytes: number,
+	created_at: string,
+};
+
+/**  An image's bytes and type, as `attachments_get` returns them. */
+export type AttachmentData = {
+	mime: string,
+	bytes: number[],
+};
+
+export type AttachmentId = number;
 
 export type Bar = {
 	issue_id: IssueId,
@@ -924,7 +1069,18 @@ export type Filter = ({ And: Filter[] }) & { Cond?: never; Not?: never; Or?: nev
 
 export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "Points" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount" | 
 /**  Filter only: the issue has a relation of the given kind id(s), on either end. */
-"RelationKind";
+"RelationKind" | 
+/**  An issue's project status; on a project view, use `Status`. */
+"ProjectStatus" | 
+/**  Project views only. */
+"TargetDate" | 
+/**  Project views only: the percent of the project's issues that are completed. */
+"Progress" | 
+/**  Project views only: the project's issues, archived ones left out. */
+"IssueCount";
+
+/**  The sidebar section a folder belongs to; its items live in the table of the same name. */
+export type FolderSection = "pin" | "view" | "project" | "cycle";
 
 /**
  *  Everything an import would create. The lists of statuses, labels, projects, cycles and property
@@ -1076,7 +1232,15 @@ export type Pin = {
 
 export type PinId = number;
 
-export type PinKind = "Issue" | "Project" | "View" | "Cycle" | "Note" | "Url";
+export type PinKind = "Issue" | "Project" | "View" | "Cycle" | "Note" | "Url" | "Folder";
+
+/**  Where one pin, view, project or cycle sits: the folder (`None` is the section's top level) and its place there. */
+export type Placement = {
+	section: FolderSection,
+	id: number,
+	folder_id: ViewFolderId | null,
+	position: number,
+};
 
 export type PlanCycle = {
 	name: string | null,
@@ -1147,17 +1311,50 @@ export type Project = {
 	archived_at: string | null,
 	icon: string | null,
 	color: string | null,
+	status_id: ProjectStatusId,
+	/**  The issue scale: 0 none, 1 urgent, 2 high, 3 medium, 4 low. */
+	priority: number,
+	label_ids: LabelId[],
+	properties: { [key in string]: Value },
 };
 
 export type ProjectId = number;
+
+/**  A project as a project view lists it, with its issue counts (archived issues left out). */
+export type ProjectRow = {
+	project: Project,
+	issue_total: number,
+	issue_done: number,
+};
+
+export type ProjectStatus = {
+	id: ProjectStatusId,
+	name: string,
+	category: ProjectStatusCategory,
+	position: number,
+	/**  A palette key. */
+	color: string,
+	/**  The reference hex for `color`, for showing it without the palette. */
+	color_hex: string,
+	icon: string | null,
+};
+
+export type ProjectStatusCategory = "Planned" | "Started" | "Paused" | "Completed" | "Cancelled";
+
+export type ProjectStatusId = number;
+
+/**  Which entities a custom property applies to. */
+export type PropertyAppliesTo = "Issues" | "Projects" | "Both";
 
 export type PropertyDef = {
 	key: string,
 	name: string,
 	kind: PropertyKind,
 	options: SelectOption[],
+	/**  Limits the issue side to one project; never set for a projects-only property. */
 	project_id: ProjectId | null,
 	position: number,
+	applies_to?: PropertyAppliesTo,
 };
 
 export type PropertyKind = "Text" | "Number" | "Date" | "Select" | "MultiSelect" | "Checkbox" | "Url" | "NoteLink";
@@ -1199,12 +1396,15 @@ export type ResolvedPin = {
 export type SavedView = {
 	id: ViewId,
 	name: string,
+	entity: ViewEntity,
 	def: ViewDef,
 	position: number,
 	icon: string | null,
 	color: string | null,
 	/**  The template the view was made from, for "Reset to template". */
 	template_id: ViewTemplateId | null,
+	/**  The sidebar folder the view sits in; `None` is the top level. */
+	folder_id: ViewFolderId | null,
 };
 
 export type SelectOption = {
@@ -1325,6 +1525,20 @@ export type ViewDef = {
 	card_fields?: FieldRef[],
 	show_weekends?: boolean,
 };
+
+/**  What a saved view lists. A project view's fields are project fields. */
+export type ViewEntity = "issue" | "project";
+
+/**  A sidebar folder. It holds items of its own section and folders of that section, nested by `parent_id`. */
+export type ViewFolder = {
+	id: ViewFolderId,
+	name: string,
+	position: number,
+	section: FolderSection,
+	parent_id: ViewFolderId | null,
+};
+
+export type ViewFolderId = number;
 
 export type ViewId = number;
 

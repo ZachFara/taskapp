@@ -1,19 +1,22 @@
 <script lang="ts">
-  import { onMount, setContext, untrack } from 'svelte';
+  import { onMount, setContext, tick, untrack } from 'svelte';
   import { matchRoute, navigate } from './routes';
   import { api } from '../lib/api';
   import { attachKeys, type Ctx, type Layout } from '../lib/commands';
   import { selection } from '../lib/selection.svelte';
-  import { issues, projects, selectedIssueId, views } from '../lib/stores.svelte';
+  import { issues, projects, refreshAll, selectedIssueId, views } from '../lib/stores.svelte';
   import { initTheme } from '../lib/theme.svelte';
   import CheatSheet from '../components/CheatSheet.svelte';
   import CommandPalette from '../components/CommandPalette.svelte';
   import IssueDetail from '../components/IssueDetail.svelte';
   import QuickAdd from '../components/QuickAdd.svelte';
+  import RestoreDialog from '../components/RestoreDialog.svelte';
   import Setup from '../components/Setup.svelte';
   import Shell from '../components/Shell.svelte';
   import Sidebar from '../components/Sidebar.svelte';
+  import ImageViewer from '../components/ImageViewer.svelte';
   import UndoToast from '../components/UndoToast.svelte';
+  import { fresh } from '../lib/motion.svelte';
   import { dismiss, onWrote, undoToast } from '../components/undoState.svelte';
 
   let path = $state(location.pathname);
@@ -26,6 +29,7 @@
   let refreshed = $state(0); // bumps when a command wrote, so the open view loads its rows again
   let palettePage = $state<string | undefined>();
   let paletteIssues = $state(false);
+  let restoreOpen = $state(false);
   let cheat = $state(false); // CheatSheet opens itself on help.shortcuts; this only lets the root close it
 
   // Rows from every view select through `selectedIssueId`; the peek key goes through the selection store.
@@ -72,7 +76,7 @@
     if (a === 'project') return ['Projects', projects.find((p) => p.slug === b)?.name ?? b];
     if (a === 'issue') return ['Issues', b];
     if (a === 'event') return ['Events']; // the page heading names it
-    return [LABELS[a] ?? a, ...(b ? [b[0].toUpperCase() + b.slice(1)] : [])];
+    return [LABELS[a] ?? a, ...(b ? [b[0].toUpperCase() + b.slice(1).replace(/-/g, ' ')] : [])];
   });
 
   onMount(() => {
@@ -93,10 +97,15 @@
       ['command:nav.search', () => ((palettePage = undefined), (paletteIssues = true), (overlay = 'palette'))],
       ['command:issue.create', () => (overlay = 'quickadd')],
       ['command:view.refresh', () => refreshed++],
+      ['command:settings.restore', () => (restoreOpen = true)],
     ];
     on.forEach(([n, f]) => addEventListener(n, f));
     return () => on.forEach(([n, f]) => removeEventListener(n, f));
   });
+
+  // The panel keeps showing the issue it had while it slides out.
+  let shownKey = $state<string | null>(null);
+  $effect(() => { if (panelKey !== null) shownKey = panelKey; });
 
   // Moving to another page leaves the panel behind.
   $effect(() => {
@@ -117,8 +126,19 @@
       }
     });
 
+  // The data under every store changed: load it again, show the start page, and say what happened.
+  async function restored(folder: string) {
+    restoreOpen = false;
+    await refreshAll();
+    refreshed++;
+    navigate('/');
+    await tick(); // moving pages clears the toast, so say it after
+    undoToast.value = { label: `Restored from ${folder}`, tone: 'success' };
+  }
+
   async function created({ issue }: { issue: { key: string } }) {
     const key = issue.key;
+    fresh.key = key; // its row flashes once when it appears
     overlay = null;
     // The write's own toast names the backend's step; wait for it, then say what was made.
     await onWrote();
@@ -131,11 +151,11 @@
 {#if setup === 'needed'}
   <Setup ondone={() => (setup = 'done')} />
 {:else if setup === 'done'}
-  <Shell {crumb} panelOpen={panelKey !== null} onsearch={() => ((palettePage = undefined), (paletteIssues = false), (overlay = 'palette'))}>
+  <Shell {crumb} route={path} panelOpen={panelKey !== null} onsearch={() => ((palettePage = undefined), (paletteIssues = false), (overlay = 'palette'))}>
     {#snippet sidebar()}<Sidebar route={path} />{/snippet}
     {#snippet panel()}
-      {#if panelKey !== null}
-        {#key panelKey}<IssueDetail params={{ key: panelKey }} mode="panel" onclose={closePanel} onopen={(k) => navigate(`/issue/${k}`)} />{/key}
+      {#if shownKey !== null}
+        {#key shownKey}<IssueDetail params={{ key: shownKey }} mode="panel" onclose={closePanel} onopen={(k) => navigate(`/issue/${k}`)} />{/key}
       {/if}
     {/snippet}
     {#if Page}
@@ -145,13 +165,16 @@
     {/if}
   </Shell>
 
+  <RestoreDialog bind:open={restoreOpen} onrestored={restored} />
+
   {#if overlay === 'palette'}
-    <CommandPalette page={palettePage} issues={paletteIssues} onclose={() => (overlay = null)} oncreate={() => (overlay = 'quickadd')} />
+    <CommandPalette page={palettePage} issues={paletteIssues} onclose={() => overlay === 'palette' && (overlay = null)} oncreate={() => (overlay = 'quickadd')} />
   {:else if overlay === 'quickadd'}
     <QuickAdd onclose={() => (overlay = null)} oncreated={created} />
   {/if}
   <CheatSheet bind:open={cheat} />
   <div class="toasts"><UndoToast /></div>
+  <ImageViewer />
 {/if}
 
 <style>

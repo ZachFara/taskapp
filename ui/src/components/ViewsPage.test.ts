@@ -33,12 +33,44 @@ describe('ViewsPage', () => {
     expect(first.textContent).toContain(fixtures.views![0].def.layout);
   });
 
+  it('groups_views_under_their_folder', async () => {
+    const mock = createMockApi({ ...fixtures, viewFolders: [{ id: 1, name: 'Work', position: 0, section: 'view', parent_id: null }, { id: 2, name: 'Sub', position: 1, section: 'view', parent_id: 1 }] });
+    const id = fixtures.views![1].id;
+    await mock.folders.placeItem('view', id, 2, null);
+    const { target } = await open(mock);
+    const [outer, inner] = [target.querySelector<HTMLElement>('[data-folder-id="1"]')!, target.querySelector<HTMLElement>('[data-folder-id="2"]')!];
+    expect(outer.textContent).toBe('Work');
+    // the nested folder is indented one step more and holds the view
+    expect(outer.style.marginLeft).toContain('0 *');
+    expect(inner.style.marginLeft).toContain('1 *');
+    expect(inner.nextElementSibling!.querySelector(`[data-view-id="${id}"]`)).not.toBeNull();
+    expect(target.textContent).toContain('No folder');
+  });
+
+  it('filters_issue_and_project_views', async () => {
+    const base = fixtures.views![0];
+    const mock = createMockApi({ ...fixtures, views: [{ ...base, id: 1, name: 'Bugs', entity: 'issue' }, { ...base, id: 2, name: 'Roadmap', entity: 'project' }] });
+    const { target } = await open(mock);
+    const ids = () => [...target.querySelectorAll('[data-view-id]')].map((r) => r.getAttribute('data-view-id'));
+    expect(ids()).toEqual(['1', '2']);
+    const tab = (name: string) => [...target.querySelectorAll<HTMLElement>('[role=tab]')].find((t) => t.textContent?.trim() === name)!;
+    tab('Project views').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    tab('Project views').click();
+    await vi.waitFor(() => expect(ids()).toEqual(['2']));
+    tab('Issue views').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    tab('Issue views').click();
+    await vi.waitFor(() => expect(ids()).toEqual(['1']));
+  });
+
   it('delete_view_asks_before_removing', async () => {
     const { mock, target } = await open();
     const del = vi.spyOn(mock.views, 'delete');
     const id = fixtures.views![0].id;
     mount(RowDialogHost, { target: document.body });
-    target.querySelector<HTMLElement>(`[data-view-id="${id}"]`)!.querySelector<HTMLButtonElement>('button[aria-label^="Delete"]')!.click();
+    target.querySelector<HTMLElement>(`[data-view-id="${id}"]`)!.querySelector<HTMLButtonElement>('button[aria-label^="More actions"]')!.click();
+    flushSync();
+    expect(del).not.toHaveBeenCalled();
+    await vi.waitFor(() => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((e) => /^Delete /.test(e.textContent?.trim() ?? ''))!.click());
     flushSync();
     expect(del).not.toHaveBeenCalled();
     [...document.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === 'Delete')!.click();

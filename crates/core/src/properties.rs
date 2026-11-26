@@ -3,8 +3,8 @@ use serde_json::{Map, Value, json};
 use sqlx::{Row, SqliteConnection, sqlite::SqliteRow};
 
 use crate::{
-    ChangeSource, Db, Error, Issue, IssueId, ProjectId, PropertyDef, PropertyKind, Result,
-    SelectOption, ViewDef,
+    ChangeSource, Db, Error, Issue, IssueId, ProjectId, PropertyAppliesTo, PropertyDef,
+    PropertyKind, Result, SelectOption, ViewDef,
     history::{self, Edit},
     issues, rows, views,
 };
@@ -34,7 +34,29 @@ fn def_from_row(r: &SqliteRow) -> Result<PropertyDef> {
         options: dec(r.get("options"))?,
         project_id: r.get::<Option<i64>, _>("project_id").map(ProjectId),
         position: r.get("position"),
+        applies_to: match r.get::<String, _>("applies_to").as_str() {
+            "projects" => PropertyAppliesTo::Projects,
+            "both" => PropertyAppliesTo::Both,
+            _ => PropertyAppliesTo::Issues,
+        },
     })
+}
+
+fn applies_str(a: PropertyAppliesTo) -> &'static str {
+    match a {
+        PropertyAppliesTo::Issues => "issues",
+        PropertyAppliesTo::Projects => "projects",
+        PropertyAppliesTo::Both => "both",
+    }
+}
+
+fn check_scope(applies_to: PropertyAppliesTo, project: Option<ProjectId>) -> Result<()> {
+    if applies_to == PropertyAppliesTo::Projects && project.is_some() {
+        return Err(Error::Invalid(
+            "a projects-only property cannot be limited to one project".into(),
+        ));
+    }
+    Ok(())
 }
 
 async fn record_def(
@@ -85,6 +107,7 @@ pub async fn create_def(db: &Db, def: PropertyDef, src: ChangeSource) -> Result<
         return Err(Error::Invalid("property name is empty".into()));
     }
     check_options(def.kind, &def.options)?;
+    check_scope(def.applies_to, def.project_id)?;
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     if get_def(&mut tx, &def.key).await.is_ok() {
         return Err(Error::Conflict(format!("property {} exists", def.key)));
@@ -103,7 +126,7 @@ pub async fn create_def(db: &Db, def: PropertyDef, src: ChangeSource) -> Result<
             .fetch_one(&mut *tx)
             .await?;
     sqlx::query(
-        "INSERT INTO property_defs (key, name, kind, options, project_id, position) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO property_defs (key, name, kind, options, project_id, position, applies_to) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&def.key)
     .bind(&def.name)
@@ -111,6 +134,7 @@ pub async fn create_def(db: &Db, def: PropertyDef, src: ChangeSource) -> Result<
     .bind(enc(&def.options)?)
     .bind(def.project_id.map(|p| p.0))
     .bind(position)
+    .bind(applies_str(def.applies_to))
     .execute(&mut *tx)
     .await?;
     rows::created(&mut tx, src, "property_defs", &def.key).await?;
@@ -309,6 +333,7 @@ pub async fn set_scope(
 ) -> Result<PropertyDef> {
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let old = get_def(&mut tx, key).await?;
+    check_scope(old.applies_to, project)?;
     if let Some(p) = project {
         let sql = format!(
             "SELECT {} FROM issues WHERE json_type(properties, ?1) IS NOT NULL
@@ -355,6 +380,130 @@ pub async fn set_scope(
     })
 }
 
+/// Chooses whether the property applies to issues, projects or both. Refused with `Conflict`, changing
+/// nothing, while an entity the property would stop applying to holds a value. A projects-only property
+/// loses any single-project limit.
+///
+/// # Errors
+///
+/// Fails with `NotFound` for an unknown key, `Conflict` as above, or on a database error.
+pub async fn set_applies_to(
+    db: &Db,
+    key: &str,
+    applies_to: PropertyAppliesTo,
+    src: ChangeSource,
+) -> Result<PropertyDef> {
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let old = get_def(&mut tx, key).await?;
+    let path = format!("$.\"{key}\"");
+    for (table, noun, drops) in [
+        (
+            "issues",
+            "issues",
+            applies_to == PropertyAppliesTo::Projects,
+        ),
+        (
+            "projects",
+            "projects",
+            applies_to == PropertyAppliesTo::Issues,
+        ),
+    ] {
+        if !drops {
+            continue;
+        }
+        let held: i64 = sqlx::query_scalar(&format!(
+            "SELECT count(*) FROM {table} WHERE json_type(properties, ?) IS NOT NULL"
+        ))
+        .bind(&path)
+        .fetch_one(&mut *tx)
+        .await?;
+        if held > 0 {
+            return Err(Error::Conflict(format!(
+                "{key} has values on {held} {noun}"
+            )));
+        }
+    }
+    let project = if applies_to == PropertyAppliesTo::Projects {
+        None
+    } else {
+        old.project_id
+    };
+    let before_row = rows::by_key(&mut tx, "property_defs", key).await?;
+    sqlx::query("UPDATE property_defs SET applies_to = ?, project_id = ? WHERE key = ?")
+        .bind(applies_str(applies_to))
+        .bind(project.map(|p| p.0))
+        .bind(key)
+        .execute(&mut *tx)
+        .await?;
+    rows::changed(&mut tx, src, before_row).await?;
+    let (before, after) = (json!(old.applies_to), json!(applies_to));
+    record_def(&mut tx, src, key, "applies_to", Some(&before), Some(&after)).await?;
+    tx.commit().await?;
+    Ok(PropertyDef {
+        applies_to,
+        project_id: project,
+        ..old
+    })
+}
+
+/// Rewrites the property's value on every project to the new kind; refuses, writing nothing, if one cannot convert.
+async fn convert_projects(
+    tx: &mut SqliteConnection,
+    src: ChangeSource,
+    key: &str,
+    old: &PropertyDef,
+    new: &PropertyDef,
+) -> Result<()> {
+    let path = format!("$.\"{key}\"");
+    let before = rows::snap(
+        tx,
+        "projects",
+        "json_type(properties, ?) IS NOT NULL",
+        &path,
+    )
+    .await?;
+    let held: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT id, slug, properties FROM projects WHERE json_type(properties, ?) IS NOT NULL ORDER BY id",
+    )
+    .bind(&path)
+    .fetch_all(&mut *tx)
+    .await?;
+    let mut bad = Vec::new();
+    let mut writes = Vec::new();
+    for (id, slug, props) in held {
+        let mut props: Map<String, Value> = dec(&props)?;
+        let v = props.get(key).cloned().unwrap_or(Value::Null);
+        let converted = convert(old.kind, new.kind, &v).and_then(|c| match c {
+            Some(c) => validate(new, &c).map(|()| Some(c)),
+            None => Ok(None),
+        });
+        match converted {
+            Ok(Some(c)) => props.insert(key.to_owned(), c),
+            Ok(None) => props.remove(key),
+            Err(_) => {
+                bad.push(slug);
+                continue;
+            }
+        };
+        writes.push((id, enc(&props)?));
+    }
+    if !bad.is_empty() {
+        return Err(Error::Conflict(format!(
+            "cannot convert {key} to {:?} on projects {}",
+            new.kind,
+            bad.join(", ")
+        )));
+    }
+    for (id, props) in writes {
+        sqlx::query("UPDATE projects SET properties = ? WHERE id = ?")
+            .bind(props)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    rows::changed(tx, src, before).await
+}
+
 /// Converts every stored value to the new kind. If any value cannot convert, nothing changes and the
 /// error lists up to 20 issue keys.
 ///
@@ -393,6 +542,7 @@ pub async fn change_kind(
         };
         history::record(&mut tx, src, "issue", &w.id.to_string(), &edit).await?;
     }
+    convert_projects(&mut tx, src, key, &old, &new).await?;
     let before_row = rows::by_key(&mut tx, "property_defs", key).await?;
     sqlx::query("UPDATE property_defs SET kind = ?, options = ? WHERE key = ?")
         .bind(enc(&new.kind)?)
@@ -441,14 +591,8 @@ async fn strip_from_views(
     Ok(before)
 }
 
-/// Removes the definition, every issue's value, and every saved-view reference to it.
-///
-/// # Errors
-///
-/// Fails on a database error or invalid arguments.
-pub async fn delete_def(db: &Db, key: &str, src: ChangeSource) -> Result<()> {
-    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
-    let def = get_def(&mut tx, key).await?;
+/// Drops the property from every issue that holds a value, recording each.
+async fn strip_from_issues(tx: &mut SqliteConnection, src: ChangeSource, key: &str) -> Result<()> {
     let path = format!("$.\"{key}\"");
     let lost: Vec<(i64, String)> = sqlx::query_as(
         "SELECT id, properties -> ?1 FROM issues WHERE json_type(properties, ?1) IS NOT NULL ORDER BY id",
@@ -468,8 +612,38 @@ pub async fn delete_def(db: &Db, key: &str, src: ChangeSource) -> Result<()> {
             old: Some(&old),
             new: None,
         };
-        history::record(&mut tx, src, "issue", &id.to_string(), &edit).await?;
+        history::record(tx, src, "issue", &id.to_string(), &edit).await?;
     }
+    Ok(())
+}
+
+/// Drops the property from every project that holds a value.
+async fn strip_from_projects(
+    tx: &mut SqliteConnection,
+    src: ChangeSource,
+    key: &str,
+) -> Result<()> {
+    let path = format!("$.\"{key}\"");
+    let path = path.as_str();
+    let filter = "json_type(properties, ?) IS NOT NULL";
+    let before = rows::snap(tx, "projects", filter, path).await?;
+    sqlx::query("UPDATE projects SET properties = json_remove(properties, ?1) WHERE json_type(properties, ?1) IS NOT NULL")
+        .bind(path)
+        .execute(&mut *tx)
+        .await?;
+    rows::changed(tx, src, before).await
+}
+
+/// Removes the definition, every issue's value, and every saved-view reference to it.
+///
+/// # Errors
+///
+/// Fails on a database error or invalid arguments.
+pub async fn delete_def(db: &Db, key: &str, src: ChangeSource) -> Result<()> {
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let def = get_def(&mut tx, key).await?;
+    strip_from_issues(&mut tx, src, key).await?;
+    strip_from_projects(&mut tx, src, key).await?;
     let (views_before, templates_before) = strip_from_views(&mut tx, key).await?;
     rows::changed(&mut tx, src, views_before).await?;
     rows::changed(&mut tx, src, templates_before).await?;
@@ -505,6 +679,9 @@ pub async fn set_value(
         .await?
         .ok_or_else(|| Error::NotFound(format!("issue {}", issue.0)))?;
     let mut found = issues::issues_from_rows(&mut tx, &[row]).await?.remove(0);
+    if def.applies_to == PropertyAppliesTo::Projects {
+        return Err(Error::Invalid(format!("{key} applies to projects only")));
+    }
     if def.project_id.is_some() && def.project_id != found.project_id {
         return Err(Error::Invalid(format!(
             "{key} is scoped to another project than {}",

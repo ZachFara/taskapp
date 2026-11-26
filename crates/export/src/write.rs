@@ -4,12 +4,13 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::FromRow;
-use taskapp_core::{Db, Result, settings};
+use taskapp_core::{Db, Result, attachments, settings};
 
 use crate::files::{
-    CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow,
-    MilestoneRow, PinRow, ProjectFile, PropertyFile, RelationKindRow, StatusRow, ViewFile,
-    ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir, read_plain, render_issue, safe_name,
+    AttachmentFile, CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile,
+    LabelRow, MilestoneRow, PinRow, ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow,
+    StatusRow, ViewFile, ViewFolderFile, ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir,
+    read_plain, render_issue, safe_name,
 };
 
 pub struct ExportStats {
@@ -58,7 +59,62 @@ pub async fn write_snapshot(db: &Db, dir: &Path) -> Result<ExportStats> {
     for sub in MANAGED_DIRS {
         stats.files_removed += remove_stale(dir, sub, &files)?;
     }
+    stats.files_written += write_images(db, dir).await?;
     Ok(stats)
+}
+
+/// Copies the images some text still points at into `attachments/` and lists them in `attachments.yaml`; an
+/// image nothing points at any more is dropped from the folder (the database keeps it).
+async fn write_images(db: &Db, dir: &Path) -> Result<u32> {
+    let folder = dir.join("attachments");
+    let mut written = 0;
+    let mut kept = std::collections::HashSet::new();
+    let mut manifest = Vec::new();
+    for a in attachments::referenced(db).await? {
+        let Ok(data) = attachments::get(db, a.id).await else {
+            continue;
+        };
+        let name = attachments::inspect(&data.bytes)?.file();
+        let path = folder.join(&name);
+        if fs::symlink_metadata(&path).is_err() {
+            plain_dir(dir, "attachments")?;
+            fs::create_dir_all(&folder)?;
+            fs::write(&path, &data.bytes)?;
+            written += 1;
+        } else if !fs::symlink_metadata(&path)?.is_file() {
+            return Err(taskapp_core::Error::Invalid(format!(
+                "attachments/{name} in the export is not a regular file"
+            )));
+        }
+        kept.insert(name);
+        manifest.push(AttachmentFile {
+            id: a.id.0,
+            sha256: a.sha256,
+            created_at: a.created_at,
+        });
+    }
+    let text = yaml(&manifest)?;
+    let path = dir.join("attachments.yaml");
+    if fs::symlink_metadata(&path).is_ok_and(|m| !m.is_file()) {
+        return Err(invalid(
+            "attachments.yaml in the export is not a regular file",
+        ));
+    }
+    if read_plain(&path).is_ok_and(|old| old == text) {
+        return Ok(written);
+    }
+    fs::write(&path, text)?;
+    if plain_dir(dir, "attachments")? {
+        for entry in fs::read_dir(&folder)? {
+            let entry = entry?;
+            if entry.file_type()?.is_file()
+                && !kept.contains(entry.file_name().to_string_lossy().as_ref())
+            {
+                fs::remove_file(entry.path())?;
+            }
+        }
+    }
+    Ok(written)
 }
 
 fn remove_stale(dir: &Path, sub: &str, files: &BTreeMap<String, String>) -> Result<u32> {
@@ -105,11 +161,16 @@ async fn render(db: &Db) -> Result<BTreeMap<String, String>> {
 }
 
 async fn template_files(db: &Db, files: &mut BTreeMap<String, String>) -> Result<()> {
+    let view_folders = yaml(&view_folders(db).await?)?;
+    files.insert("view_folders.yaml".to_string(), view_folders);
     let view_templates = yaml(&view_templates(db).await?)?;
     files.insert("view_templates.yaml".to_string(), view_templates);
     let issue_templates = yaml(&issue_templates(db).await?)?;
     files.insert("issue_templates.yaml".to_string(), issue_templates);
     files.insert("import_log.yaml".to_string(), yaml(&import_log(db).await?)?);
+    files.insert("local.yaml".to_string(), yaml(&local_settings(db).await?)?);
+    let project_statuses = yaml(&project_statuses(db).await?)?;
+    files.insert("project_statuses.yaml".to_string(), project_statuses);
     files.insert(
         "relation_kinds.yaml".to_string(),
         yaml(&relation_kinds(db).await?)?,
@@ -137,6 +198,43 @@ fn exported_setting(key: &str) -> bool {
     !LOCAL.iter().any(|word| key.contains(word))
 }
 
+/// The per-machine settings that are safe to write down; `restore` offers them back.
+pub(crate) const LOCAL_KEYS: [&str; 3] = ["export_dir", "export_remote", "backup_dir"];
+
+async fn local_settings(db: &Db) -> Result<BTreeMap<String, String>> {
+    let mut out = BTreeMap::new();
+    for key in LOCAL_KEYS {
+        if let Some(v) = settings::get::<String>(db, key)
+            .await?
+            .filter(|v| !v.is_empty())
+        {
+            out.insert(key.to_string(), home_relative(&without_credentials(&v)));
+        }
+    }
+    Ok(out)
+}
+
+/// A path under the home folder becomes `~/...`, so the file names no one and fits another machine.
+fn home_relative(value: &str) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    match value.strip_prefix(&home) {
+        Some(rest) if !home.is_empty() && rest.starts_with('/') => format!("~{rest}"),
+        _ => value.to_string(),
+    }
+}
+
+/// `https://user:token@host/x` loses its `user:token@`; a bare `git@host:x` has no secret and stays.
+pub(crate) fn without_credentials(url: &str) -> String {
+    if let Some((scheme, rest)) = url.split_once("://")
+        && let Some((auth, host)) = rest.split_once('@')
+        && auth.contains(':')
+        && !auth.contains('/')
+    {
+        return format!("{scheme}://{host}");
+    }
+    url.to_string()
+}
+
 async fn settings_map(db: &Db) -> Result<BTreeMap<String, Value>> {
     let rows = sqlx::query_as::<_, (String, String)>("SELECT key, value FROM settings")
         .fetch_all(&db.pool)
@@ -150,6 +248,15 @@ async fn settings_map(db: &Db) -> Result<BTreeMap<String, Value>> {
 async fn statuses(db: &Db) -> Result<Vec<StatusRow>> {
     let rows = sqlx::query_as(
         "SELECT name, category, position, color, icon FROM statuses ORDER BY position, id",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
+async fn project_statuses(db: &Db) -> Result<Vec<ProjectStatusRow>> {
+    let rows = sqlx::query_as(
+        "SELECT name, category, position, color, icon FROM project_statuses ORDER BY position, id",
     )
     .fetch_all(&db.pool)
     .await?;
@@ -174,7 +281,7 @@ async fn relation_kinds(db: &Db) -> Result<Vec<RelationKindRow>> {
 
 async fn cycles(db: &Db) -> Result<Vec<CycleRow>> {
     let rows = sqlx::query_as(
-        "SELECT number, name, start_date, end_date, icon, color FROM cycles ORDER BY number",
+        "SELECT number, name, start_date, end_date, icon, color, folder_id, position FROM cycles ORDER BY number",
     )
     .fetch_all(&db.pool)
     .await?;
@@ -241,32 +348,36 @@ async fn events(db: &Db, prefix: &str) -> Result<Vec<EventFile>> {
 }
 
 async fn pins(db: &Db) -> Result<Vec<PinRow>> {
-    let rows =
-        sqlx::query_as("SELECT kind, target, title, position FROM pins ORDER BY position, id")
-            .fetch_all(&db.pool)
-            .await?;
+    let rows = sqlx::query_as(
+        "SELECT kind, target, title, position, folder_id FROM pins ORDER BY position, id",
+    )
+    .fetch_all(&db.pool)
+    .await?;
     Ok(rows)
 }
 
 async fn properties(db: &Db) -> Result<Vec<PropertyFile>> {
-    let rows = sqlx::query_as::<_, (String, String, String, String, Option<String>, i64)>(
-        "SELECT d.key, d.name, d.kind, d.options, p.slug, d.position
+    let rows = sqlx::query_as::<_, (String, String, String, String, Option<String>, i64, String)>(
+        "SELECT d.key, d.name, d.kind, d.options, p.slug, d.position, d.applies_to
          FROM property_defs d LEFT JOIN projects p ON p.id = d.project_id
          ORDER BY d.position, d.key",
     )
     .fetch_all(&db.pool)
     .await?;
     rows.into_iter()
-        .map(|(key, name, kind, options, project, position)| {
-            Ok(PropertyFile {
-                key,
-                name,
-                kind: serde_json::from_str(&kind).map_err(invalid)?,
-                options: serde_json::from_str(&options).map_err(invalid)?,
-                project,
-                position,
-            })
-        })
+        .map(
+            |(key, name, kind, options, project, position, applies_to)| {
+                Ok(PropertyFile {
+                    key,
+                    name,
+                    kind: serde_json::from_str(&kind).map_err(invalid)?,
+                    options: serde_json::from_str(&options).map_err(invalid)?,
+                    project,
+                    position,
+                    applies_to,
+                })
+            },
+        )
         .collect()
 }
 
@@ -274,28 +385,52 @@ async fn views(db: &Db) -> Result<Vec<ViewFile>> {
     type Row = (
         String,
         String,
+        String,
         i64,
         Option<String>,
         Option<String>,
         Option<i64>,
+        Option<i64>,
     );
     let rows = sqlx::query_as::<_, Row>(
-        "SELECT name, definition, position, icon, color, template_id FROM views ORDER BY position, id",
+        "SELECT name, entity, definition, position, icon, color, template_id, folder_id FROM views ORDER BY position, id",
     )
     .fetch_all(&db.pool)
     .await?;
     rows.into_iter()
-        .map(|(name, definition, position, icon, color, template_id)| {
-            Ok(ViewFile {
-                name,
-                position,
-                definition: serde_json::from_str(&definition).map_err(invalid)?,
-                icon,
-                color,
-                template_id,
-            })
-        })
+        .map(
+            |(name, entity, definition, position, icon, color, template_id, folder_id)| {
+                Ok(ViewFile {
+                    name,
+                    entity,
+                    position,
+                    definition: serde_json::from_str(&definition).map_err(invalid)?,
+                    icon,
+                    color,
+                    template_id,
+                    folder_id,
+                })
+            },
+        )
         .collect()
+}
+
+async fn view_folders(db: &Db) -> Result<Vec<ViewFolderFile>> {
+    let rows = sqlx::query_as::<_, (i64, String, i64, String, Option<i64>)>(
+        "SELECT id, name, position, section, parent_id FROM view_folders ORDER BY position, id",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, name, position, section, parent_id)| ViewFolderFile {
+            id,
+            name,
+            position,
+            section,
+            parent_id,
+        })
+        .collect())
 }
 
 async fn view_templates(db: &Db) -> Result<Vec<ViewTemplateFile>> {
@@ -362,11 +497,23 @@ async fn import_log(db: &Db) -> Result<Vec<ImportLogRow>> {
 
 async fn projects(db: &Db) -> Result<Vec<ProjectFile>> {
     let mut projects: Vec<ProjectFile> = sqlx::query_as(
-        "SELECT slug, name, description, doc_link, start_date, target_date, archived_at, created_at, icon, color
-         FROM projects ORDER BY slug",
+        "SELECT p.slug, p.name, p.description, p.doc_link, p.start_date, p.target_date, p.archived_at,
+                p.created_at, p.icon, p.color, s.name AS status, p.priority, p.folder_id, p.position
+         FROM projects p JOIN project_statuses s ON s.id = p.status_id ORDER BY p.slug",
     )
     .fetch_all(&db.pool)
     .await?;
+    let labels = sqlx::query_as::<_, (String, String)>(
+        "SELECT p.slug, l.name FROM project_labels pl JOIN projects p ON p.id = pl.project_id
+         JOIN labels l ON l.id = pl.label_id ORDER BY l.name",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    let mut labels = group(labels);
+    let values = sqlx::query_as::<_, (String, String)>("SELECT slug, properties FROM projects")
+        .fetch_all(&db.pool)
+        .await?;
+    let mut values: BTreeMap<String, String> = values.into_iter().collect();
     let milestones = sqlx::query_as::<_, (String, String, Option<NaiveDate>)>(
         "SELECT p.slug, m.name, m.target_date FROM milestones m
          JOIN projects p ON p.id = m.project_id ORDER BY m.id",
@@ -381,6 +528,9 @@ async fn projects(db: &Db) -> Result<Vec<ProjectFile>> {
     );
     for project in &mut projects {
         project.milestones = by_slug.remove(&project.slug).unwrap_or_default();
+        project.labels = labels.remove(&project.slug).unwrap_or_default();
+        let text = values.remove(&project.slug).unwrap_or_default();
+        project.properties = serde_json::from_str(&text).map_err(invalid)?;
     }
     Ok(projects)
 }

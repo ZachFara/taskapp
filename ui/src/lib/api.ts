@@ -1,7 +1,7 @@
 import { commands } from './bindings';
 // The generated file's own text gives each command's wire name and argument names for the http transport.
 import bindingsSource from './bindings.ts?raw';
-import { createMockApi } from './api.mock';
+import { createMockApi, fixtures } from './api.mock';
 
 type Cmds = typeof commands;
 // `issuesGetByKey` -> ["issues", "getByKey"]
@@ -53,7 +53,7 @@ export function httpApi(base: string = import.meta.env.VITE_API_URL ?? 'http://1
 }
 
 // Reads never change history; undo and redo show their own toast, so a second one would overwrite it.
-const READ = /^(get|list|kindsList|query|search|status|progress|children|parse|plan|for|bars|criticalPath|between|undoStatus)/;
+const READ = /^(get|list|kindsList|statusesList|query|search|status(?![a-z])|progress|children|parse|plan|for|bars|criticalPath|between|undoStatus)/;
 const watched = new WeakSet<Api>();
 
 /** Makes every write tell the app (`history:wrote`) once it succeeds, so the undo toast can name the step. Wraps in place. */
@@ -77,7 +77,7 @@ function watchWrites(a: Api): Api {
 const mode = import.meta.env.VITE_API_MODE;
 
 export let api: Api = watchWrites(
-  mode === 'mock' ? createMockApi() : mode === 'http' ? httpApi() : build((key, args) => (commands as any)[key](...args)),
+  mode === 'mock' ? createMockApi(location.search.includes('fresh') ? { ...fixtures, workspace: { setup_done: false, name: null, key: 'ABC', timezone: 'UTC' } } : undefined) : mode === 'http' ? httpApi() : build((key, args) => (commands as any)[key](...args)),
 );
 
 /** Swaps the implementation; tests use it to install the mock. */

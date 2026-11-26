@@ -29,8 +29,6 @@
     border: 1px solid var(--control);
     border-radius: var(--r-pop);
     box-shadow: var(--shadow-float);
-    animation: cx-pop var(--dur-2) var(--ease);
   }
   :global(.cx-menu) { min-width: 200px; padding: var(--s-2); }
-  @keyframes cx-pop { from { opacity: 0; transform: translateY(-2px); } }
 </style>
