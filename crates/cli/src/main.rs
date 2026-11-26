@@ -1,6 +1,8 @@
 //! Command-line adapter over `taskapp-core`. Every write uses `ChangeSource::Cli`.
 
+mod api;
 mod commands;
+mod references;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -24,6 +26,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// Explore and call the application's core operations using JSON.
+    #[command(subcommand)]
+    Api(ApiCmd),
+    /// Show a practical guide to the CLI.
+    Guide,
     /// Create an issue from quick-add text, such as "Pay rent friday p1".
     Add {
         text: String,
@@ -83,6 +90,20 @@ enum Cmd {
     },
 }
 
+#[derive(Subcommand)]
+enum ApiCmd {
+    /// List available operations.
+    List,
+    /// Show an operation's argument names and types.
+    Describe { name: String },
+    /// Call an operation with a JSON object of named arguments.
+    Call {
+        name: String,
+        #[arg(long, default_value = "{}")]
+        args: String,
+    },
+}
+
 /// Both sources print the plan and write nothing unless `--apply` is given.
 #[derive(Subcommand)]
 enum ImportCmd {
@@ -128,12 +149,12 @@ enum IssueCmd {
         description: Option<String>,
         #[arg(long)]
         priority: Option<u8>,
-        /// Status id.
+        /// Status id or exact name (case-insensitive).
         #[arg(long)]
-        status: Option<i64>,
-        /// Project id.
+        status: Option<String>,
+        /// Project id, slug or exact name (case-insensitive).
         #[arg(long)]
-        project: Option<i64>,
+        project: Option<String>,
         /// Due date, YYYY-MM-DD.
         #[arg(long)]
         due: Option<String>,
@@ -155,12 +176,12 @@ enum IssueCmd {
         /// Parent issue key.
         #[arg(long)]
         parent: Option<String>,
-        /// Cycle id.
+        /// Cycle id or exact name (case-insensitive).
         #[arg(long)]
-        cycle: Option<i64>,
-        /// Label id; repeat for several.
+        cycle: Option<String>,
+        /// Label id or exact name (case-insensitive); repeat for several.
         #[arg(long = "label")]
-        labels: Vec<i64>,
+        labels: Vec<String>,
         /// Record the Migration source instead of Cli.
         #[arg(long)]
         migration: bool,
@@ -173,9 +194,9 @@ enum IssueCmd {
         description: Option<String>,
         #[arg(long)]
         priority: Option<u8>,
-        /// Status id.
+        /// Status id or exact name (case-insensitive).
         #[arg(long)]
-        status: Option<i64>,
+        status: Option<String>,
         /// Due date, YYYY-MM-DD.
         #[arg(long, conflicts_with = "clear_due")]
         due: Option<String>,
@@ -194,9 +215,9 @@ enum IssueCmd {
         /// Estimate in minutes.
         #[arg(long)]
         estimate: Option<u32>,
-        /// Project id.
+        /// Project id, slug or exact name (case-insensitive).
         #[arg(long)]
-        project: Option<i64>,
+        project: Option<String>,
     },
     Get {
         key: String,
@@ -562,6 +583,21 @@ async fn main() -> ExitCode {
 }
 
 async fn run(cli: Cli) -> Result<()> {
+    match &cli.cmd {
+        Cmd::Guide => {
+            print_value(&api::guide(), cli.json);
+            return Ok(());
+        }
+        Cmd::Api(ApiCmd::List) => {
+            print_value(&api::names(), cli.json);
+            return Ok(());
+        }
+        Cmd::Api(ApiCmd::Describe { name }) => {
+            print_value(&api::describe(name)?, cli.json);
+            return Ok(());
+        }
+        _ => {}
+    }
     // Backup commands run before the database opens: restore must not hold a pool on its target.
     if let Cmd::Backup(cmd) = &cli.cmd {
         let value = backup_cmd(cmd, cli.db.as_deref()).await?;
@@ -598,7 +634,10 @@ async fn run(cli: Cli) -> Result<()> {
             _ => words.push(a),
         }
     }
-    let label = words.join(" ");
+    let label = match &cli.cmd {
+        Cmd::Api(ApiCmd::Call { name, .. }) => format!("api call {name}"),
+        _ => words.join(" "),
+    };
     let value = history::step(&label, commands::run(&db, &dir.join("backups"), cli.cmd)).await?;
     print_value(&value, cli.json);
     Ok(())
@@ -672,6 +711,9 @@ fn render(value: &Value) -> String {
 }
 
 fn render_table(rows: &[Value]) -> String {
+    if !rows.is_empty() && rows.iter().all(|row| !row.is_object()) {
+        return rows.iter().map(cell).collect::<Vec<_>>().join("\n") + "\n";
+    }
     let Some(first) = rows.first().and_then(Value::as_object) else {
         return "(none)\n".to_string();
     };

@@ -738,8 +738,30 @@ These are handled by the dialogs themselves, not the command registry, so they a
 
 Binary `taskapp` (build: `cargo build -p taskapp-cli`; or `cargo run -p taskapp-cli -- <args>`). Global options:
 `--db <path>` (default: the app's database) and `--json` (JSON instead of a table). `taskapp --help` and
-`taskapp <command> --help` print the full list. Every write is one undoable step with source Cli. There are 48
-subcommands; keys are issue keys such as `ABC-1`, ids are numbers.
+`taskapp <command> --help` print the full list. Keys are issue keys such as `ABC-1`, ids are numbers. Writes that
+record history normally use source Cli; some core operations use their own Ui or System source, and some do not
+record undoable history. `--migration` explicitly selects Migration for issue creation.
+
+Issue creation accepts status, project, cycle and label IDs or exact case-insensitive names; projects also accept
+slugs. Issue updates accept status and project IDs or names. Ambiguous names are rejected; use an ID.
+
+`taskapp guide` shows a short orientation. For operations without a dedicated subcommand, `taskapp api list`
+lists the core-backed app commands, `taskapp api describe <name>` shows argument names and Rust types, and
+`taskapp api call <name> --args '<JSON object>'` runs one. Use `--json` for machine-readable results and
+runtime errors. Optional arguments may be omitted; unexpected arguments are rejected. IDs are numbers. For
+complex objects, fetch an existing object first and modify its JSON; field definitions are also in
+`ui/src/lib/bindings.ts`. For example:
+
+```sh
+taskapp --json api call labels_list
+taskapp --json api call labels_update --args '{"label":{"id":1,"name":"Bug","color":"red","color_hex":"#ef4444","icon":"icon:tag"}}'
+taskapp --json api call issues_restore --args '{"id":1}'
+```
+
+Changing or deleting a property takes a database snapshot first, including through `api`; bulk issue updates
+of more than 10 IDs do too. A snapshot failure prevents the operation. API history step labels contain the
+operation name, not the argument JSON. The API covers the app's core-backed commands, not shell-only Google
+Calendar sign-in/listing, Reminders listing, immediate sync or export actions. Those remain in the app.
 
 | Command | What it does | Example |
 |---|---|---|
@@ -781,8 +803,6 @@ subcommands; keys are issue keys such as `ABC-1`, ids are numbers.
 | `import csv <file> [--map COLUMN=FIELD] [--apply]` | Plan, or apply with `--apply`. | `taskapp import csv tasks.csv --map Name=title --apply` |
 | `import linear [--apply]` | Plan or apply a Linear import (`LINEAR_API_KEY`). | `taskapp import linear` |
 | `setup <name> <key> [--tz]` | First-run setup. | `taskapp setup Cairn ABC --tz Europe/Berlin` |
-
-The CLI has no command for statuses, milestones, settings or unarchiving; use the app or MCP (statuses, milestones).
 
 ## MCP tools reference
 

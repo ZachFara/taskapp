@@ -1,6 +1,7 @@
 //! Core: SQLite database and every domain operation.
 //! One plain async function per UI command.
 
+mod command_registry;
 mod db;
 mod error;
 mod model;

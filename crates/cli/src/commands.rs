@@ -7,12 +7,12 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use taskapp_core::{
-    ChangeSource, CycleId, Db, Due, Error, EventId, EventInput, IssueId, IssuePatch, LabelId,
-    Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind,
-    Relation, RelationKind, Result, SelectOption, StatusId, TemplateId, ViewDef, ViewId,
-    ViewTemplateId, backup, comments, cycles, events, history, import, insights, issues, labels,
-    pins, project_statuses, projects, properties, quickadd, relations, search, statuses, templates,
-    undo, view_templates, views,
+    ChangeSource, CycleId, Db, Due, Error, EventId, EventInput, IssueId, IssuePatch, Measure,
+    NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind, Relation,
+    RelationKind, Result, SelectOption, TemplateId, ViewDef, ViewId, ViewTemplateId, backup,
+    comments, cycles, events, history, import, insights, issues, labels, pins, project_statuses,
+    projects, properties, quickadd, relations, search, statuses, templates, undo, view_templates,
+    views,
 };
 
 use crate::{
@@ -24,6 +24,11 @@ const SRC: ChangeSource = ChangeSource::Cli;
 
 pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
     match cmd {
+        Cmd::Api(crate::ApiCmd::Call { name, args }) => {
+            let args = serde_json::from_str(&args)
+                .map_err(|e| Error::Invalid(format!("arguments must be a JSON object: {e}")))?;
+            crate::api::call(db, dir, &name, args).await
+        }
         Cmd::Undo => val(undo::undo(db).await?),
         Cmd::Setup { name, key, tz } => {
             val(taskapp_core::workspace::setup(db, &name, &key, tz.as_deref()).await?)
@@ -50,7 +55,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Relation(cmd) => relation(db, cmd).await,
         Cmd::Pin(cmd) => pin(db, cmd).await,
         Cmd::Import(cmd) => import(db, cmd).await,
-        Cmd::Backup(_) | Cmd::Restore { .. } => Err(Error::Invalid(
+        Cmd::Backup(_) | Cmd::Restore { .. } | Cmd::Guide | Cmd::Api(_) => Err(Error::Invalid(
             "this command runs before the database opens".into(),
         )),
         Cmd::Undo
@@ -109,18 +114,22 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
                 Some(key) => Some(issue_id(db, &key).await?),
                 None => None,
             };
+            let status_id = crate::references::status(db, status.as_deref()).await?;
+            let project_id = crate::references::project(db, project.as_deref()).await?;
+            let cycle_id = crate::references::cycle(db, cycle.as_deref()).await?;
+            let label_ids = crate::references::labels(db, &labels).await?;
             let new = NewIssue {
                 created_at: created_at.as_deref().map(timestamp).transpose()?,
                 completed_at: completed_at.as_deref().map(timestamp).transpose()?,
                 properties: property_map(&properties)?,
                 parent_id,
-                cycle_id: cycle.map(CycleId),
-                label_ids: (!labels.is_empty()).then(|| labels.into_iter().map(LabelId).collect()),
+                cycle_id,
+                label_ids: (!labels.is_empty()).then_some(label_ids),
                 title,
                 description,
                 priority: check_priority(priority)?,
-                status_id: status.map(StatusId),
-                project_id: project.map(ProjectId),
+                status_id,
+                project_id,
                 due: due.as_deref().map(date).transpose()?.map(Due::Date),
                 estimate_minutes: estimate,
                 points,
@@ -158,6 +167,8 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         unreachable!("issue_update is only called with Update");
     };
     let id = issue_id(db, &key).await?;
+    let status_id = crate::references::status(db, status.as_deref()).await?;
+    let project_id = crate::references::project(db, project.as_deref()).await?;
     let due = if clear_due {
         Some(None)
     } else {
@@ -170,7 +181,7 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         title,
         description,
         priority: check_priority(priority)?,
-        status_id: status.map(StatusId),
+        status_id,
         due,
         points: if clear_points {
             Some(None)
@@ -179,7 +190,7 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         },
         start_date: start.as_deref().map(date).transpose()?.map(Some),
         estimate_minutes: estimate.map(Some),
-        project_id: project.map(|p| Some(ProjectId(p))),
+        project_id: project_id.map(Some),
         ..IssuePatch::default()
     };
     val(issues::update(db, id, patch, SRC).await?)
@@ -584,7 +595,7 @@ async fn pin(db: &Db, cmd: PinCmd) -> Result<Value> {
 }
 
 /// Snapshot before a destructive property change, as the MCP server does.
-async fn snapshot(db: &Db, dir: &Path, reason: &str) -> Result<()> {
+pub(crate) async fn snapshot(db: &Db, dir: &Path, reason: &str) -> Result<()> {
     backup::snapshot(db, dir, reason).await?;
     Ok(())
 }
