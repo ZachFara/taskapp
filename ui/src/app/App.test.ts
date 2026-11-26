@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, setApi } from '../lib/api';
 import { createMockApi } from '../lib/api.mock';
 import { setTheme } from '../lib/theme.svelte';
-import { refreshAll, selectedIssueId } from '../lib/stores.svelte';
+import { refreshAll, selectedIssueId, statuses as statusStore } from '../lib/stores.svelte';
 import { undoToast } from '../components/undoState.svelte';
 import App from './App.svelte';
 import CtxProbe from './testing/CtxProbe.svelte';
@@ -274,6 +274,110 @@ describe('views inside the frame', () => {
     name.form!.requestSubmit();
     await settle();
     expect(q('aside.sidebar')!.textContent).toContain('Renamed');
+  });
+
+  it('creating_an_issue_keeps_the_temporary_sort', async () => {
+    await withView();
+    q<HTMLButtonElement>('button[aria-label="Sort by Title"]')!.click();
+    await settle();
+    expect(q('button[aria-label="Sort by Title"]')!.textContent).toContain('↑');
+    press('c');
+    await settle();
+    const field = q<HTMLInputElement>('input[data-quickadd]')!;
+    field.value = 'Sorted issue';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle();
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await until(() => !!q('aside.panel [aria-label=Title]'));
+    expect(q('button[aria-label="Sort by Title"]')!.textContent).toContain('↑');
+  });
+
+  it('creating_an_issue_within_a_view_applies_filters_refreshes_and_opens_in_panel', async () => {
+    const a = createMockApi();
+    const statuses = await a.statuses.list();
+    const delegated = statuses[2];
+    const proj = await a.projects.create('cairn', 'Cairn', null, null);
+    const view = await a.views.save(
+      null,
+      'Delegated Cairn',
+      {
+        ...def,
+        filter: {
+          And: [
+            { Cond: { field: { Fixed: 'Status' }, op: 'In', value: [delegated.id] } },
+            { Cond: { field: { Fixed: 'Project' }, op: 'In', value: [proj.id] } },
+          ],
+        },
+      },
+      null,
+      null,
+    );
+    setApi(a);
+    history.replaceState(null, '', `/view/${view.id}`);
+    app = mount(App, { target: document.body });
+    await settle();
+
+    press('c');
+    await settle();
+    const field = q<HTMLInputElement>('input[data-quickadd]')!;
+    field.value = 'Created inside view';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle();
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await until(() => !!q('aside.panel [aria-label=Title]'));
+
+    expect(location.pathname).toBe(`/view/${view.id}`);
+    expect(q('aside.panel [aria-label=Title]')!.textContent).toBe('Created inside view');
+    expect(q('aside.panel')!.textContent).toContain(delegated.name);
+    expect(q('aside.panel')!.textContent).toContain(proj.name);
+    expect(document.querySelector('main')?.textContent).toContain('Created inside view');
+  });
+
+  it('uses_view_status_even_when_status_store_has_not_loaded', async () => {
+    const a = createMockApi();
+    const status = (await a.statuses.list())[2];
+    const view = await a.views.save(null, 'Status view', {
+      ...def, filter: { Cond: { field: { Fixed: 'Status' }, op: 'Eq', value: status.id } },
+    }, null, null);
+    setApi(a);
+    history.replaceState(null, '', `/view/${view.id}`);
+    app = mount(App, { target: document.body });
+    await settle();
+    statusStore.splice(0);
+    const create = vi.spyOn(a.issues, 'create');
+    press('c');
+    await settle();
+    const field = q<HTMLInputElement>('input[data-quickadd]')!;
+    field.value = 'Early issue';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle();
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await until(() => create.mock.calls.length > 0);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ status_id: status.id }));
+  });
+
+  it('keeps_the_new_issue_panel_open_if_an_override_does_not_match_the_view', async () => {
+    const a = createMockApi();
+    const p = await a.projects.create('alpha', 'Alpha', null, null);
+    await a.projects.create('beta', 'Beta', null, null);
+    const view = await a.views.save(null, 'Alpha view', {
+      ...def, filter: { Cond: { field: { Fixed: 'Project' }, op: 'Eq', value: p.id } },
+    }, null, null);
+    setApi(a);
+    history.replaceState(null, '', `/view/${view.id}`);
+    app = mount(App, { target: document.body });
+    await settle();
+    press('c');
+    await settle();
+    const field = q<HTMLInputElement>('input[data-quickadd]')!;
+    field.value = 'Outside view #beta';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle();
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await until(() => !!q('aside.panel [aria-label=Title]'));
+    await refreshAll(view.def);
+    await settle();
+    expect(q('aside.panel [aria-label=Title]')?.textContent).toBe('Outside view');
   });
 });
 

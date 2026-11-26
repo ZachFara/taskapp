@@ -4,6 +4,7 @@ import { createMockApi, fixtures, type MockSeed } from '../../lib/api.mock';
 import { setApi } from '../../lib/api';
 import type { Issue, SavedView, ViewDef } from '../../lib/bindings';
 import { selection } from '../../lib/selection.svelte';
+import { selectedIssueId } from '../../lib/stores.svelte';
 import { listState } from '../../lib/listState.svelte';
 import { listCommands, type Ctx } from '../../lib/commands';
 import ListView from './ListView.svelte';
@@ -202,6 +203,38 @@ describe('ListView', () => {
     target.querySelector<HTMLElement>(`[aria-label="Add to ${S1.name}"]`)!.click();
     await vi.waitFor(() => expect(spy).toHaveBeenCalledWith(expect.objectContaining({ status_id: S1.id })));
     await vi.waitFor(() => expect(listState.editing).not.toBeNull());
+  });
+
+  it('add_in_group_inherits_view_filter_defaults_and_opens_panel', async () => {
+    const proj = fixtures.projects[0];
+    const { mock, target } = await open({
+      issues: [issue(1, { project_id: proj.id })],
+      views: [{
+        id: 1,
+        name: 'Proj',
+        entity: 'issue',
+        position: 0,
+        icon: null,
+        color: null,
+        template_id: null,
+        folder_id: null,
+        def: {
+          filter: { Cond: { field: { Fixed: 'Project' }, op: 'In', value: [proj.id] } },
+          sorts: [],
+          group_by: { Fixed: 'Status' },
+          layout: 'List',
+          columns: [],
+          include_archived: false,
+        },
+      }],
+    });
+    const spy = vi.spyOn(mock.issues, 'create');
+    target.querySelector<HTMLElement>(`[aria-label="Add to ${S1.name}"]`)!.click();
+    await vi.waitFor(() =>
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ status_id: S1.id, project_id: proj.id })),
+    );
+    const created = await spy.mock.results[0].value;
+    await vi.waitFor(() => expect(selectedIssueId.value).toBe(created.id));
   });
 
   it('right_click_opens_menu_of_commands_for_that_row', async () => {

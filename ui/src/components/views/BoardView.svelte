@@ -17,6 +17,7 @@
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
   import { priorityGlyph } from '../detail/format';
   import { onRowsChanged } from './onRowsChanged';
+  import type { IssueDefaults } from '../filters/defaults';
 
   let { view }: { view: SavedView } = $props();
 
@@ -26,6 +27,7 @@
     category: StatusCategory;
     holds: (i: Issue) => boolean;
     patch: (i: Issue) => IssuePatch;
+    defaults: IssueDefaults;
   };
 
   const groupBy = $derived(view.def.group_by?.Fixed === 'Points' && !ctx.points ? null : view.def.group_by);
@@ -47,22 +49,24 @@
         category: 'Unstarted',
         holds: (i) => bucket(i) === value,
         patch: (i) => ({ properties: { ...i.properties, [def.key]: value } }),
+        defaults: { properties: { [def.key]: value } },
       }));
       cols.push({
         name: 'None',
         category: 'Unstarted',
         holds: (i) => bucket(i) === null,
         patch: (i) => ({ properties: { ...i.properties, [def.key]: null } }),
+        defaults: { properties: { [def.key]: null } },
       });
       return cols;
     }
     if (groupBy?.Fixed === 'Points') {
       const values = [...new Set(issues.map((i) => i.points))].sort((a, b) => (a ?? Infinity) - (b ?? Infinity));
-      return values.map((v) => ({ name: pointsName(v), category: 'Unstarted', holds: (i) => i.points === v, patch: () => ({ points: v }) }));
+      return values.map((v) => ({ name: pointsName(v), category: 'Unstarted', holds: (i) => i.points === v, patch: () => ({ points: v }), defaults: { points: v } }));
     }
     return [...statuses]
       .sort((a, b) => a.position - b.position)
-      .map((s) => ({ name: s.name, category: s.category, icon: s.icon, color: s.color, holds: (i) => i.status_id === s.id, patch: () => ({ status_id: s.id }) }));
+      .map((s) => ({ name: s.name, category: s.category, icon: s.icon, color: s.color, holds: (i) => i.status_id === s.id, patch: () => ({ status_id: s.id }), defaults: { status_id: s.id } }));
   });
 
   // Per-viewer layout memory. Storage can be blocked (private window), so every access is guarded.
@@ -221,7 +225,7 @@
         color={col.color}
         {collapsed}
         ontoggle={() => toggleCollapsed(col)}
-        onadd={() => dispatchEvent(new CustomEvent('command:issue.create'))}
+        onadd={() => dispatchEvent(new CustomEvent('command:issue.create', { detail: { defaults: col.defaults } }))}
       />
       {#if !collapsed}
         {#if cards.length}

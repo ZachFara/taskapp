@@ -6,6 +6,8 @@
   import { nextSort, sortable } from '../../lib/viewSort';
   import SortHeading from './SortHeading.svelte';
   import { listState } from '../../lib/listState.svelte';
+  import { defaultStatusId, issues as issueStore, selectedIssueId } from '../../lib/stores.svelte';
+  import { defaultsFromFilter, mergeIssueDefaults } from '../filters/defaults';
   import { selection } from '../../lib/selection.svelte';
   import { navigate } from '../../app/routes';
   import Checkbox from '../../ui/Checkbox.svelte';
@@ -272,9 +274,12 @@
     await load();
   }
   async function add(g: Group) {
-    const made = await api.issues.create({ title: 'Untitled', ...g.patch });
+    const defaults = defaultsFromFilter(view.def.filter, { statuses, projects, propertyDefs: ctx.defs, defaultStatusId: defaultStatusId.value });
+    const made = await api.issues.create({ title: 'Untitled', ...mergeIssueDefaults(defaults, g.patch) });
     await load();
+    if (!issueStore.some((i) => i.id === made.id)) issueStore.push(made);
     selection.focus(made.id);
+    selectedIssueId.value = made.id;
     draft = made.title;
     listState.editing = made.id;
   }

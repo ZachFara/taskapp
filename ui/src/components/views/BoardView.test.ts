@@ -231,4 +231,19 @@ describe('BoardView', () => {
     expect(columnNames(root)).not.toContain('Doing');
     expect(columnNames(root)).toContain('Todo');
   });
+
+  it('column_add_button_passes_column_defaults_to_issue_create', async () => {
+    const root = await render(seed());
+    let detail: unknown = null;
+    const onCreate = (e: Event) => {
+      detail = (e as CustomEvent).detail;
+    };
+    addEventListener('command:issue.create', onCreate);
+    try {
+      column(root, 'Doing').querySelector<HTMLButtonElement>('button[aria-label="Add to Doing"]')!.click();
+      expect(detail).toEqual({ defaults: { status_id: 2 } });
+    } finally {
+      removeEventListener('command:issue.create', onCreate);
+    }
+  });
 });

@@ -2,6 +2,7 @@
   import type { Component } from 'svelte';
   import type { FieldRef, Filter, Layout, SavedView, ViewDef } from '../../lib/bindings';
   import { issues, selectedIssueId } from '../../lib/stores.svelte';
+  import { clearViewContext, setViewContext } from '../../lib/viewContext.svelte';
   import BoardView from '../views/BoardView.svelte';
   import CalendarView from '../views/CalendarView.svelte';
   import GanttView from '../views/GanttView.svelte';
@@ -27,6 +28,10 @@
     def: { ...def, layout, filter: inProject(def.filter) },
   }));
   const Shown = $derived(byLayout[layout]);
+  $effect(() => {
+    setViewContext({ inView: true, filter: view.def.filter, viewDef: view.def });
+    return clearViewContext;
+  });
 
   // Same pick rule as a saved view: rows are tagged with the key (or the id in the Gantt).
   function pick(e: MouseEvent) {

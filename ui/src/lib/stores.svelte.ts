@@ -12,16 +12,17 @@ export const folders = $state<ViewFolder[]>([]);
 export const placements = $state<Placement[]>([]);
 export const currentViewId = $state<{ value: ViewId | null }>({ value: null });
 export const selectedIssueId = $state<{ value: IssueId | null }>({ value: null });
+export const defaultStatusId = $state<{ value: number | null }>({ value: null });
 
 const replace = <T>(list: T[], next: T[]) => void list.splice(0, list.length, ...next);
 let refreshVersion = 0;
 
-/** Reloads every store from the backend; the current view's issues, or all issues when none is chosen. */
+/** Reloads every store from the backend; the provided or current view's issues, or all issues when none is chosen. */
 export async function refreshAll(def?: ViewDef): Promise<void> {
   const mine = ++refreshVersion;
   const savedViews = await api.views.list();
   const current = savedViews.find((v) => v.id === currentViewId.value && v.entity !== 'project');
-  const [i, st, p, d, f, pl, ps] = await Promise.all([
+  const [i, st, p, d, f, pl, ps, ds] = await Promise.all([
     api.views.query(
       def ?? current?.def ?? { filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false },
     ),
@@ -31,6 +32,7 @@ export async function refreshAll(def?: ViewDef): Promise<void> {
     api.folders.list(),
     api.folders.items(),
     api.project.statusesList(),
+    api.settings?.get?.('default_status').catch(() => null) ?? Promise.resolve(null),
   ]);
   if (mine !== refreshVersion) return;
   replace(issues, i);
@@ -41,6 +43,7 @@ export async function refreshAll(def?: ViewDef): Promise<void> {
   replace(views, savedViews);
   replace(folders, f);
   replace(placements, pl);
+  defaultStatusId.value = typeof ds === 'number' ? ds : null;
 }
 
 /** In the desktop app the backend says when another process wrote (`db-changed`) or a link was opened. */

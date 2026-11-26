@@ -2,9 +2,10 @@
   import { fieldOn } from '../lib/fields.svelte';
   import { untrack } from 'svelte';
   import { api } from '../lib/api';
-  import type { Issue, IssueTemplate, ParsedQuickAdd } from '../lib/bindings';
+  import type { Issue, IssueTemplate, NewIssue, ParsedQuickAdd, Project, Status } from '../lib/bindings';
   import { navigate } from '../app/routes';
-  import { projects, refreshAll } from '../lib/stores.svelte';
+  import { projects, refreshAll, statuses } from '../lib/stores.svelte';
+  import { viewContext } from '../lib/viewContext.svelte';
   import Button from '../ui/Button.svelte';
   import Contour from '../ui/Contour.svelte';
   import Dialog from '../ui/Dialog.svelte';
@@ -12,21 +13,25 @@
   import Menu from '../ui/Menu.svelte';
   import MenuItem from '../ui/MenuItem.svelte';
   import PriorityGlyph from '../ui/PriorityGlyph.svelte';
+  import StatusGlyph from '../ui/StatusGlyph.svelte';
   import { humanDate, PRIORITIES, priorityGlyph } from './detail/format';
+  import { mergeIssueDefaults, type IssueDefaults } from './filters/defaults';
   import { pointsOn, readEstimation, SCALES, type Estimation, type ScaleName } from './insights/estimation';
 
-  // `project_slug` and `status_id` prefill from the screen that opened the dialog (a group band, a project page).
+  // `project_slug`, `status_id` and `defaults` prefill from the screen that opened the dialog (a view, a column, a project).
   // `oncreated` hands the owner the new issue and an undo for the whole create, so it can show the toast.
   let {
     onclose,
     oncreated,
     project_slug = null,
     status_id = null,
+    defaults = null,
   }: {
     onclose: () => void;
-    oncreated?: (created: { issue: Issue; undo: () => Promise<void> }) => void;
+    oncreated?: (created: { issue: Issue; undo: () => Promise<void>; mode: 'close' | 'open' | 'keep' }) => void;
     project_slug?: string | null;
     status_id?: number | null;
+    defaults?: IssueDefaults | null;
   } = $props();
 
   const DUE_WORDS = String.raw`(?:today|tomorrow|next week|(?:mon|tue|wed|thu|fri|sat|sun)\w*|\d{4}-\d{2}-\d{2}|in \d+ (?:day|days|week|weeks))`;
@@ -34,11 +39,16 @@
   let open = $state(true);
   // The prefill is the starting text only; the dialog owns the field after it opens.
   const prefill = untrack(() => (project_slug ? `#${project_slug} ` : ''));
+  const initialDefaults = (): IssueDefaults =>
+    mergeIssueDefaults(defaults, status_id !== null ? { status_id } : null);
+  let activeDefaults = $state<IssueDefaults>(untrack(initialDefaults));
   let text = $state(prefill);
   let parsed = $state<ParsedQuickAdd | null>(null);
   let error = $state('');
   let templates = $state<IssueTemplate[]>([]);
-  let labels = $state<{ name: string }[]>([]);
+  let labels = $state<{ id: number; name: string }[]>([]);
+  let statusList = $state<Status[]>(statuses);
+  let projectList = $state<Project[]>(projects);
   let highlight = $state(0);
   let field: HTMLInputElement | undefined = $state();
   let seq = 0;
@@ -51,6 +61,8 @@
 
   void api.templates.list().then((t) => (templates = t)).catch(() => {});
   void api.labels.list().then((l) => (labels = l)).catch(() => {});
+  void api.statuses.list().then((s) => (statusList = s)).catch(() => {});
+  void api.projects.list().then((p) => (projectList = p)).catch(() => {});
 
   // Typing `/` at the start opens the template list; the list narrows as the slug is typed.
   const slashQuery = $derived(/^\/(\S*)$/.exec(text)?.[1] ?? null);
@@ -59,25 +71,55 @@
   );
   const template = $derived(templates.find((t) => text.startsWith(`/${t.slug} `) || text === `/${t.slug}`));
 
+  const defaultStatus = $derived(statusList.find((s) => s.id === activeDefaults.status_id) ?? null);
+  const defaultProject = $derived(projectList.find((p) => p.id === activeDefaults.project_id) ?? null);
+  const defaultLabels = $derived(
+    (activeDefaults.label_ids ?? [])
+      .map((id) => labels.find((l) => l.id === id))
+      .filter((l): l is { id: number; name: string } => !!l),
+  );
+  const effectivePriority = $derived(parsed?.priority ?? activeDefaults.priority ?? null);
+  const effectiveDue = $derived(parsed?.due ?? activeDefaults.due ?? null);
+  const effectiveStart = $derived(parsed?.start_date ?? activeDefaults.start_date ?? null);
+  const effectiveEstimate = $derived(parsed?.estimate_minutes ?? activeDefaults.estimate_minutes ?? null);
+  const effectivePoints = $derived(pointsIn(parsed) ?? activeDefaults.points ?? null);
+  const effectiveProjectSlug = $derived(parsed?.project_slug ?? defaultProject?.slug ?? null);
+  const effectiveLabelNames = $derived([
+    ...new Set([
+      ...defaultLabels.map((l) => l.name),
+      ...(parsed?.label_names ?? []),
+    ]),
+  ]);
+  const propEntries = $derived(Object.entries(activeDefaults.properties ?? {}));
+
   // Each chip is a Menu trigger: Tab reaches it in order, Enter or Space opens its menu, and the menu rewrites
-  // that token in the text, so the field stays the one source of truth.
+  // that token (or the inherited view default), so the user always sees what will be set.
   // Only the tokens of fields that are switched on.
   const hint = $derived([['priority', 'p2'], ['project', '#project'], ['labels', '@label'], ['estimate', '~30m'], ['due', 'tomorrow']].flatMap(([f, t]) => (fieldOn(f as 'due') ? [t] : [])).map((t) => ` ${t}`).join(''));
   const chips = $derived(
     [
       template && { key: 'template', label: `/${template.slug}` },
-      parsed?.due && { key: 'due', label: `Due ${humanDate(parsed.due.Date ?? parsed.due.DateTime!.utc.slice(0, 10))}` },
-      parsed?.start_date && { key: 'start', label: `Start ${humanDate(parsed.start_date)}` },
-      parsed?.priority != null && { key: 'priority', label: PRIORITIES[parsed.priority] ?? `P${parsed.priority}` },
-      parsed?.project_slug && { key: 'project', label: `#${parsed.project_slug}` },
-      ...(parsed?.label_names ?? []).map((l) => ({ key: 'labels', label: `@${l}` })),
-      parsed?.estimate_minutes != null && { key: 'estimate', label: `${parsed.estimate_minutes}m` },
-      pointsIn(parsed) != null && pointsOn(estimation) && { key: 'points', label: `${pointsIn(parsed)} pts` },
+      defaultStatus && { key: 'status', label: defaultStatus.name },
+      effectiveDue && { key: 'due', label: `Due ${humanDate(effectiveDue.Date ?? effectiveDue.DateTime!.utc.slice(0, 10))}` },
+      effectiveStart && { key: 'start', label: `Start ${humanDate(effectiveStart)}` },
+      effectivePriority != null && { key: 'priority', label: PRIORITIES[effectivePriority] ?? `P${effectivePriority}` },
+      effectiveProjectSlug && { key: 'project', label: `#${effectiveProjectSlug}` },
+      ...effectiveLabelNames.map((l) => ({ key: 'labels', label: `@${l}` })),
+      effectiveEstimate != null && { key: 'estimate', label: `${effectiveEstimate}m` },
+      effectivePoints != null && pointsOn(estimation) && { key: 'points', label: `${effectivePoints} pts` },
+      ...propEntries.map(([k, v]) => ({ key: `prop:${k}`, label: `${k}: ${Array.isArray(v) ? v.join(', ') : String(v)}` })),
     ].filter((c): c is { key: string; label: string } => !!c),
   );
 
+  function dropDefault(key: keyof IssueDefaults) {
+    const next = { ...activeDefaults };
+    delete next[key];
+    activeDefaults = next;
+  }
+
   // Replaces the token matching `pattern` with `token` (or drops it when `token` is empty). Chip menus use it.
-  function setToken(pattern: RegExp, token: string) {
+  function setToken(pattern: RegExp, token: string, defaultKey?: keyof IssueDefaults) {
+    if (defaultKey) dropDefault(defaultKey);
     const rest = text.replace(pattern, ' ').replace(/\s+/g, ' ').trim();
     text = token ? `${rest} ${token} `.trimStart() : `${rest} `.trimStart();
     void oninput();
@@ -94,22 +136,52 @@
     if (mine === seq) parsed = p;
   }
 
+  const hasDefaults = (d: IssueDefaults) =>
+    Object.entries(d).some(([, v]) =>
+      v !== undefined &&
+      v !== null &&
+      (!Array.isArray(v) || v.length > 0) &&
+      (typeof v !== 'object' || Object.keys(v).length > 0),
+    );
+
   async function submit(mode: 'close' | 'open' | 'keep') {
     const value = text.trim();
     if (!value || (slashQuery !== null && !template)) return;
     let issue: Issue;
     try {
-      if (status_id !== null) {
-        // The quick-add grammar has no status token, so the parsed fields and the status go into one write:
-        // a template apply or a create, either way one undo step.
-        const text = template ? value.slice(template.slug.length + 1).trim() : value;
-        const p = await api.issues.parseQuickadd(text);
+      if (hasDefaults(activeDefaults)) {
+        // The quick-add grammar has no status/filter token for everything, so the parsed fields and view defaults
+        // go into one write: a template apply or a create, either way one undo step.
+        const rawText = template ? value.slice(template.slug.length + 1).trim() : value;
+        const p = await api.issues.parseQuickadd(rawText);
         const found = await api.labels.list();
-        const label_ids = p.label_names.flatMap((n) => found.find((l) => l.name.toLowerCase() === n.toLowerCase())?.id ?? []);
-        const fields = {
-          title: p.title, due: p.due, start_date: p.start_date, priority: p.priority, estimate_minutes: p.estimate_minutes,
-          ...(pointsIn(p) != null ? { points: pointsIn(p) } : {}),
-          project_id: projects.find((x) => x.slug === p.project_slug)?.id ?? null, label_ids: label_ids.length ? label_ids : null, status_id,
+        let title = p.title;
+        const parsedProject = p.project_slug === null ? undefined : projectList.find((x) => x.slug === p.project_slug);
+        if (p.project_slug !== null && !parsedProject) title += ` #${p.project_slug}`;
+        const parsedLabelIds: number[] = [];
+        for (const name of p.label_names) {
+          const hit = found.find((l) => l.name.toLowerCase() === name.toLowerCase());
+          if (hit) parsedLabelIds.push(hit.id);
+          else title += ` @${name}`;
+        }
+        const label_ids = [...new Set([...(activeDefaults.label_ids ?? []), ...parsedLabelIds])];
+        const pts = pointsIn(p) ?? activeDefaults.points;
+        const fields: NewIssue = {
+          title,
+          due: p.due ?? activeDefaults.due ?? null,
+          start_date: p.start_date ?? activeDefaults.start_date ?? null,
+          priority: p.priority ?? activeDefaults.priority ?? null,
+          estimate_minutes: p.estimate_minutes ?? activeDefaults.estimate_minutes ?? null,
+          ...(pts != null ? { points: pts } : {}),
+          project_id: parsedProject?.id ?? activeDefaults.project_id ?? null,
+          label_ids: label_ids.length ? label_ids : null,
+          status_id: activeDefaults.status_id ?? null,
+          ...(activeDefaults.cycle_id != null ? { cycle_id: activeDefaults.cycle_id } : {}),
+          ...(activeDefaults.milestone_id != null ? { milestone_id: activeDefaults.milestone_id } : {}),
+          ...(activeDefaults.parent_id != null ? { parent_id: activeDefaults.parent_id } : {}),
+          ...(activeDefaults.properties && Object.keys(activeDefaults.properties).length
+            ? { properties: activeDefaults.properties }
+            : {}),
         };
         issue = template ? (await api.templates.apply(template.id, fields)).issue : await api.issues.create(fields);
       } else {
@@ -120,17 +192,19 @@
       error = (err as { message?: string })?.message ?? String(err);
       return;
     }
+    await refreshAll(viewContext.viewDef ?? undefined).catch(() => {});
     oncreated?.({
       issue,
+      mode,
       undo: async () => {
         await api.history.undo();
-        void refreshAll().catch(() => {});
+        void refreshAll(viewContext.viewDef ?? undefined).catch(() => {});
       },
     });
-    void refreshAll().catch(() => {});
     if (mode === 'keep') {
       text = prefill;
       parsed = null;
+      activeDefaults = initialDefaults();
       return;
     }
     if (mode === 'open') navigate(`/issue/${issue.key}`);
@@ -208,45 +282,66 @@
         <Menu>
           {#snippet trigger(props)}
             <button {...props} class="chip" type="button" data-chip data-kind={c.key} aria-label={`Edit ${c.key}: ${c.label}`}>
-              {#if c.key === 'priority'}<PriorityGlyph level={priorityGlyph(parsed?.priority ?? 0)} size={12} />{/if}
+              {#if c.key === 'status' && defaultStatus}<StatusGlyph category={defaultStatus.category} icon={defaultStatus.icon} color={defaultStatus.color} size={12} />{/if}
+              {#if c.key === 'priority'}<PriorityGlyph level={priorityGlyph(effectivePriority ?? 0)} size={12} />{/if}
               {c.label}
             </button>
           {/snippet}
-          {#if c.key === 'priority'}
+          {#if c.key === 'status'}
+            {#each statusList as s (s.id)}
+              <MenuItem label={s.name} onSelect={() => (activeDefaults = { ...activeDefaults, status_id: s.id })} />
+            {/each}
+            <MenuItem label="Default status" onSelect={() => dropDefault('status_id')} />
+          {:else if c.key === 'priority'}
             {#each PRIORITIES as name, level (name)}
-              <MenuItem label={name} onSelect={() => setToken(/(^|\s)p[0-4](?=\s|$)/i, level ? `p${level}` : '')} />
+              <MenuItem label={name} onSelect={() => setToken(/(^|\s)p[0-4](?=\s|$)/i, level ? `p${level}` : '', 'priority')} />
             {/each}
           {:else if c.key === 'project'}
-            {#each projects as p (p.slug)}
-              <MenuItem label={p.name} icon="project" onSelect={() => setToken(/(^|\s)#[\w-]+/, `#${p.slug}`)} />
+            {#each projectList as p (p.slug)}
+              <MenuItem label={p.name} icon="project" onSelect={() => setToken(/(^|\s)#[\w-]+/, `#${p.slug}`, 'project_id')} />
             {/each}
-            <MenuItem label="No project" onSelect={() => setToken(/(^|\s)#[\w-]+/, '')} />
+            <MenuItem label="No project" onSelect={() => setToken(/(^|\s)#[\w-]+/, '', 'project_id')} />
           {:else if c.key === 'due'}
-            <MenuItem label="Today" icon="calendar" onSelect={() => setToken(new RegExp(`(^|\\s)(by |due )?${DUE_WORDS}(?=\\s|$)`, 'i'), 'today')} />
-            <MenuItem label="Tomorrow" icon="calendar" onSelect={() => setToken(new RegExp(`(^|\\s)(by |due )?${DUE_WORDS}(?=\\s|$)`, 'i'), 'tomorrow')} />
-            <MenuItem label="Next week" icon="calendar" onSelect={() => setToken(new RegExp(`(^|\\s)(by |due )?${DUE_WORDS}(?=\\s|$)`, 'i'), 'next week')} />
-            <MenuItem label="No due date" onSelect={() => setToken(new RegExp(`(^|\\s)(by |due )?${DUE_WORDS}(?=\\s|$)`, 'i'), '')} />
+            <MenuItem label="Today" icon="calendar" onSelect={() => setToken(new RegExp(`(^|\\s)(by |due )?${DUE_WORDS}(?=\\s|$)`, 'i'), 'today', 'due')} />
+            <MenuItem label="Tomorrow" icon="calendar" onSelect={() => setToken(new RegExp(`(^|\\s)(by |due )?${DUE_WORDS}(?=\\s|$)`, 'i'), 'tomorrow', 'due')} />
+            <MenuItem label="Next week" icon="calendar" onSelect={() => setToken(new RegExp(`(^|\\s)(by |due )?${DUE_WORDS}(?=\\s|$)`, 'i'), 'next week', 'due')} />
+            <MenuItem label="No due date" onSelect={() => setToken(new RegExp(`(^|\\s)(by |due )?${DUE_WORDS}(?=\\s|$)`, 'i'), '', 'due')} />
           {:else if c.key === 'start'}
-            <MenuItem label="Start today" icon="clock" onSelect={() => setToken(/(^|\s)start\s+\S+(\s+\S+)?/i, 'start today')} />
-            <MenuItem label="No start date" onSelect={() => setToken(/(^|\s)start\s+\S+(\s+\S+)?/i, '')} />
+            <MenuItem label="Start today" icon="clock" onSelect={() => setToken(/(^|\s)start\s+\S+(\s+\S+)?/i, 'start today', 'start_date')} />
+            <MenuItem label="No start date" onSelect={() => setToken(/(^|\s)start\s+\S+(\s+\S+)?/i, '', 'start_date')} />
           {:else if c.key === 'labels'}
             {#each labels as l (l.name)}
-              <MenuItem label={l.name} icon="tag" onSelect={() => setToken(new RegExp(`(^|\\s)@${l.name}(?=\\s|$)`, 'i'), text.toLowerCase().includes(`@${l.name.toLowerCase()}`) ? '' : `@${l.name}`)} />
+              <MenuItem label={l.name} icon="tag" onSelect={() => {
+                const inText = text.toLowerCase().includes(`@${l.name.toLowerCase()}`);
+                const inDefaults = (activeDefaults.label_ids ?? []).includes(l.id);
+                if (inDefaults) {
+                  activeDefaults = { ...activeDefaults, label_ids: (activeDefaults.label_ids ?? []).filter((id) => id !== l.id) };
+                } else {
+                  setToken(new RegExp(`(^|\\s)@${l.name}(?=\\s|$)`, 'i'), inText ? '' : `@${l.name}`);
+                }
+              }} />
             {/each}
           {:else if c.key === 'estimate'}
-            <MenuItem label="30 minutes" icon="clock" onSelect={() => setToken(/(^|\s)~\w+(?=\s|$)/, '~30m')} />
-            <MenuItem label="2 hours" icon="clock" onSelect={() => setToken(/(^|\s)~\w+(?=\s|$)/, '~2h')} />
-            <MenuItem label="1 day" icon="clock" onSelect={() => setToken(/(^|\s)~\w+(?=\s|$)/, '~1d')} />
-            <MenuItem label="No estimate" onSelect={() => setToken(/(^|\s)~\w+(?=\s|$)/, '')} />
+            <MenuItem label="30 minutes" icon="clock" onSelect={() => setToken(/(^|\s)~\w+(?=\s|$)/, '~30m', 'estimate_minutes')} />
+            <MenuItem label="2 hours" icon="clock" onSelect={() => setToken(/(^|\s)~\w+(?=\s|$)/, '~2h', 'estimate_minutes')} />
+            <MenuItem label="1 day" icon="clock" onSelect={() => setToken(/(^|\s)~\w+(?=\s|$)/, '~1d', 'estimate_minutes')} />
+            <MenuItem label="No estimate" onSelect={() => setToken(/(^|\s)~\w+(?=\s|$)/, '', 'estimate_minutes')} />
           {:else if c.key === 'points'}
             {#each SCALES[scale] as s (s.label)}
-              <MenuItem label={`${s.label} pts`} onSelect={() => setToken(POINTS_TOKEN, `${s.value}pt`)} />
+              <MenuItem label={`${s.label} pts`} onSelect={() => setToken(POINTS_TOKEN, `${s.value}pt`, 'points')} />
             {/each}
-            <MenuItem label="No points" onSelect={() => setToken(POINTS_TOKEN, '')} />
+            <MenuItem label="No points" onSelect={() => setToken(POINTS_TOKEN, '', 'points')} />
           {:else if c.key === 'template'}
             {#each templates as t (t.id)}
               <MenuItem label={t.name} icon="layers" onSelect={() => pickTemplate(t)} />
             {/each}
+          {:else if c.key.startsWith('prop:')}
+            {@const propKey = c.key.slice(5)}
+            <MenuItem label={`Clear ${propKey}`} onSelect={() => {
+              const next = { ...(activeDefaults.properties ?? {}) };
+              delete next[propKey];
+              activeDefaults = { ...activeDefaults, properties: Object.keys(next).length ? next : undefined };
+            }} />
           {/if}
         </Menu>
       {/each}

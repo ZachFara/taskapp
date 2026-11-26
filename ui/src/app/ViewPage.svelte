@@ -5,6 +5,7 @@
   import { nextSort } from '../lib/viewSort';
   import { api } from '../lib/api';
   import { issues, refreshAll, selectedIssueId } from '../lib/stores.svelte';
+  import { clearViewContext, setViewContext } from '../lib/viewContext.svelte';
   import { announce } from '../components/undoState.svelte';
   import ViewEditor from '../components/ViewEditor.svelte';
   import InsightsPanel from '../components/insights/InsightsPanel.svelte';
@@ -111,6 +112,12 @@
   const quickFilter = $derived(combineFilters(quickText.trim() ? { Cond: { field: { Fixed: 'Title' }, op: 'Contains', value: quickText.trim() } } : null, buildFilter(null, quickChips)));
   // What the layouts get: the saved view plus the quick filter. Only the saved part is ever written.
   const shown = $derived(live && editorDef && { ...live, def: { ...editorDef, filter: combineFilters(editorDef.filter, quickFilter) } });
+  $effect(() => {
+    const active = shown?.def;
+    if (!isProject && active) setViewContext({ inView: true, filter: active.filter, viewDef: active });
+    else clearViewContext();
+    return clearViewContext;
+  });
   const filtered = $derived(shown?.def.filter != null);
   function closeQuick() {
     quickOpen = false;
