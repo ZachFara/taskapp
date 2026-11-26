@@ -192,6 +192,21 @@ describe('CommandPalette', () => {
     expect(group!.querySelector('[role=option]')!.textContent).toContain('Zebra plain');
   });
 
+  it('shows the current status glyph for a recent issue after reopening', async () => {
+    const issue = await api.issues.create({ title: 'Quokka status' });
+    await type('quokka status');
+    press('Enter');
+    await settle();
+    await api.issues.update(issue.id, { status_id: 4 });
+    unmount(app!);
+    document.body.innerHTML = '';
+    app = mount(CommandPalette, { target: document.body, props: { onclose, oncreate } });
+    await settle();
+    const group = document.querySelector('[role=group][aria-label=Recent]')!;
+    const row = [...group.querySelectorAll('[role=option]')].find((r) => r.textContent?.includes(issue.key))!;
+    await vi.waitFor(() => expect(row.querySelector('[data-category="Completed"]')).not.toBeNull());
+  });
+
   it('multi_pick_page_stays_open_and_shows_checkmarks', async () => {
     await type('zebra toggle');
     press('Enter');

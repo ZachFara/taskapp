@@ -90,6 +90,18 @@
       return [];
     }
   })();
+  let recentIssues = $state<Record<string, Issue>>({});
+  onMount(() => {
+    let mounted = true;
+    for (const r of recent) {
+      const match = /^issue:(\d+)$/.exec(r.id);
+      if (!match) continue;
+      void api.issues.get(Number(match[1])).then((issue) => {
+        if (mounted) recentIssues[r.id] = issue;
+      }).catch(() => {});
+    }
+    return () => { mounted = false; };
+  });
   const remember = (row: Row) => {
     recent.splice(0, recent.length, { id: row.id, label: row.label, path: row.path, icon: row.icon }, ...recent.filter((x) => x.id !== row.id).slice(0, 7));
     try {
@@ -224,7 +236,8 @@
       const recents = recent
         .flatMap((r): Row[] => {
           const live = rows.find((x) => x.id === r.id);
-          return live ? [live] : r.path ? [{ id: r.id, label: r.label, icon: r.icon, group: 'Recent', path: r.path, run: nav(r.path) }] : [];
+          const issue = recentIssues[r.id];
+          return live ? [live] : r.path ? [{ id: r.id, label: r.label, icon: r.icon, status: statuses.find((s) => s.id === issue?.status_id), group: 'Recent', path: r.path, run: nav(r.path) }] : [];
         })
         .slice(0, 5);
       if (recents.length) out.push({ name: 'Recent', rows: recents });
