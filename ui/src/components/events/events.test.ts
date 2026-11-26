@@ -44,6 +44,20 @@ async function type(label: string, value: string) {
 }
 
 describe('Events page', () => {
+  it('shows a visible label for each event field, including timed fields', async () => {
+    await show(EventsPage);
+    button('New event').click();
+    await settle();
+    for (const name of ['Event title', 'Date', 'End date (optional)', 'Place', 'Notes']) {
+      expect(field(name).closest('label')?.textContent).toContain(name);
+    }
+    document.querySelector<HTMLElement>('[role="checkbox"][aria-label="All day"]')!.click();
+    await settle();
+    for (const name of ['From', 'To']) {
+      expect(field(name).closest('label')?.textContent).toContain(name);
+    }
+  });
+
   it('lists upcoming events by day and keeps the past behind a toggle', async () => {
     await api.events.create(input('Launch', '2026-12-01T09:30:00', { place: 'HQ' }));
     await api.events.create(input('Standup', '2026-12-01T10:00:00'));

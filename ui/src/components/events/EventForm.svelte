@@ -65,17 +65,19 @@
 
 <Dialog bind:open title={event ? 'Edit event' : 'New event'}>
   {#snippet children()}
-    <TextInput bind:value={title} label="Event title" placeholder="Title" />
-    <TextInput bind:value={date} label="Date" type="date" />
-    <TextInput bind:value={endDate} label="End date (optional)" type="date" />
-    <label class="row"><Checkbox bind:checked={allDay} label="All day" /> All day</label>
-    {#if !allDay}
-      <TextInput bind:value={from} label="From" type="time" />
-      <TextInput bind:value={to} label="To" type="time" />
-    {/if}
-    <TextInput bind:value={place} label="Place" placeholder="Place (optional)" />
-    <TextArea bind:value={notes} label="Notes" placeholder="Notes (optional)" rows={3} />
-    {#if error}<p role="alert" class="error">{error}</p>{/if}
+    <div class="fields">
+      <label class="field"><span>Event title</span><TextInput bind:value={title} label="Event title" placeholder="Title" /></label>
+      <label class="field"><span>Date</span><TextInput bind:value={date} label="Date" type="date" /></label>
+      <label class="field"><span>End date (optional)</span><TextInput bind:value={endDate} label="End date (optional)" type="date" /></label>
+      <label class="row"><Checkbox bind:checked={allDay} label="All day" /> All day</label>
+      {#if !allDay}
+        <label class="field"><span>From</span><TextInput bind:value={from} label="From" type="time" /></label>
+        <label class="field"><span>To</span><TextInput bind:value={to} label="To" type="time" /></label>
+      {/if}
+      <label class="field"><span>Place</span><TextInput bind:value={place} label="Place" placeholder="Place (optional)" /></label>
+      <label class="field"><span>Notes</span><TextArea bind:value={notes} label="Notes" placeholder="Notes (optional)" rows={3} /></label>
+      {#if error}<p role="alert" class="error">{error}</p>{/if}
+    </div>
   {/snippet}
   {#snippet actions()}
     <Button variant="quiet" onclick={() => (open = false)}>Cancel</Button>
@@ -84,6 +86,8 @@
 </Dialog>
 
 <style>
+  .fields { display: grid; gap: var(--s-4); max-height: 60vh; overflow-y: auto; }
+  .field { display: grid; gap: var(--s-2); font-weight: 600; }
   .row { display: flex; align-items: center; gap: var(--s-4); }
   .error { margin: 0; color: var(--signal); font-weight: 600; }
 </style>
