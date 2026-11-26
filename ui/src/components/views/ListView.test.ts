@@ -53,6 +53,19 @@ const bands = (t: HTMLElement) => [...t.querySelectorAll<HTMLElement>('.band')].
 const ctxFor = (id: number | null): Ctx => ({ route: '/', selection: [], focusedIssueId: id, openIssueId: null, api: {} as Ctx['api'], navigate: () => {} });
 
 describe('ListView', () => {
+  it('sorts_a_standalone_list_for_the_visit_and_restores_its_order', async () => {
+    const { target, mock } = await open({ issues: [issue(1, { title: 'Zebra' }), issue(2, { title: 'Alpha' })], views: viewSeed({ group_by: null }) });
+    const names = () => rows(target).map((r) => r.dataset.key);
+    const click = () => target.querySelector<HTMLButtonElement>('button[aria-label="Sort by Title"]')!.click();
+    click();
+    await vi.waitFor(() => expect(names()).toEqual(['ABC-2', 'ABC-1']));
+    click();
+    await vi.waitFor(() => expect(names()).toEqual(['ABC-1', 'ABC-2']));
+    click();
+    await vi.waitFor(() => expect(target.querySelector('button[aria-label="Sort by Title"]')?.textContent).not.toContain('↓'));
+    expect((await mock.views.list())[0].def.sorts).toEqual([]);
+  });
+
   it('groups_by_status_with_counts', async () => {
     const { target } = await open({ issues: [issue(1), issue(2), issue(3, { status_id: S2.id })] });
     expect(bands(target)).toEqual([{ name: S1.name, count: '2' }, { name: S2.name, count: '1' }]);

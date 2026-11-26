@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Component } from 'svelte';
-  import type { Filter, Layout, SavedView, ViewDef } from '../../lib/bindings';
+  import type { FieldRef, Filter, Layout, SavedView, ViewDef } from '../../lib/bindings';
   import { issues, selectedIssueId } from '../../lib/stores.svelte';
   import BoardView from '../views/BoardView.svelte';
   import CalendarView from '../views/CalendarView.svelte';
@@ -9,7 +9,7 @@
   import TableView from '../views/TableView.svelte';
 
   // The page's toolbar owns filter, group and sort; this only turns them into a view of the project's issues.
-  let { projectId, layout, def }: { projectId: number; layout: Layout; def: ViewDef } = $props();
+  let { projectId, layout, def, onsort }: { projectId: number; layout: Layout; def: ViewDef; onsort?: (field: FieldRef) => void } = $props();
   const byLayout: Record<Layout, Component<any>> = { List: ListView, Table: TableView, Board: BoardView, Gantt: GanttView, Calendar: CalendarView };
 
   const inProject = (f: Filter | null): Filter => {
@@ -38,7 +38,7 @@
 </script>
 
 {#key `${layout}:${projectId}:${JSON.stringify(def)}`}
-  <div class="issues" role="presentation" onclick={pick}><Shown {view} /></div>
+  <div class="issues" role="presentation" onclick={pick}><Shown {view} {onsort} /></div>
 {/key}
 
 <style>

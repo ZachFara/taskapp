@@ -21,6 +21,28 @@ afterEach(() => {
 });
 
 describe('a project view page', () => {
+  it('sorts_project_list_and_table_headings_without_saving', async () => {
+    const mock = createMockApi(seed());
+    setApi(mock);
+    await refreshAll();
+    const user = userEvent.setup();
+    const { container } = render(ViewPage, { params: { id: '2' } });
+    await waitFor(() => expect(container.querySelectorAll('[data-slug]').length).toBe(fixtures.projects.length));
+    const names = () => [...container.querySelectorAll<HTMLElement>('[data-slug]')].map((row) => row.dataset.slug);
+    const original = names();
+    await user.click(screen.getByRole('button', { name: 'Sort by Project' }));
+    await waitFor(() => expect(names()).not.toEqual(original));
+    const ascending = names();
+    await user.click(screen.getByRole('button', { name: 'Sort by Project' }));
+    await waitFor(() => expect(names()).toEqual([...ascending].reverse()));
+    await user.click(screen.getByRole('tab', { name: /Table/ }));
+    await waitFor(() => expect(names()).toEqual([...ascending].reverse()));
+    await user.click(screen.getByRole('button', { name: 'Sort by Project' }));
+    await waitFor(() => expect(names()).toEqual(original));
+    await waitFor(async () => expect((await mock.views.list())[1].def.layout).toBe('Table'));
+    expect((await mock.views.list())[1].def.sorts).toEqual([]);
+  });
+
   it('lists projects and offers project fields in the filter, group and sort pickers', async () => {
     setApi(createMockApi(seed()));
     await refreshAll();

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api } from '../lib/api';
-  import type { Issue, Layout, Milestone, Project, ResolvedPin, Status, ViewDef } from '../lib/bindings';
+  import type { FieldRef, Issue, Layout, Milestone, Project, ResolvedPin, Status, ViewDef } from '../lib/bindings';
+  import { nextSort } from '../lib/viewSort';
   import { navigate } from '../app/routes';
   import { openExternal } from '../lib/openExternal';
   import Button from '../ui/Button.svelte';
@@ -32,6 +33,7 @@
   let layout = $state<Layout>('List');
   // raw: ViewEditor and the views clone it.
   let def = $state.raw<ViewDef>({ filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false });
+  const sortHeading = (field: FieldRef) => (def = { ...def, sorts: nextSort(def.sorts, field) ?? [] });
   let renaming = $state(false);
   let confirming = $state(false);
   let insights = $state(false);
@@ -151,7 +153,7 @@
         <Tabs tabs={layouts} bind:value={layout as string} label="Layout" />
         <ViewEditor {def} onchange={(p) => (def = { ...def, ...p })} />
       </div>
-      <div class="issues"><ProjectIssues projectId={project.id} {layout} {def} /></div>
+      <div class="issues"><ProjectIssues projectId={project.id} {layout} {def} onsort={sortHeading} /></div>
     </div>
     {#if insights}<InsightsPanel kind="project" id={project.id} title={project.name} onclose={() => (insights = false)} />{/if}
     </div>

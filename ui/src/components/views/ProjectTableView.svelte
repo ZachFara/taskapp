@@ -1,7 +1,9 @@
 <script lang="ts">
   // The Table layout of a project view: the columns come from Display, a click on a row opens the project.
   import { navigate } from '../../app/routes';
-  import type { SavedView } from '../../lib/bindings';
+  import type { FieldRef, SavedView, Sort } from '../../lib/bindings';
+  import { nextSort, sameField, sortable } from '../../lib/viewSort';
+  import SortHeading from './SortHeading.svelte';
   import { priorityGlyph } from '../../lib/priority';
   import { fieldName, groupRows, shownFields, statusGlyph } from '../../lib/projectViews';
   import EmptyState from '../../ui/EmptyState.svelte';
@@ -12,8 +14,13 @@
   import ProjectField from './ProjectField.svelte';
   import { projectData } from './projectData.svelte';
 
-  let { view }: { view: SavedView } = $props();
-  const data = projectData(() => view.def);
+  let { view, onsort }: { view: SavedView; onsort?: (field: FieldRef) => void } = $props();
+  let localSort = $state.raw<Sort[] | null>(null);
+  const currentDef = $derived({ ...view.def, sorts: localSort ?? view.def.sorts });
+  const activeSort = $derived(currentDef.sorts[0] ?? null);
+  const sortHeading = (field: FieldRef) => onsort ? onsort(field) : (localSort = nextSort(localSort, field));
+  const sortAria = (field: FieldRef) => activeSort && sameField(activeSort.field, field) ? (activeSort.descending ? 'descending' : 'ascending') : undefined;
+  const data = projectData(() => currentDef);
   const fields = $derived(shownFields(view.def));
   const groups = $derived(groupRows(data.rows, view.def.group_by, data.ctx, { empty: view.def.show_empty_groups }));
 </script>
@@ -26,8 +33,8 @@
   <table class="table" aria-label={view.name} data-density={view.def.density === 'compact' ? 'compact' : undefined}>
     <thead>
       <tr>
-        <th scope="col">Project</th>
-        {#each fields as f (f.Property ?? f.Fixed)}<th scope="col">{fieldName(f, data.ctx.defs)}</th>{/each}
+        <th scope="col" aria-sort={sortAria({ Fixed: 'Title' })}><SortHeading field={{ Fixed: 'Title' }} label="Project" sort={activeSort} onclick={sortHeading} /></th>
+        {#each fields as f (f.Property ?? f.Fixed)}<th scope="col" aria-sort={sortAria(f)}>{#if sortable(f, 'project')}<SortHeading field={f} label={fieldName(f, data.ctx.defs)} sort={activeSort} onclick={sortHeading} />{:else}{fieldName(f, data.ctx.defs)}{/if}</th>{/each}
       </tr>
     </thead>
     {#each groups as g (g.key)}

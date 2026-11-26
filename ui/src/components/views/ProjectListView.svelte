@@ -1,7 +1,9 @@
 <script lang="ts">
   // The List layout of a project view: one row per project in bands, a click opens the project.
   import { navigate } from '../../app/routes';
-  import type { SavedView } from '../../lib/bindings';
+  import type { FieldRef, SavedView, Sort } from '../../lib/bindings';
+  import { nextSort, sortable } from '../../lib/viewSort';
+  import SortHeading from './SortHeading.svelte';
   import { priorityGlyph } from '../../lib/priority';
   import { fieldName, groupRows, shownFields, statusGlyph } from '../../lib/projectViews';
   import EmptyState from '../../ui/EmptyState.svelte';
@@ -13,8 +15,12 @@
   import ProjectField from './ProjectField.svelte';
   import { projectData } from './projectData.svelte';
 
-  let { view }: { view: SavedView } = $props();
-  const data = projectData(() => view.def);
+  let { view, onsort }: { view: SavedView; onsort?: (field: FieldRef) => void } = $props();
+  let localSort = $state.raw<Sort[] | null>(null);
+  const currentDef = $derived({ ...view.def, sorts: localSort ?? view.def.sorts });
+  const activeSort = $derived(currentDef.sorts[0] ?? null);
+  const sortHeading = (field: FieldRef) => onsort ? onsort(field) : (localSort = nextSort(localSort, field));
+  const data = projectData(() => currentDef);
   const fields = $derived(shownFields(view.def));
   const groups = $derived(groupRows(data.rows, view.def.group_by, data.ctx, { empty: view.def.show_empty_groups }));
   let closed = $state<string[]>([]);
@@ -28,9 +34,9 @@
   <div class="empty"><EmptyState title="No projects in this view" hint="Projects that match this view will show up here." /></div>
 {:else}
   <div class="wrap" style:--cols={`repeat(${fields.length}, minmax(0, 1fr))`}>
-  <div class="heads" aria-hidden="true">
-    <span></span><span></span><span>Project</span>
-    {#each fields as f (f.Property ?? f.Fixed)}<span>{fieldName(f, data.ctx.defs)}</span>{/each}
+  <div class="heads">
+    <span><SortHeading field={{ Fixed: 'Status' }} label="Status" display="S" sort={activeSort} onclick={sortHeading} /></span><span><SortHeading field={{ Fixed: 'Priority' }} label="Priority" display="P" sort={activeSort} onclick={sortHeading} /></span><span><SortHeading field={{ Fixed: 'Title' }} label="Project" sort={activeSort} onclick={sortHeading} /></span>
+    {#each fields as f (f.Property ?? f.Fixed)}<span>{#if sortable(f, 'project')}<SortHeading field={f} label={fieldName(f, data.ctx.defs)} sort={activeSort} onclick={sortHeading} />{:else}{fieldName(f, data.ctx.defs)}{/if}</span>{/each}
   </div>
   <ul class="list" aria-label={view.name}>
     {#each groups as g (g.key)}

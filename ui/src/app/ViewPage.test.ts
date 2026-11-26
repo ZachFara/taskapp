@@ -7,6 +7,7 @@ import type { SavedView, ViewDef } from '../lib/bindings';
 import { listCommands, shortcutFor } from '../lib/commands';
 import { currentViewId, refreshAll, selectedIssueId } from '../lib/stores.svelte';
 import ViewPage from './ViewPage.svelte';
+import { pick } from '../components/settings/testing';
 
 // Popovers and user-event are slow on a loaded machine.
 vi.setConfig({ testTimeout: 30000 });
@@ -39,6 +40,68 @@ afterEach(() => {
 });
 
 describe('ViewPage', () => {
+  it('sorts_list_headings_temporarily_across_refresh_and_layout_changes', async () => {
+    const user = userEvent.setup();
+    const savedSort = [{ field: { Fixed: 'Title' as const }, descending: false }];
+    const { container } = await open({ sorts: savedSort });
+    await screen.findByText('Alpha task');
+    expect(screen.getByRole('button', { name: 'Sort by Priority' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sort by Status' })).toBeTruthy();
+    const order = () => [...container.querySelectorAll<HTMLElement>('[data-key]')].map((row) => row.textContent ?? '').filter((s) => /Alpha task|Beta task/.test(s)).map((s) => s.includes('Alpha task') ? 'Alpha' : 'Beta');
+    await user.click(screen.getByRole('button', { name: 'Sort by Title' }));
+    await user.click(screen.getByRole('button', { name: 'Sort by Title' }));
+    await waitFor(() => expect(order()).toEqual(['Beta', 'Alpha']));
+    await mock.issues.create({ title: 'Gamma task' } as never);
+    await screen.findByText('Gamma task');
+    expect(order()).toEqual(['Beta', 'Alpha']);
+    await user.click(screen.getByRole('tab', { name: /Table/ }));
+    await waitFor(() => expect(order()).toEqual(['Beta', 'Alpha']));
+    await waitFor(async () => expect((await saved()).def.layout).toBe('Table'));
+    expect((await saved()).def.sorts).toEqual(savedSort);
+  });
+
+  it('does_not_save_sort_picker_changes', async () => {
+    const user = userEvent.setup();
+    await open();
+    await screen.findByText('Alpha task');
+    await user.click(screen.getByRole('button', { name: 'Sort' }));
+    await pick(document.body, 'Sort by', 'Title');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sort: Title' })).toBeTruthy());
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect((await saved()).def.sorts).toEqual([]);
+  });
+
+  it('carries_a_table_heading_sort_into_the_list', async () => {
+    const user = userEvent.setup();
+    const { container } = await open({ layout: 'Table' });
+    await screen.findByText('Alpha task');
+    await user.click(screen.getByRole('button', { name: 'Title' }));
+    await user.click(screen.getByRole('button', { name: 'Title' }));
+    await waitFor(() => expect(container.querySelector('th[data-col="fixed:Title"]')?.getAttribute('aria-sort')).toBe('descending'));
+    await user.click(screen.getByRole('tab', { name: /List/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sort by Title' }).textContent).toContain('↓'));
+    const rows = [...container.querySelectorAll<HTMLElement>('li[data-key]')].map((r) => r.textContent ?? '');
+    expect(rows.findIndex((r) => r.includes('Beta task'))).toBeLessThan(rows.findIndex((r) => r.includes('Alpha task')));
+    await waitFor(async () => expect((await saved()).def.layout).toBe('List'));
+    expect((await saved()).def.sorts).toEqual([]);
+  });
+
+  it('restores_the_saved_sort_after_visiting_another_view', async () => {
+    const user = userEvent.setup();
+    const savedSort = [{ field: { Fixed: 'Title' as const }, descending: true }];
+    const page = await open({ sorts: savedSort });
+    await screen.findByText('Alpha task');
+    await user.click(screen.getByRole('button', { name: 'Sort by Title' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sort by Title' }).textContent).toContain('↑'));
+    const other = await mock.views.save(null, 'Other', def());
+    await page.rerender({ params: { id: String(other.id) } });
+    await screen.findByRole('heading', { name: 'Other' });
+    await page.rerender({ params: { id: '1' } });
+    await screen.findByRole('heading', { name: 'Mine' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sort by Title' }).textContent).toContain('↓'));
+    expect((await saved()).def.sorts).toEqual(savedSort);
+  });
+
   it('updates_a_filtered_empty_view_when_an_issue_is_created', async () => {
     await open({ filter: { Cond: { field: { Fixed: 'Title' }, op: 'Contains', value: 'Gamma' } } });
     await screen.findByText('Nothing matches these filters');

@@ -95,6 +95,7 @@
   // Only these can group a project view: a status, the priority, or a select property.
   const groupItems = $derived(project ? fieldItems.filter((f) => ['F:Status', 'F:StatusCategory', 'F:Priority'].includes(f.value) || data.defs.some((d) => d.kind === 'Select' && f.value === `P:${d.key}`)) : fieldItems);
   const sort = $derived(def.sorts[0] ?? null);
+  const sortItems = $derived(sort && !fieldItems.some((f) => f.value === fieldKey(sort.field)) ? [...fieldItems, { value: fieldKey(sort.field), label: lookup.name(sort.field) }] : fieldItems);
   const setGroup = (k: string) => onchange({ group_by: k ? parseField(k) : null });
   const setSort = (k: string) => onchange({ sorts: k ? [{ field: parseField(k), descending: sort?.descending ?? false }] : [] });
   const setDesc = (descending: boolean) => sort && onchange({ sorts: [{ ...sort, descending }] });
@@ -135,7 +136,7 @@
     <Popover bind:open={sortOpen}>
       {#snippet trigger(props)}<span {...props} class="trig">{@render tip('Sort', 'view.sort.open', sortBtn)}</span>{/snippet}
       <div class="stack">
-        <Select label="Sort by" placeholder="Default order" items={[{ value: '', label: 'Default order' }, ...fieldItems]} bind:value={() => (sort ? fieldKey(sort.field) : ''), setSort} />
+        <Select label="Sort by" placeholder="Default order" items={[{ value: '', label: 'Default order' }, ...sortItems]} bind:value={() => (sort ? fieldKey(sort.field) : ''), setSort} />
         {#if sort}<Switch label="Descending" bind:checked={() => sort.descending, setDesc} />{/if}
       </div>
     </Popover>

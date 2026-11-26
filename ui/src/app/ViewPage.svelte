@@ -1,7 +1,8 @@
 <script lang="ts">
   import { selection } from '../lib/selection.svelte';
   import { onMount, type Component } from 'svelte';
-  import type { Layout, SavedView, ViewDef } from '../lib/bindings';
+  import type { FieldRef, Layout, SavedView, Sort, ViewDef } from '../lib/bindings';
+  import { nextSort } from '../lib/viewSort';
   import { api } from '../lib/api';
   import { issues, refreshAll, selectedIssueId } from '../lib/stores.svelte';
   import { announce } from '../components/undoState.svelte';
@@ -56,6 +57,7 @@
 
   let view = $state.raw<SavedView | null>(null);
   let def = $state.raw<ViewDef | null>(null);
+  let temporarySort = $state.raw<Sort[] | null>(null);
   let name = $state('');
   let override = $state<string | null>(null);
   let missing = $state(false);
@@ -96,6 +98,7 @@
   $effect(() => {
     params.id;
     clearTimeout(timer);
+    temporarySort = null;
     load();
   });
 
@@ -104,9 +107,10 @@
   // Commands scope their keys by layout; the timeline does not announce itself, and tabs can change without a route change.
   $effect(() => selection.setLayout(({ List: 'list', Table: 'table', Board: 'board', Gantt: 'timeline', Calendar: 'calendar' } as const)[layout]));
   const live = $derived(view && def ? { ...view, name, def: { ...def, layout } } : null);
+  const editorDef = $derived(live && { ...live.def, sorts: temporarySort ?? live.def.sorts });
   const quickFilter = $derived(combineFilters(quickText.trim() ? { Cond: { field: { Fixed: 'Title' }, op: 'Contains', value: quickText.trim() } } : null, buildFilter(null, quickChips)));
   // What the layouts get: the saved view plus the quick filter. Only the saved part is ever written.
-  const shown = $derived(live && { ...live, def: { ...live.def, filter: combineFilters(live.def.filter, quickFilter) } });
+  const shown = $derived(live && editorDef && { ...live, def: { ...editorDef, filter: combineFilters(editorDef.filter, quickFilter) } });
   const filtered = $derived(shown?.def.filter != null);
   function closeQuick() {
     quickOpen = false;
@@ -139,10 +143,14 @@
   };
   function change(patch: Partial<ViewDef>) {
     if (!def) return;
-    def = { ...def, ...patch };
-    if ('filter' in patch) loud = true;
+    const { sorts, ...savedPatch } = patch;
+    if (sorts !== undefined) temporarySort = sorts;
+    if (Object.keys(savedPatch).length === 0) return;
+    def = { ...def, ...savedPatch };
+    if ('filter' in savedPatch) loud = true;
     save();
   }
+  const sortHeading = (field: FieldRef) => (temporarySort = nextSort(temporarySort, field));
   const setLayout = (l: string) => {
     override = null;
     change({ layout: l as Layout });
@@ -179,6 +187,7 @@
     if (!view) return;
     clearTimeout(timer);
     await templates().resetToTemplate(view.id);
+    temporarySort = null;
     await load();
     await refreshAll();
   }
@@ -259,7 +268,7 @@
     <PageHeader title={name} icon={view?.icon ?? 'icon:layers'} color={view?.color ?? undefined}>
       {#snippet iconEdit()}<IconColorPicker label={`Icon and colour of ${name}`} value={{ icon: view?.icon ?? 'icon:layers', color: view?.color ?? null }} onchange={changeLook} bind:open={iconOpen} />{/snippet}
       {#snippet tabs()}<Tabs tabs={layoutTabs} bind:value={() => layout, setLayout} />{/snippet}
-      {#snippet filters()}{#key `${live.id}:${editorKey}`}<ViewEditor def={live.def} onchange={change} {clearSignal} entity={live.entity} />{/key}{/snippet}
+      {#snippet filters()}{#key `${live.id}:${editorKey}`}<ViewEditor def={editorDef!} onchange={change} {clearSignal} entity={live.entity} />{/key}{/snippet}
       {#snippet actions()}
         <Popover bind:open={renaming}>
           {#snippet trigger(props)}<span {...props} class="trig"><IconButton icon="edit" label="Rename view" shortcut={shortcutFor('view.rename')} onclick={() => (draft = name)} /></span>{/snippet}
@@ -294,7 +303,7 @@
           {#snippet action()}<Button onclick={clearFilters}>Clear filters</Button>{/snippet}
         </EmptyState>
       {:else}
-        <div class="pane" role="presentation" onclick={pick}><Shown view={shown} embedded /></div>
+        <div class="pane" role="presentation" onclick={pick}><Shown view={shown} embedded onsort={sortHeading} /></div>
       {/if}
     </main>
     {#if insights && view && !isProject}<InsightsPanel kind="view" id={view.id} title={name} onclose={() => (insights = false)} />{/if}

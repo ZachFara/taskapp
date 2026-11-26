@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { fieldOn } from '../../lib/fields.svelte';
   import { api } from '../../lib/api';
-  import type { Cycle, FieldRef, Issue, IssuePatch, Label, Project, SavedView, Status, StatusCategory } from '../../lib/bindings';
+  import type { Cycle, FieldRef, Issue, IssuePatch, Label, Project, SavedView, Sort, Status, StatusCategory } from '../../lib/bindings';
+  import { nextSort, sortable } from '../../lib/viewSort';
+  import SortHeading from './SortHeading.svelte';
   import { listState } from '../../lib/listState.svelte';
   import { selection } from '../../lib/selection.svelte';
   import { navigate } from '../../app/routes';
@@ -35,7 +38,13 @@
   const WINDOW_ABOVE = 300;
   const FALLBACK_VIEWPORT = 800;
 
-  let { view }: { view: SavedView } = $props();
+  let { view, onsort }: { view: SavedView; onsort?: (field: FieldRef) => void } = $props();
+  let localSort = $state.raw<Sort[] | null>(null);
+  const activeSort = $derived((localSort ?? view.def.sorts)[0] ?? null);
+  function sortHeading(field: FieldRef) {
+    if (onsort) onsort(field);
+    else localSort = nextSort(localSort, field);
+  }
 
   const storeKey = (id: number) => `cairn.list.collapsed.${id}`;
   type Group = { key: string; kind: 'status' | 'project' | 'cycle' | 'priority' | 'label' | 'points' | 'none'; ref?: Project | Cycle | Label; name: string; category: StatusCategory; icon?: string | null; color?: string | null; order: number; patch: IssuePatch; rows: Issue[] };
@@ -112,7 +121,7 @@
   let queryVersion = 0;
   async function load() {
     const mine = ++queryVersion;
-    const def = $state.snapshot(view.def);
+    const def = $state.snapshot({ ...view.def, sorts: localSort ?? view.def.sorts });
     const [st, pr, cy, lb, rows, c] = await Promise.all([
       api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.views.query(def), loadCtx(def),
     ]);
@@ -127,7 +136,8 @@
   }
   $effect(() => {
     view;
-    load();
+    localSort;
+    untrack(load);
   });
   onRowsChanged(() => void load());
 
@@ -328,9 +338,9 @@
 {:else}
   <IssueMenu>
   <div class="wrap" use:watchWidth>
-  <div class="heads" style:grid-template-columns={columns} aria-hidden="true">
-    <span></span><span></span><span></span><span></span><span>Title</span>
-    {#each fields as f (f.Property ?? f.Fixed)}<span data-right={rightAligned(f) ? '' : undefined}>{fieldName(f, ctx.defs)}</span>{/each}
+  <div class="heads" style:grid-template-columns={columns}>
+    <span></span><span>{#if fieldOn('priority')}<SortHeading field={{ Fixed: 'Priority' }} label="Priority" display="P" sort={activeSort} onclick={sortHeading} />{/if}</span><span><SortHeading field={{ Fixed: 'Key' }} label="Key" sort={activeSort} onclick={sortHeading} /></span><span><SortHeading field={{ Fixed: 'Status' }} label="Status" display="S" sort={activeSort} onclick={sortHeading} /></span><span><SortHeading field={{ Fixed: 'Title' }} label="Title" sort={activeSort} onclick={sortHeading} /></span>
+    {#each fields as f (f.Property ?? f.Fixed)}<span data-right={rightAligned(f) ? '' : undefined}>{#if sortable(f)}<SortHeading field={f} label={fieldName(f, ctx.defs)} sort={activeSort} onclick={sortHeading} />{:else}{fieldName(f, ctx.defs)}{/if}</span>{/each}
   </div>
   <div class="scroller" role="presentation" bind:this={scroller} onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}>
     <ul class="list" role="grid" aria-multiselectable="true" data-density={compact ? 'compact' : undefined} aria-label={view.name} style:height="{total}px">

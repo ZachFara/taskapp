@@ -174,7 +174,7 @@ Undo refuses when something changed since. Inside a text field `mod+z` is the fi
 ## Views
 
 A saved view is a definition: filter, sort, group, layout, displayed fields, and display options. Edits to a view are
-saved automatically (after a short pause). Filter changes show an "Undo" toast.
+saved automatically (after a short pause), except temporary sorting changes. Filter changes show an "Undo" toast.
 
 - **Make one.** Views page > New view, or the view menu > "New view..." (choose Blank, a copy of the current view, or
   a template), or "Save as new view" (copies the current one).
@@ -206,7 +206,9 @@ saved automatically (after a short pause). Filter changes show an "Undo" toast.
   leaving the view clears them.
 - **Group.** "Group" button (not on the calendar): choose any of Status, Status category, Priority, Project, Cycle,
   Due, Title, Points (if on) or a custom property. Group headers collapse; the list adds an issue to a group.
-- **Sort.** One sort field plus a Descending switch.
+- **Sort.** Choose a field and direction with Sort, or click a sortable list or table heading for ascending, descending,
+  then the saved order. Sorting lasts until you leave the view; it survives layout changes and live updates but does not
+  change the saved definition. Grouped rows stay within their groups and nested issues stay with their parents.
 - **Display** (button, or the command "Display options..."). Switch fields on or off and drag (or use the arrow
   buttons, or `alt+arrowup` / `alt+arrowdown` on a focused row) to reorder: Key, Priority, Status, Labels, Project,
   Milestone, Cycle, Parent, Start, Due, Estimate, Points, Sub-issues, Relations, Comments, Created, Updated, and your

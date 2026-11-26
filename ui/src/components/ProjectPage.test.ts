@@ -35,6 +35,23 @@ afterEach(() => {
 });
 
 describe('ProjectPage', () => {
+  it('keeps_a_heading_sort_in_the_project_toolbar_and_other_layouts', async () => {
+    const mock = createMockApi(seed());
+    await mock.issues.create({ title: 'Alpha project sort', project_id: 1 });
+    await mock.issues.create({ title: 'Zebra project sort', project_id: 1 });
+    const target = await open('/project/website', mock);
+    await vi.waitFor(() => expect(target.textContent).toContain('Zebra project sort'));
+    target.querySelector<HTMLButtonElement>('button[aria-label="Sort by Title"]')!.click();
+    await vi.waitFor(() => expect(target.querySelector('[data-testid="issues-toolbar"]')?.textContent).toContain('Sort: Title'));
+    target.querySelector<HTMLButtonElement>('button[aria-label="Sort by Title"]')!.click();
+    await vi.waitFor(() => expect(target.querySelector('button[aria-label="Sort by Title"]')?.textContent).toContain('↓'));
+    target.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Table"]')!.click();
+    await vi.waitFor(() => {
+      const rows = [...target.querySelectorAll<HTMLElement>('tr[data-key]')].map((r) => r.textContent ?? '');
+      expect(rows.findIndex((r) => r.includes('Zebra project sort'))).toBeLessThan(rows.findIndex((r) => r.includes('Alpha project sort')));
+    });
+  });
+
   it('doc_link_button_shown_only_when_set', async () => {
     const without = await open('/project/website');
     expect(without.querySelector('[data-testid="open-obsidian"]')).toBeNull();

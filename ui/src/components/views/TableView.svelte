@@ -25,8 +25,10 @@
   import FieldValue from '../display/FieldValue.svelte';
   import { emptyCtx, loadCtx, pointsTotal, pointsName, type Ctx, type DisplayDef } from '../display/types';
   import { onRowsChanged } from './onRowsChanged';
+  import { sortable } from '../../lib/viewSort';
+  import SortHeading from './SortHeading.svelte';
 
-  let { view }: { view: SavedView } = $props();
+  let { view, onsort }: { view: SavedView; onsort?: (field: FieldRef) => void } = $props();
 
   type EditKind = PropertyKind | 'Status' | 'Priority' | 'Project' | 'Labels' | 'Read';
   // Fixed fields a table can show and edit. Others are left out of the column picker and skipped in views.
@@ -84,6 +86,11 @@
   let error = $state<string | null>(null);
   let activeCol = $state(0);
   let sort = $state<{ col: string; dir: 'asc' | 'desc' } | null>(null);
+  const activeSort = $derived(sort ?? (onsort && view.def.sorts[0] ? { col: colId(view.def.sorts[0].field), dir: view.def.sorts[0].descending ? 'desc' as const : 'asc' as const } : null));
+  $effect(() => {
+    view.def.sorts;
+    if (onsort) sort = null;
+  });
   let widths = $state<Record<string, number>>({});
   let collapsed = $state(new Set<string>());
   let loaded = $state(false);
@@ -120,6 +127,7 @@
   const raw = (i: Issue, ref: FieldRef): Value => {
     if (ref.Property !== undefined) return i.properties[ref.Property] ?? null;
     switch (ref.Fixed) {
+      case 'Key': return Number(i.key.slice(i.key.lastIndexOf('-') + 1));
       case 'Title': return i.title;
       case 'Status': return i.status_id;
       case 'Priority': return i.priority;
@@ -153,7 +161,7 @@
   }
   const sorted = $derived.by(() => {
     const s = sort;
-    const col = s && cols.find((c) => c.id === s.col);
+    const col = s && (s.col === 'fixed:Key' ? { ref: { Fixed: 'Key' as const } } : cols.find((c) => c.id === s.col));
     if (!s || !col) return tableIssues;
     const sign = s.dir === 'asc' ? 1 : -1;
     return [...tableIssues].sort((x, y) => {
@@ -376,6 +384,12 @@
   const removeColumn = (index: number) => void saveColumns(base.filter((_, i) => i !== index));
 
   function cycleSort(id: string) {
+    const col = id === 'fixed:Key' ? { ref: { Fixed: 'Key' as const } } : cols.find((c) => c.id === id);
+    if (onsort && col && sortable(col.ref)) {
+      sort = null;
+      onsort(col.ref);
+      return;
+    }
     sort = sort?.col !== id ? { col: id, dir: 'asc' } : sort.dir === 'asc' ? { col: id, dir: 'desc' } : null;
   }
 
@@ -427,11 +441,11 @@
       </colgroup>
       <thead>
         <tr>
-          <th scope="col" class="key-head">Key</th>
+          <th scope="col" class="key-head" aria-sort={activeSort?.col === 'fixed:Key' ? (activeSort.dir === 'asc' ? 'ascending' : 'descending') : undefined}><SortHeading field={{ Fixed: 'Key' }} label="Key" sort={activeSort?.col === 'fixed:Key' ? { field: { Fixed: 'Key' }, descending: activeSort.dir === 'desc' } : null} onclick={() => cycleSort('fixed:Key')} /></th>
           {#each cols as col (col.id)}
-            <th scope="col" data-col={col.id} data-sticky={col.id === 'fixed:Title' ? '' : undefined} class:num={col.kind === 'Number'} aria-sort={sort?.col === col.id ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+            <th scope="col" data-col={col.id} data-sticky={col.id === 'fixed:Title' ? '' : undefined} class:num={col.kind === 'Number'} aria-sort={activeSort?.col === col.id ? (activeSort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
               <span class="head">
-                <Button variant="quiet" icon={sort?.col === col.id ? (sort.dir === 'asc' ? 'chevron-up' : 'chevron-down') : undefined} onclick={() => cycleSort(col.id)}>{col.label}</Button>
+                <Button variant="quiet" icon={activeSort?.col === col.id ? (activeSort.dir === 'asc' ? 'chevron-up' : 'chevron-down') : undefined} onclick={() => cycleSort(col.id)}>{col.label}</Button>
                 <span class="tools">
                 <span class="flip"><IconButton icon="chevron-right" label="Move {col.label} left" onclick={() => moveColumn(col.index, -1)} /></span>
                 <IconButton icon="chevron-right" label="Move {col.label} right" onclick={() => moveColumn(col.index, 1)} />
