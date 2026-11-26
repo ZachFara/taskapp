@@ -43,6 +43,18 @@ describe('IconColorPicker', () => {
     expect(document.body.querySelector('[aria-label="flag"]')).toBeNull();
   });
 
+  it('finds and selects an additional icon without losing the colour', async () => {
+    const out = await open({ icon: null, color: 'blue' });
+    const input = byLabel('Search icons') as HTMLInputElement;
+    input.value = 'rocket';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await flush();
+    const choice = byLabel('rocket');
+    expect(choice.querySelector('svg path')).not.toBeNull();
+    await click('rocket');
+    expect(out).toEqual([{ icon: 'icon:rocket', color: 'blue' }]);
+  });
+
   it('emits emoji:<x> from the list and from a pasted emoji', async () => {
     const out = await open({ icon: null, color: 'red' });
     await click('Emoji');
