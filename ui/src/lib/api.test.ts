@@ -49,4 +49,13 @@ describe('history:wrote', () => {
     await h.pins.unpin(1);
     expect(wrote).toHaveBeenCalledTimes(1);
   });
+
+  it('does_not_report_view_and_folder_reads_as_writes', async () => {
+    vi.stubGlobal('fetch', async () => ({ json: async () => ({ ok: [] }) }));
+    const h = httpApi('http://x');
+    await h.folders.items();
+    await h.views.stats({ filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false });
+    await h.insights.velocity({ View: 1 }, 'count', 8);
+    expect(wrote).not.toHaveBeenCalled();
+  });
 });

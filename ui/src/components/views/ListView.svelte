@@ -108,16 +108,20 @@
     }
   }
 
+  let queryVersion = 0;
   async function load() {
+    const mine = ++queryVersion;
+    const def = $state.snapshot(view.def);
     const [st, pr, cy, lb, rows, c] = await Promise.all([
-      api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.views.query(view.def), loadCtx(view.def),
+      api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.views.query(def), loadCtx(def),
     ]);
+    if (mine !== queryVersion) return;
     ctx = c;
     statuses = st;
     projects = pr;
     cycles = cy;
     labels = lb;
-    issues = subIssues(view.def) === 'hide' ? rows.filter((i) => i.parent_id === null) : rows;
+    issues = subIssues(def) === 'hide' ? rows.filter((i) => i.parent_id === null) : rows;
     loaded = true;
   }
   $effect(() => {

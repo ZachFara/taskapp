@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fieldOn } from '../../lib/fields.svelte';
-  import { onMount } from 'svelte';
+  import { untrack } from 'svelte';
   import { api } from '../../lib/api';
   import type { Issue, IssuePatch, SavedView, StatusCategory } from '../../lib/bindings';
   import { selection } from '../../lib/selection.svelte';
@@ -102,14 +102,21 @@
   let loaded = $state(false);
   let error: string | null = $state(null);
   let ctx = $state.raw<Ctx>(emptyCtx);
+  let queryVersion = 0;
   // Key and priority are always on the card; the rest follow the view.
   const fields = $derived(shown(view.def, BOARD_DEFAULT, true).filter((f) => f.Fixed !== 'Key' && f.Fixed !== 'Priority' && (ctx.points || f.Fixed !== 'Points')));
 
   async function reload() {
-    issues = await api.views.query($state.snapshot(view.def));
+    const mine = ++queryVersion;
+    const rows = await api.views.query($state.snapshot(view.def));
+    if (mine !== queryVersion) return;
+    issues = rows;
     loaded = true;
   }
-  onMount(reload);
+  $effect(() => {
+    view.def;
+    untrack(reload);
+  });
   $effect(() => {
     const d = $state.snapshot(view.def);
     loadCtx(d).then((c) => (ctx = c));

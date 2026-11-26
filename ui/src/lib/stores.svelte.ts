@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { Issue, IssueId, Placement, Project, ProjectStatus, PropertyDef, SavedView, Status, ViewFolder, ViewId } from './bindings';
+import type { Issue, IssueId, Placement, Project, ProjectStatus, PropertyDef, SavedView, Status, ViewDef, ViewFolder, ViewId } from './bindings';
 
 // Runes cannot be reassigned across modules, so lists are replaced in place and scalars live in a box.
 export const issues = $state<Issue[]>([]);
@@ -14,14 +14,16 @@ export const currentViewId = $state<{ value: ViewId | null }>({ value: null });
 export const selectedIssueId = $state<{ value: IssueId | null }>({ value: null });
 
 const replace = <T>(list: T[], next: T[]) => void list.splice(0, list.length, ...next);
+let refreshVersion = 0;
 
 /** Reloads every store from the backend; the current view's issues, or all issues when none is chosen. */
-export async function refreshAll(): Promise<void> {
+export async function refreshAll(def?: ViewDef): Promise<void> {
+  const mine = ++refreshVersion;
   const savedViews = await api.views.list();
   const current = savedViews.find((v) => v.id === currentViewId.value && v.entity !== 'project');
   const [i, st, p, d, f, pl, ps] = await Promise.all([
     api.views.query(
-      current?.def ?? { filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false },
+      def ?? current?.def ?? { filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false },
     ),
     api.statuses.list(),
     api.projects.list(),
@@ -30,6 +32,7 @@ export async function refreshAll(): Promise<void> {
     api.folders.items(),
     api.project.statusesList(),
   ]);
+  if (mine !== refreshVersion) return;
   replace(issues, i);
   replace(statuses, st);
   replace(projects, p);
@@ -43,7 +46,9 @@ export async function refreshAll(): Promise<void> {
 /** In the desktop app the backend says when another process wrote (`db-changed`) or a link was opened. */
 export async function listenToBackend(): Promise<void> {
   const { listen } = await import('@tauri-apps/api/event');
-  await listen('db-changed', () => void refreshAll());
+  await listen('db-changed', () => {
+    void refreshAll().then(() => dispatchEvent(new Event('rows:changed')));
+  });
   await listen<string>('open-issue', ({ payload }) => {
     history.pushState(null, '', `/issue/${encodeURIComponent(payload)}`);
     dispatchEvent(new PopStateEvent('popstate'));

@@ -62,32 +62,38 @@
   const iss = (r: Row) => (r.issueId === undefined ? undefined : allIssues.find((i) => i.id === r.issueId));
   const projectOf = (id?: number) => projectList.find((p) => p.id === id);
 
+  let queryVersion = 0;
   async function load() {
+    const mine = ++queryVersion;
+    const def = view ? $state.snapshot(view.def) : null;
+    const currentMode = mode;
     const own = view?.entity === 'project';
     const [issues, projects, statuses] = await Promise.all([
-      own ? Promise.resolve([] as Issue[]) : api.views.query(mode === 'issues' && view ? view.def : ALL),
-      own ? api.views.queryProjects(view!.def).then((r) => r.map((x) => x.project)) : api.projects.list(),
+      own ? Promise.resolve([] as Issue[]) : api.views.query(currentMode === 'issues' && def ? def : ALL),
+      own ? api.views.queryProjects(def!).then((r) => r.map((x) => x.project)) : api.projects.list(),
       api.statuses.list(),
     ]);
-    const live = mode === 'issues' && view !== null && view !== undefined;
+    const live = currentMode === 'issues' && def !== null;
     const [bars, critical, rels] = live
       ? await Promise.all([
-          api.schedule.bars(view.def),
-          api.schedule.criticalPath(view.def),
+          api.schedule.bars(def!),
+          api.schedule.criticalPath(def!),
           // shortcut: one call per issue, upgrade when a view holds thousands of issues
           Promise.all(issues.map((i) => api.relations.forIssue(i.id))).then((r) => r.flat()),
         ])
       : [[], [], []];
-    const shown = mode === 'issues' ? new Set(issues.map((i) => i.project_id)) : new Set(projects.map((p) => p.id));
+    const shown = currentMode === 'issues' ? new Set(issues.map((i) => i.project_id)) : new Set(projects.map((p) => p.id));
     const milestones: Milestone[] = (await Promise.all(projects.filter((p) => shown.has(p.id)).map((p) => api.projects.listMilestones(p.id)))).flat();
-    ctx = own ? emptyCtx : await loadCtx(view?.def);
+    const nextCtx = own ? emptyCtx : await loadCtx(def ?? undefined);
+    if (mine !== queryVersion) return;
+    ctx = nextCtx;
     allIssues = issues;
     projectList = projects;
     // Each relation comes back from both of its issues.
     relations = [...new Map(rels.filter((r) => r.kind === 'blocks').map((r) => [`${r.from}-${r.to}`, r])).values()];
     statusList = statuses;
-    rows = buildRows({ mode, issues, bars, projects, milestones, critical, statuses });
-    lane = mode === 'issues' ? unscheduled(issues, rows) : [];
+    rows = buildRows({ mode: currentMode, issues, bars, projects, milestones, critical, statuses });
+    lane = currentMode === 'issues' ? unscheduled(issues, rows) : [];
     if (!loaded) {
       loaded = true;
       queueMicrotask(toToday);

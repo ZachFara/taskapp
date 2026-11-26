@@ -12,7 +12,7 @@ vi.mock('./api', () => ({
     statuses: { list: vi.fn(async () => []) },
     projects: { list: vi.fn(async () => []) },
     properties: { listDefs: vi.fn(async () => []) },
-    folders: { list: vi.fn(async () => []) },
+    folders: { list: vi.fn(async () => []), items: vi.fn(async () => []) },
     project: { statusesList: vi.fn(async () => []) },
   },
 }));
@@ -22,9 +22,28 @@ afterEach(() => vi.restoreAllMocks());
 it('db-changed reloads the stores and open-issue navigates', async () => {
   const { listenToBackend } = await import('./stores.svelte');
   const { api } = await import('./api');
+  const rowsChanged = vi.fn();
+  window.addEventListener('rows:changed', rowsChanged);
   await listenToBackend();
   handlers['db-changed']({ payload: null });
-  await vi.waitFor(() => expect(api.views.list).toHaveBeenCalled());
+  await vi.waitFor(() => expect(rowsChanged).toHaveBeenCalledOnce());
+  expect(api.views.list).toHaveBeenCalled();
+  window.removeEventListener('rows:changed', rowsChanged);
   handlers['open-issue']({ payload: 'ABC-7' });
   expect(location.pathname).toBe('/issue/ABC-7');
+});
+
+it('keeps the newest store refresh when an older query finishes later', async () => {
+  const { refreshAll, issues } = await import('./stores.svelte');
+  const { api } = await import('./api');
+  let release!: (rows: never[]) => void;
+  vi.mocked(api.views.query)
+    .mockImplementationOnce(() => new Promise((resolve) => (release = resolve)))
+    .mockResolvedValueOnce([{ id: 2, title: 'new' }] as never);
+  const old = refreshAll();
+  await vi.waitFor(() => expect(release).toBeDefined());
+  await refreshAll();
+  release([{ id: 1, title: 'old' }] as never);
+  await old;
+  expect(issues.map((i) => i.title)).toEqual(['new']);
 });

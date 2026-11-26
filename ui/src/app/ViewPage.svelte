@@ -73,6 +73,7 @@
   let quickText = $state('');
   let quickChips = $state<Chip[]>([]);
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let rowsVersion = $state(0);
 
   async function changeLook(c: { icon: string | null; color: string | null }) {
     if (!view || !def) return;
@@ -105,7 +106,10 @@
   const live = $derived(view && def ? { ...view, name, def: { ...def, layout } } : null);
   const quickFilter = $derived(combineFilters(quickText.trim() ? { Cond: { field: { Fixed: 'Title' }, op: 'Contains', value: quickText.trim() } } : null, buildFilter(null, quickChips)));
   // What the layouts get: the saved view plus the quick filter. Only the saved part is ever written.
-  const shown = $derived(live && { ...live, def: { ...live.def, filter: combineFilters(live.def.filter, quickFilter) } });
+  const shown = $derived.by(() => {
+    rowsVersion;
+    return live && { ...live, def: { ...live.def, filter: combineFilters(live.def.filter, quickFilter) } };
+  });
   const filtered = $derived(shown?.def.filter != null);
   function closeQuick() {
     quickOpen = false;
@@ -190,9 +194,13 @@
   }
 
   // Count for the empty state; the layout components run the same query for their own rows.
+  let queryVersion = 0;
   $effect(() => {
     const d = shown?.def;
-    if (d) (isProject ? api.views.queryProjects(d) : api.views.query(d)).then((r) => (rows = r.length));
+    const mine = ++queryVersion;
+    if (d) (isProject ? api.views.queryProjects(d) : api.views.query(d)).then((r) => {
+      if (mine === queryVersion) rows = r.length;
+    });
   });
 
   onMount(() => {
@@ -212,6 +220,14 @@
       on('command:insights.toggle', () => (insights = !insights)),
       on('command:view.quickFilter', () => (quickOpen ? closeQuick() : (quickOpen = true))),
       on('command:icon.change', () => (iconOpen = true)),
+      on('history:wrote', () => {
+        rowsVersion++;
+        void refreshAll(isProject ? undefined : shown?.def);
+      }),
+      on('rows:changed', () => {
+        rowsVersion++;
+        if (!isProject) void refreshAll(shown?.def);
+      }),
     ];
     return () => {
       offs.forEach((f) => f());
@@ -220,11 +236,15 @@
   });
 
   // Every view marks its issue rows with the key (or, in the Gantt, the id); a click on one opens the panel.
-  function pick(e: MouseEvent) {
+  async function pick(e: MouseEvent) {
     if (e.metaKey || e.ctrlKey || e.shiftKey) return; // selecting rows is not opening one
     const el = (e.target as Element).closest<HTMLElement>('[data-key],[data-issue]');
     const tag = el?.dataset.key ?? el?.dataset.issue;
-    const hit = issues.find((i) => i.key === tag || String(i.id) === tag);
+    let hit = issues.find((i) => i.key === tag || String(i.id) === tag);
+    if (!hit && tag && shown && !isProject) {
+      await refreshAll(shown.def);
+      hit = issues.find((i) => i.key === tag || String(i.id) === tag);
+    }
     if (hit) selectedIssueId.value = hit.id;
   }
   function clearFilters() {

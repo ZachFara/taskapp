@@ -92,6 +92,16 @@
   let labels = $state.raw<Label[]>([]);
   let tz = $state('UTC');
   let ctx = $state.raw<Ctx>(emptyCtx);
+  let tableIssues = $state.raw<Issue[]>([]);
+  let queryVersion = 0;
+  $effect(() => {
+    const d = $state.snapshot(view.def);
+    issues.map((issue) => issue.id);
+    const mine = ++queryVersion;
+    void untrack(() => api.views.query(d)).then((rows) => {
+      if (mine === queryVersion) tableIssues = rows;
+    });
+  });
   $effect(() => {
     const d = $state.snapshot(def);
     loadCtx(d).then((c) => (ctx = c));
@@ -140,9 +150,9 @@
   const sorted = $derived.by(() => {
     const s = sort;
     const col = s && cols.find((c) => c.id === s.col);
-    if (!s || !col) return issues;
+    if (!s || !col) return tableIssues;
     const sign = s.dir === 'asc' ? 1 : -1;
-    return [...issues].sort((x, y) => {
+    return [...tableIssues].sort((x, y) => {
       const a = sortValue(x, col.ref);
       const b = sortValue(y, col.ref);
       // Empty cells sort last in both directions.

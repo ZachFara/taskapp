@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Calendar, DayGrid, Interaction, TimeGrid } from '@event-calendar/core';
   import '@event-calendar/core/index.css';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { navigate } from '../../app/routes';
   import { getWeekStart } from '../../lib/theme.svelte';
   import { selection } from '../../lib/selection.svelte';
@@ -301,16 +301,27 @@
     eventResize: onMove,
   };
 
+  let queryVersion = 0;
+  async function loadIssues() {
+    const mine = ++queryVersion;
+    const def = $state.snapshot(view.def);
+    try {
+      const result = await Promise.all([api.statuses.list(), api.views.query(def), loadCtx(def)]);
+      if (mine !== queryVersion) return;
+      [statuses, issues, ctx] = result;
+      loaded = true;
+    } catch (e) {
+      if (mine === queryVersion) error = message(e);
+    }
+  }
+  $effect(() => {
+    view.def;
+    untrack(loadIssues);
+  });
   onMount(async () => {
     selection.setLayout('calendar');
     options.firstDay = (await getWeekStart()) === 'monday' ? 1 : 0;
     calendar?.setOption('firstDay', options.firstDay);
-    try {
-      [statuses, issues, ctx] = await Promise.all([api.statuses.list(), api.views.query(view.def), loadCtx(view.def)]);
-      loaded = true;
-    } catch (e) {
-      error = message(e);
-    }
   });
 
   const modes = [

@@ -6,13 +6,15 @@ import { emptyPCtx, loadPCtx, type PCtx } from '../../lib/projectViews';
 /** The projects a project view shows and what draws them, reloaded when the definition or the data changes. Call while a component initialises. */
 export function projectData(getDef: () => ViewDef) {
   const data = $state<{ rows: ProjectRow[]; ctx: PCtx; loaded: boolean }>({ rows: [], ctx: emptyPCtx, loaded: false });
+  let queryVersion = 0;
   async function load() {
+    const mine = ++queryVersion;
     const def = $state.snapshot(getDef()) as ViewDef;
     const [rows, ctx] = await Promise.all([
       api.views.queryProjects(def),
       loadPCtx({ statuses: api.project.statusesList, labels: api.labels.list, defs: api.properties.listDefs }),
     ]);
-    [data.rows, data.ctx, data.loaded] = [rows, ctx, true];
+    if (mine === queryVersion) [data.rows, data.ctx, data.loaded] = [rows, ctx, true];
   }
   $effect(() => {
     getDef();

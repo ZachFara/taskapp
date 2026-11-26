@@ -1,11 +1,11 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setApi, type Api } from '../lib/api';
 import { createMockApi, fixtures } from '../lib/api.mock';
 import type { SavedView, ViewDef } from '../lib/bindings';
 import { listCommands, shortcutFor } from '../lib/commands';
-import { refreshAll } from '../lib/stores.svelte';
+import { currentViewId, refreshAll, selectedIssueId } from '../lib/stores.svelte';
 import ViewPage from './ViewPage.svelte';
 
 // Popovers and user-event are slow on a loaded machine.
@@ -32,9 +32,89 @@ async function open(over: Partial<ViewDef> = {}, name = 'Mine') {
   return r;
 }
 const saved = async () => (await mock.views.list())[0];
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  currentViewId.value = null;
+  selectedIssueId.value = null;
+});
 
 describe('ViewPage', () => {
+  it('updates_a_filtered_empty_view_when_an_issue_is_created', async () => {
+    await open({ filter: { Cond: { field: { Fixed: 'Title' }, op: 'Contains', value: 'Gamma' } } });
+    await screen.findByText('Nothing matches these filters');
+    await mock.issues.create({ title: 'Gamma task' } as never);
+    await screen.findByText('Gamma task');
+    expect(screen.queryByText('Nothing matches these filters')).toBeNull();
+  });
+
+  it('updates_a_list_when_an_issue_changes', async () => {
+    await open();
+    await screen.findByText('Alpha task');
+    const alpha = (await mock.views.query(def())).find((i) => i.title === 'Alpha task')!;
+    const query = mock.views.query;
+    vi.spyOn(mock.views, 'query').mockImplementation(async (d) => structuredClone(await query(d)));
+    await mock.issues.update(alpha.id, { title: 'Updated task' });
+    await screen.findByText('Updated task');
+    expect(screen.queryByText('Alpha task')).toBeNull();
+  });
+
+  it('can_open_a_refreshed_issue_after_visiting_a_different_table_view', async () => {
+    const user = userEvent.setup();
+    await open();
+    await screen.findByText('Alpha task');
+    const other = await mock.views.save(null, 'Other', def({
+      filter: { Cond: { field: { Fixed: 'Title' }, op: 'Contains', value: 'absent' } },
+    }));
+    currentViewId.value = other.id;
+    const alpha = (await mock.views.query(def())).find((i) => i.title === 'Alpha task')!;
+    const query = mock.views.query;
+    vi.spyOn(mock.views, 'query').mockImplementation(async (d) => structuredClone(await query(d)));
+    await mock.issues.update(alpha.id, { title: 'Updated task' });
+    await user.click(await screen.findByText('Updated task'));
+    await waitFor(() => expect(selectedIssueId.value).toBe(alpha.id));
+  });
+
+  it('updates_board_rows_when_the_quick_filter_changes', async () => {
+    const user = userEvent.setup();
+    await open({ layout: 'Board' });
+    await screen.findByText('Alpha task');
+    await user.click(screen.getByRole('button', { name: 'Quick filter' }));
+    await user.type(await screen.findByLabelText('Quick filter text'), 'Beta');
+    await waitFor(() => expect(screen.queryByText('Alpha task')).toBeNull());
+  });
+
+  it('updates_table_rows_when_the_quick_filter_changes', async () => {
+    const user = userEvent.setup();
+    await open({ layout: 'Table' });
+    await screen.findByText('Alpha task');
+    await user.click(screen.getByRole('button', { name: 'Quick filter' }));
+    await user.type(await screen.findByLabelText('Quick filter text'), 'Beta');
+    await waitFor(() => expect(screen.queryByText('Alpha task')).toBeNull());
+    expect(screen.getByText('Beta task')).toBeTruthy();
+  });
+
+  it('keeps_the_latest_board_filter_when_an_older_query_finishes_late', async () => {
+    const user = userEvent.setup();
+    await open({ layout: 'Board' });
+    await screen.findByText('Alpha task');
+    const releases: (() => void)[] = [];
+    const query = mock.views.query;
+    vi.spyOn(mock.views, 'query').mockImplementation(async (d) => {
+      const result = structuredClone(await query(d));
+      if (d.filter?.Cond?.value === 'Beta') await new Promise<void>((resolve) => releases.push(resolve));
+      return result;
+    });
+    await user.click(screen.getByRole('button', { name: 'Quick filter' }));
+    const input = await screen.findByLabelText('Quick filter text');
+    await fireEvent.input(input, { target: { value: 'Beta' } });
+    await waitFor(() => expect(releases.length).toBeGreaterThan(1));
+    await fireEvent.input(input, { target: { value: 'Alpha' } });
+    await waitFor(() => expect(screen.getByText('Alpha task')).toBeTruthy());
+    releases.forEach((release) => release());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.getByText('Alpha task')).toBeTruthy();
+  });
+
   it('switching_layout_renders_it_and_persists', async () => {
     const user = userEvent.setup();
     const { container } = await open();
