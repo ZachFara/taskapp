@@ -78,13 +78,14 @@ describe('Sidebar', () => {
     expect((await api.pins.listResolved()).map((r) => r.label)).toEqual(['Home', 'One']);
   });
 
-  it('unpin_on_hover_button', async () => {
+  it('keeps unpin in the context menu instead of a hover button', async () => {
     const api = createMockApi(seed);
     await api.pins.pin('View', '1', 'One');
     await open(api);
-    document.querySelector<HTMLButtonElement>('[aria-label="Unpin One"]')!.click();
-    await settle();
+    expect(document.querySelector('[aria-label="Unpin One"]')).toBeNull();
+    await pick('One (pinned)', /^Unpin One$/);
     expect(await api.pins.listResolved()).toEqual([]);
+    expect(names('[aria-label=Pinned]')).toEqual([]);
   });
 
   it('reorder_views', async () => {

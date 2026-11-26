@@ -216,11 +216,6 @@
     <RowActions button={false} label={`${r.label} (pinned)`} actions={rowActs({ kind: 'pin', id: r.pin.id, name: r.label })}>
       <a class="item" class:on={route === r.route} aria-current={route === r.route ? 'page' : undefined} href={r.route} onclick={(e) => (e.preventDefault(), open(r.route))}><Icon name="pin" /><span class="t">{r.label}</span></a>
     </RowActions>
-    <Tooltip label={`Unpin ${r.label}`}>
-      {#snippet children(props)}
-        <button {...props} class="aff" type="button" aria-label={`Unpin ${r.label}`} onclick={() => api.pins.unpin(r.pin.id).then(async () => (pins = await api.pins.listResolved()), fail)}><Icon name="close" size={12} /></button>
-      {/snippet}
-    </Tooltip>
   </li>
   {/if}
 {/snippet}
