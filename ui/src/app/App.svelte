@@ -96,7 +96,14 @@
       ['command:palette.open', (e) => ((palettePage = (e as CustomEvent<{ page?: string } | null>).detail?.page), (paletteIssues = false), (overlay = 'palette'))],
       ['command:nav.search', () => ((palettePage = undefined), (paletteIssues = true), (overlay = 'palette'))],
       ['command:issue.create', () => (overlay = 'quickadd')],
-      ['command:view.refresh', () => refreshed++],
+      ['command:view.refresh', () => {
+        if (path.startsWith('/view/')) dispatchEvent(new Event('rows:changed'));
+        else if (path === '/my') {
+          dispatchEvent(new Event('rows:changed'));
+          void refreshAll({ filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false });
+        }
+        else refreshed++;
+      }],
       ['command:settings.restore', () => (restoreOpen = true)],
     ];
     on.forEach(([n, f]) => addEventListener(n, f));

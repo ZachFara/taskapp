@@ -98,6 +98,12 @@ const columnNames = (root: Element) =>
   [...root.querySelectorAll('[data-column]')].map((c) => c.getAttribute('data-column'));
 
 describe('BoardView', () => {
+  it('updates_after_an_issue_is_created_outside_the_board', async () => {
+    const root = await render(seed());
+    const made = await api.issues.create({ title: 'New card', status_id: 1 });
+    await vi.waitFor(() => expect(card(root, made.key)?.textContent).toContain('New card'));
+  });
+
   it('shows_only_the_filtered_issues_and_hides_excluded_columns', async () => {
     const view: SavedView = {
       ...boardView(),

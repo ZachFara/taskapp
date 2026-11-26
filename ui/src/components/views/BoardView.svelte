@@ -16,6 +16,7 @@
   import { BOARD_DEFAULT, density, emptyCtx, loadCtx, pointsName, pointsTotal, shown, type Ctx } from '../display/types';
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
   import { priorityGlyph } from '../detail/format';
+  import { onRowsChanged } from './onRowsChanged';
 
   let { view }: { view: SavedView } = $props();
 
@@ -117,6 +118,7 @@
     view.def;
     untrack(reload);
   });
+  onRowsChanged(() => void reload());
   $effect(() => {
     const d = $state.snapshot(view.def);
     loadCtx(d).then((c) => (ctx = c));

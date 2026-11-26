@@ -24,6 +24,7 @@
   import DisplayPanel from '../display/DisplayPanel.svelte';
   import FieldValue from '../display/FieldValue.svelte';
   import { emptyCtx, loadCtx, pointsTotal, pointsName, type Ctx, type DisplayDef } from '../display/types';
+  import { onRowsChanged } from './onRowsChanged';
 
   let { view }: { view: SavedView } = $props();
 
@@ -94,14 +95,17 @@
   let ctx = $state.raw<Ctx>(emptyCtx);
   let tableIssues = $state.raw<Issue[]>([]);
   let queryVersion = 0;
+  async function loadRows(d: typeof view.def) {
+    const mine = ++queryVersion;
+    const rows = await api.views.query(d);
+    if (mine === queryVersion) tableIssues = rows;
+  }
   $effect(() => {
     const d = $state.snapshot(view.def);
     issues.map((issue) => issue.id);
-    const mine = ++queryVersion;
-    void untrack(() => api.views.query(d)).then((rows) => {
-      if (mine === queryVersion) tableIssues = rows;
-    });
+    untrack(() => void loadRows(d));
   });
+  onRowsChanged(() => void loadRows($state.snapshot(view.def)));
   $effect(() => {
     const d = $state.snapshot(def);
     loadCtx(d).then((c) => (ctx = c));

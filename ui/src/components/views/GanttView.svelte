@@ -17,6 +17,7 @@
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import Tabs from '../../ui/Tabs.svelte';
   import Toast from '../../ui/Toast.svelte';
+  import { onRowsChanged } from './onRowsChanged';
 
   // The projects route mounts this without a view, which selects projects mode. `today` is a prop so tests are not clock-bound.
   let {
@@ -103,6 +104,7 @@
     void [mode, view];
     untrack(load);
   });
+  onRowsChanged(() => void load());
 
   const toToday = () => {
     if (timeline) timeline.scrollLeft = Math.max(0, xOf(today) - timeline.clientWidth / 3);

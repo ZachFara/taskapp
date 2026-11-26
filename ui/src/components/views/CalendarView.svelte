@@ -19,6 +19,7 @@
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import Tabs from '../../ui/Tabs.svelte';
   import { calendarSpan } from '../events/format';
+  import { onRowsChanged } from './onRowsChanged';
 
   let { view }: { view: SavedView } = $props();
 
@@ -318,6 +319,7 @@
     view.def;
     untrack(loadIssues);
   });
+  onRowsChanged(() => void loadIssues());
   onMount(async () => {
     selection.setLayout('calendar');
     options.firstDay = (await getWeekStart()) === 'monday' ? 1 : 0;

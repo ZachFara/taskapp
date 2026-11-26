@@ -106,10 +106,7 @@
   const live = $derived(view && def ? { ...view, name, def: { ...def, layout } } : null);
   const quickFilter = $derived(combineFilters(quickText.trim() ? { Cond: { field: { Fixed: 'Title' }, op: 'Contains', value: quickText.trim() } } : null, buildFilter(null, quickChips)));
   // What the layouts get: the saved view plus the quick filter. Only the saved part is ever written.
-  const shown = $derived.by(() => {
-    rowsVersion;
-    return live && { ...live, def: { ...live.def, filter: combineFilters(live.def.filter, quickFilter) } };
-  });
+  const shown = $derived(live && { ...live, def: { ...live.def, filter: combineFilters(live.def.filter, quickFilter) } });
   const filtered = $derived(shown?.def.filter != null);
   function closeQuick() {
     quickOpen = false;
@@ -196,6 +193,7 @@
   // Count for the empty state; the layout components run the same query for their own rows.
   let queryVersion = 0;
   $effect(() => {
+    rowsVersion;
     const d = shown?.def;
     const mine = ++queryVersion;
     if (d) (isProject ? api.views.queryProjects(d) : api.views.query(d)).then((r) => {

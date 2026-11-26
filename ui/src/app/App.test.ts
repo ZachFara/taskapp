@@ -75,6 +75,28 @@ describe('first run gate', () => {
 });
 
 describe('sidebar and frame', () => {
+  it('keeps_a_temporary_view_filter_when_an_issue_command_refreshes', async () => {
+    await open('/view/1');
+    await until(() => !!q('button[aria-label="Quick filter"]'));
+    q<HTMLButtonElement>('button[aria-label="Quick filter"]')!.click();
+    await until(() => !!q('input[aria-label="Quick filter text"]'));
+    const input = q<HTMLInputElement>('input[aria-label="Quick filter text"]')!;
+    input.value = 'probe';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle();
+    dispatchEvent(new Event('command:view.refresh'));
+    await settle();
+    expect(q<HTMLInputElement>('input[aria-label="Quick filter text"]')?.value).toBe('probe');
+  });
+
+  it('updates_my_issues_without_remounting_the_page', async () => {
+    await open('/my');
+    const heading = q('h1')!;
+    dispatchEvent(new Event('command:view.refresh'));
+    await settle();
+    expect(q('h1')).toBe(heading);
+  });
+
   it('marks_the_active_route', async () => {
     await open('/my');
     expect(q('aside.sidebar [aria-current=page]')!.textContent).toContain('My issues');

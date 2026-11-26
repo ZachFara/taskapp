@@ -27,6 +27,7 @@
   import { dueDay as dueDayIn, isOverdue } from './dates';
   import FieldValue from '../display/FieldValue.svelte';
   import { LEADING, LIST_DEFAULT, density, emptyCtx, fieldName, loadCtx, pointsName, pointsTotal, shown, showEmptyGroups, subIssues, type Ctx } from '../display/types';
+  import { onRowsChanged } from './onRowsChanged';
 
   // shortcut: row and band heights default to the token values when the CSS is not loaded (tests), upgrade if rows vary in height
   const BAND = 30;
@@ -128,6 +129,7 @@
     view;
     load();
   });
+  onRowsChanged(() => void load());
 
   const groupField = $derived(view.def.group_by?.Fixed === 'Points' && !ctx.points ? null : (view.def.group_by?.Fixed ?? null));
   const groups = $derived.by<Group[]>(() => {
