@@ -34,6 +34,15 @@ async function show(Comp: typeof ProjectListView | typeof GanttView, layout: Lay
 const slugs = () => [...document.querySelectorAll('[data-slug]')].map((e) => (e as HTMLElement).dataset.slug);
 
 describe('project list', () => {
+  it('changes status from the row without opening the project', async () => {
+    await show(ProjectListView, 'List');
+    const originalPath = location.pathname;
+    document.querySelector<HTMLButtonElement>('button[aria-label="Change status of Website relaunch"]')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[role="listbox"][aria-label="Project status"]')).not.toBeNull());
+    [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((o) => o.textContent?.trim() === 'Paused')!.click();
+    await vi.waitFor(async () => expect((await api.projects.list()).find((p) => p.slug === 'website')?.status_id).toBe(3));
+    expect(location.pathname).toBe(originalPath);
+  });
   it('has a row per project, grouped in bands by the view', async () => {
     await show(ProjectListView, 'List', { group_by: { Fixed: 'Status' } });
     expect(slugs()).toEqual(['website', 'mobile', 'office']);
@@ -54,6 +63,16 @@ describe('project list', () => {
 });
 
 describe('project table', () => {
+  it('changes a displayed status and lets undo restore it', async () => {
+    await show(ProjectTableView, 'Table', { columns: [{ Fixed: 'Status' }] });
+    document.querySelector<HTMLButtonElement>('button[aria-label="Change status of Website relaunch"]')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[role="listbox"][aria-label="Project status"]')).not.toBeNull());
+    [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((o) => o.textContent?.trim() === 'Paused')!.click();
+    await vi.waitFor(async () => expect((await api.projects.list()).find((p) => p.slug === 'website')?.status_id).toBe(3));
+    await api.history.undo();
+    expect((await api.projects.list()).find((p) => p.slug === 'website')?.status_id).toBe(1);
+  });
+
   it('shows the columns Display chose', async () => {
     await show(ProjectTableView, 'Table', { columns: [{ Fixed: 'Priority' }, { Fixed: 'TargetDate' }] });
     expect([...document.querySelectorAll('thead th')].map((h) => h.textContent)).toEqual(['Project', 'Priority', 'Target']);

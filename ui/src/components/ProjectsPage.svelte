@@ -23,6 +23,7 @@
   import Skeleton from '../ui/Skeleton.svelte';
   import StatusGlyph from '../ui/StatusGlyph.svelte';
   import TextInput from '../ui/TextInput.svelte';
+  import ProjectStatusPicker from './project/ProjectStatusPicker.svelte';
 
   type Row = Project & { done: number; total: number };
   let rows = $state<Row[]>([]);
@@ -46,7 +47,6 @@
   const num = (v: string) => (v === '' ? null : Number(v));
   const groups = $derived(arrange(rows, statuses, { sort, group, filters: { ...noFilters, status: num(fStatus), priority: num(fPriority), label: num(fLabel) } }));
   const propCols = $derived(defs.filter((d) => d.applies_to !== 'Issues'));
-  const statusOf = (p: Project) => statuses.find((s) => s.id === p.status_id);
   const shown = (v: unknown) => (v === undefined || v === null || v === '' ? '' : Array.isArray(v) ? v.join(', ') : v === true ? 'Yes' : v === false ? 'No' : String(v));
   const any = (label: string) => ({ value: '', label });
 
@@ -135,7 +135,6 @@
               <tr class="fold" data-folder-id={r.folder.id}><td colspan={7 + propCols.length} style:padding-left={`calc(var(--s-4) + ${r.depth} * var(--s-8))`}><span class="cell"><Icon name="folder" size={12} />{r.folder.name}<span class="muted">{r.count}</span></span></td></tr>
             {:else}
             {@const p = r.item}
-            {@const st = statusOf(p)}
             <tr data-slug={p.slug} onclick={() => navigate(`/project/${p.slug}`)}>
               <td style:padding-left={`calc(var(--s-4) + ${r.depth} * var(--s-8))`}>
                 <div role="presentation" onclick={(e) => e.stopPropagation()}>
@@ -145,7 +144,7 @@
                   </RowActions>
                 </div>
               </td>
-              <td>{#if st}<span class="cell"><StatusGlyph category={glyphCategory[st.category]} />{st.name}</span>{/if}</td>
+              <td><ProjectStatusPicker project={p} {statuses} onsaved={load} /></td>
               <td><span class="cell"><PriorityGlyph level={priorityGlyph(p.priority)} />{p.priority ? PRIORITIES[p.priority] : ''}</span></td>
               <td><span class="cell">{#each labels.filter((l) => p.label_ids.includes(l.id)) as l (l.id)}<Pill color={l.color}>{l.name}</Pill>{/each}</span></td>
               <td>

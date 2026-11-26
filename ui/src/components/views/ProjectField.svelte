@@ -2,10 +2,10 @@
   // One field of a project row, drawn the same in every project layout.
   import type { FieldRef, ProjectRow } from '../../lib/bindings';
   import { PRIORITIES, priorityGlyph } from '../../lib/priority';
-  import { percent, statusGlyph, type PCtx } from '../../lib/projectViews';
+  import { percent, type PCtx } from '../../lib/projectViews';
   import Pill from '../../ui/Pill.svelte';
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
-  import StatusGlyph from '../../ui/StatusGlyph.svelte';
+  import ProjectStatusPicker from '../project/ProjectStatusPicker.svelte';
   import { dayText } from './dates';
 
   let { field, row, ctx }: { field: FieldRef; row: ProjectRow; ctx: PCtx } = $props();
@@ -18,7 +18,7 @@
 {#if field.Property !== undefined}
   <span class="t">{text(prop)}</span>
 {:else if field.Fixed === 'Status'}
-  {#if status}<span class="t"><StatusGlyph category={statusGlyph(status)} size={14} />{status.name}</span>{/if}
+  <ProjectStatusPicker project={p} statuses={ctx.statuses} />
 {:else if field.Fixed === 'StatusCategory'}
   <span class="t">{status?.category ?? ''}</span>
 {:else if field.Fixed === 'Priority'}

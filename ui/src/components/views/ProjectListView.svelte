@@ -11,8 +11,8 @@
   import GroupHeader from '../../ui/GroupHeader.svelte';
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
   import Skeleton from '../../ui/Skeleton.svelte';
-  import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import ProjectField from './ProjectField.svelte';
+  import ProjectStatusPicker from '../project/ProjectStatusPicker.svelte';
   import { projectData } from './projectData.svelte';
 
   let { view, onsort }: { view: SavedView; onsort?: (field: FieldRef) => void } = $props();
@@ -50,9 +50,8 @@
       {#if !closed.includes(g.key)}
         {#each g.rows as r (r.project.id)}
           {@const p = r.project}
-          {@const st = data.ctx.statuses.find((s) => s.id === p.status_id)}
           <li class="row" class:compact data-slug={p.slug} onclick={() => navigate(`/project/${p.slug}`)} role="row">
-            <span class="st">{#if st}<StatusGlyph category={statusGlyph(st)} icon={st.icon} color={st.color} label={st.name} />{/if}</span>
+            <span class="st"><ProjectStatusPicker project={p} statuses={data.ctx.statuses} iconOnly /></span>
             <span class="prio"><PriorityGlyph level={priorityGlyph(p.priority)} /></span>
             <span class="name"><EntityIcon icon={p.icon ?? 'icon:project'} color={p.color} size={14} /><a href={`/project/${p.slug}`} onclick={(e) => (e.preventDefault(), e.stopPropagation(), navigate(`/project/${p.slug}`))}>{p.name}</a></span>
             {#each fields as f (f.Property ?? f.Fixed)}<span class="cell"><ProjectField field={f} row={r} ctx={data.ctx} /></span>{/each}
