@@ -89,6 +89,8 @@ pub fn step_label(name: &str, args: &Value, out: Option<&Value>) -> String {
         "project_statuses_update" => "Edited project status".into(),
         "project_statuses_reorder" => "Reordered project statuses".into(),
         "project_statuses_delete" => "Deleted project status".into(),
+        "folders_place" => "Moved folder".into(),
+        "folders_place_item" => format!("Moved {}", args["section"].as_str().unwrap_or("item")),
         "relation_kinds_create" => "Created relation kind".into(),
         "relation_kinds_update" => "Edited relation kind".into(),
         "relation_kinds_delete" => "Deleted relation kind".into(),
@@ -108,6 +110,18 @@ pub fn step_label(name: &str, args: &Value, out: Option<&Value>) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn folder_moves_say_what_moved() {
+        assert_eq!(
+            step_label("folders_place", &json!({"id": 1}), None),
+            "Moved folder"
+        );
+        let item = json!({"section": "view", "id": 3});
+        assert_eq!(step_label("folders_place_item", &item, None), "Moved view");
+        let pin = json!({"section": "pin", "id": 3});
+        assert_eq!(step_label("folders_place_item", &pin, None), "Moved pin");
+    }
 
     #[test]
     fn no_label_reads_like_a_command_name() {
