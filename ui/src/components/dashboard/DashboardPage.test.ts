@@ -50,7 +50,7 @@ const text = () => document.body.textContent?.replace(/\s+/g, ' ') ?? '';
 describe('DashboardPage', () => {
   it('asks the engine for the range with a day bucket and shows the summary and burn-up cards', async () => {
     await open(() => metrics());
-    expect(asked[0]).toMatchObject({ bucket: 'Day', measure: 'Count', filter: null });
+    expect(asked[0]).toMatchObject({ bucket: 'Day', measure: 'count', filter: null });
     expect('Range' in asked[0].scope).toBe(true);
     const s = document.querySelector('section[aria-label="Summary"]')!;
     expect(s.textContent).toContain('Completed');
@@ -94,7 +94,7 @@ describe('DashboardPage', () => {
     await open(() => metrics());
     dashboard.measure = 'Points';
     await settle();
-    expect(asked.at(-1)!.measure).toBe('Points');
+    expect(asked.at(-1)!.measure).toBe('points');
     expect(text()).toContain('Points completed');
   });
 });

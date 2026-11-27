@@ -14,7 +14,7 @@ afterEach(() => {
 
 // The accessible table must carry exactly the numbers the backend series has, for the seeded project and cycle.
 describe('View as table equals the backend series', () => {
-  const scopes: [string, ProgressScope][] = [['project', { Project: fixtures.projects[0].id }], ['cycle', { Cycle: fixtures.cycles![0].id }]];
+  const scopes: [string, ProgressScope][] = [['project', { Project: fixtures.projects.find((p) => p.start_date && p.target_date)!.id }], ['cycle', { Cycle: fixtures.cycles![0].id }]];
   for (const [name, scope] of scopes)
     for (const measure of ['issues', 'points'] as Measure[])
       it(`${name} / ${measure}`, async () => {
