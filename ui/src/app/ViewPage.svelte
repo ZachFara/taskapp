@@ -136,11 +136,14 @@
   // Debounced: a burst of chip edits is one save.
   // A filter change changes what the user sees, so its save is announced with an Undo; display toggles are not.
   let loud = false;
+  let pendingId: number | null = null;
   const save = () => {
     clearTimeout(timer);
     // Taken now, not when the timer fires: by then the page may show another view.
     const [v, d, n] = [view, def, name];
+    pendingId = v?.id ?? null;
     timer = setTimeout(async () => {
+      pendingId = null;
       if (!v || !d) return;
       const say = loud;
       loud = false;
@@ -158,9 +161,13 @@
     save();
   }
   const sortHeading = (field: FieldRef) => (temporarySort = nextSort(temporarySort, field));
+  // A tab pick is kept but is not an edit, so it makes no undo step; a save still waiting for this view takes it along.
   const setLayout = (l: string) => {
     override = null;
-    change({ layout: l as Layout });
+    if (!view || !def) return;
+    def = { ...def, layout: l as Layout };
+    if (pendingId === view.id) save();
+    else void api.views.setLayout(view.id, l as Layout);
   };
   async function rename() {
     renaming = false;

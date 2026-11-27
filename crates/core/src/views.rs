@@ -740,6 +740,27 @@ async fn insert_view(
     Ok(id)
 }
 
+/// Keeps the layout tab a view was last shown in. Picking a tab is looking, not editing, so this records no
+/// change and makes no undo step; an undo of a later edit restores the row as it was, layout included.
+///
+/// # Errors
+///
+/// Fails with `NotFound` for an unknown id, or on a database error.
+pub async fn set_layout(db: &Db, id: ViewId, layout: crate::Layout) -> Result<()> {
+    let word = serde_json::to_value(layout).map_err(|e| Error::Invalid(e.to_string()))?;
+    let done = sqlx::query(
+        "UPDATE views SET definition = json_set(definition, '$.layout', ?) WHERE id = ?",
+    )
+    .bind(word.as_str())
+    .bind(id.0)
+    .execute(&db.pool)
+    .await?;
+    if done.rows_affected() == 0 {
+        return Err(Error::NotFound(format!("view {}", id.0)));
+    }
+    Ok(())
+}
+
 /// # Errors
 ///
 /// Fails with `NotFound` for an unknown id, or on a database error.

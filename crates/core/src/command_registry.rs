@@ -196,6 +196,8 @@ macro_rules! with_commands {
             views_save_project(s, id: Option<ViewId>, name: String, def: ViewDef, icon: Option<String>, color: Option<String>) -> SavedView {
                 views::save_as(&s.db, id, (&name, ViewEntity::Project), def, taskapp_core::palette::Look { icon, color }, $source).await
             }
+            // The tab a view was last shown in; no undo step (picking a tab is not an edit).
+            views_set_layout(s, id: ViewId, layout: taskapp_core::Layout) -> () { views::set_layout(&s.db, id, layout).await }
             views_delete(s, id: ViewId) -> () { views::delete(&s.db, id).await }
             views_reorder(s, ids: Vec<ViewId>) -> () { views::reorder(&s.db, &ids).await }
             attachments_add(s, bytes: Vec<u8>, mime: String) -> Attachment {

@@ -667,3 +667,64 @@ fn update_sets_the_start_date_and_estimate() {
     assert_eq!(issue["start_date"], "2026-12-01");
     assert_eq!(issue["estimate_minutes"], 960);
 }
+
+#[test]
+fn issue_list_filters_by_names_and_prints_names() {
+    let (_d, db) = fresh();
+    run_json(&db, &["project", "create", "cairn", "Cairn"]);
+    run_json(&db, &["label", "create", "By AI", "blue"]);
+    let new = |title: &str, extra: &[&str]| {
+        let mut args = vec!["issue", "create", title];
+        args.extend_from_slice(extra);
+        run_json(&db, &args)
+    };
+    new(
+        "Urgent todo",
+        &["--project", "Cairn", "--priority", "1", "--status", "Todo"],
+    );
+    new(
+        "Done one",
+        &["--project", "cairn", "--priority", "2", "--status", "Done"],
+    );
+    new(
+        "Low backlog",
+        &["--project", "Cairn", "--priority", "4", "--label", "By AI"],
+    );
+    new("Elsewhere", &["--priority", "1"]);
+
+    let rows = run_json(
+        &db,
+        &[
+            "issue",
+            "list",
+            "--project",
+            "Cairn",
+            "--not-status",
+            "Done,Canceled",
+        ],
+    );
+    let titles: Vec<&str> = rows
+        .as_array()
+        .expect("array")
+        .iter()
+        .map(|r| r["title"].as_str().expect("title"))
+        .collect();
+    assert_eq!(
+        titles,
+        ["Urgent todo", "Low backlog"],
+        "sorted by priority, Done left out"
+    );
+    assert_eq!(rows[0]["status"], "Todo");
+    assert_eq!(rows[0]["priority"], "Urgent");
+    assert_eq!(rows[0]["project"], "Cairn");
+    assert_eq!(rows[1]["labels"][0], "By AI");
+
+    let ai = run_json(&db, &["issue", "list", "--label", "by ai"]);
+    assert_eq!(ai.as_array().expect("array").len(), 1);
+    let urgent = run_json(&db, &["issue", "list", "--priority", "urgent"]);
+    assert_eq!(urgent.as_array().expect("array").len(), 2);
+
+    let out = run(&db, &["issue", "list", "--status", "Nope"]);
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("status Nope"));
+}

@@ -585,6 +585,13 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	viewsSetLayout: (id: ViewId, layout: Layout, options?: InvokeOptions) => __TAURI_INVOKE<null>("views_set_layout", { id, layout }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	viewsDelete: (id: ViewId, options?: InvokeOptions) => __TAURI_INVOKE<null>("views_delete", { id }, options),
 	/**
 	 * Forwards to the command of the same name.
