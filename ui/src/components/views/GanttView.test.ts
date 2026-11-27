@@ -111,6 +111,12 @@ describe('GanttView', () => {
     expect(bar('group-2')).not.toBeNull();
   });
 
+  it('project_bars_take_their_status_colour', async () => {
+    const projects = fixtures.projects.map((p) => (p.id === 1 ? { ...p, start_date: '2026-12-01', target_date: '2026-12-31', status_id: 2 } : p));
+    await show([], { mode: 'projects' }, { projects });
+    expect(bar('project-1').style.getPropertyValue('--bc')).toContain('--c-amber');
+  });
+
   it('projects_mode_drag_updates_target_date', async () => {
     const projects = fixtures.projects.map((p) => (p.id === 1 ? { ...p, start_date: '2026-12-01', target_date: '2026-12-31' } : p));
     await show([], { mode: 'projects' }, { projects });

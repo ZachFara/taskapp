@@ -1,4 +1,4 @@
-import type { Bar, Issue, Milestone, Project, Status, StatusCategory } from './bindings';
+import type { Bar, Issue, Milestone, Project, ProjectStatus, Status, StatusCategory } from './bindings';
 
 // Pixels per day. shortcut: fixed widths, upgrade to fit-to-width when a view is rarely wider than the screen.
 export const ZOOMS = { Day: 40, Week: 14, Month: 4, Quarter: 1.5 } as const;
@@ -48,6 +48,7 @@ type Input = {
   milestones: Milestone[];
   critical: number[];
   statuses?: Status[];
+  projectStatuses?: ProjectStatus[];
 };
 
 const milestoneRows = (ms: Milestone[], indent: number): Row[] =>
@@ -56,12 +57,14 @@ const milestoneRows = (ms: Milestone[], indent: number): Row[] =>
   }));
 
 /** Rows top to bottom. Issues mode groups by project when the view spans several; parents with dated children get a roll-up bar. */
-export function buildRows({ mode, issues, bars, projects, milestones, critical, statuses = [] }: Input): Row[] {
+export function buildRows({ mode, issues, bars, projects, milestones, critical, statuses = [], projectStatuses = [] }: Input): Row[] {
   if (mode === 'projects') {
-    return projects.flatMap((p): Row[] => [
-      ...(p.start_date && p.target_date
-        ? [{ id: `project-${p.id}`, kind: 'bar' as const, label: p.name, indent: 0, start: p.start_date, end: p.target_date, projectId: p.id }]
-        : []),
+    // A dateless project has no row, so its milestones would hang without one: they are left out with it.
+    return projects.filter((p) => p.start_date && p.target_date).flatMap((p): Row[] => [
+      {
+        id: `project-${p.id}`, kind: 'bar', label: p.name, indent: 0, start: p.start_date!, end: p.target_date!, projectId: p.id,
+        color: projectStatuses.find((s) => s.id === p.status_id)?.color ?? null,
+      },
       ...milestoneRows(milestones.filter((m) => m.project_id === p.id), 1),
     ]);
   }
