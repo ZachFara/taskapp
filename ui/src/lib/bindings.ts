@@ -123,6 +123,13 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	statusesSetFlow: (id: StatusId, definition: string | null, flowKind: FlowKind | null, nudgeDays: number | null, options?: InvokeOptions) => __TAURI_INVOKE<Status>("statuses_set_flow", { id, definition, flowKind, nudgeDays }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	statusesReorder: (idsInOrder: StatusId[], options?: InvokeOptions) => __TAURI_INVOKE<null>("statuses_reorder", { idsInOrder }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1186,6 +1193,9 @@ export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "P
 /**  Project views only: shows progress as a percent with a scope and completed sparkline; sorts and filters as `Progress`. */
 "ProgressChart";
 
+/**  Whether time in a status is work (`Active`), blocked on someone or something (`Waiting`) or neither (`Idle`). */
+export type FlowKind = "Active" | "Waiting" | "Idle";
+
 /**  The sidebar section a folder belongs to; its items live in the table of the same name. */
 export type FolderSection = "pin" | "view" | "project" | "cycle";
 
@@ -1543,6 +1553,12 @@ export type Status = {
 	/**  The reference hex for `color`, for showing it without the palette. */
 	color_hex: string,
 	icon: string | null,
+	/**  What the status means, in a sentence or two. */
+	definition: string,
+	/**  How time in this status counts for flow efficiency. */
+	flow_kind: FlowKind,
+	/**  Issues sitting here this many days are stale (for nudges); none means never. */
+	nudge_days: number | null,
 };
 
 export type StatusCategory = "Backlog" | "Unstarted" | "Started" | "Completed" | "Canceled";

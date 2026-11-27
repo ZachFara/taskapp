@@ -302,9 +302,12 @@ async fn status_create_edit_and_delete_with_move_round_trip() -> R {
     )
     .await?;
     undo::undo(&db).await?;
-    assert_eq!(
-        statuses::list(&db).await?.last().expect("one").name,
-        "ABC extra"
+    // Listed by category now, so the Started one is no longer last.
+    assert!(
+        statuses::list(&db)
+            .await?
+            .iter()
+            .any(|s| s.name == "ABC extra")
     );
     undo::redo(&db).await?;
     undo::undo(&db).await?;

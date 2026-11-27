@@ -17,6 +17,7 @@
   import { humanDate, PRIORITIES, priorityGlyph } from './detail/format';
   import { mergeIssueDefaults, type IssueDefaults } from './filters/defaults';
   import { pointsOn, readEstimation, SCALES, type Estimation, type ScaleName } from './insights/estimation';
+  import { byStatusOrder } from '../lib/statusOrder';
 
   // `project_slug`, `status_id` and `defaults` prefill from the screen that opened the dialog (a view, a column, a project).
   // `oncreated` hands the owner the new issue and an undo for the whole create, so it can show the toast.
@@ -75,7 +76,7 @@
   // The workspace's starting status is where the issue lands anyway, so it is not news: only a status the screen
   // chose (a column, a view) is worth a chip.
   const startingStatusId = $derived(
-    defaultStatusId.value ?? [...statusList].sort((a, b) => a.position - b.position)[0]?.id ?? null,
+    defaultStatusId.value ?? [...statusList].sort(byStatusOrder)[0]?.id ?? null,
   );
   const defaultProject = $derived(projectList.find((p) => p.id === activeDefaults.project_id) ?? null);
   const defaultLabels = $derived(

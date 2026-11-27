@@ -1132,3 +1132,41 @@ fn colors_lists_the_palette_keys() {
     ];
     assert_eq!(listed, expected);
 }
+
+#[test]
+fn status_update_sets_definition_kind_and_nudge() {
+    let (_d, db) = fresh();
+    run_json(
+        &db,
+        &["status", "create", "Blocked", "--category", "Started"],
+    );
+    let s = run_json(
+        &db,
+        &[
+            "status",
+            "update",
+            "blocked",
+            "--definition",
+            "Needs someone else",
+            "--kind",
+            "waiting",
+            "--nudge-days",
+            "4",
+        ],
+    );
+    assert_eq!(s["definition"], "Needs someone else");
+    assert_eq!(
+        (s["flow_kind"].as_str(), s["nudge_days"].as_i64()),
+        (Some("Waiting"), Some(4))
+    );
+    let listed = run_json(&db, &["status", "list"]);
+    assert!(
+        listed
+            .as_array()
+            .expect("array")
+            .iter()
+            .any(|s| s["name"] == "Blocked" && s["flow_kind"] == "Waiting")
+    );
+    let bad = run(&db, &["status", "update", "Blocked", "--kind", "sleepy"]);
+    assert_ne!(bad.status.code(), Some(0));
+}

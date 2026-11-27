@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: i64\" FROM statuses ORDER BY CASE category WHEN 'backlog' THEN 0 WHEN 'unstarted' THEN 1\n           WHEN 'started' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END, position, id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7dd22e1dd4be7f2a3cf54b145f226fe1756121d2b67ff5ca4dd71edb0bef6674"
+}

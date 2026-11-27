@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO statuses (name, category, position, color, icon, flow_kind)\n         VALUES (?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM statuses), ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "862c6addb71a90e03bf71d7f214f5c8ccacb02d66d8cab4321db03c381e5c39c"
+}

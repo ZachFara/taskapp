@@ -6,6 +6,7 @@ import { parseQuickadd } from './api.mock.quickadd';
 import * as insights from './api.mock.insights';
 import { metricsFor as metricsMock } from './api.mock.metrics'; // TEMPORARY (DASH): replace with the engine builder's metrics.for
 import { stepLabel } from './api.mock.stepLabel';
+import { byStatusOrder, flowDefaults } from './statusOrder';
 import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
 import { decisionsApi } from './api.mock.decisions';
 import { attachmentsApi } from './api.mock.attachments';
@@ -641,11 +642,11 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       },
     },
     statuses: {
-      list: async () => [...s.statuses].sort((a, b) => a.position - b.position),
+      list: async () => [...s.statuses].sort(byStatusOrder),
       create: async (name, category, color, icon) => {
         checkIcon(icon);
         const key = colorKey(color)!;
-        const st = { id: next(s.statuses), name, category, color: key, color_hex: hexOf(key)!, icon: icon ?? null, position: s.statuses.length };
+        const st = { id: next(s.statuses), name, category, color: key, color_hex: hexOf(key)!, icon: icon ?? null, position: s.statuses.length, ...flowDefaults(category) };
         s.statuses.push(st);
         return st;
       },
@@ -655,6 +656,15 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         const key = colorKey(color) ?? st.color;
         if (name && s.statuses.some((x) => x.id !== id && x.name === name)) fail('Conflict', `status ${name} already exists`);
         return Object.assign(st, { name: name ?? st.name, color: key, color_hex: hexOf(key)!, position: position ?? st.position, icon: icon ?? st.icon });
+      },
+      setFlow: async (id, definition, flowKind, nudgeDays) => {
+        const st = find(s.statuses, id, 'status');
+        if (nudgeDays !== null && nudgeDays < 0) fail('Invalid', 'nudge days cannot be negative');
+        return Object.assign(st, {
+          definition: definition === null ? st.definition : definition.trim(),
+          flow_kind: flowKind ?? st.flow_kind,
+          nudge_days: nudgeDays === null ? st.nudge_days : nudgeDays > 0 ? nudgeDays : null,
+        });
       },
       // Hands the listed statuses' own positions to the new order, like the backend.
       reorder: async (ids) => {
@@ -1209,7 +1219,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         const byName = <T extends { name: string }>(rows: T[], name: string) => rows.find((r) => r.name.toLowerCase() === name.toLowerCase());
         for (const st of plan.statuses ?? []) {
           if (!byName(s.statuses, st.name)) {
-            const made: Status = { id: next(s.statuses), name: st.name, category: st.category, position: s.statuses.length, color: 'gray', color_hex: hexOf('gray')!, icon: null };
+            const made: Status = { id: next(s.statuses), name: st.name, category: st.category, position: s.statuses.length, color: 'gray', color_hex: hexOf('gray')!, icon: null, ...flowDefaults(st.category) };
             s.statuses.push(made);
             keptStatuses.push(made);
           }
@@ -1276,7 +1286,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   };
   const commandOf = (mod: string, fn: string) => `${mod}_${fn.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}`;
   const mutating = (
-    'issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
+    'issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.setFlow statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
     'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
     'projects.create projects.update projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink decisions.create decisions.answer decisions.withdraw decisions.link decisions.unlink templates.create templates.update templates.delete templates.apply ' +
@@ -1299,7 +1309,7 @@ const statuses: Status[] = (
     ['Backlog', 'Backlog', 'gray'], ['Todo', 'Unstarted', 'purple'], ['In Progress', 'Started', 'yellow'],
     ['Done', 'Completed', 'indigo'], ['Canceled', 'Canceled', 'gray'],
   ] as const
-).map(([name, category, color], position) => ({ id: position + 1, name, category, position, color, color_hex: hexOf(color)!, icon: null }));
+).map(([name, category, color], position) => ({ id: position + 1, name, category, position, color, color_hex: hexOf(color)!, icon: null, ...flowDefaults(category) }));
 
 export const projectStatusSeed: ProjectStatus[] = (
   [

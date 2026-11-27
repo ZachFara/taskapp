@@ -2,7 +2,7 @@ use serde_json::json;
 use sqlx::SqliteConnection;
 
 use crate::{
-    ChangeSource, Db, Error, Result, Status, StatusCategory, StatusId, history,
+    ChangeSource, Db, Error, FlowKind, Result, Status, StatusCategory, StatusId, history,
     palette::{self, Look},
     rows,
 };
@@ -28,6 +28,23 @@ pub(crate) fn parse_category(s: &str) -> Result<StatusCategory> {
     })
 }
 
+const fn kind_str(k: FlowKind) -> &'static str {
+    match k {
+        FlowKind::Active => "active",
+        FlowKind::Waiting => "waiting",
+        FlowKind::Idle => "idle",
+    }
+}
+
+fn parse_kind(s: &str) -> Result<FlowKind> {
+    Ok(match s {
+        "active" => FlowKind::Active,
+        "waiting" => FlowKind::Waiting,
+        "idle" => FlowKind::Idle,
+        other => return Err(Error::Invalid(format!("flow kind {other}"))),
+    })
+}
+
 fn check_name(name: &str) -> Result<()> {
     if name.trim().is_empty() {
         return Err(Error::Invalid("status name is empty".into()));
@@ -46,7 +63,7 @@ fn unique_to_conflict(e: sqlx::Error, name: &str) -> Error {
 
 async fn fetch(conn: &mut SqliteConnection, id: StatusId) -> Result<Status> {
     let r = sqlx::query!(
-        r#"SELECT id AS "id!: i64", name, category, position, color, icon FROM statuses WHERE id = ?"#,
+        r#"SELECT id AS "id!: i64", name, category, position, color, icon, definition, flow_kind, nudge_days FROM statuses WHERE id = ?"#,
         id.0
     )
     .fetch_optional(conn)
@@ -60,6 +77,13 @@ async fn fetch(conn: &mut SqliteConnection, id: StatusId) -> Result<Status> {
         color_hex: palette::resolve(&r.color),
         color: r.color,
         icon: r.icon,
+        definition: r.definition,
+        flow_kind: parse_kind(&r.flow_kind)?,
+        nudge_days: r
+            .nudge_days
+            .map(i32::try_from)
+            .transpose()
+            .map_err(|e| Error::Invalid(e.to_string()))?,
     })
 }
 
@@ -67,7 +91,8 @@ async fn fetch(conn: &mut SqliteConnection, id: StatusId) -> Result<Status> {
 ///
 /// Fails on a database error.
 pub async fn list(db: &Db) -> Result<Vec<Status>> {
-    let ids = sqlx::query_scalar!(r#"SELECT id AS "id!: i64" FROM statuses ORDER BY position, id"#)
+    let ids = sqlx::query_scalar!(r#"SELECT id AS "id!: i64" FROM statuses ORDER BY CASE category WHEN 'backlog' THEN 0 WHEN 'unstarted' THEN 1
+           WHEN 'started' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END, position, id"#)
         .fetch_all(&db.pool)
         .await?;
     let mut conn = db.pool.acquire().await?;
@@ -95,14 +120,20 @@ pub async fn create(
         palette::check_icon(icon)?;
     }
     let cat = category_str(category);
+    let kind = kind_str(if category == StatusCategory::Started {
+        FlowKind::Active
+    } else {
+        FlowKind::Idle
+    });
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let id = sqlx::query!(
-        "INSERT INTO statuses (name, category, position, color, icon)
-         VALUES (?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM statuses), ?, ?)",
+        "INSERT INTO statuses (name, category, position, color, icon, flow_kind)
+         VALUES (?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM statuses), ?, ?, ?)",
         name,
         cat,
         color,
-        icon
+        icon,
+        kind
     )
     .execute(&mut *tx)
     .await
@@ -175,6 +206,43 @@ pub async fn update(
             history::record(&mut tx, src, "status", &id.0.to_string(), &edit).await?;
         }
     }
+    let status = fetch(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(status)
+}
+
+/// Edits the management fields. A `None` keeps the current value; `nudge_days` of 0 clears the nudge.
+///
+/// # Errors
+///
+/// `NotFound` for an unknown id, `Invalid` for a negative `nudge_days`.
+pub async fn set_flow(
+    db: &Db,
+    id: StatusId,
+    definition: Option<String>,
+    kind: Option<FlowKind>,
+    nudge_days: Option<i32>,
+    src: ChangeSource,
+) -> Result<Status> {
+    if nudge_days.is_some_and(|n| n < 0) {
+        return Err(Error::Invalid("nudge days cannot be negative".into()));
+    }
+    let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let old = fetch(&mut tx, id).await?;
+    let before = rows::by_key(&mut tx, "statuses", id.0).await?;
+    let definition = definition.map_or(old.definition, |d| d.trim().to_owned());
+    let kind = kind_str(kind.unwrap_or(old.flow_kind));
+    let nudge = nudge_days.map_or(old.nudge_days, |n| (n > 0).then_some(n));
+    sqlx::query!(
+        "UPDATE statuses SET definition = ?, flow_kind = ?, nudge_days = ? WHERE id = ?",
+        definition,
+        kind,
+        nudge,
+        id.0
+    )
+    .execute(&mut *tx)
+    .await?;
+    rows::changed(&mut tx, src, before).await?;
     let status = fetch(&mut tx, id).await?;
     tx.commit().await?;
     Ok(status)

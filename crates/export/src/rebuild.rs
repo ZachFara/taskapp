@@ -284,15 +284,22 @@ async fn restore_statuses(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let statuses: Vec<StatusRow> = read_yaml(&dir.join("statuses.yaml"))?;
     for s in statuses {
         sqlx::query(
-            "INSERT INTO statuses (name, category, position, color, icon) VALUES (?, ?, ?, ?, ?)
+            "INSERT INTO statuses (name, category, position, color, icon, definition, flow_kind, nudge_days)
+             VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, CASE WHEN ? = 'started' THEN 'active' ELSE 'idle' END), ?)
              ON CONFLICT(name) DO UPDATE SET category = excluded.category,
-               position = excluded.position, color = excluded.color, icon = excluded.icon",
+               position = excluded.position, color = excluded.color, icon = excluded.icon,
+               definition = excluded.definition, flow_kind = excluded.flow_kind,
+               nudge_days = excluded.nudge_days",
         )
         .bind(s.name)
-        .bind(s.category)
+        .bind(s.category.clone())
         .bind(s.position)
         .bind(s.color)
         .bind(s.icon)
+        .bind(s.definition)
+        .bind(s.flow_kind)
+        .bind(s.category)
+        .bind(s.nudge_days)
         .execute(&mut **tx)
         .await?;
     }

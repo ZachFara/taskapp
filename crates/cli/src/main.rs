@@ -351,6 +351,18 @@ enum StatusCmd {
         #[arg(long, default_value = "gray")]
         color: String,
     },
+    /// Edit what a status means. NAME is its name or id.
+    Update {
+        name: String,
+        #[arg(long)]
+        definition: Option<String>,
+        /// active, waiting or idle: how time here counts for flow efficiency.
+        #[arg(long)]
+        kind: Option<String>,
+        /// Issues stale after this many days here; 0 clears it.
+        #[arg(long)]
+        nudge_days: Option<i32>,
+    },
 }
 
 #[derive(Subcommand)]

@@ -39,6 +39,8 @@ macro_rules! with_commands {
             }
             statuses_update(s, id: StatusId, name: Option<String>, color: Option<String>, position: Option<i32>, icon: Option<String>)
                 -> Status { statuses::update(&s.db, id, name, position, taskapp_core::palette::Look { icon, color }, $source).await }
+            statuses_set_flow(s, id: StatusId, definition: Option<String>, flow_kind: Option<FlowKind>, nudge_days: Option<i32>)
+                -> Status { statuses::set_flow(&s.db, id, definition, flow_kind, nudge_days, $source).await }
             statuses_reorder(s, ids_in_order: Vec<StatusId>) -> () {
                 statuses::reorder(&s.db, &ids_in_order, $source).await
             }

@@ -33,6 +33,7 @@
   import FieldValue from '../display/FieldValue.svelte';
   import { LEADING, LIST_DEFAULT, density, emptyCtx, fieldName, loadCtx, pointsName, pointsTotal, shown, showEmptyGroups, subIssues, type Ctx } from '../display/types';
   import { onRowsChanged } from './onRowsChanged';
+  import { statusRank } from '../../lib/statusOrder';
 
   // shortcut: row and band heights default to the token values when the CSS is not loaded (tests), upgrade if rows vary in height
   const BAND = 30;
@@ -161,7 +162,7 @@
       const base = { category: 'Unstarted' as StatusCategory, patch: {}, kind: 'none' as Group['kind'] };
       if (groupField === 'Status') {
         const s = statuses.find((x) => x.id === i.status_id);
-        put(i, { kind: 'status', key: `s${s?.id ?? 'x'}`, name: s?.name ?? 'Unknown', category: s?.category ?? 'Backlog', icon: s?.icon, color: s?.color, order: s?.position ?? Infinity, patch: s ? { status_id: s.id } : {} });
+        put(i, { kind: 'status', key: `s${s?.id ?? 'x'}`, name: s?.name ?? 'Unknown', category: s?.category ?? 'Backlog', icon: s?.icon, color: s?.color, order: s ? statusRank(s) : Infinity, patch: s ? { status_id: s.id } : {} });
       } else if (groupField === 'Project') {
         put(i, { key: `p${i.project_id}`, ...base, kind: 'project', ref: projects.find((p) => p.id === i.project_id), ...named(projects, i.project_id, 'No project', (p) => p.name), patch: { project_id: i.project_id } });
       } else if (groupField === 'Cycle') {
@@ -180,7 +181,7 @@
     if (showEmptyGroups(view.def)) {
       const empty = (g: Omit<Group, 'rows'>) => by.has(g.key) || by.set(g.key, { ...g, rows: [] });
       const base = { category: 'Unstarted' as StatusCategory, patch: {} };
-      if (groupField === 'Status') for (const s of statuses) empty({ key: `s${s.id}`, kind: 'status', name: s.name, category: s.category, icon: s.icon, color: s.color, order: s.position, patch: { status_id: s.id } });
+      if (groupField === 'Status') for (const s of statuses) empty({ key: `s${s.id}`, kind: 'status', name: s.name, category: s.category, icon: s.icon, color: s.color, order: statusRank(s), patch: { status_id: s.id } });
       if (groupField === 'Project') for (const p of projects) empty({ key: `p${p.id}`, ...base, kind: 'project', ref: p, name: p.name, order: projects.indexOf(p), patch: { project_id: p.id } });
       if (groupField === 'Cycle') for (const c of cycles) empty({ key: `c${c.id}`, ...base, kind: 'cycle', name: c.name ?? `Cycle ${c.number}`, order: cycles.indexOf(c), patch: { cycle_id: c.id } });
     }

@@ -226,6 +226,20 @@ pub struct Status {
     /// The reference hex for `color`, for showing it without the palette.
     pub color_hex: String,
     pub icon: Option<String>,
+    /// What the status means, in a sentence or two.
+    pub definition: String,
+    /// How time in this status counts for flow efficiency.
+    pub flow_kind: FlowKind,
+    /// Issues sitting here this many days are stale (for nudges); none means never.
+    pub nudge_days: Option<i32>,
+}
+
+/// Whether time in a status is work (`Active`), blocked on someone or something (`Waiting`) or neither (`Idle`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+pub enum FlowKind {
+    Active,
+    Waiting,
+    Idle,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]

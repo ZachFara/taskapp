@@ -18,6 +18,7 @@
   import { priorityGlyph } from '../detail/format';
   import { onRowsChanged } from './onRowsChanged';
   import type { IssueDefaults } from '../filters/defaults';
+  import { byStatusOrder } from '../../lib/statusOrder';
 
   let { view }: { view: SavedView } = $props();
 
@@ -65,7 +66,7 @@
       return values.map((v) => ({ name: pointsName(v), category: 'Unstarted', holds: (i) => i.points === v, patch: () => ({ points: v }), defaults: { points: v } }));
     }
     return [...statuses]
-      .sort((a, b) => a.position - b.position)
+      .sort(byStatusOrder)
       .map((s) => ({ name: s.name, category: s.category, icon: s.icon, color: s.color, holds: (i) => i.status_id === s.id, patch: () => ({ status_id: s.id }), defaults: { status_id: s.id } }));
   });
 

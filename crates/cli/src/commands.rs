@@ -7,12 +7,12 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use taskapp_core::{
-    AttachmentId, ChangeSource, CycleId, Db, Due, Error, EventId, EventInput, IssueId, IssuePatch,
-    Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind,
-    Relation, RelationKind, Result, SelectOption, TemplateId, ViewDef, ViewId, ViewTemplateId,
-    attachments, backup, comments, cycles, events, history, import, insights, issues, labels, pins,
-    project_statuses, projects, properties, quickadd, relations, search, statuses, templates, undo,
-    view_templates, views,
+    AttachmentId, ChangeSource, CycleId, Db, Due, Error, EventId, EventInput, FlowKind, IssueId,
+    IssuePatch, Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef,
+    PropertyKind, Relation, RelationKind, Result, SelectOption, TemplateId, ViewDef, ViewId,
+    ViewTemplateId, attachments, backup, comments, cycles, events, history, import, insights,
+    issues, labels, pins, project_statuses, projects, properties, quickadd, relations, search,
+    statuses, templates, undo, view_templates, views,
 };
 
 use crate::{
@@ -263,6 +263,25 @@ async fn status(db: &Db, cmd: StatusCmd) -> Result<Value> {
             category,
             color,
         } => val(statuses::create(db, &name, named(&category)?, &color, None, SRC).await?),
+        StatusCmd::Update {
+            name,
+            definition,
+            kind,
+            nudge_days,
+        } => {
+            let id = crate::references::status(db, Some(&name))
+                .await?
+                .ok_or_else(|| Error::Invalid("status name is empty".into()))?;
+            let kind = kind
+                .map(|k| match k.to_lowercase().as_str() {
+                    "active" => Ok(FlowKind::Active),
+                    "waiting" => Ok(FlowKind::Waiting),
+                    "idle" => Ok(FlowKind::Idle),
+                    _ => Err(Error::Invalid("kind is active, waiting or idle".into())),
+                })
+                .transpose()?;
+            val(statuses::set_flow(db, id, definition, kind, nudge_days, SRC).await?)
+        }
     }
 }
 

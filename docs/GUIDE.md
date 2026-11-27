@@ -398,6 +398,13 @@ templates and imports. Unset, or if that status is deleted, new issues start in 
   move that status's issues to. Each status shows its own icon and colour (from the same picker) wherever its glyph appears;
   without one it shows the default circle for its category: backlog dashed, unstarted empty, started half-filled, completed
   filled with a check, canceled with a cross.
+  Statuses always list by category (Backlog, Unstarted, Started, Completed, Canceled), then by their position inside it,
+  in every picker, group header and column.
+- **Status definitions** (same page): each status row also holds a short definition, a flow kind and an optional nudge.
+  The kind says how time in the status counts for flow efficiency: Active (work is happening), Waiting (blocked on someone
+  or something) or Idle (not being worked). New and existing Started statuses are Active, all others Idle. "Nudge after N
+  days" is stored for stale-issue nudges (0 or empty means never). CLI: `taskapp status list` shows the fields,
+  `taskapp status update NAME --definition "..." --kind active|waiting|idle --nudge-days N`.
 - **Priority** shows as three bars of rising height: none faint, low one bar, medium two, high three, urgent three in red.
 - **Labels** (Settings > Labels): name, icon, colour. Add to issues with `l`, the panel, or `#name` in quick-add.
 - **Colours** are a fixed palette of 12 keys: gray, red, orange, amber, yellow, green, teal, cyan, blue, indigo, purple,
