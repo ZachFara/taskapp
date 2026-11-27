@@ -4,6 +4,7 @@ import { planCsv, projectSlug } from './api.mock.import';
 import { FIELDS } from './issueFields';
 import { parseQuickadd } from './api.mock.quickadd';
 import * as insights from './api.mock.insights';
+import { metricsFor as metricsMock } from './api.mock.metrics'; // TEMPORARY (DASH): replace with the engine builder's metrics.for
 import { stepLabel } from './api.mock.stepLabel';
 import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
 import { decisionsApi } from './api.mock.decisions';
@@ -40,6 +41,7 @@ export type MockSeed = {
 export type Workspace = { setup_done: boolean; name: string | null; key: string; timezone: string };
 /** The workspace commands are built on the backend in parallel and are not in the generated bindings yet. */
 export type MockApi = Api & {
+  metrics: { for: (q: import('../components/dashboard/metrics').MetricsQuery) => Promise<import('../components/dashboard/metrics').Metrics> };
   workspace: { status: () => Promise<Workspace>; setup: (name: string, key: string, timezone: string | null) => Promise<Workspace> };
 };
 
@@ -1046,6 +1048,12 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         for (const v of views) if (v.template_id === id) v.template_id = null;
         if (settings.get('default_view_template') === id) settings.delete('default_view_template');
         return null;
+      },
+    },
+    metrics: {
+      for: async (q) => {
+        const ids = new Set(query({ filter: q.filter, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false }).map((i) => i.id));
+        return metricsMock(q, { issues: s.issues, statuses: s.statuses, changes, cycles, tz: workspace.timezone, match: (i) => ids.has(i.id) });
       },
     },
     insights: {

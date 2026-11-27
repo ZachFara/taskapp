@@ -10,6 +10,7 @@
   import { motion, setSpeed, type Speed } from '../../lib/motion.svelte';
   import { setTooltips, tooltips } from '../../lib/tooltips.svelte';
   import Switch from '../../ui/Switch.svelte';
+  import { dashboard, setDashboard } from '../dashboard/dashboard.svelte';
   import { estimationItems, scaleItems } from '../insights/estimation';
 
   const KEY = /^[A-Z]{2,5}$/;
@@ -164,6 +165,11 @@
       <span>Progress charts</span>
       <Switch label="Progress charts" bind:checked={charts} />
       <span class="st-hint">Burn-up charts on projects and cycles. The insights panel on a view still opens on demand.</span>
+    </div>
+    <div class="st-field">
+      <span>Dashboard</span>
+      <Switch label="Dashboard" bind:checked={() => dashboard.on, (v) => void setDashboard(v)} />
+      <span class="st-hint">Shows the Dashboard page in the sidebar. Applies at once; no need to save.</span>
     </div>
     <div class="st-field">
       <span>Sidebar sparklines</span>

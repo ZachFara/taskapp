@@ -1,5 +1,6 @@
 import type { Component } from 'svelte';
 import DecisionsPage from '../components/DecisionsPage.svelte';
+import DashboardPage from '../components/dashboard/DashboardPage.svelte';
 import CyclesPage from '../components/CyclesPage.svelte';
 import InboxPage from '../components/InboxPage.svelte';
 import IssueDetail from '../components/IssueDetail.svelte';
@@ -24,6 +25,7 @@ export const routes: { pattern: string; component: Component }[] = [
   { pattern: '/projects/timeline', component: GanttView },
   { pattern: '/pinned', component: PinnedPage },
   { pattern: '/cycles', component: CyclesPage },
+  { pattern: '/dashboard', component: DashboardPage },
   { pattern: '/decisions', component: DecisionsPage },
   { pattern: '/events', component: EventsPage },
   { pattern: '/event/:id', component: EventPage },

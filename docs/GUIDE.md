@@ -44,7 +44,7 @@ The same screen has a second choice, "Restore from an export": see [Restore](#re
 ## The screen
 
 - **Sidebar (left).** Top: My issues. Then four collapsible sections with counts: Pinned, Views, Projects (with "All
-  projects"), Cycles (with "All cycles"). Bottom: Settings. Drag a pin or a view to reorder it. Right-click a view, folder,
+  projects"), Cycles (with "All cycles"). Then Events, Decisions and Dashboard (Settings > General can hide it). Bottom: Settings. Drag a pin or a view to reorder it. Right-click a view, folder,
   project or cycle and choose Pin or Unpin. The Projects section shows only "All projects" until you right-click its
   heading and choose "Show projects in the sidebar" (kept on this device); pinned projects always show under Pinned. With "Sidebar sparklines" on (Settings > General) each project
   shows a small progress line. The sidebar has no Inbox link; `/inbox` exists but only shows "Inbox arrives in a later
@@ -347,6 +347,16 @@ with its recommendation until you answer). Decisions are Cairn's own; nothing ou
   `--source`, such as `agent:builder` or later `curia`), and `external_id` is the raiser's own id, unique per source, so a
   later integration can mirror a decision and not raise it twice. Nothing reads them yet.
 
+## Dashboard
+
+The Dashboard (sidebar, or `g b`) shows how work is going over a range. Pick the range at the top: Today, This week,
+This cycle, any other cycle, Month, Quarter, Year, or Custom with two dates. The chart steps by day up to 31 days, by
+week up to about six months, and by month beyond. Limit it to a project or a label, and switch Count or Points.
+Two cards so far: Summary (completed, created, in progress now, lead time and cycle time as median and 85th percentile;
+a note appears when fewer than 5 issues finished) and Burn-up (scope against done). The Cards button shows, hides and
+reorders cards, kept on this device. Every choice is also in the command menu ("Dashboard range", "Dashboard: show or
+hide cards"). Settings > General > Dashboard turns the whole page off; it is on by default.
+
 ## Points and insights
 
 - **Estimation setting** (Settings > General): None, Points, Time or Both. Points show only for Points or Both; time
@@ -602,6 +612,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.projects` | Go to Projects | `g p` | Go to the project list. |
 | `nav.cycles` | Go to Cycles | `g c` | Go to Cycles. |
 | `nav.events` | Go to Events | `g e` | Go to Events. |
+| `nav.dashboard` | Go to Dashboard | `g b` | Go to the Dashboard (when it is switched on in Settings). |
 | `nav.decisions` | Go to Decisions | `g q` | Go to Decisions. |
 | `nav.views` | Go to Views | `g v` | Go to Views. |
 | `nav.timeline` | Go to Timeline | `g t` | Go to the all-projects timeline. |
