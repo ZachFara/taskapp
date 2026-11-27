@@ -3,7 +3,10 @@
 use std::collections::HashMap;
 
 use serde_json::{Value, json};
-use taskapp_core::{Db, Error, Result, ViewDef, labels, projects, statuses, views};
+use taskapp_core::{
+    Db, Error, Issue, LabelId, ProjectId, Result, StatusId, ViewDef, issues, labels, projects,
+    statuses, views,
+};
 
 use crate::references;
 
@@ -109,32 +112,80 @@ pub async fn run(db: &Db, args: &ListArgs) -> Result<Value> {
     let mut rows = views::query(db, &def).await?;
     let number = |key: &str| key.rsplit('-').next().and_then(|n| n.parse::<u32>().ok());
     rows.sort_by_key(|i| (i.priority == 0, i.priority, number(&i.key)));
-    let status: HashMap<_, _> = statuses::list(db)
-        .await?
-        .into_iter()
-        .map(|s| (s.id, s.name))
-        .collect();
-    let project: HashMap<_, _> = projects::list(db)
-        .await?
-        .into_iter()
-        .map(|p| (p.id, p.name))
-        .collect();
-    let label: HashMap<_, _> = labels::list(db)
-        .await?
-        .into_iter()
-        .map(|l| (l.id, l.name))
-        .collect();
+    let names = Names::load(db).await?;
     Ok(rows
         .iter()
         .map(|i| {
             json!({
                 "key": i.key,
-                "priority": PRIORITIES[usize::from(i.priority).min(4)],
-                "status": status.get(&i.status_id),
-                "project": i.project_id.and_then(|p| project.get(&p)),
-                "labels": i.label_ids.iter().filter_map(|l| label.get(l)).collect::<Vec<_>>(),
+                "priority": priority_name(i.priority),
+                "status": names.status(i),
+                "project": names.project(i),
+                "labels": names.labels(i),
                 "title": i.title,
             })
         })
         .collect())
+}
+
+/// Display names for the ids on an issue, so readers need no id lookups.
+pub struct Names {
+    status: HashMap<StatusId, String>,
+    project: HashMap<ProjectId, String>,
+    label: HashMap<LabelId, String>,
+}
+
+impl Names {
+    pub async fn load(db: &Db) -> Result<Self> {
+        Ok(Self {
+            status: statuses::list(db)
+                .await?
+                .into_iter()
+                .map(|s| (s.id, s.name))
+                .collect(),
+            project: projects::list(db)
+                .await?
+                .into_iter()
+                .map(|p| (p.id, p.name))
+                .collect(),
+            label: labels::list(db)
+                .await?
+                .into_iter()
+                .map(|l| (l.id, l.name))
+                .collect(),
+        })
+    }
+
+    pub fn status(&self, i: &Issue) -> Option<&str> {
+        self.status.get(&i.status_id).map(String::as_str)
+    }
+
+    pub fn project(&self, i: &Issue) -> Option<&str> {
+        i.project_id
+            .and_then(|p| self.project.get(&p))
+            .map(String::as_str)
+    }
+
+    pub fn labels(&self, i: &Issue) -> Vec<&str> {
+        i.label_ids
+            .iter()
+            .filter_map(|l| self.label.get(l).map(String::as_str))
+            .collect()
+    }
+}
+
+/// `issue get`: the raw issue plus names; ids and numeric priority stay.
+pub async fn get(db: &Db, key: &str) -> Result<Value> {
+    let issue = issues::get_by_key(db, key).await?;
+    let names = Names::load(db).await?;
+    let mut out = serde_json::to_value(&issue).map_err(|e| Error::Invalid(e.to_string()))?;
+    out["status"] = json!(names.status(&issue));
+    out["project"] = json!(names.project(&issue));
+    out["labels"] = json!(names.labels(&issue));
+    out["priority_name"] = json!(priority_name(issue.priority));
+    Ok(out)
+}
+
+pub fn priority_name(priority: u8) -> &'static str {
+    PRIORITIES[usize::from(priority).min(4)]
 }

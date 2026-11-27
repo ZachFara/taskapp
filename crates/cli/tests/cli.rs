@@ -728,3 +728,44 @@ fn issue_list_filters_by_names_and_prints_names() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("status Nope"));
 }
+
+#[test]
+fn issue_get_prints_names_and_keeps_ids() {
+    let (_d, db) = fresh();
+    run_json(&db, &["project", "create", "cairn", "Cairn"]);
+    run_json(&db, &["label", "create", "By AI", "blue"]);
+    run_json(
+        &db,
+        &[
+            "issue",
+            "create",
+            "Named",
+            "--project",
+            "Cairn",
+            "--priority",
+            "1",
+            "--status",
+            "Todo",
+            "--label",
+            "By AI",
+        ],
+    );
+
+    let issue = run_json(&db, &["issue", "get", "ABC-1"]);
+    assert_eq!(issue["key"], "ABC-1");
+    assert!(issue["status_id"].is_number(), "ids stay in JSON");
+    assert!(issue["project_id"].is_number());
+    assert_eq!(issue["priority"], 1, "numeric priority stays in JSON");
+    assert_eq!(issue["status"], "Todo");
+    assert_eq!(issue["project"], "Cairn");
+    assert_eq!(issue["labels"][0], "By AI");
+    assert_eq!(issue["priority_name"], "Urgent");
+
+    let table = run(&db, &["issue", "get", "ABC-1"]);
+    let stdout = String::from_utf8_lossy(&table.stdout);
+    assert!(stdout.contains("status: Todo"), "stdout was: {stdout}");
+    assert!(
+        stdout.contains("priority_name: Urgent"),
+        "stdout was: {stdout}"
+    );
+}
