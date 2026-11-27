@@ -39,7 +39,13 @@ async fn run<T: DeserializeOwned>(helper: &Path, args: &[&str]) -> Result<T> {
     let value: serde_json::Value = serde_json::from_slice(&out.stdout)
         .map_err(|e| Error::Invalid(format!("reminders helper printed invalid JSON: {e}")))?;
     if let Some(msg) = value.get("error").and_then(|m| m.as_str()) {
-        return Err(Error::Invalid(format!("reminders helper: {msg}")));
+        // The access message is already addressed to the owner; keep it as it is.
+        let text = if msg.starts_with("Reminders access is off") {
+            msg.to_owned()
+        } else {
+            format!("reminders helper: {msg}")
+        };
+        return Err(Error::Invalid(text));
     }
     if !out.status.success() {
         return Err(Error::Invalid(format!(

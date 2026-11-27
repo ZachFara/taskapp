@@ -76,6 +76,9 @@ enum Cmd {
     Redo,
     #[command(subcommand)]
     Backup(BackupCmd),
+    /// Run the syncs the app runs on its own.
+    #[command(subcommand)]
+    Sync(SyncCmd),
     /// Builds a new database from an export folder. Needs --db, which must not exist yet.
     Restore {
         #[arg(long, value_name = "DIR")]
@@ -125,6 +128,16 @@ enum ImportCmd {
     Linear {
         #[arg(long)]
         apply: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum SyncCmd {
+    /// Imports the Reminders list and updates Google Calendar once, against this database.
+    Now {
+        /// The Reminders helper. Defaults to the one inside the installed app.
+        #[arg(long, value_name = "PATH")]
+        helper: Option<PathBuf>,
     },
 }
 

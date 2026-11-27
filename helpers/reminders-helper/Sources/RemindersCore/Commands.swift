@@ -39,6 +39,10 @@ public func run(_ args: [String], store: ReminderStore, out: @escaping (String) 
         guard let i = args.firstIndex(of: "--list"), i + 1 < args.count else { return nil }
         return args[i + 1]
     }
+    let needsAccess = ["lists", "fetch", "delete", "watch"]
+    if let cmd = args.first, needsAccess.contains(cmd), !store.isAuthorized {
+        return fail("Reminders access is off: press Authorize in Settings > Reminders")
+    }
     do {
         switch args.first {
         case "authorize":

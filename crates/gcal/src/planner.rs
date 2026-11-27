@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
 use chrono_tz::Tz;
 use sha2::{Digest, Sha256};
-use taskapp_core::{Due, Issue, Project, Status, StatusCategory, WorkBlock};
+use taskapp_core::{Due, Event, Issue, Project, Status, StatusCategory, WorkBlock};
 
 /// Digest notification time, local to the user's zone.
 pub const DIGEST_NOTIFY_LOCAL: NaiveTime = NaiveTime::from_hms_opt(8, 0, 0).expect("valid time");
@@ -22,6 +22,8 @@ pub struct DesiredEvent {
 #[derive(Debug, Clone, PartialEq)]
 pub enum EventTiming {
     AllDay(NaiveDate),
+    /// First day and the day after the last (Google's exclusive end), for an all-day event over several days.
+    AllDaySpan(NaiveDate, NaiveDate),
     Timed {
         start: DateTime<Utc>,
         end: DateTime<Utc>,
@@ -72,6 +74,52 @@ pub fn desired(
     events.extend(digest_events(&open, projects, zone));
     events.extend(block_events(blocks, issues, statuses, projects));
     events
+}
+
+/// Cairn events (not archived: `events::list` leaves those out). Naive local times become UTC in `tz`.
+/// An event has no reminder in Cairn, so none is written; no end means one hour; "shortcut: a time
+/// skipped by a clock change takes the zone's later reading.
+#[must_use]
+pub fn event_events(events: &[Event], tz: &str) -> Vec<DesiredEvent> {
+    let zone: Tz = tz.parse().unwrap_or(chrono_tz::UTC);
+    let utc = |t| {
+        zone.from_local_datetime(&t)
+            .earliest()
+            .or_else(|| zone.from_local_datetime(&t).latest())
+            .map_or_else(|| t.and_utc(), |z| z.with_timezone(&Utc))
+    };
+    events
+        .iter()
+        .map(|e| {
+            let day = e.starts_at.date();
+            let last = e.ends_at.map_or(day, |t| t.date().max(day));
+            let timing = match (e.all_day, last > day) {
+                (true, false) => EventTiming::AllDay(day),
+                (true, true) => EventTiming::AllDaySpan(day, last + Duration::days(1)),
+                (false, _) => {
+                    let start = utc(e.starts_at);
+                    let end = e.ends_at.map_or(start + Duration::hours(1), utc);
+                    EventTiming::Timed { start, end }
+                }
+            };
+            let description = [
+                e.place.as_ref().map(|p| format!("Place: {p}")),
+                Some(e.notes.clone()),
+            ]
+            .into_iter()
+            .flatten()
+            .filter(|t| !t.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+            DesiredEvent {
+                managed_key: format!("event:{}", e.id.0),
+                summary: e.title.clone(),
+                description,
+                timing,
+                reminder_minutes: None,
+            }
+        })
+        .collect()
 }
 
 fn is_open(issue: &Issue, statuses: &[Status]) -> bool {
@@ -234,6 +282,7 @@ pub fn plan(desired: &[DesiredEvent], existing: &[ManagedEvent]) -> Vec<EventOp>
 pub fn hash(event: &DesiredEvent) -> String {
     let timing = match &event.timing {
         EventTiming::AllDay(date) => format!("day {date}"),
+        EventTiming::AllDaySpan(a, b) => format!("days {a} {b}"),
         EventTiming::Timed { start, end } => {
             format!("timed {} {}", start.to_rfc3339(), end.to_rfc3339())
         }
@@ -534,6 +583,81 @@ mod tests {
     #[test]
     fn digest_reminder_is_none_until_probe() {
         assert_eq!(digest_reminder_minutes(), None);
+    }
+
+    fn cairn_event(all_day: bool, start: (u32, u32), end: Option<(u32, u32)>) -> Event {
+        let t = |(d, h): (u32, u32)| {
+            NaiveDate::from_ymd_opt(2026, 11, d)
+                .and_then(|x| x.and_hms_opt(h, 0, 0))
+                .expect("valid time")
+        };
+        Event {
+            id: taskapp_core::EventId(4),
+            title: "Dentist".into(),
+            starts_at: t(start),
+            ends_at: end.map(t),
+            all_day,
+            place: Some("Main St".into()),
+            notes: "Bring card".into(),
+            icon: None,
+            color: None,
+            archived: false,
+            issue_ids: vec![],
+        }
+    }
+
+    #[test]
+    fn timed_event_keeps_start_end_in_utc_without_popup() {
+        let e = &event_events(&[cairn_event(false, (21, 10), Some((21, 11)))], NY)[0];
+        assert_eq!(e.managed_key, "event:4");
+        assert_eq!(
+            e.timing,
+            EventTiming::Timed {
+                start: at(2026, 11, 21, 9),
+                end: at(2026, 11, 21, 10)
+            }
+        );
+        assert_eq!(e.reminder_minutes, None);
+        assert_eq!(e.description, "Place: Main St\nBring card");
+    }
+
+    #[test]
+    fn timed_event_without_end_lasts_an_hour() {
+        let e = &event_events(&[cairn_event(false, (21, 10), None)], NY)[0];
+        assert_eq!(
+            e.timing,
+            EventTiming::Timed {
+                start: at(2026, 11, 21, 9),
+                end: at(2026, 11, 21, 10)
+            }
+        );
+    }
+
+    #[test]
+    fn all_day_event_stays_all_day_single_or_span() {
+        let d = |n| NaiveDate::from_ymd_opt(2026, 11, n).expect("valid date");
+        let one = event_events(&[cairn_event(true, (21, 0), None)], NY);
+        assert_eq!(one[0].timing, EventTiming::AllDay(d(21)));
+        let span = event_events(&[cairn_event(true, (21, 0), Some((23, 0)))], NY);
+        assert_eq!(span[0].timing, EventTiming::AllDaySpan(d(21), d(24)));
+    }
+
+    #[test]
+    fn edited_event_updates_and_removed_event_deletes() {
+        let before = event_events(&[cairn_event(false, (21, 10), None)], NY);
+        let existing = [ManagedEvent {
+            google_event_id: "g1".into(),
+            managed_key: "event:4".into(),
+            last_synced_hash: hash(&before[0]),
+        }];
+        let moved = event_events(&[cairn_event(false, (22, 10), None)], NY);
+        assert!(matches!(plan(&moved, &existing)[0], EventOp::Update { .. }));
+        assert_eq!(
+            plan(&[], &existing),
+            vec![EventOp::Delete {
+                google_event_id: "g1".into()
+            }]
+        );
     }
 
     #[test]

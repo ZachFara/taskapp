@@ -300,7 +300,11 @@ belong to many events. Times are wall-clock times with no zone.
 - Undo covers create, edit, delete, link and unlink. The export writes one `events/<id>.yaml` per event and a rebuild
   restores it with its links.
 - CLI: `event list`, `event create`, `event link`. MCP: `list_events`, `create_event`, `link_event`.
-- Not built: writing events to Google Calendar, recurrence, reminders, and searching events.
+- Google Calendar: when Calendar sync is on, each event is also written to your Cairn calendar. A timed event keeps its
+  start and end (no end means one hour), an all-day event stays all-day (over several days if it has an end date).
+  Editing or deleting (or archiving) an event updates or removes it there. Cairn events have no reminder, so none is
+  written; the popup is only for tasks.
+- Not built: recurrence, reminders, and searching events.
 
 ## Points and insights
 
@@ -451,7 +455,12 @@ restoring the backup it wrote (`taskapp backup restore`).
 - **Google Calendar** (Settings > Calendar): "Connect Google Calendar", choose a calendar (use a dedicated one),
   turn on "Enable notifications". Sync is one way: the app writes events and overwrites manual edits to its own events.
   Needs your Google Cloud OAuth client and a Google login (setup steps in docs/gcal.md). Not verified against a real account.
-- The legend bar shows the sync state; a sync error appears there.
+- The legend bar shows the sync state; a sync error appears there. If Reminders access is off (a fresh build), it says
+  "Reminders access is off: press Authorize in Settings > Reminders".
+- **Sync now**: the command menu has "Sync now" (runs every sync step in the app). From the terminal,
+  `taskapp sync now [--helper PATH]` runs the Reminders import and the Google Calendar update once against the
+  database, because the CLI cannot reach the running app. The helper defaults to
+  `/Applications/taskapp.app/Contents/MacOS/reminders-helper`. Both steps do nothing when their setting is off.
 
 ## Settings
 

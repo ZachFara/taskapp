@@ -559,3 +559,42 @@ async fn token_exchange_sends_the_pkce_verifier_for_the_challenge() {
     );
     assert_eq!(expected.as_str(), *challenge.lock().expect("lock"));
 }
+
+#[tokio::test]
+async fn cairn_event_becomes_a_calendar_event() {
+    let db = db().await;
+    let start = (Utc::now() + Duration::days(2)).naive_utc();
+    let event = taskapp_core::events::create(
+        &db,
+        taskapp_core::EventInput {
+            title: "Dentist".into(),
+            starts_at: start,
+            ends_at: None,
+            all_day: false,
+            place: None,
+            notes: String::new(),
+            icon: None,
+            color: None,
+            archived: false,
+        },
+        ChangeSource::Ui,
+    )
+    .await
+    .expect("event");
+    let s = server().await;
+    mount_list(&s, &[]).await;
+    Mock::given(method("POST"))
+        .and(path(EVENTS))
+        .and(body_string_contains(format!(
+            "\"managed_key\":\"event:{}\"",
+            event.id.0
+        )))
+        .respond_with(stored("ge", "ee"))
+        .expect(1)
+        .mount(&s)
+        .await;
+    reconcile_with(&db, &google(&s), REFRESH)
+        .await
+        .expect("reconcile");
+    assert!(row_ids(&db).await.contains(&"ge".to_owned()));
+}

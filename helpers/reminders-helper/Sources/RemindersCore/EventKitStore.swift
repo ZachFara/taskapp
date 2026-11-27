@@ -9,6 +9,8 @@ public final class EventKitStore: ReminderStore {
         try await store.requestFullAccessToReminders()
     }
 
+    public var isAuthorized: Bool { EKEventStore.authorizationStatus(for: .reminder) == .fullAccess }
+
     public func lists() throws -> [ReminderList] {
         store.calendars(for: .reminder).map { ReminderList(id: $0.calendarIdentifier, title: $0.title) }
     }

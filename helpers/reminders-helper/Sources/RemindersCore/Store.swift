@@ -28,6 +28,8 @@ public struct HelperError: Error, Equatable {
 /// EventKit stays behind this so the JSON mapping can be tested with a fake.
 public protocol ReminderStore {
     func requestAccess() async throws -> Bool
+    /// Whether Reminders access is already granted; never prompts.
+    var isAuthorized: Bool { get }
     func lists() throws -> [ReminderList]
     /// Throws `HelperError` for an unknown list id.
     func reminders(inList id: String) async throws -> [RawReminder]

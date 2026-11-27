@@ -17,7 +17,8 @@ use taskapp_core::{
 
 use crate::{
     AttachmentCmd, Cmd, CommentCmd, CycleCmd, EventCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd,
-    PinCmd, ProjectCmd, PropertyCmd, RelationCmd, ScopeArgs, StatusCmd, TemplateCmd, ViewCmd,
+    PinCmd, ProjectCmd, PropertyCmd, RelationCmd, ScopeArgs, StatusCmd, SyncCmd, TemplateCmd,
+    ViewCmd,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
@@ -39,6 +40,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Event(cmd) => event(db, cmd).await,
         Cmd::Status(cmd) => status(db, cmd).await,
         Cmd::Attachment(cmd) => attachment(db, cmd).await,
+        Cmd::Sync(SyncCmd::Now { helper }) => sync_now(db, helper).await,
         cmd => run_group(db, dir, cmd).await,
     }
 }
@@ -66,7 +68,8 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Insights(_)
         | Cmd::Status(_)
         | Cmd::Attachment(_)
-        | Cmd::Event(_) => handled_in_run(),
+        | Cmd::Event(_)
+        | Cmd::Sync(_) => handled_in_run(),
         Cmd::History { key } => {
             let id = issue_id(db, &key).await?;
             val(history::list_for(db, "issue", &id.0.to_string()).await?)
@@ -744,4 +747,34 @@ async fn comment(db: &Db, cmd: CommentCmd) -> Result<Value> {
     let id = issue_id(db, &key).await?;
     let at = created_at.as_deref().map(timestamp).transpose()?;
     val(comments::add_comment(db, id, &body, at, source(migration)).await?)
+}
+
+const APP_HELPER: &str = "/Applications/taskapp.app/Contents/MacOS/reminders-helper";
+
+/// The app's own sync steps for Reminders and Google Calendar, once. The CLI cannot reach a running app,
+/// so it does the work itself; both steps do nothing when their setting is off.
+async fn sync_now(db: &Db, helper: Option<std::path::PathBuf>) -> Result<Value> {
+    let helper = helper.unwrap_or_else(|| APP_HELPER.into());
+    let tz: String = taskapp_core::settings::get(db, "timezone")
+        .await?
+        .unwrap_or_else(|| "UTC".into());
+    let zone: chrono_tz::Tz = tz
+        .parse()
+        .map_err(|_| Error::Invalid(format!("unknown time zone {tz}")))?;
+    let configured = taskapp_core::settings::get::<String>(db, "reminders_list_id")
+        .await?
+        .is_some_and(|l| !l.is_empty());
+    if configured && !helper.exists() {
+        return Err(Error::Invalid(format!(
+            "reminders helper not found at {}; pass --helper <path>",
+            helper.display()
+        )));
+    }
+    let today = Utc::now().with_timezone(&zone).date_naive();
+    let r = taskapp_reminders::import::import(db, &helper, today, &tz).await?;
+    let g = taskapp_gcal::reconcile::reconcile(db).await?;
+    Ok(json!({
+        "reminders": {"imported": r.imported, "skipped_duplicates": r.skipped_duplicates, "failed": r.failed},
+        "gcal": {"created": g.created, "updated": g.updated, "deleted": g.deleted},
+    }))
 }

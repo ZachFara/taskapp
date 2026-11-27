@@ -839,3 +839,41 @@ fn attachment_path_and_list_for_an_issue() {
     let missing = run(&db, &["attachment", "path", "99"]);
     assert!(!missing.status.success());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn sync_now_reports_missing_reminders_access_from_the_helper() {
+    use std::os::unix::fs::PermissionsExt;
+    let (d, db) = fresh();
+    {
+        let conn = taskapp_core::Db::open(&db).await.expect("open");
+        taskapp_core::settings::set(&conn, "reminders_list_id", &"L1")
+            .await
+            .expect("set");
+    }
+    let helper = d.path().join("helper");
+    std::fs::write(
+        &helper,
+        "#!/bin/sh\necho '{\"error\":\"Reminders access is off: press Authorize in Settings > Reminders\"}'\nexit 1\n",
+    )
+    .expect("script");
+    std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    let out = run(
+        &db,
+        &["sync", "now", "--helper", helper.to_str().expect("utf8")],
+    );
+    assert!(!out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("Reminders access is off: press Authorize"),
+        "{err}"
+    );
+    assert!(!err.contains("reminders helper:"), "{err}");
+}
+
+#[test]
+fn sync_now_with_nothing_configured_does_nothing() {
+    let (_d, db) = fresh();
+    let v = run_json(&db, &["sync", "now"]);
+    assert_eq!(v["reminders"]["imported"], 0);
+    assert_eq!(v["gcal"]["created"], 0);
+}
