@@ -952,8 +952,9 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       shiftDependents: async (moved) => shiftDependents(moved),
     },
     views: {
-      query: async (d) => query(d),
-      queryProjects: async (d) => queryProjects(d),
+      // Fresh copies through JSON, as the backend sends them: a view that reloads in place must see new objects to redraw.
+      query: async (d) => JSON.parse(JSON.stringify(query(d))),
+      queryProjects: async (d) => JSON.parse(JSON.stringify(queryProjects(d))),
       list: async () => views,
       stats: async (d) =>
         query(d).map((i) => {

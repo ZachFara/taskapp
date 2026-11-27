@@ -131,7 +131,7 @@ describe('walk views', { timeout: 25_000 }, () => {
       await page.locator('.cx-tip').first().waitFor({ timeout: 2500 });
       expect(await page.locator('.cx-tip').first().innerText()).toMatch(text);
     };
-    await tip(page.getByRole('button', { name: /^Sort/ }), /Sort/);
+    await tip(page.getByRole('button', { name: 'Sort', exact: true }), /Sort/);
     await tip(page.getByRole('button', { name: /^Display/ }), /Display/);
     await tip(page.getByRole('button', { name: /^Group/ }), /Group/);
     await tip(rows().first().getByRole('button', { name: /^Status/ }), /Status/);
