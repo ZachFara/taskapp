@@ -167,21 +167,18 @@ pub fn table(list: Value) -> Value {
     };
     rows.iter()
         .map(|d| {
-            let options = d["options"]
-                .as_array()
-                .map(|opts| {
-                    opts.iter()
-                        .map(|o| {
-                            format!(
-                                "{}) {}",
-                                o["key"].as_str().unwrap_or(""),
-                                o["label"].as_str().unwrap_or("")
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                        .join("; ")
-                })
-                .unwrap_or_default();
+            let options = d["options"].as_array().map_or_else(String::new, |opts| {
+                opts.iter()
+                    .map(|o| {
+                        format!(
+                            "{}) {}",
+                            o["key"].as_str().unwrap_or(""),
+                            o["label"].as_str().unwrap_or("")
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            });
             json!({
                 "id": d["id"],
                 "mode": d["mode"],
