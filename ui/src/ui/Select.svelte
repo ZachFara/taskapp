@@ -63,6 +63,8 @@
   }
   :global(.cx-select:hover:not([data-disabled])) { border-color: var(--muted); }
   :global(.cx-select[data-disabled]) { opacity: 0.55; }
+  /* Clicks land on the trigger itself: bits-ui reads the event target, so a child under the pointer changes its path. */
+  :global(.cx-select) :global(*) { pointer-events: none; }
   .v { flex: 1; text-align: left; }
   .v[data-empty] { color: var(--muted); }
   :global(.cx-listbox) { min-width: calc(var(--bits-select-anchor-width) / var(--ui-zoom, 1)); padding: var(--s-2); }

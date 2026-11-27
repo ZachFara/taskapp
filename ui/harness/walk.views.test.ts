@@ -361,4 +361,18 @@ describe('walk project', { timeout: 25_000 }, () => {
     await page.getByRole('tab', { name: 'Timeline' }).click();
     await pw(page.locator('[data-row^="project-"]').first()).toBeVisible();
   });
+
+  it('MIT-79 a Select opens from its centre as well as its arrow', async () => {
+    await open();
+    await page.goto(base + '/settings/calendar');
+    await page.getByRole('button', { name: 'Connect Google Calendar' }).click();
+    const trigger = page.getByRole('combobox', { name: 'Calendar' });
+    await pw(trigger).toBeVisible();
+    const box = await trigger.boundingBox();
+    // The centre must hit the trigger itself, not the label inside it, or bits-ui sees a different target than the arrow.
+    const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.classList.contains('cx-select') === true, [box!.x + box!.width / 2, box!.y + box!.height / 2]);
+    expect(hit).toBe(true);
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await pw(page.getByRole('option', { name: 'Primary' })).toBeVisible();
+  });
 });
