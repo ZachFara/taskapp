@@ -4,6 +4,7 @@ mod api;
 mod commands;
 mod decision;
 mod list;
+mod look;
 mod references;
 
 use std::path::{Path, PathBuf};
@@ -83,6 +84,10 @@ enum Cmd {
     /// Questions for the owner: raise one with options, read it, answer it.
     #[command(subcommand)]
     Decision(decision::DecisionCmd),
+    /// Icon names for `project set --icon`.
+    Icons,
+    /// Palette colors for `project set --color`.
+    Colors,
     /// Builds a new database from an export folder. Needs --db, which must not exist yet.
     Restore {
         #[arg(long, value_name = "DIR")]
@@ -407,22 +412,44 @@ enum ProjectCmd {
         #[arg(long, default_value = "gray")]
         color: String,
     },
-    /// Change a project's status, priority, labels or a custom property value.
+    /// Change a project's name, look, dates, status, priority, labels or a custom property value.
     Set {
         slug: String,
-        /// Project status name.
-        #[arg(long)]
-        status: Option<String>,
-        /// 0 none, 1 urgent, 2 high, 3 medium, 4 low.
-        #[arg(long)]
-        priority: Option<u8>,
-        /// Label name; repeat for several. Replaces the project's labels.
-        #[arg(long = "label")]
-        labels: Vec<String>,
-        /// Property key and JSON value, e.g. `--property owner '"sam"'`; `null` clears.
-        #[arg(long, num_args = 2, value_names = ["KEY", "JSON"])]
-        property: Vec<String>,
+        #[command(flatten)]
+        edit: ProjectEdit,
     },
+}
+
+#[derive(clap::Args)]
+struct ProjectEdit {
+    /// Project status name.
+    #[arg(long)]
+    status: Option<String>,
+    /// 0 none, 1 urgent, 2 high, 3 medium, 4 low.
+    #[arg(long)]
+    priority: Option<u8>,
+    /// Label name; repeat for several. Replaces the project's labels.
+    #[arg(long = "label")]
+    labels: Vec<String>,
+    /// Property key and JSON value, e.g. `--property owner '"sam"'`; `null` clears.
+    #[arg(long, num_args = 2, value_names = ["KEY", "JSON"])]
+    property: Vec<String>,
+    /// Bare icon name from `taskapp icons`.
+    #[arg(long)]
+    icon: Option<String>,
+    /// Palette color from `taskapp colors`.
+    #[arg(long)]
+    color: Option<String>,
+    #[arg(long)]
+    name: Option<String>,
+    #[arg(long)]
+    description: Option<String>,
+    /// YYYY-MM-DD.
+    #[arg(long)]
+    start: Option<String>,
+    /// YYYY-MM-DD.
+    #[arg(long)]
+    target: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -664,12 +691,13 @@ async fn run(cli: Cli) -> Result<()> {
             _ => words.push(a),
         }
     }
+    let list = matches!(cli.cmd, Cmd::Decision(decision::DecisionCmd::List { .. }));
     let label = match &cli.cmd {
         Cmd::Api(ApiCmd::Call { name, .. }) => format!("api call {name}"),
         _ => words.join(" "),
     };
     let value = history::step(&label, commands::run(&db, &dir.join("backups"), cli.cmd)).await?;
-    print_value(&value, cli.json);
+    print_value(&view(value, list, cli.json), cli.json);
     Ok(())
 }
 
@@ -716,6 +744,15 @@ fn report(err: &Error, json: bool) {
         );
     } else {
         eprintln!("error: {err}");
+    }
+}
+
+/// `decision list` shows its compact table unless --json; other output is unchanged.
+fn view(value: Value, list: bool, json: bool) -> Value {
+    if list && !json {
+        decision::table(value)
+    } else {
+        value
     }
 }
 

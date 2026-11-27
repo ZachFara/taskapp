@@ -975,3 +975,136 @@ fn decision_withdraw() {
         1
     );
 }
+
+#[test]
+fn decision_list_table_shows_options_as_labels() {
+    let (_d, db) = fresh();
+    raise(&db);
+    let out = run(&db, &["decision", "list", "--status", "all"]);
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let header = stdout.lines().next().expect("header");
+    for col in [
+        "id",
+        "mode",
+        "status",
+        "question",
+        "options",
+        "recommendation",
+    ] {
+        assert!(header.contains(col), "header was: {header}");
+    }
+    assert!(
+        stdout.contains("a) Postgres; b) SQLite"),
+        "stdout was: {stdout}"
+    );
+    assert!(
+        !stdout.contains('{'),
+        "options must not be raw JSON: {stdout}"
+    );
+    assert!(
+        !stdout.contains("heavier"),
+        "trade-offs stay in get: {stdout}"
+    );
+}
+
+#[test]
+fn decision_list_json_keeps_full_detail() {
+    let (_d, db) = fresh();
+    raise(&db);
+    let listed = run_json(&db, &["decision", "list", "--status", "all"]);
+    assert_eq!(listed[0]["options"][0]["tradeoff"], "heavier");
+}
+
+#[test]
+fn project_set_changes_look_name_and_dates() {
+    let (_d, db) = fresh();
+    run_json(&db, &["project", "create", "web", "Website"]);
+    let p = run_json(
+        &db,
+        &[
+            "project",
+            "set",
+            "web",
+            "--icon",
+            "folder",
+            "--color",
+            "teal",
+            "--name",
+            "Web",
+            "--start",
+            "2026-12-01",
+            "--target",
+            "2026-12-31",
+            "--description",
+            "The site",
+        ],
+    );
+    assert_eq!(p["icon"], "icon:folder");
+    assert_eq!(p["color"], "teal");
+    assert_eq!(p["name"], "Web");
+    assert_eq!(p["start_date"], "2026-12-01");
+    assert_eq!(p["target_date"], "2026-12-31");
+    assert_eq!(p["description"], "The site");
+}
+
+#[test]
+fn project_set_rejects_unknown_icon_and_color_with_choices() {
+    let (_d, db) = fresh();
+    run_json(&db, &["project", "create", "web", "Website"]);
+    let bad_icon = run(&db, &["project", "set", "web", "--icon", "nope"]);
+    assert!(!bad_icon.status.success());
+    let err = String::from_utf8_lossy(&bad_icon.stderr).to_string();
+    assert!(err.contains("folder-open"), "stderr was: {err}");
+    let bad_color = run(&db, &["project", "set", "web", "--color", "teal2"]);
+    assert!(!bad_color.status.success());
+    let err = String::from_utf8_lossy(&bad_color.stderr).to_string();
+    assert!(err.contains("pink"), "stderr was: {err}");
+    let bad_date = run(&db, &["project", "set", "web", "--start", "1 Dec"]);
+    assert!(!bad_date.status.success());
+}
+
+/// Icon ids the app offers, read from the UI's own list so the CLI cannot drift from it.
+fn app_icon_ids() -> Vec<String> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/src/ui/icons.ts");
+    let text = std::fs::read_to_string(&path).expect("icons.ts");
+    text.lines()
+        .filter(|l| l.starts_with("  ") && !l.starts_with("  //") && l.contains(": `"))
+        .map(|l| {
+            l.trim()
+                .split(':')
+                .next()
+                .unwrap_or_default()
+                .trim_matches('\'')
+                .to_string()
+        })
+        .collect()
+}
+
+#[test]
+fn icons_lists_the_app_icon_ids() {
+    let (_d, db) = fresh();
+    let out = run(&db, &["icons"]);
+    assert!(out.status.success());
+    let listed: Vec<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(listed, app_icon_ids());
+}
+
+#[test]
+fn colors_lists_the_palette_keys() {
+    let (_d, db) = fresh();
+    let out = run(&db, &["colors"]);
+    assert!(out.status.success());
+    let listed: Vec<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let expected = [
+        "gray", "red", "orange", "amber", "yellow", "green", "teal", "cyan", "blue", "indigo",
+        "purple", "pink",
+    ];
+    assert_eq!(listed, expected);
+}

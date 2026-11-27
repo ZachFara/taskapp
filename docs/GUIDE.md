@@ -282,7 +282,7 @@ filter chips, Group, Sort and Display.
   menu on a project page: "Set project status", "Set project priority", "Add or remove project labels" and "Set project
   property" (Select and Checkbox only). The Projects page shows Status, Priority, Labels and a column per project
   property, and groups by status or priority, sorts, and filters by status, priority or label. The sidebar shows each
-  project's status glyph. CLI: `project statuses`, `project set <slug> --status --priority --label --property`; MCP:
+  project's status glyph. CLI: `project statuses`, `project set <slug> --status --priority --label --property`, plus `--name --description --icon --color --start --target` (`taskapp icons` and `taskapp colors` list the choices); MCP:
   `list_project_statuses`, and `update_project` takes `status_id`, `priority`, `label_ids`, `properties`. Export writes
   `project_statuses.yaml` and the fields into each project file.
 - **Milestones.** On a project page, "Milestones": add a name and a date. An issue is assigned a milestone in the
@@ -821,7 +821,7 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `event create <title> --start T [--end T --all-day --place --notes]` | Create an event (`T` is `YYYY-MM-DDTHH:MM` or a date). | `taskapp event create Demo --start 2026-12-10T09:30` |
 | `event link <id> <key>` | Link an event to an issue. | `taskapp event link 1 ABC-1` |
 | `decision create <question> [--option KEY="label: trade-off" --recommend KEY --mode blocking\|assume --context --source --external-id --issue KEY]` | Raise a decision for the owner. | `taskapp decision create "Ship now?" --option y="Yes: fast" --option n="No: safe" --recommend n` |
-| `decision list [--status open]` / `decision get <id>` | Read decisions (`open`, `answered`, `withdrawn`, `all`). | `taskapp --json decision list` |
+| `decision list [--status open]` / `decision get <id>` | Read decisions (`open`, `answered`, `withdrawn`, `all`). The table shows options as `a) Label; b) Label`; `get` and `--json` give the trade-offs. | `taskapp decision list --status all` |
 | `decision answer <id> (--option KEY \| --text TEXT) [--note]` / `decision withdraw <id>` | Answer or close an open decision. | `taskapp decision answer 1 --option n` |
 | `issue search <text> [--limit 20]` | Full-text search (archived issues are left out). | `taskapp issue search rent` |
 | `view query [--def JSON \| --id N]` | Run an ad hoc view definition or a saved view. | `taskapp view query --id 1` |
@@ -837,6 +837,8 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `property delete <key>` | Delete the property and its values; snapshots first. | `taskapp property delete area` |
 | `property set <issue> <key> <value>` | Set a value (JSON; `null` clears). | `taskapp property set ABC-1 area '"web"'` |
 | `project list` / `project create <slug> <name> [--icon --color]` | List or create projects. | `taskapp project create web Website` |
+| `project set <slug> [--name --description --icon --color --start --target --status --priority --label --property]` | Change a project's name, look (`--icon` from `icons`, `--color` from `colors`), dates (`YYYY-MM-DD`) or other fields. | `taskapp project set web --icon folder --color teal --start 2026-12-01` |
+| `icons` / `colors` | List the icon names and palette colors `project set` accepts. | `taskapp colors` |
 | `cycle list` / `cycle create --start --end [--name --color --icon]` | List or create cycles. | `taskapp cycle create --start 2026-12-01 --end 2026-12-14` |
 | `label list` / `label create <name> <color> [--icon]` | List or create labels. | `taskapp label create bug red` |
 | `comment add <key> <body>` | Comment on an issue. | `taskapp comment add ABC-1 "Looks good"` |

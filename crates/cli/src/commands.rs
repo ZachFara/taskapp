@@ -17,8 +17,8 @@ use taskapp_core::{
 
 use crate::{
     AttachmentCmd, Cmd, CommentCmd, CycleCmd, EventCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd,
-    PinCmd, ProjectCmd, PropertyCmd, RelationCmd, ScopeArgs, StatusCmd, SyncCmd, TemplateCmd,
-    ViewCmd,
+    PinCmd, ProjectCmd, ProjectEdit, PropertyCmd, RelationCmd, ScopeArgs, StatusCmd, SyncCmd,
+    TemplateCmd, ViewCmd, look,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
@@ -42,6 +42,13 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Attachment(cmd) => attachment(db, cmd).await,
         Cmd::Sync(SyncCmd::Now { helper }) => sync_now(db, helper).await,
         Cmd::Decision(cmd) => crate::decision::run(db, cmd).await,
+        Cmd::Icons => Ok(json!(look::ICONS)),
+        Cmd::Colors => Ok(json!(
+            taskapp_core::palette::COLORS
+                .iter()
+                .map(|(key, _)| *key)
+                .collect::<Vec<_>>()
+        )),
         cmd => run_group(db, dir, cmd).await,
     }
 }
@@ -71,6 +78,8 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Attachment(_)
         | Cmd::Event(_)
         | Cmd::Decision(_)
+        | Cmd::Icons
+        | Cmd::Colors
         | Cmd::Sync(_) => handled_in_run(),
         Cmd::History { key } => {
             let id = issue_id(db, &key).await?;
@@ -393,19 +402,43 @@ fn applies_to_of(s: &str) -> Result<taskapp_core::PropertyAppliesTo> {
     }
 }
 
-async fn project_set(
-    db: &Db,
-    slug: &str,
-    status: Option<String>,
-    priority: Option<u8>,
-    label_names: &[String],
-    property: &[String],
-) -> Result<Value> {
+/// The name, description, look and dates `project set` takes; each one is kept unless given.
+fn set_details(p: &mut taskapp_core::Project, edit: &ProjectEdit) -> Result<()> {
+    if let Some(name) = &edit.name {
+        p.name.clone_from(name);
+    }
+    if let Some(description) = &edit.description {
+        p.description = Some(description.clone());
+    }
+    if let Some(icon) = &edit.icon {
+        p.icon = Some(look::icon(icon)?);
+    }
+    if let Some(color) = &edit.color {
+        p.color = Some(look::color(color)?);
+    }
+    if let Some(start) = &edit.start {
+        p.start_date = Some(date(start)?);
+    }
+    if let Some(target) = &edit.target {
+        p.target_date = Some(date(target)?);
+    }
+    Ok(())
+}
+
+async fn project_set(db: &Db, slug: &str, edit: ProjectEdit) -> Result<Value> {
     let mut p = projects::list(db)
         .await?
         .into_iter()
         .find(|p| p.slug == slug)
         .ok_or_else(|| Error::NotFound(format!("project {slug}")))?;
+    set_details(&mut p, &edit)?;
+    let ProjectEdit {
+        status,
+        priority,
+        labels: label_names,
+        property,
+        ..
+    } = edit;
     if let Some(name) = status {
         let all = project_statuses::list(db).await?;
         let found = all.iter().find(|s| s.name.eq_ignore_ascii_case(&name));
@@ -449,13 +482,7 @@ async fn project(db: &Db, cmd: ProjectCmd) -> Result<Value> {
             category,
             color,
         } => val(project_statuses::create(db, &name, named(&category)?, &color, None, SRC).await?),
-        ProjectCmd::Set {
-            slug,
-            status,
-            priority,
-            labels,
-            property,
-        } => project_set(db, &slug, status, priority, &labels, &property).await,
+        ProjectCmd::Set { slug, edit } => project_set(db, &slug, edit).await,
         ProjectCmd::Create {
             slug,
             name,

@@ -159,3 +159,38 @@ pub async fn run(db: &Db, cmd: DecisionCmd) -> Result<Value> {
         }
     }
 }
+
+/// The table view of `decision list`: options as `a) Label; b) Label`. Trade-offs stay in `decision get`.
+pub fn table(list: Value) -> Value {
+    let Value::Array(rows) = &list else {
+        return list;
+    };
+    rows.iter()
+        .map(|d| {
+            let options = d["options"]
+                .as_array()
+                .map(|opts| {
+                    opts.iter()
+                        .map(|o| {
+                            format!(
+                                "{}) {}",
+                                o["key"].as_str().unwrap_or(""),
+                                o["label"].as_str().unwrap_or("")
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                })
+                .unwrap_or_default();
+            json!({
+                "id": d["id"],
+                "mode": d["mode"],
+                "status": d["status"],
+                "question": d["question"],
+                "options": options,
+                "recommendation": d["recommendation"],
+            })
+        })
+        .collect::<Vec<_>>()
+        .into()
+}
