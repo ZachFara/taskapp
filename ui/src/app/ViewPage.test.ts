@@ -187,6 +187,15 @@ describe('ViewPage', () => {
     await waitFor(async () => expect((await saved()).def.layout).toBe('Board'), { timeout: 2000 });
   });
 
+  it('switching_layout_makes_no_undo_step', async () => {
+    const user = userEvent.setup();
+    await open();
+    const before = (await mock.history.undoStatus()).undo;
+    await user.click(screen.getByRole('tab', { name: /Board/ }));
+    await waitFor(async () => expect((await saved()).def.layout).toBe('Board'));
+    expect((await mock.history.undoStatus()).undo).toBe(before);
+  });
+
   it('v_then_a_letter_switches_layout', async () => {
     const { container } = await open();
     const ctx = { route: '/view/1', selection: [], focusedIssueId: null, openIssueId: null, api: mock, navigate: () => {} };

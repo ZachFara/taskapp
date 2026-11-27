@@ -343,3 +343,37 @@ async fn due_date_filter_sees_timed_due_issues() -> R {
     assert_eq!(got, ["dated", "timed"]);
     Ok(())
 }
+
+#[tokio::test]
+async fn picking_a_layout_is_kept_but_is_not_an_undo_step() -> R {
+    let db = Db::open_in_memory().await?;
+    let look = taskapp_core::palette::Look::default;
+    let v = views::save(&db, None, "Mine", def(None), look(), ChangeSource::Ui).await?;
+    let filtered = def(Some(cond(
+        FieldRef::Fixed(FixedField::Priority),
+        Op::Eq,
+        json!(1),
+    )));
+    taskapp_core::history::step("Filter", async {
+        views::save(&db, Some(v.id), "Mine", filtered, look(), ChangeSource::Ui).await
+    })
+    .await?;
+    taskapp_core::history::step("Layout", views::set_layout(&db, v.id, Layout::Board)).await?;
+    let kept = views::list(&db)
+        .await?
+        .into_iter()
+        .find(|x| x.id == v.id)
+        .ok_or("view")?;
+    assert_eq!(kept.def.layout, Layout::Board);
+    let undo = taskapp_core::undo::undo_status(&db).await?.undo;
+    assert_eq!(
+        undo.as_deref(),
+        Some("Filter"),
+        "the filter edit is still the newest step"
+    );
+    assert!(matches!(
+        views::set_layout(&db, taskapp_core::ViewId(9999), Layout::List).await,
+        Err(Error::NotFound(_))
+    ));
+    Ok(())
+}

@@ -967,6 +967,12 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         }),
       save: (id, name, d, icon, color) => saveView(id, name, d, icon, color, 'issue'),
       saveProject: (id, name, d, icon, color) => saveView(id, name, d, icon, color, 'project'),
+      // Not in `mutating` below: picking a tab makes no undo step, as in the backend.
+      setLayout: async (id, layout) => {
+        const v = find(views, id, 'view');
+        v.def = { ...v.def, layout };
+        return null;
+      },
       createFromTemplate: async (templateId, name) => {
         const t = find(viewTemplates, templateId, 'view template');
         const v = { id: next(views), name: name ?? t.name, entity: 'issue' as const, def: withDisplay(t.def), position: Math.max(-1, ...views.map((x) => x.position)) + 1, icon: t.icon, color: t.color, template_id: t.id, folder_id: null };

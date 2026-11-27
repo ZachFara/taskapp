@@ -52,8 +52,8 @@ export function httpApi(base: string = import.meta.env.VITE_API_URL ?? 'http://1
   }));
 }
 
-// Reads never change history; undo and redo show their own toast, so a second one would overwrite it.
-const READ = /^(get|list|kindsList|statusesList|query|search|status(?![a-z])|progress|children|parse|plan|for|bars|criticalPath|between|undoStatus|items$|stats$|velocity$)/;
+// Reads (and a layout pick) never change history; undo and redo show their own toast, so a second one would overwrite it.
+const READ = /^(get|list|kindsList|statusesList|query|search|status(?![a-z])|progress|children|parse|plan|for|bars|criticalPath|between|undoStatus|items$|stats$|velocity$|setLayout$)/;
 const watched = new WeakSet<Api>();
 
 /** Makes every write tell the app (`history:wrote`) once it succeeds, so the undo toast can name the step. Wraps in place. */
