@@ -507,7 +507,7 @@
                       <Checkbox label={`${col.label} for ${issue.key}`} bind:checked={() => raw(issue, col.ref) === true, (v) => void save(issue, col, v)} />
                     {:else}
                       <span class="due" data-overdue={col.ref.Fixed === 'DueDate' && isOverdue(issue, statuses.find((s) => s.id === issue.status_id)?.category, tz) ? '' : undefined}>
-                        <FieldValue field={col.ref} {issue} {ctx} />
+                        <FieldValue field={col.ref} {issue} {ctx} all={view.def.wrap === 'on'} />
                       </span>
                     {/if}
                   </td>

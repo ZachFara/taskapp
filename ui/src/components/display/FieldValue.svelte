@@ -12,7 +12,8 @@
   import { paletteKey, type Ctx } from './types';
 
   // `named` prefixes bare custom values (a number or date has no meaning without its field) where there is no column header.
-  let { field, issue, ctx, named = false }: { field: FieldRef; issue: Issue; ctx: Ctx; named?: boolean } = $props();
+  // `all` shows every label (a view with Wrap on) instead of two and a count.
+  let { field, issue, ctx, named = false, all = false }: { field: FieldRef; issue: Issue; ctx: Ctx; named?: boolean; all?: boolean } = $props();
 
   const day = (iso: string | null) => (iso ? dayText(iso.slice(0, 10)) : '');
   const estimate = (m: number | null) => (m === null ? '' : m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`);
@@ -51,9 +52,10 @@
   <span class="with"><StatusGlyph category={status?.category ?? 'Backlog'} icon={status?.icon} color={status?.color} label={status?.name ?? 'Unknown'} /><span class="text">{status?.name}</span></span>
 {:else if field.Fixed === 'Label'}
   {@const labels = issue.label_ids.flatMap((id) => ctx.labels.find((l) => l.id === id) ?? [])}
-  <span class="chips">
-    {#each labels.slice(0, 2) as l (l.id)}<Pill color={l.color}>{l.name}</Pill>{/each}
-    {#if labels.length > 2}<span class="muted">+{labels.length - 2}</span>{/if}
+  {@const max = all ? labels.length : 2}
+  <span class="chips" class:all>
+    {#each labels.slice(0, max) as l (l.id)}<Pill color={l.color}>{l.name}</Pill>{/each}
+    {#if labels.length > max}<span class="muted">+{labels.length - max}</span>{/if}
   </span>
 {:else if field.Fixed === 'Project'}
   {@const project = ctx.projects.find((p) => p.id === issue.project_id)}
@@ -97,6 +99,7 @@
   .lbl { margin-right: var(--s-2); }
   .muted { color: var(--muted); }
   .with, .chips { display: flex; align-items: center; gap: var(--s-3); min-width: 0; overflow: hidden; }
+  .chips.all { flex-wrap: wrap; overflow: visible; }
   .with { color: var(--muted); }
   .check { display: inline-flex; color: var(--accent); }
   .url { display: inline-flex; color: var(--accent); }

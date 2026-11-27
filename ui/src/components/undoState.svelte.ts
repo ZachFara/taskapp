@@ -14,7 +14,9 @@ let nextId = 0;
 
 export function say(msg: UndoMsg, ms = 6_000) {
   const id = ++nextId;
-  undoToast.items = [...undoToast.items, { ...msg, id }].slice(-3);
+  // One write can be announced from several places; the same message replaces its copy instead of stacking.
+  const others = undoToast.items.filter((m) => m.label !== msg.label || m.tone !== msg.tone);
+  undoToast.items = [...others, { ...msg, id }].slice(-3);
   setTimeout(() => dismiss(id), ms);
 }
 

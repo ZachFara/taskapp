@@ -440,7 +440,7 @@
             </span>
             {#each cells as { f, key, right } (key)}
               <span class="cell" data-field={key} data-right={right ? '' : undefined} data-overdue={f.Fixed === 'DueDate' && overdue(i) ? '' : undefined}>
-                <FieldValue field={f} issue={i} {ctx} />
+                <FieldValue field={f} issue={i} {ctx} all={wrap} />
               </span>
             {/each}
             <!-- shortcut: only the hovered or focused row renders its actions (a tooltip per row costs the 1000-row budget) -->
