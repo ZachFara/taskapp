@@ -5,6 +5,7 @@ mod commands;
 mod decision;
 mod list;
 mod look;
+mod metrics;
 mod references;
 
 use std::path::{Path, PathBuf};
@@ -67,6 +68,8 @@ enum Cmd {
     Attachment(AttachmentCmd),
     #[command(subcommand)]
     Template(TemplateCmd),
+    /// Throughput, lead and cycle time, work in progress and breakdowns, rebuilt from history.
+    Metrics(metrics::MetricsArgs),
     /// Progress and velocity over time, rebuilt from history.
     #[command(subcommand)]
     Insights(InsightsCmd),
@@ -683,15 +686,7 @@ async fn run(cli: Cli) -> Result<()> {
         print_value(&json!({"restored": to, "from": from}), cli.json);
         return Ok(());
     }
-    let path = match cli.db {
-        Some(path) => path,
-        None => default_db_path()?,
-    };
-    let dir = path
-        .parent()
-        .map_or_else(|| PathBuf::from("."), PathBuf::from);
-    std::fs::create_dir_all(&dir)?;
-    let db = Db::open(&path).await?;
+    let (db, dir) = open(cli.db).await?;
     // Same folder the MCP server and the app list and prune.
     // One invocation is one undoable step, labelled with the command line minus the global flags.
     let mut args = std::env::args().skip(1);
@@ -708,9 +703,24 @@ async fn run(cli: Cli) -> Result<()> {
         Cmd::Api(ApiCmd::Call { name, .. }) => format!("api call {name}"),
         _ => words.join(" "),
     };
+    if let Cmd::Metrics(args) = &cli.cmd {
+        return metrics::print(&db, args, cli.json).await;
+    }
     let value = history::step(&label, commands::run(&db, &dir.join("backups"), cli.cmd)).await?;
     print_value(&view(value, list, cli.json), cli.json);
     Ok(())
+}
+
+async fn open(path: Option<PathBuf>) -> Result<(Db, PathBuf)> {
+    let path = match path {
+        Some(path) => path,
+        None => default_db_path()?,
+    };
+    let dir = path
+        .parent()
+        .map_or_else(|| PathBuf::from("."), PathBuf::from);
+    std::fs::create_dir_all(&dir)?;
+    Ok((Db::open(&path).await?, dir))
 }
 
 async fn backup_cmd(cmd: &BackupCmd, db: Option<&Path>) -> Result<Value> {

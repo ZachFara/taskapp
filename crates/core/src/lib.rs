@@ -20,6 +20,7 @@ pub mod import;
 pub mod insights;
 pub mod issues;
 pub mod labels;
+pub mod metrics;
 pub mod palette;
 pub mod pins;
 pub mod project_statuses;

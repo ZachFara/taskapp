@@ -371,6 +371,18 @@ hide cards"). Settings > General > Dashboard turns the whole page off; it is on 
 - **Progress charts** switch (Settings > General): burn-ups on project and cycle pages, sparklines on past cycles.
 - CLI: `insights progress` and `insights velocity`; MCP: `insights_progress`, `insights_velocity`.
 
+### Metrics
+Delivery numbers for a range of days or one cycle, rebuilt from the change history (nothing is stored). The
+registry command is `metrics_for` (query: scope Range or Cycle, bucket Day, Week or Month, optional filter, measure
+`count` or `points`); the CLI is `taskapp metrics`. Per bucket: issues created, completed (and their points), scope and
+done so far, and work in progress. Over the whole range: lead time (created to done) and cycle time (first move into a
+Started status to done) as p50 and p85 calendar days in the workspace time zone, work in progress now, completed per
+label and per source (who made and who finished the issue: Ui, Cli, Agent, Migration), and the points and count of
+the last six finished cycles. Only Done counts as finished; archived and canceled issues are left out. Issues without
+a Started move (including Linear imports, which have no history) have a lead time but no cycle time. `thin` is true
+when fewer than five issues finished in the range: read the numbers as anecdotes. With a cycle, only its members are
+counted; velocity always looks across cycles.
+
 ## Custom properties
 
 Your own fields on issues, on projects, or on both (or, for issues, just one project's). Kinds: Text, Number, Date, Select, MultiSelect, Checkbox, Url,
@@ -875,6 +887,7 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `template apply <id> [title]` | Create the issue and its sub-issues. | `taskapp template apply 1 "Login fails"` |
 | `insights progress (--project N \| --cycle N \| --view N) [--measure points\|count\|time --from --to]` | Per-day scope, started, completed. | `taskapp insights progress --project 1 --measure count` |
 | `insights velocity (--project N \| --cycle N \| --view N) [--measure --periods 6]` | Completed per cycle or week. | `taskapp insights velocity --cycle 1` |
+| `metrics [--range today\|week\|month\|quarter\|year\|FROM..TO \| --cycle NAME] [--project NAME --label NAME --points --json]` | Throughput, lead and cycle time, WIP, by label and source, velocity. Ranges end today; buckets are days up to 31 days, weeks up to about six months, then months. | `taskapp metrics --range month --label bug` |
 | `history <key>` | Change history of an issue. | `taskapp history ABC-1` |
 | `undo` / `redo` | Undo or redo the newest step. | `taskapp undo` |
 | `backup list --dir <dir>` | List backups in a folder. | `taskapp backup list --dir ~/Backups/cairn` |

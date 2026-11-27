@@ -261,3 +261,18 @@ async fn attachments_round_trip_and_leave_no_undo_step() -> R {
     assert_eq!(undo["undo"], json!(null), "{undo}");
     Ok(())
 }
+
+#[tokio::test]
+async fn metrics_for_takes_the_wire_shape() -> R {
+    let s = state().await;
+    let query = json!({"scope": {"Range": {"from": "2026-01-01", "to": "2026-01-02"}},
+        "bucket": "Day", "filter": null, "measure": "count"});
+    let out = dispatch(&s, "metrics_for", json!({ "query": query })).await?;
+    assert_eq!(out["buckets"].as_array().map(Vec::len), Some(2));
+    assert_eq!(
+        out["lead_time"],
+        json!({"p50_days": null, "p85_days": null, "n": 0})
+    );
+    assert_eq!(out["thin"], true);
+    Ok(())
+}

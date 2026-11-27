@@ -4,7 +4,7 @@ import { planCsv, projectSlug } from './api.mock.import';
 import { FIELDS } from './issueFields';
 import { parseQuickadd } from './api.mock.quickadd';
 import * as insights from './api.mock.insights';
-import { metricsFor as metricsMock } from './api.mock.metrics'; // TEMPORARY (DASH): replace with the engine builder's metrics.for
+import { metrics } from './api.mock.metrics';
 import { stepLabel } from './api.mock.stepLabel';
 import { byStatusOrder, flowDefaults } from './statusOrder';
 import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
@@ -42,7 +42,6 @@ export type MockSeed = {
 export type Workspace = { setup_done: boolean; name: string | null; key: string; timezone: string };
 /** The workspace commands are built on the backend in parallel and are not in the generated bindings yet. */
 export type MockApi = Api & {
-  metrics: { for: (q: import('../components/dashboard/metrics').MetricsQuery) => Promise<import('../components/dashboard/metrics').Metrics> };
   workspace: { status: () => Promise<Workspace>; setup: (name: string, key: string, timezone: string | null) => Promise<Workspace> };
 };
 
@@ -1060,12 +1059,6 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return null;
       },
     },
-    metrics: {
-      for: async (q) => {
-        const ids = new Set(query({ filter: q.filter, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false }).map((i) => i.id));
-        return metricsMock(q, { issues: s.issues, statuses: s.statuses, changes, cycles, tz: workspace.timezone, match: (i) => ids.has(i.id) });
-      },
-    },
     insights: {
       progress: async (scope, measure, from, to) => {
         const { tls, range } = scoped(scope, measure);
@@ -1083,6 +1076,9 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           : insights.weekSpans(now, periods);
         return insights.velocity(tls, spans);
       },
+    },
+    metrics: {
+      for: async (q) => metrics(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, tz: workspace.timezone, today: zoneToday() }, fail),
     },
     search: {
       // shortcut: results come in id order; the backend ranks by bm25. Upgrade when a screen depends on relevance order.
@@ -1236,7 +1232,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           if (!cycles.some((x) => x.start_date === c.start_date)) cycles.push({ id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name: c.name, start_date: c.start_date, end_date: c.end_date, icon: null, color: null });
         }
         for (const d of plan.property_defs ?? []) if (!s.propertyDefs.some((x) => x.key === d.key)) s.propertyDefs.push({ ...d, position: Math.max(-1, ...s.propertyDefs.map((x) => x.position)) + 1 });
-        const ids = new Map<string, number>();
+        const [ids, mark] = [new Map<string, number>(), changes.length];
         const warnings: string[] = [];
         const known = (ext: string) => ids.get(ext) ?? importLog.find((x) => x.external_id === ext)?.issue_id;
         for (const i of plan.issues ?? []) {
@@ -1264,6 +1260,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           if (from === undefined || to === undefined) warnings.push(`relation ${r.from} -> ${r.to} skipped: an issue was not imported`);
           else if (!relations.some((x) => x.from === from && x.to === to && x.kind === kinds.resolve(r.kind))) relations.push({ from, to, kind: kinds.resolve(r.kind) });
         }
+        // Like the real import, every row it wrote says so (metrics split by source).
+        for (const c of changes.slice(mark)) c.source = 'Migration';
         return { created: ids.size, warnings };
       },
     },

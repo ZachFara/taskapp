@@ -809,6 +809,13 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	metricsFor: (query: MetricsQuery, options?: InvokeOptions) => __TAURI_INVOKE<Metrics>("metrics_for", { query }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	searchSearch: (text: string, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<Issue[]>("search_search", { text, limit }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1031,6 +1038,8 @@ export type Bar = {
 	from_estimate: boolean,
 };
 
+export type Bucket = "Day" | "Week" | "Month";
+
 /**  One edit for a whole selection: the patch, labels to add or remove, and a relation from each issue to `add_relation.1`. */
 export type BulkPatch = {
 	patch?: IssuePatch,
@@ -1076,6 +1085,21 @@ export type Cycle = {
 };
 
 export type CycleId = number;
+
+export type CycleTime = {
+	p50_days: number | null,
+	p85_days: number | null,
+	n: number,
+	points: CycleTimePoint[],
+};
+
+export type CycleTimePoint = {
+	issue_id: IssueId,
+	key: string,
+	title: string,
+	completed: string,
+	days: number | null,
+};
 
 /**  A question for the owner. `answer` is an option key, or free text when the options did not fit. */
 export type Decision = {
@@ -1290,12 +1314,67 @@ export type Label = {
 	icon: string | null,
 };
 
+export type LabelBreakdown = {
+	label_id: number | null,
+	name: string,
+	completed: number,
+	points: number | null,
+};
+
 export type LabelId = number;
 
 export type Layout = "List" | "Table" | "Board" | "Gantt" | "Calendar";
 
+/**  Calendar days in the workspace zone, nearest-rank percentiles; `None` without a finished issue. */
+export type LeadTime = {
+	p50_days: number | null,
+	p85_days: number | null,
+	n: number,
+};
+
 /**  What is summed: story points, issue count, or estimated time (minutes). */
 export type Measure = "points" | "count" | "time";
+
+export type Metrics = {
+	from: string,
+	to: string,
+	bucket: Bucket,
+	buckets: MetricsBucket[],
+	lead_time: LeadTime,
+	cycle_time: CycleTime,
+	wip_now: number,
+	by_label: LabelBreakdown[],
+	by_source: SourceBreakdown[],
+	/**  The last six finished cycles. */
+	velocity: VelocityCycle[],
+	/**  Fewer than five issues finished in the range: read the numbers as anecdotes. */
+	thin: boolean,
+};
+
+/**  One bucket; `scope` is open plus finished-in-range work at the bucket's end, `done_total` the finished part. */
+export type MetricsBucket = {
+	start: string,
+	created: number,
+	completed: number,
+	completed_points: number | null,
+	scope: number,
+	done_total: number,
+	wip: number,
+};
+
+/**  `measure` is `count` or `points` (time is refused); it picks what the label breakdown ranks by. */
+export type MetricsQuery = {
+	scope: MetricsScope,
+	bucket: Bucket,
+	filter: Filter | null,
+	measure: Measure,
+};
+
+/**  What the metrics cover: a run of days, or one cycle's own dates. */
+export type MetricsScope = ({ Range: {
+	from: string,
+	to: string,
+} }) & { Cycle?: never } | ({ Cycle: CycleId }) & { Range?: never };
 
 export type Milestone = {
 	id: MilestoneId,
@@ -1543,6 +1622,13 @@ export type Sort = {
 	descending: boolean,
 };
 
+/**  `source` is a [`ChangeSource`] name: Ui, Cli, Agent, Migration and so on. */
+export type SourceBreakdown = {
+	source: string,
+	created: number,
+	completed: number,
+};
+
 export type Status = {
 	id: StatusId,
 	name: string,
@@ -1624,6 +1710,13 @@ export type UndoStatus = {
 };
 
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value };
+
+export type VelocityCycle = {
+	cycle_id: CycleId,
+	name: string,
+	points: number | null,
+	count: number,
+};
 
 /**  Completed in one cycle or week. */
 export type VelocityPeriod = {

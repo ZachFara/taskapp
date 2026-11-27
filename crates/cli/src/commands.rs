@@ -74,6 +74,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Setup { .. }
         | Cmd::Template(_)
         | Cmd::Insights(_)
+        | Cmd::Metrics(_)
         | Cmd::Status(_)
         | Cmd::Attachment(_)
         | Cmd::Event(_)

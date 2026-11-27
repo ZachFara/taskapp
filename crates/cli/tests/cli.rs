@@ -1170,3 +1170,53 @@ fn status_update_sets_definition_kind_and_nudge() {
     let bad = run(&db, &["status", "update", "Blocked", "--kind", "sleepy"]);
     assert_ne!(bad.status.code(), Some(0));
 }
+
+#[test]
+fn metrics_reads_ranges_cycles_and_filters() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Write report"]);
+    run(
+        &db,
+        &["issue", "update", "ABC-1", "--status", "In Progress"],
+    );
+    run(&db, &["issue", "update", "ABC-1", "--status", "Done"]);
+    let m = run_json(&db, &["metrics", "--range", "today"]);
+    assert_eq!(m["bucket"], "Day");
+    assert_eq!(m["lead_time"]["n"], 1);
+    assert_eq!(m["cycle_time"]["n"], 1);
+    assert_eq!(m["by_source"][0]["source"], "Cli");
+    assert_eq!(m["thin"], true);
+    let text =
+        String::from_utf8_lossy(&run(&db, &["metrics", "--range", "year", "--points"]).stdout)
+            .into_owned();
+    assert!(
+        text.contains("Lead time:") && text.contains("By label") && text.contains("per Month"),
+        "{text}"
+    );
+    run(&db, &["label", "create", "bug", "red"]);
+    let start = [
+        "cycle",
+        "create",
+        "--start",
+        "2026-01-01",
+        "--end",
+        "2026-01-14",
+        "--name",
+        "Sprint",
+    ];
+    run(&db, &start);
+    let past = [
+        "metrics",
+        "--range",
+        "2026-01-01..2026-03-01",
+        "--label",
+        "bug",
+    ];
+    let by_label = run_json(&db, &past);
+    assert_eq!(
+        (&by_label["lead_time"]["n"], &by_label["bucket"]),
+        (&Value::from(0), &Value::from("Week"))
+    );
+    let cycle = run_json(&db, &["metrics", "--cycle", "Sprint"]);
+    assert_eq!(cycle["from"], "2026-01-01");
+}

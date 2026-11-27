@@ -20,8 +20,10 @@ export type Metrics = {
   thin: boolean;
 };
 
-type Wire = { metrics?: { for: (q: MetricsQuery) => Promise<Metrics> } };
-export const metricsFor = (q: MetricsQuery) => (api as unknown as Wire).metrics!.for(q);
+// The engine's measure is the shared lowercase Measure type; the page's own copy of the shape stays until bindings replace it.
+type Wire = { metrics: { for: (q: Omit<MetricsQuery, 'measure'> & { measure: 'count' | 'points' }) => Promise<Metrics> } };
+export const metricsFor = (q: MetricsQuery) =>
+  (api as unknown as Wire).metrics.for({ ...q, measure: q.measure === 'Points' ? 'points' : 'count' });
 
 export const PRESETS = [
   { id: 'today', label: 'Today' }, { id: 'week', label: 'This week' }, { id: 'cycle', label: 'This cycle' },
