@@ -571,7 +571,8 @@ async fn dump(
             let mut row: serde_json::Value = serde_json::from_str(&r)?;
             // JSON columns compare as values: the rebuild writes keys in sorted order.
             for c in ["body", "definition", "options"] {
-                if let Some(text) = row[c].as_str() {
+                // A status definition is plain prose.
+                if let (false, Some(text)) = (t == "statuses", row[c].as_str()) {
                     row[c] = serde_json::from_str(text)?;
                 }
             }
@@ -587,6 +588,7 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
     let db = seeded().await?;
     for sql in [
         "UPDATE statuses SET icon = 'icon:flag' WHERE name = 'Done'",
+        "UPDATE statuses SET definition = 'Work is shipped', flow_kind = 'waiting', nudge_days = 9 WHERE name = 'Todo'",
         "UPDATE labels SET icon = 'icon:bug', color = 'red' WHERE name = 'bug'",
         "UPDATE projects SET icon = 'emoji:🚀', color = 'teal'",
         "UPDATE cycles SET icon = 'icon:repeat', color = 'blue'",

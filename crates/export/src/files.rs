@@ -71,6 +71,13 @@ pub struct StatusRow {
     pub color: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub definition: String,
+    /// Old exports have none: `None` means the category's default, as the migration sets it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flow_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nudge_days: Option<i64>,
 }
 
 /// One entry of `project_statuses.yaml`.

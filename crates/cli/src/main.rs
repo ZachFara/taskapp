@@ -4,6 +4,8 @@ mod api;
 mod commands;
 mod decision;
 mod list;
+mod look;
+mod metrics;
 mod references;
 
 use std::path::{Path, PathBuf};
@@ -66,6 +68,8 @@ enum Cmd {
     Attachment(AttachmentCmd),
     #[command(subcommand)]
     Template(TemplateCmd),
+    /// Throughput, lead and cycle time, work in progress and breakdowns, rebuilt from history.
+    Metrics(metrics::MetricsArgs),
     /// Progress and velocity over time, rebuilt from history.
     #[command(subcommand)]
     Insights(InsightsCmd),
@@ -83,6 +87,10 @@ enum Cmd {
     /// Questions for the owner: raise one with options, read it, answer it.
     #[command(subcommand)]
     Decision(decision::DecisionCmd),
+    /// Icon names for `project set --icon`.
+    Icons,
+    /// Palette colors for `project set --color`.
+    Colors,
     /// Builds a new database from an export folder. Needs --db, which must not exist yet.
     Restore {
         #[arg(long, value_name = "DIR")]
@@ -346,6 +354,18 @@ enum StatusCmd {
         #[arg(long, default_value = "gray")]
         color: String,
     },
+    /// Edit what a status means. NAME is its name or id.
+    Update {
+        name: String,
+        #[arg(long)]
+        definition: Option<String>,
+        /// active, waiting or idle: how time here counts for flow efficiency.
+        #[arg(long)]
+        kind: Option<String>,
+        /// Issues stale after this many days here; 0 clears it.
+        #[arg(long)]
+        nudge_days: Option<i32>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -407,22 +427,44 @@ enum ProjectCmd {
         #[arg(long, default_value = "gray")]
         color: String,
     },
-    /// Change a project's status, priority, labels or a custom property value.
+    /// Change a project's name, look, dates, status, priority, labels or a custom property value.
     Set {
         slug: String,
-        /// Project status name.
-        #[arg(long)]
-        status: Option<String>,
-        /// 0 none, 1 urgent, 2 high, 3 medium, 4 low.
-        #[arg(long)]
-        priority: Option<u8>,
-        /// Label name; repeat for several. Replaces the project's labels.
-        #[arg(long = "label")]
-        labels: Vec<String>,
-        /// Property key and JSON value, e.g. `--property owner '"sam"'`; `null` clears.
-        #[arg(long, num_args = 2, value_names = ["KEY", "JSON"])]
-        property: Vec<String>,
+        #[command(flatten)]
+        edit: ProjectEdit,
     },
+}
+
+#[derive(clap::Args)]
+struct ProjectEdit {
+    /// Project status name.
+    #[arg(long)]
+    status: Option<String>,
+    /// 0 none, 1 urgent, 2 high, 3 medium, 4 low.
+    #[arg(long)]
+    priority: Option<u8>,
+    /// Label name; repeat for several. Replaces the project's labels.
+    #[arg(long = "label")]
+    labels: Vec<String>,
+    /// Property key and JSON value, e.g. `--property owner '"sam"'`; `null` clears.
+    #[arg(long, num_args = 2, value_names = ["KEY", "JSON"])]
+    property: Vec<String>,
+    /// Bare icon name from `taskapp icons`.
+    #[arg(long)]
+    icon: Option<String>,
+    /// Palette color from `taskapp colors`.
+    #[arg(long)]
+    color: Option<String>,
+    #[arg(long)]
+    name: Option<String>,
+    #[arg(long)]
+    description: Option<String>,
+    /// YYYY-MM-DD.
+    #[arg(long)]
+    start: Option<String>,
+    /// YYYY-MM-DD.
+    #[arg(long)]
+    target: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -644,15 +686,7 @@ async fn run(cli: Cli) -> Result<()> {
         print_value(&json!({"restored": to, "from": from}), cli.json);
         return Ok(());
     }
-    let path = match cli.db {
-        Some(path) => path,
-        None => default_db_path()?,
-    };
-    let dir = path
-        .parent()
-        .map_or_else(|| PathBuf::from("."), PathBuf::from);
-    std::fs::create_dir_all(&dir)?;
-    let db = Db::open(&path).await?;
+    let (db, dir) = open(cli.db).await?;
     // Same folder the MCP server and the app list and prune.
     // One invocation is one undoable step, labelled with the command line minus the global flags.
     let mut args = std::env::args().skip(1);
@@ -664,13 +698,29 @@ async fn run(cli: Cli) -> Result<()> {
             _ => words.push(a),
         }
     }
+    let list = matches!(cli.cmd, Cmd::Decision(decision::DecisionCmd::List { .. }));
     let label = match &cli.cmd {
         Cmd::Api(ApiCmd::Call { name, .. }) => format!("api call {name}"),
         _ => words.join(" "),
     };
+    if let Cmd::Metrics(args) = &cli.cmd {
+        return metrics::print(&db, args, cli.json).await;
+    }
     let value = history::step(&label, commands::run(&db, &dir.join("backups"), cli.cmd)).await?;
-    print_value(&value, cli.json);
+    print_value(&view(value, list, cli.json), cli.json);
     Ok(())
+}
+
+async fn open(path: Option<PathBuf>) -> Result<(Db, PathBuf)> {
+    let path = match path {
+        Some(path) => path,
+        None => default_db_path()?,
+    };
+    let dir = path
+        .parent()
+        .map_or_else(|| PathBuf::from("."), PathBuf::from);
+    std::fs::create_dir_all(&dir)?;
+    Ok((Db::open(&path).await?, dir))
 }
 
 async fn backup_cmd(cmd: &BackupCmd, db: Option<&Path>) -> Result<Value> {
@@ -716,6 +766,15 @@ fn report(err: &Error, json: bool) {
         );
     } else {
         eprintln!("error: {err}");
+    }
+}
+
+/// `decision list` shows its compact table unless --json; other output is unchanged.
+fn view(value: Value, list: bool, json: bool) -> Value {
+    if list && !json {
+        decision::table(value)
+    } else {
+        value
     }
 }
 

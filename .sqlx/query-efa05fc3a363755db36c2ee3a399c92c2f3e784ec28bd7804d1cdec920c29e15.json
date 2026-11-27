@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE statuses SET definition = ?, flow_kind = ?, nudge_days = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "efa05fc3a363755db36c2ee3a399c92c2f3e784ec28bd7804d1cdec920c29e15"
+}

@@ -1,4 +1,5 @@
 import type { FieldRef, Filter, NewIssue, Project, PropertyDef, Status, Value } from '../../lib/bindings';
+import { byStatusOrder } from '../../lib/statusOrder';
 
 export type IssueDefaults = Omit<NewIssue, 'title' | 'created_at' | 'completed_at'>;
 
@@ -24,7 +25,7 @@ export function defaultsFromFilter(filter: Filter | null, ctx: FilterDefaultCont
   const excludedCategories = new Set<string>();
   const allowedStatusSets: Set<number>[] = [];
   const allowedCategorySets: Set<string>[] = [];
-  const orderedStatuses = [...ctx.statuses].sort((a, b) => a.position - b.position);
+  const orderedStatuses = [...ctx.statuses].sort(byStatusOrder);
   const defaultStatus =
     orderedStatuses.find((s) => s.id === ctx.defaultStatusId) ?? orderedStatuses[0] ?? null;
 

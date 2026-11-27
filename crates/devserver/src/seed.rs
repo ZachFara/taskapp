@@ -442,12 +442,14 @@ fn at(today: NaiveDate, days: i64) -> NaiveDate {
     .unwrap_or(today)
 }
 
-/// Two projects are under way with dates, so project views have something to lay out; the website one has none.
+/// Two projects are under way with dates, so project views have something to lay out; the website one has a start only.
 async fn date_projects(db: &Db) -> Result<()> {
     let today = Utc::now().date_naive();
-    for (slug, status, priority, (from, to)) in
-        [("office", 2, 2, (-14, 30)), ("mobile", 2, 3, (-3, 45))]
-    {
+    for (slug, status, priority, (from, to)) in [
+        ("office", 2, 2, (-14, Some(30))),
+        ("mobile", 2, 3, (-3, Some(45))),
+        ("website", 1, 0, (-5, None)),
+    ] {
         let mut p = projects::list(db)
             .await?
             .into_iter()
@@ -456,7 +458,7 @@ async fn date_projects(db: &Db) -> Result<()> {
         p.status_id = taskapp_core::ProjectStatusId(status);
         p.priority = priority;
         p.start_date = Some(at(today, from));
-        p.target_date = Some(at(today, to));
+        p.target_date = to.map(|to| at(today, to));
         projects::update(db, p, Ui).await?;
     }
     Ok(())

@@ -44,7 +44,7 @@ The same screen has a second choice, "Restore from an export": see [Restore](#re
 ## The screen
 
 - **Sidebar (left).** Top: My issues. Then four collapsible sections with counts: Pinned, Views, Projects (with "All
-  projects"), Cycles (with "All cycles"). Bottom: Settings. Drag a pin or a view to reorder it. Right-click a view, folder,
+  projects"), Cycles (with "All cycles"). Then Events, Decisions and Dashboard (Settings > General can hide it). Bottom: Settings. Drag a pin or a view to reorder it. Right-click a view, folder,
   project or cycle and choose Pin or Unpin. The Projects section shows only "All projects" until you right-click its
   heading and choose "Show projects in the sidebar" (kept on this device); pinned projects always show under Pinned. With "Sidebar sparklines" on (Settings > General) each project
   shows a small progress line. The sidebar has no Inbox link; `/inbox` exists but only shows "Inbox arrives in a later
@@ -121,6 +121,13 @@ Quick-add has no token for status, parent, cycle or milestone. Example: `Pay ren
 - Open the full page: `mod+enter` (route `/issue/ABC-1`). Close the panel or page: `escape`. `[` and `]` step to the
   previous or next issue.
 - Copy: `mod+c` copies the key, `mod+shift+c` the link. Pin: `.`. Duplicate: `mod+d`.
+
+### Checklists in descriptions
+
+A line `- [ ] item` in a description is a checklist item; `- [x] item` is ticked. Click the box in the description to tick it
+or untick it; the tick rewrites that one line and is one undo step. In the editor's Preview you tick the draft, and Save keeps
+it. Nested items count, and lines inside a code block do not. A list row, table row or board card shows `done/total` when the
+issue has items (the Checklist field, on by default). `taskapp issue get` reports `checklist: {done, total}`.
 
 ### Links in descriptions and comments
 
@@ -199,8 +206,8 @@ saved automatically (after a short pause), except temporary sorting changes. Fil
   uses OR or NOT (made by CLI or MCP) shows as one "Advanced filter" chip you can only remove. Filters are saved
   with the view (see [Limits](#limits-and-not-built-yet)). The full field list a view definition accepts: Title,
   Status, StatusCategory, Priority, Project, Milestone, Cycle, Label, Parent, StartDate, DueDate, Estimate, Points,
-  CreatedAt, UpdatedAt, CompletedAt, Archived, Key, SubIssueProgress, RelationCount, CommentCount, and any custom
-  property.
+  CreatedAt, UpdatedAt, CompletedAt, Archived, Key, SubIssueProgress, Checklist, RelationCount, CommentCount, and any
+  custom property.
 - **Relative dates.** On a date field (Start, Due, Created, Updated, Completed, a date property) the chip's first
   line picks "Exact date" or a relative day: today, 7 or 14 or 30 days ago, in 7, 14 or 30 days. Relative days count
   from today in the workspace time zone and move on their own. "Before today" lists overdue dates; "up to in 7 days"
@@ -262,7 +269,9 @@ filter chips, Group, Sort and Display.
 - **Layouts.** List: status, priority, name, then the fields, in bands when grouped. Table: the columns chosen in
   Display. Board: a column per project status (or priority, or a select property, from Group); dragging a card to
   another column sets that field, one undo step. Timeline: a bar from start to target date per project, milestones as
-  diamonds and a today line; drag a bar or its ends to change the dates. Calendar: a month grid with a chip on each
+  diamonds and a today line; drag a bar or its ends to change the dates. Every project has a row: a project with only a
+  start date runs from it to today (or its latest dated issue) with a faded end, one with only a target date gets a week
+  before it, and a project with no dates shows "Set dates", which opens its project page. Calendar: a month grid with a chip on each
   project's start and target day. Clicking a row, card, bar label or chip opens the project.
 - **Display.** Which fields show, compact rows, empty groups and "Show archived" (archived projects are hidden by default).
 - **Not available.** Templates and Insights are for issue views; a project's created and updated times are not fields yet.
@@ -282,7 +291,7 @@ filter chips, Group, Sort and Display.
   menu on a project page: "Set project status", "Set project priority", "Add or remove project labels" and "Set project
   property" (Select and Checkbox only). The Projects page shows Status, Priority, Labels and a column per project
   property, and groups by status or priority, sorts, and filters by status, priority or label. The sidebar shows each
-  project's status glyph. CLI: `project statuses`, `project set <slug> --status --priority --label --property`; MCP:
+  project's status glyph. CLI: `project statuses`, `project set <slug> --status --priority --label --property`, plus `--name --description --icon --color --start --target` (`taskapp icons` and `taskapp colors` list the choices); MCP:
   `list_project_statuses`, and `update_project` takes `status_id`, `priority`, `label_ids`, `properties`. Export writes
   `project_statuses.yaml` and the fields into each project file.
 - **Milestones.** On a project page, "Milestones": add a name and a date. An issue is assigned a milestone in the
@@ -340,6 +349,16 @@ with its recommendation until you answer). Decisions are Cairn's own; nothing ou
   `--source`, such as `agent:builder` or later `curia`), and `external_id` is the raiser's own id, unique per source, so a
   later integration can mirror a decision and not raise it twice. Nothing reads them yet.
 
+## Dashboard
+
+The Dashboard (sidebar, or `g b`) shows how work is going over a range. Pick the range at the top: Today, This week,
+This cycle, any other cycle, Month, Quarter, Year, or Custom with two dates. The chart steps by day up to 31 days, by
+week up to about six months, and by month beyond. Limit it to a project or a label, and switch Count or Points.
+Two cards so far: Summary (completed, created, in progress now, lead time and cycle time as median and 85th percentile;
+a note appears when fewer than 5 issues finished) and Burn-up (scope against done). The Cards button shows, hides and
+reorders cards, kept on this device. Every choice is also in the command menu ("Dashboard range", "Dashboard: show or
+hide cards"). Settings > General > Dashboard turns the whole page off; it is on by default.
+
 ## Points and insights
 
 - **Estimation setting** (Settings > General): None, Points, Time or Both. Points show only for Points or Both; time
@@ -353,6 +372,18 @@ with its recommendation until you answer). Decisions are Cairn's own; nothing ou
   started, completed. With a chart focused, left and right arrows step through days.
 - **Progress charts** switch (Settings > General): burn-ups on project and cycle pages, sparklines on past cycles.
 - CLI: `insights progress` and `insights velocity`; MCP: `insights_progress`, `insights_velocity`.
+
+### Metrics
+Delivery numbers for a range of days or one cycle, rebuilt from the change history (nothing is stored). The
+registry command is `metrics_for` (query: scope Range or Cycle, bucket Day, Week or Month, optional filter, measure
+`count` or `points`); the CLI is `taskapp metrics`. Per bucket: issues created, completed (and their points), scope and
+done so far, and work in progress. Over the whole range: lead time (created to done) and cycle time (first move into a
+Started status to done) as p50 and p85 calendar days in the workspace time zone, work in progress now, completed per
+label and per source (who made and who finished the issue: Ui, Cli, Agent, Migration), and the points and count of
+the last six finished cycles. Only Done counts as finished; archived and canceled issues are left out. Issues without
+a Started move (including Linear imports, which have no history) have a lead time but no cycle time. `thin` is true
+when fewer than five issues finished in the range: read the numbers as anecdotes. With a cycle, only its members are
+counted; velocity always looks across cycles.
 
 ## Custom properties
 
@@ -381,6 +412,13 @@ templates and imports. Unset, or if that status is deleted, new issues start in 
   move that status's issues to. Each status shows its own icon and colour (from the same picker) wherever its glyph appears;
   without one it shows the default circle for its category: backlog dashed, unstarted empty, started half-filled, completed
   filled with a check, canceled with a cross.
+  Statuses always list by category (Backlog, Unstarted, Started, Completed, Canceled), then by their position inside it,
+  in every picker, group header and column.
+- **Status definitions** (same page): each status row also holds a short definition, a flow kind and an optional nudge.
+  The kind says how time in the status counts for flow efficiency: Active (work is happening), Waiting (blocked on someone
+  or something) or Idle (not being worked). New and existing Started statuses are Active, all others Idle. "Nudge after N
+  days" is stored for stale-issue nudges (0 or empty means never). CLI: `taskapp status list` shows the fields,
+  `taskapp status update NAME --definition "..." --kind active|waiting|idle --nudge-days N`.
 - **Priority** shows as three bars of rising height: none faint, low one bar, medium two, high three, urgent three in red.
 - **Labels** (Settings > Labels): name, icon, colour. Add to issues with `l`, the panel, or `#name` in quick-add.
 - **Colours** are a fixed palette of 12 keys: gray, red, orange, amber, yellow, green, teal, cyan, blue, indigo, purple,
@@ -595,6 +633,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.projects` | Go to Projects | `g p` | Go to the project list. |
 | `nav.cycles` | Go to Cycles | `g c` | Go to Cycles. |
 | `nav.events` | Go to Events | `g e` | Go to Events. |
+| `nav.dashboard` | Go to Dashboard | `g b` | Go to the Dashboard (when it is switched on in Settings). |
 | `nav.decisions` | Go to Decisions | `g q` | Go to Decisions. |
 | `nav.views` | Go to Views | `g v` | Go to Views. |
 | `nav.timeline` | Go to Timeline | `g t` | Go to the all-projects timeline. |
@@ -821,7 +860,7 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `event create <title> --start T [--end T --all-day --place --notes]` | Create an event (`T` is `YYYY-MM-DDTHH:MM` or a date). | `taskapp event create Demo --start 2026-12-10T09:30` |
 | `event link <id> <key>` | Link an event to an issue. | `taskapp event link 1 ABC-1` |
 | `decision create <question> [--option KEY="label: trade-off" --recommend KEY --mode blocking\|assume --context --source --external-id --issue KEY]` | Raise a decision for the owner. | `taskapp decision create "Ship now?" --option y="Yes: fast" --option n="No: safe" --recommend n` |
-| `decision list [--status open]` / `decision get <id>` | Read decisions (`open`, `answered`, `withdrawn`, `all`). | `taskapp --json decision list` |
+| `decision list [--status open]` / `decision get <id>` | Read decisions (`open`, `answered`, `withdrawn`, `all`). The table shows options as `a) Label; b) Label`; `get` and `--json` give the trade-offs. | `taskapp decision list --status all` |
 | `decision answer <id> (--option KEY \| --text TEXT) [--note]` / `decision withdraw <id>` | Answer or close an open decision. | `taskapp decision answer 1 --option n` |
 | `issue search <text> [--limit 20]` | Full-text search (archived issues are left out). | `taskapp issue search rent` |
 | `view query [--def JSON \| --id N]` | Run an ad hoc view definition or a saved view. | `taskapp view query --id 1` |
@@ -837,6 +876,8 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `property delete <key>` | Delete the property and its values; snapshots first. | `taskapp property delete area` |
 | `property set <issue> <key> <value>` | Set a value (JSON; `null` clears). | `taskapp property set ABC-1 area '"web"'` |
 | `project list` / `project create <slug> <name> [--icon --color]` | List or create projects. | `taskapp project create web Website` |
+| `project set <slug> [--name --description --icon --color --start --target --status --priority --label --property]` | Change a project's name, look (`--icon` from `icons`, `--color` from `colors`), dates (`YYYY-MM-DD`) or other fields. | `taskapp project set web --icon folder --color teal --start 2026-12-01` |
+| `icons` / `colors` | List the icon names and palette colors `project set` accepts. | `taskapp colors` |
 | `cycle list` / `cycle create --start --end [--name --color --icon]` | List or create cycles. | `taskapp cycle create --start 2026-12-01 --end 2026-12-14` |
 | `label list` / `label create <name> <color> [--icon]` | List or create labels. | `taskapp label create bug red` |
 | `comment add <key> <body>` | Comment on an issue. | `taskapp comment add ABC-1 "Looks good"` |
@@ -848,6 +889,7 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `template apply <id> [title]` | Create the issue and its sub-issues. | `taskapp template apply 1 "Login fails"` |
 | `insights progress (--project N \| --cycle N \| --view N) [--measure points\|count\|time --from --to]` | Per-day scope, started, completed. | `taskapp insights progress --project 1 --measure count` |
 | `insights velocity (--project N \| --cycle N \| --view N) [--measure --periods 6]` | Completed per cycle or week. | `taskapp insights velocity --cycle 1` |
+| `metrics [--range today\|week\|month\|quarter\|year\|FROM..TO \| --cycle NAME] [--project NAME --label NAME --points --json]` | Throughput, lead and cycle time, WIP, by label and source, velocity. Ranges end today; buckets are days up to 31 days, weeks up to about six months, then months. | `taskapp metrics --range month --label bug` |
 | `history <key>` | Change history of an issue. | `taskapp history ABC-1` |
 | `undo` / `redo` | Undo or redo the newest step. | `taskapp undo` |
 | `backup list --dir <dir>` | List backups in a folder. | `taskapp backup list --dir ~/Backups/cairn` |

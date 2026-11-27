@@ -150,3 +150,18 @@ describe('images', () => {
     expect(img.hasAttribute('src')).toBe(false);
   });
 });
+
+describe('checklist items render as checkboxes', () => {
+  it('numbers each task box in document order and keeps its state', () => {
+    const d = dom(renderMarkdown('- [ ] first\n- [x] second\n\n```\n- [ ] code\n```\n\n- [ ] third'));
+    const boxes = [...d.querySelectorAll<HTMLInputElement>('input[type=checkbox]')];
+    expect(boxes.map((b) => b.dataset.check)).toEqual(['0', '1', '2']);
+    expect(boxes.map((b) => b.checked)).toEqual([false, true, false]);
+  });
+
+  it('starts numbering again for each render', () => {
+    renderMarkdown('- [ ] a\n- [ ] b');
+    const d = dom(renderMarkdown('- [ ] c'));
+    expect(d.querySelector('input')!.dataset.check).toBe('0');
+  });
+});

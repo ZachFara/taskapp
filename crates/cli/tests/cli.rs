@@ -81,6 +81,30 @@ fn undo_and_redo_revert_a_cli_edit() {
 }
 
 #[test]
+fn issue_get_reports_checklist_progress() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Trip"]);
+    let out = run(
+        &db,
+        &[
+            "issue",
+            "update",
+            "ABC-1",
+            "--description",
+            "Packing\n- [x] pack\n- [ ] book",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let issue = run_json(&db, &["issue", "get", "ABC-1"]);
+    assert_eq!(issue["checklist"]["done"], 1);
+    assert_eq!(issue["checklist"]["total"], 2);
+}
+
+#[test]
 fn unknown_key_exits_nonzero_with_message() {
     let (_d, db) = fresh();
     let out = run(&db, &["issue", "get", "ABC-999"]);
@@ -974,4 +998,225 @@ fn decision_withdraw() {
         run_json(&db, &["decision", "withdraw", "1"])["withdrawn"],
         1
     );
+}
+
+#[test]
+fn decision_list_table_shows_options_as_labels() {
+    let (_d, db) = fresh();
+    raise(&db);
+    let out = run(&db, &["decision", "list", "--status", "all"]);
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let header = stdout.lines().next().expect("header");
+    for col in [
+        "id",
+        "mode",
+        "status",
+        "question",
+        "options",
+        "recommendation",
+    ] {
+        assert!(header.contains(col), "header was: {header}");
+    }
+    assert!(
+        stdout.contains("a) Postgres; b) SQLite"),
+        "stdout was: {stdout}"
+    );
+    assert!(
+        !stdout.contains('{'),
+        "options must not be raw JSON: {stdout}"
+    );
+    assert!(
+        !stdout.contains("heavier"),
+        "trade-offs stay in get: {stdout}"
+    );
+}
+
+#[test]
+fn decision_list_json_keeps_full_detail() {
+    let (_d, db) = fresh();
+    raise(&db);
+    let listed = run_json(&db, &["decision", "list", "--status", "all"]);
+    assert_eq!(listed[0]["options"][0]["tradeoff"], "heavier");
+}
+
+#[test]
+fn project_set_changes_look_name_and_dates() {
+    let (_d, db) = fresh();
+    run_json(&db, &["project", "create", "web", "Website"]);
+    let p = run_json(
+        &db,
+        &[
+            "project",
+            "set",
+            "web",
+            "--icon",
+            "folder",
+            "--color",
+            "teal",
+            "--name",
+            "Web",
+            "--start",
+            "2026-12-01",
+            "--target",
+            "2026-12-31",
+            "--description",
+            "The site",
+        ],
+    );
+    assert_eq!(p["icon"], "icon:folder");
+    assert_eq!(p["color"], "teal");
+    assert_eq!(p["name"], "Web");
+    assert_eq!(p["start_date"], "2026-12-01");
+    assert_eq!(p["target_date"], "2026-12-31");
+    assert_eq!(p["description"], "The site");
+}
+
+#[test]
+fn project_set_rejects_unknown_icon_and_color_with_choices() {
+    let (_d, db) = fresh();
+    run_json(&db, &["project", "create", "web", "Website"]);
+    let bad_icon = run(&db, &["project", "set", "web", "--icon", "nope"]);
+    assert!(!bad_icon.status.success());
+    let err = String::from_utf8_lossy(&bad_icon.stderr).to_string();
+    assert!(err.contains("folder-open"), "stderr was: {err}");
+    let bad_color = run(&db, &["project", "set", "web", "--color", "teal2"]);
+    assert!(!bad_color.status.success());
+    let err = String::from_utf8_lossy(&bad_color.stderr).to_string();
+    assert!(err.contains("pink"), "stderr was: {err}");
+    let bad_date = run(&db, &["project", "set", "web", "--start", "1 Dec"]);
+    assert!(!bad_date.status.success());
+}
+
+/// Icon ids the app offers, read from the UI's own list so the CLI cannot drift from it.
+fn app_icon_ids() -> Vec<String> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/src/ui/icons.ts");
+    let text = std::fs::read_to_string(&path).expect("icons.ts");
+    text.lines()
+        .filter(|l| l.starts_with("  ") && !l.starts_with("  //") && l.contains(": `"))
+        .map(|l| {
+            l.trim()
+                .split(':')
+                .next()
+                .unwrap_or_default()
+                .trim_matches('\'')
+                .to_string()
+        })
+        .collect()
+}
+
+#[test]
+fn icons_lists_the_app_icon_ids() {
+    let (_d, db) = fresh();
+    let out = run(&db, &["icons"]);
+    assert!(out.status.success());
+    let listed: Vec<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(listed, app_icon_ids());
+}
+
+#[test]
+fn colors_lists_the_palette_keys() {
+    let (_d, db) = fresh();
+    let out = run(&db, &["colors"]);
+    assert!(out.status.success());
+    let listed: Vec<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let expected = [
+        "gray", "red", "orange", "amber", "yellow", "green", "teal", "cyan", "blue", "indigo",
+        "purple", "pink",
+    ];
+    assert_eq!(listed, expected);
+}
+
+#[test]
+fn status_update_sets_definition_kind_and_nudge() {
+    let (_d, db) = fresh();
+    run_json(
+        &db,
+        &["status", "create", "Blocked", "--category", "Started"],
+    );
+    let s = run_json(
+        &db,
+        &[
+            "status",
+            "update",
+            "blocked",
+            "--definition",
+            "Needs someone else",
+            "--kind",
+            "waiting",
+            "--nudge-days",
+            "4",
+        ],
+    );
+    assert_eq!(s["definition"], "Needs someone else");
+    assert_eq!(
+        (s["flow_kind"].as_str(), s["nudge_days"].as_i64()),
+        (Some("Waiting"), Some(4))
+    );
+    let listed = run_json(&db, &["status", "list"]);
+    assert!(
+        listed
+            .as_array()
+            .expect("array")
+            .iter()
+            .any(|s| s["name"] == "Blocked" && s["flow_kind"] == "Waiting")
+    );
+    let bad = run(&db, &["status", "update", "Blocked", "--kind", "sleepy"]);
+    assert_ne!(bad.status.code(), Some(0));
+}
+
+#[test]
+fn metrics_reads_ranges_cycles_and_filters() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Write report"]);
+    run(
+        &db,
+        &["issue", "update", "ABC-1", "--status", "In Progress"],
+    );
+    run(&db, &["issue", "update", "ABC-1", "--status", "Done"]);
+    let m = run_json(&db, &["metrics", "--range", "today"]);
+    assert_eq!(m["bucket"], "Day");
+    assert_eq!(m["lead_time"]["n"], 1);
+    assert_eq!(m["cycle_time"]["n"], 1);
+    assert_eq!(m["by_source"][0]["source"], "Cli");
+    assert_eq!(m["thin"], true);
+    let text =
+        String::from_utf8_lossy(&run(&db, &["metrics", "--range", "year", "--points"]).stdout)
+            .into_owned();
+    assert!(
+        text.contains("Lead time:") && text.contains("By label") && text.contains("per Month"),
+        "{text}"
+    );
+    run(&db, &["label", "create", "bug", "red"]);
+    let start = [
+        "cycle",
+        "create",
+        "--start",
+        "2026-01-01",
+        "--end",
+        "2026-01-14",
+        "--name",
+        "Sprint",
+    ];
+    run(&db, &start);
+    let past = [
+        "metrics",
+        "--range",
+        "2026-01-01..2026-03-01",
+        "--label",
+        "bug",
+    ];
+    let by_label = run_json(&db, &past);
+    assert_eq!(
+        (&by_label["lead_time"]["n"], &by_label["bucket"]),
+        (&Value::from(0), &Value::from("Week"))
+    );
+    let cycle = run_json(&db, &["metrics", "--cycle", "Sprint"]);
+    assert_eq!(cycle["from"], "2026-01-01");
 }

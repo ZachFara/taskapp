@@ -10,6 +10,7 @@
   import { dayText, dueDay } from '../views/dates';
   import { issues } from '../../lib/stores.svelte';
   import { paletteKey, type Ctx } from './types';
+  import { checklistCount } from '../detail/checklist';
 
   // `named` prefixes bare custom values (a number or date has no meaning without its field) where there is no column header.
   // `all` shows every label (a view with Wrap on) instead of two and a count.
@@ -72,6 +73,9 @@
 {:else if field.Fixed === 'SubIssueProgress'}
   {@const stat = ctx.stats.get(issue.id)}
   {#if stat && stat.sub_total > 0}<span class="num muted">{stat.sub_done}/{stat.sub_total}</span>{/if}
+{:else if field.Fixed === 'Checklist'}
+  {@const list = checklistCount(issue.description)}
+  {#if list.total}<span class="num muted with"><Icon name="check" size={12} />{list.done}/{list.total}</span>{/if}
 {:else if field.Fixed === 'RelationCount'}
   {@const stat = ctx.stats.get(issue.id)}
   <span class="num muted">{stat?.relations ?? 0}</span>

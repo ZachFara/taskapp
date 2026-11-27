@@ -21,3 +21,13 @@ it('labels show two and a count, or every label when the view wraps', () => {
   for (const l of labels) expect(document.body.textContent).toContain(l.name);
   expect(document.body.textContent).not.toContain('+2');
 });
+
+it('checklist shows done of total only when the description has items', () => {
+  const withList = { ...issue, description: '- [x] a\n- [ ] b\n- [ ] c' } as unknown as Issue;
+  app = mount(FieldValue, { target: document.body, props: { field: { Fixed: 'Checklist' }, issue: withList, ctx: emptyCtx } });
+  expect(document.body.textContent).toContain('1/3');
+  unmount(app);
+  document.body.innerHTML = '';
+  app = mount(FieldValue, { target: document.body, props: { field: { Fixed: 'Checklist' }, issue: { ...issue, description: 'no list' } as unknown as Issue, ctx: emptyCtx } });
+  expect(document.body.textContent).toBe('');
+});

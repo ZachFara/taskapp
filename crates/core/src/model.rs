@@ -226,6 +226,20 @@ pub struct Status {
     /// The reference hex for `color`, for showing it without the palette.
     pub color_hex: String,
     pub icon: Option<String>,
+    /// What the status means, in a sentence or two.
+    pub definition: String,
+    /// How time in this status counts for flow efficiency.
+    pub flow_kind: FlowKind,
+    /// Issues sitting here this many days are stale (for nudges); none means never.
+    pub nudge_days: Option<i32>,
+}
+
+/// Whether time in a status is work (`Active`), blocked on someone or something (`Waiting`) or neither (`Idle`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+pub enum FlowKind {
+    Active,
+    Waiting,
+    Idle,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -465,6 +479,8 @@ pub enum FixedField {
     SubIssueProgress,
     RelationCount,
     CommentCount,
+    /// Shows `done/total` of the description's task lines; not sortable or filterable.
+    Checklist,
     /// Filter only: the issue has a relation of the given kind id(s), on either end.
     RelationKind,
     /// An issue's project status; on a project view, use `Status`.
@@ -799,6 +815,107 @@ pub struct VelocityPeriod {
     pub end: NaiveDate,
     pub label: String,
     pub completed: f64,
+}
+
+/// What the metrics cover: a run of days, or one cycle's own dates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub enum MetricsScope {
+    Range { from: NaiveDate, to: NaiveDate },
+    Cycle(CycleId),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub enum Bucket {
+    Day,
+    Week,
+    Month,
+}
+
+/// `measure` is `count` or `points` (time is refused); it picks what the label breakdown ranks by.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct MetricsQuery {
+    pub scope: MetricsScope,
+    pub bucket: Bucket,
+    pub filter: Option<Filter>,
+    pub measure: Measure,
+}
+
+/// One bucket; `scope` is open plus finished-in-range work at the bucket's end, `done_total` the finished part.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct MetricsBucket {
+    pub start: NaiveDate,
+    pub created: u32,
+    pub completed: u32,
+    pub completed_points: f64,
+    pub scope: u32,
+    pub done_total: u32,
+    pub wip: u32,
+}
+
+/// Calendar days in the workspace zone, nearest-rank percentiles; `None` without a finished issue.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct LeadTime {
+    pub p50_days: Option<f64>,
+    pub p85_days: Option<f64>,
+    pub n: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct CycleTimePoint {
+    pub issue_id: IssueId,
+    pub key: String,
+    pub title: String,
+    pub completed: NaiveDate,
+    pub days: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct CycleTime {
+    pub p50_days: Option<f64>,
+    pub p85_days: Option<f64>,
+    pub n: u32,
+    pub points: Vec<CycleTimePoint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct LabelBreakdown {
+    pub label_id: Option<i64>,
+    pub name: String,
+    pub completed: u32,
+    pub points: f64,
+}
+
+/// `source` is a [`ChangeSource`] name: Ui, Cli, Agent, Migration and so on.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct SourceBreakdown {
+    pub source: String,
+    pub created: u32,
+    pub completed: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct VelocityCycle {
+    pub cycle_id: CycleId,
+    pub name: String,
+    pub points: f64,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct Metrics {
+    pub from: NaiveDate,
+    pub to: NaiveDate,
+    pub bucket: Bucket,
+    pub buckets: Vec<MetricsBucket>,
+    pub lead_time: LeadTime,
+    pub cycle_time: CycleTime,
+    pub wip_now: u32,
+    pub by_label: Vec<LabelBreakdown>,
+    pub by_source: Vec<SourceBreakdown>,
+    /// The last six finished cycles.
+    pub velocity: Vec<VelocityCycle>,
+    /// Fewer than five issues finished in the range: read the numbers as anecdotes.
+    pub thin: bool,
 }
 
 /// One choice of a [`Decision`]; `key` is what an answer and the recommendation name.

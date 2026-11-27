@@ -318,6 +318,9 @@ mod tests {
             color: String::new(),
             color_hex: String::new(),
             icon: None,
+            definition: String::new(),
+            flow_kind: taskapp_core::FlowKind::Idle,
+            nudge_days: None,
         }
     }
 

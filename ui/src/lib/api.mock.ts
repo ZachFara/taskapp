@@ -4,7 +4,9 @@ import { planCsv, projectSlug } from './api.mock.import';
 import { FIELDS } from './issueFields';
 import { parseQuickadd } from './api.mock.quickadd';
 import * as insights from './api.mock.insights';
+import { metrics } from './api.mock.metrics';
 import { stepLabel } from './api.mock.stepLabel';
+import { byStatusOrder, flowDefaults } from './statusOrder';
 import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
 import { decisionsApi } from './api.mock.decisions';
 import { attachmentsApi } from './api.mock.attachments';
@@ -639,11 +641,11 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       },
     },
     statuses: {
-      list: async () => [...s.statuses].sort((a, b) => a.position - b.position),
+      list: async () => [...s.statuses].sort(byStatusOrder),
       create: async (name, category, color, icon) => {
         checkIcon(icon);
         const key = colorKey(color)!;
-        const st = { id: next(s.statuses), name, category, color: key, color_hex: hexOf(key)!, icon: icon ?? null, position: s.statuses.length };
+        const st = { id: next(s.statuses), name, category, color: key, color_hex: hexOf(key)!, icon: icon ?? null, position: s.statuses.length, ...flowDefaults(category) };
         s.statuses.push(st);
         return st;
       },
@@ -653,6 +655,15 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         const key = colorKey(color) ?? st.color;
         if (name && s.statuses.some((x) => x.id !== id && x.name === name)) fail('Conflict', `status ${name} already exists`);
         return Object.assign(st, { name: name ?? st.name, color: key, color_hex: hexOf(key)!, position: position ?? st.position, icon: icon ?? st.icon });
+      },
+      setFlow: async (id, definition, flowKind, nudgeDays) => {
+        const st = find(s.statuses, id, 'status');
+        if (nudgeDays !== null && nudgeDays < 0) fail('Invalid', 'nudge days cannot be negative');
+        return Object.assign(st, {
+          definition: definition === null ? st.definition : definition.trim(),
+          flow_kind: flowKind ?? st.flow_kind,
+          nudge_days: nudgeDays === null ? st.nudge_days : nudgeDays > 0 ? nudgeDays : null,
+        });
       },
       // Hands the listed statuses' own positions to the new order, like the backend.
       reorder: async (ids) => {
@@ -1066,6 +1077,9 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return insights.velocity(tls, spans);
       },
     },
+    metrics: {
+      for: async (q) => metrics(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, tz: workspace.timezone, today: zoneToday() }, fail),
+    },
     search: {
       // shortcut: results come in id order; the backend ranks by bm25. Upgrade when a screen depends on relevance order.
       search: async (text, limit) => {
@@ -1201,7 +1215,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         const byName = <T extends { name: string }>(rows: T[], name: string) => rows.find((r) => r.name.toLowerCase() === name.toLowerCase());
         for (const st of plan.statuses ?? []) {
           if (!byName(s.statuses, st.name)) {
-            const made: Status = { id: next(s.statuses), name: st.name, category: st.category, position: s.statuses.length, color: 'gray', color_hex: hexOf('gray')!, icon: null };
+            const made: Status = { id: next(s.statuses), name: st.name, category: st.category, position: s.statuses.length, color: 'gray', color_hex: hexOf('gray')!, icon: null, ...flowDefaults(st.category) };
             s.statuses.push(made);
             keptStatuses.push(made);
           }
@@ -1218,7 +1232,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           if (!cycles.some((x) => x.start_date === c.start_date)) cycles.push({ id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name: c.name, start_date: c.start_date, end_date: c.end_date, icon: null, color: null });
         }
         for (const d of plan.property_defs ?? []) if (!s.propertyDefs.some((x) => x.key === d.key)) s.propertyDefs.push({ ...d, position: Math.max(-1, ...s.propertyDefs.map((x) => x.position)) + 1 });
-        const ids = new Map<string, number>();
+        const [ids, mark] = [new Map<string, number>(), changes.length];
         const warnings: string[] = [];
         const known = (ext: string) => ids.get(ext) ?? importLog.find((x) => x.external_id === ext)?.issue_id;
         for (const i of plan.issues ?? []) {
@@ -1246,6 +1260,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           if (from === undefined || to === undefined) warnings.push(`relation ${r.from} -> ${r.to} skipped: an issue was not imported`);
           else if (!relations.some((x) => x.from === from && x.to === to && x.kind === kinds.resolve(r.kind))) relations.push({ from, to, kind: kinds.resolve(r.kind) });
         }
+        // Like the real import, every row it wrote says so (metrics split by source).
+        for (const c of changes.slice(mark)) c.source = 'Migration';
         return { created: ids.size, warnings };
       },
     },
@@ -1268,7 +1284,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   };
   const commandOf = (mod: string, fn: string) => `${mod}_${fn.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}`;
   const mutating = (
-    'issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
+    'issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.setFlow statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
     'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
     'projects.create projects.update projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink decisions.create decisions.answer decisions.withdraw decisions.link decisions.unlink templates.create templates.update templates.delete templates.apply ' +
@@ -1291,7 +1307,7 @@ const statuses: Status[] = (
     ['Backlog', 'Backlog', 'gray'], ['Todo', 'Unstarted', 'purple'], ['In Progress', 'Started', 'yellow'],
     ['Done', 'Completed', 'indigo'], ['Canceled', 'Canceled', 'gray'],
   ] as const
-).map(([name, category, color], position) => ({ id: position + 1, name, category, position, color, color_hex: hexOf(color)!, icon: null }));
+).map(([name, category, color], position) => ({ id: position + 1, name, category, position, color, color_hex: hexOf(color)!, icon: null, ...flowDefaults(category) }));
 
 export const projectStatusSeed: ProjectStatus[] = (
   [
@@ -1303,9 +1319,9 @@ export const projectStatusSeed: ProjectStatus[] = (
 const project = (id: number, slug: string, name: string): Project =>
   ({ id, slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), icon: null, color: null, status_id: 1, priority: 0, label_ids: [], properties: {} });
 const day = (n: number) => addDays(new Date().toISOString().slice(0, 10), n);
-// The last two are under way with dates (the devserver seed does the same); the first has none.
+// The last two are under way with dates; the first has a start only (the devserver seed does the same).
 const projects: Project[] = [
-  project(1, 'website', 'Website relaunch'),
+  { ...project(1, 'website', 'Website relaunch'), start_date: day(-5) },
   { ...project(2, 'mobile', 'Mobile app'), status_id: 2, priority: 3, start_date: day(-3), target_date: day(45) },
   { ...project(3, 'office', 'Office move'), status_id: 2, priority: 2, start_date: day(-14), target_date: day(30) },
 ];

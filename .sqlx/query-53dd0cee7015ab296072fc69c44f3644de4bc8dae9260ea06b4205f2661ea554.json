@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", name, category, position, color, icon FROM statuses WHERE id = ?",
+  "query": "SELECT id AS \"id!: i64\", name, category, position, color, icon, definition, flow_kind, nudge_days FROM statuses WHERE id = ?",
   "describe": {
     "columns": [
       {
@@ -32,6 +32,21 @@
         "name": "icon",
         "ordinal": 5,
         "type_info": "Text"
+      },
+      {
+        "name": "definition",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "flow_kind",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "nudge_days",
+        "ordinal": 8,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -43,8 +58,11 @@
       false,
       false,
       false,
+      true,
+      false,
+      false,
       true
     ]
   },
-  "hash": "255fb35ace421e17c2e898070754ec0f9ef1dce4d73f8b9c71c6f064c4aca589"
+  "hash": "53dd0cee7015ab296072fc69c44f3644de4bc8dae9260ea06b4205f2661ea554"
 }

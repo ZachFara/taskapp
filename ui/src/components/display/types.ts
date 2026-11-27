@@ -20,12 +20,12 @@ export type DisplayDef = ViewDef & {
 export const BUILT_IN: { field: FieldRef; name: string }[] = [
   ['Key', 'Key'], ['Priority', 'Priority'], ['Status', 'Status'], ['Label', 'Labels'], ['Project', 'Project'],
   ['Milestone', 'Milestone'], ['Cycle', 'Cycle'], ['Parent', 'Parent'], ['StartDate', 'Start'], ['DueDate', 'Due'], ['Estimate', 'Estimate'], ['Points', 'Points'],
-  ['SubIssueProgress', 'Sub-issues'], ['RelationCount', 'Relations'], ['CommentCount', 'Comments'], ['CreatedAt', 'Created'], ['UpdatedAt', 'Updated'],
+  ['SubIssueProgress', 'Sub-issues'], ['Checklist', 'Checklist'], ['RelationCount', 'Relations'], ['CommentCount', 'Comments'], ['CreatedAt', 'Created'], ['UpdatedAt', 'Updated'],
 ].map(([f, name]) => ({ field: { Fixed: f as FixedField }, name }));
 
 export const LIST_DEFAULT: FieldRef[] = ['Label', 'Project', 'DueDate', 'Estimate'].map((f) => ({ Fixed: f as FixedField }));
-export const TABLE_DEFAULT: FieldRef[] = ['Priority', 'Title', 'Status', 'Project', 'Label', 'DueDate', 'Estimate'].map((f) => ({ Fixed: f as FixedField }));
-export const BOARD_DEFAULT: FieldRef[] = ['Project', 'Label', 'DueDate'].map((f) => ({ Fixed: f as FixedField }));
+export const TABLE_DEFAULT: FieldRef[] = ['Priority', 'Title', 'Status', 'Project', 'Label', 'DueDate', 'Estimate', 'Checklist'].map((f) => ({ Fixed: f as FixedField }));
+export const BOARD_DEFAULT: FieldRef[] = ['Project', 'Label', 'DueDate', 'Checklist'].map((f) => ({ Fixed: f as FixedField }));
 
 export const defaultFor = (layout: ViewDef['layout']): FieldRef[] =>
   layout === 'List' ? LIST_DEFAULT : layout === 'Board' ? BOARD_DEFAULT : layout === 'Table' ? TABLE_DEFAULT : [];

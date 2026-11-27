@@ -260,8 +260,8 @@ async fn ensure_refs(tx: &mut SqliteConnection, plan: &ImportPlan) -> Result<()>
     for s in &plan.statuses {
         if find(tx, STATUS_BY_NAME, &s.name).await?.is_none() {
             // Not recorded: the archived imported issues still point at it, so undo could not delete it.
-            sqlx::query("INSERT INTO statuses (name, category, position, color) VALUES (?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM statuses), ?)")
-                .bind(&s.name).bind(category_str(s.category)).bind(COLOR).execute(&mut *tx).await?;
+            sqlx::query("INSERT INTO statuses (name, category, position, color, flow_kind) VALUES (?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM statuses), ?, CASE WHEN ? = 'started' THEN 'active' ELSE 'idle' END)")
+                .bind(&s.name).bind(category_str(s.category)).bind(COLOR).bind(category_str(s.category)).execute(&mut *tx).await?;
         }
     }
     for l in &plan.labels {

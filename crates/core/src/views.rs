@@ -350,6 +350,7 @@ fn fixed_col(entity: ViewEntity, x: FixedField) -> Result<Col> {
             false,
         ),
         FixedField::Label => return Err(Error::Invalid("cannot sort by label".into())),
+        FixedField::Checklist => return Err(Error::Invalid("cannot sort by checklist".into())),
         FixedField::RelationKind => {
             return Err(Error::Invalid("cannot sort by relation kind".into()));
         }

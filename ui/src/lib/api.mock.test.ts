@@ -278,3 +278,30 @@ describe('mock view folders', () => {
     expect(inside.sort((x, y) => x.position - y.position).map((p) => p.id)).toEqual([p1, p2]);
   });
 });
+
+describe('mock metrics', () => {
+  const ago = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
+  const query = (over = {}) => ({ scope: { Range: { from: ago(30), to: ago(0) } }, bucket: 'Week' as const, filter: null, measure: 'count' as const, ...over });
+
+  it('replays the seeded history into buckets, times and breakdowns', async () => {
+    const m = await createMockApi().metrics.for(query());
+    expect(m.buckets[0].start <= ago(30)).toBe(true);
+    expect(m.buckets.reduce((n, b) => n + b.completed, 0)).toBe(m.lead_time.n);
+    expect(m.cycle_time.n).toBeLessThanOrEqual(m.lead_time.n);
+    expect(m.cycle_time.n).toBeGreaterThan(0);
+    expect(m.by_source.map((x) => x.source)).toContain('Ui');
+    expect(m.thin).toBe(m.lead_time.n < 5);
+  });
+
+  it('counts a fresh completion by the source that made it, and refuses bad queries', async () => {
+    const mock = createMockApi();
+    const doing = (await mock.statuses.list()).find((s) => s.category === 'Started')!.id;
+    const done = (await mock.statuses.list()).find((s) => s.category === 'Completed')!.id;
+    await mock.issues.update(2, { status_id: doing });
+    await mock.issues.update(2, { status_id: done });
+    const today = (await mock.metrics.for(query({ scope: { Range: { from: ago(0), to: ago(0) } }, bucket: 'Day' }))).buckets[0];
+    expect(today.completed).toBe(1);
+    await expect(mock.metrics.for(query({ measure: 'time' }))).rejects.toMatchObject({ kind: 'Invalid' });
+    await expect(mock.metrics.for(query({ scope: { Cycle: 99 } }))).rejects.toMatchObject({ kind: 'NotFound' });
+  });
+});

@@ -378,4 +378,17 @@ describe('walk', { timeout: 20_000 }, () => {
     await img.click();
     await pw(page.getByRole('dialog', { name: 'Image' }).locator('img')).toBeVisible();
   });
+
+  it('DASH the dashboard opens from the sidebar, a card hides, and the Settings switch removes the page', async () => {
+    await open('/my');
+    await page.getByRole('link', { name: 'Dashboard' }).click();
+    await pw(page.getByRole('region', { name: 'Summary' })).toBeVisible();
+    await pw(page.getByRole('region', { name: 'Burn-up' })).toBeVisible();
+    await page.getByRole('button', { name: 'Cards' }).click();
+    await page.getByRole('checkbox', { name: 'Burn-up' }).click();
+    await pw(page.getByRole('region', { name: 'Burn-up' })).toHaveCount(0);
+    await open('/settings/general');
+    await page.getByRole('switch', { name: 'Dashboard' }).click();
+    await pw(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0);
+  });
 });

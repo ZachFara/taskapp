@@ -247,7 +247,8 @@ async fn settings_map(db: &Db) -> Result<BTreeMap<String, Value>> {
 
 async fn statuses(db: &Db) -> Result<Vec<StatusRow>> {
     let rows = sqlx::query_as(
-        "SELECT name, category, position, color, icon FROM statuses ORDER BY position, id",
+        "SELECT name, category, position, color, icon, definition, flow_kind, nudge_days
+         FROM statuses ORDER BY position, id",
     )
     .fetch_all(&db.pool)
     .await?;

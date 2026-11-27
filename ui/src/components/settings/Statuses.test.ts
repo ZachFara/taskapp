@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import Statuses from './Statuses.svelte';
-import { clickLabel, field, mountSettings, press, setField } from './testing';
+import { clickLabel, field, mountSettings, pick, press, setField } from './testing';
 
 async function add(target: Element, category: string, name: string) {
   await clickLabel(`Add to ${category}`);
@@ -86,5 +86,40 @@ describe('Statuses', () => {
     expect(meta.length).toBeGreaterThan(0);
     expect(meta.filter((t) => /^1 issues?$/.test(t))).toEqual(meta.filter((t) => t.startsWith('1 ')));
     expect(meta.join(' ')).not.toMatch(/\b1 issues\b/);
+  });
+
+  it('lists the statuses by category, not by name or creation order', async () => {
+    const { target, api } = await mountSettings(Statuses);
+    await add(target, 'Backlog', 'Zzz icebox');
+    const names = (await api.statuses.list()).map((s) => s.name);
+    expect(names.slice(0, 2)).toEqual(['Backlog', 'Zzz icebox']);
+    expect(names.at(-1)).toBe('Canceled');
+  });
+
+  it('shows each status with its definition, kind and nudge, started ones active by default', async () => {
+    const { target } = await mountSettings(Statuses);
+    expect(field(target, 'Definition of Backlog').value).toBe('');
+    expect(target.querySelector('[aria-label="Flow kind of In Progress"]')?.textContent).toContain('Active');
+    expect(target.querySelector('[aria-label="Flow kind of Todo"]')?.textContent).toContain('Idle');
+    expect(field(target, 'Nudge days of Todo').value).toBe('');
+  });
+
+  it('saves a definition and a nudge with one call each, and 0 clears the nudge', async () => {
+    const { target, calls, api } = await mountSettings(Statuses);
+    await setField(target, 'Definition of Todo', 'Ready to pick up');
+    await setField(target, 'Nudge days of Todo', '5');
+    expect(calls.filter((c) => c === 'statuses.setFlow')).toHaveLength(2);
+    const todo = () => api.statuses.list().then((l) => l.find((s) => s.name === 'Todo')!);
+    expect(await todo()).toMatchObject({ definition: 'Ready to pick up', nudge_days: 5 });
+    await setField(target, 'Nudge days of Todo', '0');
+    expect((await todo()).nudge_days).toBeNull();
+  });
+
+  it('changes the kind from the picker', async () => {
+    const { target, calls, api } = await mountSettings(Statuses);
+    await pick(target, 'Flow kind of In Progress', 'Waiting: blocked on someone or something');
+    expect(calls.filter((c) => c === 'statuses.setFlow')).toHaveLength(1);
+    expect((await api.statuses.list()).find((s) => s.name === 'In Progress')!.flow_kind).toBe('Waiting');
+    expect(target.querySelector('[aria-label="Flow kind of In Progress"]')?.textContent).toContain('Waiting');
   });
 });

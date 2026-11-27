@@ -24,6 +24,11 @@ const plain = { status_id: 1, priority: 0, label_ids: [], properties: {} };
 const T0 = '2026-01-01T00:00:00Z'; // the server ignores a project's own created_at and updated_at on update
 const tpl = (name: string, slug: string, body: Record<string, unknown>) => ({ name, slug, icon: null, color: null, body });
 
+// Metrics: the seed is dated relative to today, so these ranges are too (both sides run at the same moment).
+const ago = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
+const metrics = (name: string, over: Record<string, unknown> = {}): Case =>
+  call(name, 'metrics_for', { query: { scope: { Range: { from: ago(35), to: ago(0) } }, bucket: 'Week', filter: null, measure: 'count', ...over } });
+
 const zoned = def({ filter: cond(prop('zone'), 'Eq', 'a'), sorts: [{ field: prop('zone'), descending: false }], group_by: prop('zone'), columns: [prop('zone'), fixed('Priority')], card_fields: [prop('zone')] });
 
 export const cases: Case[] = [
@@ -316,6 +321,15 @@ export const cases: Case[] = [
   call('insights: unknown view is NotFound', 'insights_progress', { scope: { View: 99 }, measure: 'points', from: null, to: null }),
   call('insights: velocity per cycle in points', 'insights_velocity', { scope: { Project: 2 }, measure: 'points', periods: 3 }),
   call('insights: velocity counting issues', 'insights_velocity', { scope: { View: 1 }, measure: 'count', periods: 1 }),
+  metrics('metrics: five weeks by week'),
+  metrics('metrics: two weeks by day in points', { scope: { Range: { from: ago(14), to: ago(0) } }, bucket: 'Day', measure: 'points' }),
+  metrics('metrics: a quarter by month', { scope: { Range: { from: ago(90), to: ago(0) } }, bucket: 'Month' }),
+  metrics('metrics: a cycle uses its dates and members', { scope: { Cycle: 1 }, bucket: 'Day' }),
+  metrics('metrics: label filter', { filter: cond(fixed('Label'), 'In', [1]) }),
+  metrics('metrics: project filter in points', { filter: cond(fixed('Project'), 'In', [2]), measure: 'points' }),
+  metrics('metrics: backwards range is Invalid', { scope: { Range: { from: ago(0), to: ago(5) } } }),
+  metrics('metrics: time measure is Invalid', { measure: 'time' }),
+  metrics('metrics: unknown cycle is NotFound', { scope: { Cycle: 99 } }),
 
   // Writes and their validation
   call('issues: empty title is Invalid', 'issues_create', { input: { title: '  ' } }),
@@ -438,6 +452,13 @@ export const cases: Case[] = [
   call('statuses: unknown colour is Invalid', 'statuses_update', { id: 2, name: null, color: 'teal2', position: null, icon: null }),
   call('statuses: update unknown is NotFound', 'statuses_update', { id: 99, name: 'x', color: null, position: null, icon: null }),
   call('statuses: list after edits', 'statuses_list'),
+  call('statuses: set definition, kind and nudge', 'statuses_set_flow', { id: 2, definition: ' Ready to pick up ', flow_kind: 'Waiting', nudge_days: 7 }),
+  call('statuses: nudge 0 clears it, other fields stay', 'statuses_set_flow', { id: 2, definition: null, flow_kind: null, nudge_days: 0 }),
+  call('statuses: a negative nudge is Invalid', 'statuses_set_flow', { id: 2, definition: null, flow_kind: null, nudge_days: -1 }),
+  call('statuses: set flow on unknown is NotFound', 'statuses_set_flow', { id: 99, definition: 'x', flow_kind: null, nudge_days: null }),
+  call('statuses: undo the flow edit', 'history_undo'),
+  call('statuses: a new backlog status lists with its category', 'statuses_create', { name: 'Icebox', category: 'Backlog', color: 'gray', icon: null }),
+  call('statuses: list is by category then position', 'statuses_list'),
   call('properties: rename', 'properties_rename_def', { key: 'effort', new_name: 'Effort (days)' }),
   call('properties: rename unknown is NotFound', 'properties_rename_def', { key: 'nope', new_name: 'x' }),
   call('properties: change kind', 'properties_change_kind', { key: 'effort', kind: 'Text', options: [] }),

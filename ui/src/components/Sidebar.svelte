@@ -28,6 +28,7 @@
   import { decisions, openDecisions, watchDecisions } from '../lib/decisions.svelte';
   import { labelFor } from '../lib/commands';
   import { shortcutFor } from '../lib/commands';
+  import { dashboard, loadDashboard } from './dashboard/dashboard.svelte';
   import ProjectSpark from './insights/ProjectSpark.svelte';
   import IconColorPicker from './pickers/IconColorPicker.svelte';
 
@@ -42,6 +43,7 @@
   let picking = $state<string | null>(null);
 
   onMount(watchDecisions);
+  onMount(loadDashboard);
   const waiting = $derived(openDecisions());
   const blocking = $derived(waiting.filter((d) => d.mode === 'blocking').length);
 
@@ -292,6 +294,7 @@
   </section>
 
   <ul class="top">
+    {#if dashboard.on}<li>{@render navLink('/dashboard', 'chart', 'Dashboard', 'nav.dashboard', route === '/dashboard')}</li>{/if}
     <li>{@render navLink('/events', 'calendar', 'Events', 'nav.events', route === '/events' || route.startsWith('/event/'))}</li>
     <li>{@render navLink('/decisions', 'help', 'Decisions', 'nav.decisions', route === '/decisions', waiting.length > 0 && !decisions.error ? { n: waiting.length, urgent: blocking } : undefined)}</li>
   </ul>

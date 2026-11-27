@@ -5,7 +5,7 @@ import { fixtures, projectStatusSeed } from './api.mock';
 
 const issue = (id: number, o: Partial<Issue> = {}): Issue => ({ ...fixtures.issues[0], id, key: `ABC-${id}`, title: `t${id}`, parent_id: null, project_id: 1, start_date: null, due: null, estimate_minutes: null, ...o });
 const bar = (issue_id: number, start: string, end: string): Bar => ({ issue_id, start, end, from_estimate: false });
-const base = { mode: 'issues' as const, projects: fixtures.projects as Project[], milestones: [], critical: [] };
+const base = { mode: 'issues' as const, projects: fixtures.projects as Project[], milestones: [], critical: [], today: '2026-12-02' };
 
 describe('gantt rows', () => {
   it('rollup_spans_children', () => {
@@ -42,15 +42,37 @@ describe('gantt rows', () => {
 });
 
 describe('gantt project rows', () => {
-  it('a_dateless_project_draws_no_milestone_row', () => {
-    const projects = [{ ...fixtures.projects[0], start_date: null, target_date: null }] as Project[];
-    const milestones: Milestone[] = [{ id: 9, project_id: projects[0].id, name: 'Launch', target_date: '2026-12-20' }];
-    expect(buildRows({ mode: 'projects', issues: [], bars: [], projects, milestones, critical: [] })).toEqual([]);
+  const today = '2026-12-02';
+  const proj = (o: Partial<Project>) => ({ ...fixtures.projects[0], ...o }) as Project;
+  const rowsOf = (projects: Project[], issues: Issue[] = [], milestones: Milestone[] = []) =>
+    buildRows({ mode: 'projects', issues, bars: [], projects, milestones, critical: [], today });
+
+  it('a_dateless_project_gets_an_undated_row', () => {
+    const rows = rowsOf([proj({ start_date: null, target_date: null })]);
+    expect(rows).toEqual([expect.objectContaining({ id: 'project-1', label: 'Website relaunch', projectId: 1, undated: true })]);
+    expect(rows[0].start).toBeUndefined();
+  });
+
+  it('a_dateless_projects_milestones_still_draw_under_it', () => {
+    const milestones: Milestone[] = [{ id: 9, project_id: 1, name: 'Launch', target_date: '2026-12-20' }];
+    const rows = rowsOf([proj({ start_date: null, target_date: null })], [], milestones);
+    expect(rows.map((r) => r.kind)).toEqual(['bar', 'milestone']);
+  });
+
+  it('a_start_only_project_runs_to_today_or_its_latest_issue', () => {
+    const start = proj({ start_date: '2026-12-01', target_date: null });
+    expect(rowsOf([start])[0]).toMatchObject({ kind: 'bar', start: '2026-12-01', end: today, estimated: true });
+    const later = [{ ...fixtures.issues[0], id: 5, project_id: 1, due: { Date: '2026-12-20' } } as Issue];
+    expect(rowsOf([start], later)[0]).toMatchObject({ start: '2026-12-01', end: '2026-12-20' });
+  });
+
+  it('a_target_only_project_draws_a_week_ending_at_the_target', () => {
+    expect(rowsOf([proj({ start_date: null, target_date: '2026-12-10' })])[0]).toMatchObject({ start: '2026-12-03', end: '2026-12-10', estimated: true });
   });
 
   it('a_project_bar_takes_its_status_colour', () => {
-    const projects = [{ ...fixtures.projects[0], start_date: '2026-12-01', target_date: '2026-12-05', status_id: 2 }] as Project[];
-    const rows = buildRows({ mode: 'projects', issues: [], bars: [], projects, milestones: [], critical: [], projectStatuses: projectStatusSeed });
+    const projects = [proj({ start_date: '2026-12-01', target_date: '2026-12-05', status_id: 2 })];
+    const rows = buildRows({ mode: 'projects', issues: [], bars: [], projects, milestones: [], critical: [], today, projectStatuses: projectStatusSeed });
     expect(rows[0]).toMatchObject({ kind: 'bar', color: 'amber' });
   });
 });
