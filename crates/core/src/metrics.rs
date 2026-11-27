@@ -211,7 +211,7 @@ fn buckets(mine: &[&Facts], from: NaiveDate, to: NaiveDate, kind: Bucket) -> Vec
             start,
             created: count(mine.iter().filter(|f| a <= f.made && f.made <= b).count()),
             completed: count(done.len()),
-            completed_points: done.iter().map(|f| f.points()).sum(),
+            completed_points: total(done.iter().map(|f| f.points())),
             scope: open + finished,
             done_total: finished,
             wip,
@@ -219,6 +219,11 @@ fn buckets(mine: &[&Facts], from: NaiveDate, to: NaiveDate, kind: Bucket) -> Vec
         start = next;
     }
     out
+}
+
+/// Sum of points. A float `sum` of nothing is -0.0, which prints as "-0"; `+ 0.0` makes it 0.
+fn total(points: impl Iterator<Item = f64>) -> f64 {
+    points.sum::<f64>() + 0.0
 }
 
 async fn by_label(db: &Db, done: &[&Facts], measure: Measure) -> Result<Vec<LabelBreakdown>> {
@@ -301,7 +306,7 @@ fn velocity(all: &[Facts], all_cycles: &[Cycle], today: NaiveDate) -> Vec<Veloci
                     .name
                     .clone()
                     .unwrap_or_else(|| format!("Cycle {}", c.number)),
-                points: done.iter().map(|f| f.points()).sum(),
+                points: total(done.iter().map(|f| f.points())),
                 count: count(done.len()),
             }
         })
@@ -443,4 +448,13 @@ pub async fn today(db: &Db) -> Result<NaiveDate> {
 /// As [`metrics_on`].
 pub async fn metrics_for(db: &Db, q: MetricsQuery) -> Result<Metrics> {
     metrics_on(db, q, today(db).await?).await
+}
+
+#[cfg(test)]
+mod total_tests {
+    #[test]
+    fn nothing_sums_to_positive_zero() {
+        assert!(super::total(std::iter::empty()).is_sign_positive());
+        assert!((super::total([1.5, 2.0].into_iter()) - 3.5).abs() < f64::EPSILON);
+    }
 }
