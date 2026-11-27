@@ -167,7 +167,8 @@ is on. Restore with the archive button in the issue page header (or undo).
 ## Undo and redo
 
 Every change can be undone, whoever made it: `mod+z` or `u` undoes the newest step, `mod+shift+z` redoes. One CLI or
-MCP call is one step. After a change a toast offers Undo. The toast "Nothing to undo" shows when the stack is empty.
+MCP call is one step. After a change a toast offers Undo. Toasts stack (at most three) and each leaves six seconds after it appeared. The
+toast "Nothing to undo" shows when the stack is empty.
 Undo refuses when something changed since. Inside a text field `mod+z` is the field's own undo. CLI: `taskapp undo`,
 `taskapp redo`; MCP: `undo`, `redo`, `undo_status`. An import is one step ("Undo import" button after it).
 
@@ -297,6 +298,8 @@ belong to many events. Times are wall-clock times with no zone.
 
 - **Events page** (sidebar "Events", `g e`): upcoming events grouped by day, with past ones behind a "Past" toggle.
   "New event" (or the command) asks for title, date, optional end date, all day or a from and to time, place and notes.
+  Right-click an event for Open, Edit, Delete and Link an issue; the command menu runs the same actions on the event
+  you right-clicked last.
 - **An event** (click it, `/event/<id>`): details, Edit, Delete (undoable), and the linked issues with "Link an issue"
   (search by text) and a remove button on each.
 - **On an issue**: the Events section lists its events, with "Add to event" and a remove button on each.

@@ -12,6 +12,7 @@ const IDS: [string, string][] = [
   ['issue.description.edit', '/issue/ABC-1'], ['issue.comment.focus', '/issue/ABC-1'], ['issue.subissue.add', '/issue/ABC-1'],
   ['issue.relation.add', '/issue/ABC-1'], ['issue.event.add', '/issue/ABC-1'],
   ['event.edit', '/event/1'], ['event.delete', '/event/1'], ['event.link', '/event/1'], ['event.new', '/events'],
+  ['event.open', '/events'], ['event.edit', '/events'], ['event.delete', '/events'], ['event.link', '/events'],
   ['project.rename', '/project/web'], ['project.description.edit', '/project/web'], ['milestone.new', '/project/web'],
   ['icon.change', '/view/1'], ['icon.change', '/project/web'], ['cycle.move_unfinished', '/cycles'], ['settings.save', '/settings/general'],
 ];

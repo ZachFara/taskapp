@@ -3,12 +3,15 @@
   import { navigate } from '../../app/routes';
   import { api } from '../../lib/api';
   import type { Event } from '../../lib/bindings';
+  import { listCommands, type Ctx } from '../../lib/commands';
   import { localDay } from '../../lib/gantt';
   import Button from '../../ui/Button.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
   import EntityIcon from '../../ui/EntityIcon.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
+  import ContextMenu from '../../ui/ContextMenu.svelte';
   import ListRow from '../../ui/ListRow.svelte';
+  import MenuItem from '../../ui/MenuItem.svelte';
   import PageHeader from '../../ui/PageHeader.svelte';
   import { workspaceZone } from '../views/dates';
   import EventForm from './EventForm.svelte';
@@ -19,6 +22,10 @@
   let loaded = $state(false);
   let creating = $state(false);
   let showPast = $state(false);
+  // The event the pointer last hit on the list: right-click and the command menu act on it.
+  let target = $state<Event | null>(null);
+  let editing = $state(false);
+  let menuOpen = $state(false);
 
   async function load() {
     today = localDay(new Date(), await workspaceZone());
@@ -37,13 +44,44 @@
 
   // The command menu and keys open the form through the registry's event.
   $effect(() => {
-    const open = () => (creating = true);
-    addEventListener('command:event.new', open);
-    addEventListener('command:view.refresh', load);
-    return () => {
-      removeEventListener('command:event.new', open);
-      removeEventListener('command:view.refresh', load);
+    const on: Record<string, () => void> = {
+      'event.new': () => (creating = true),
+      'view.refresh': () => void load(),
+      'event.open': () => target && navigate(`/event/${target.id}`),
+      'event.edit': () => target && (editing = true),
+      'event.delete': () => target && void remove(target),
+      // The event page focuses its issue picker when it hears this; it mounts after the navigation, so ask late.
+      'event.link': () => {
+        const e = target;
+        if (!e) return;
+        navigate(`/event/${e.id}`);
+        setTimeout(() => dispatchEvent(new CustomEvent('command:event.link')), 0);
+      },
     };
+    for (const [k, f] of Object.entries(on)) addEventListener(`command:${k}`, f);
+    return () => Object.entries(on).forEach(([k, f]) => removeEventListener(`command:${k}`, f));
+  });
+
+  async function remove(e: Event) {
+    await api.events.delete(e.id);
+    target = null;
+    await load();
+  }
+
+  // Right-click picks the event under the pointer; off a row there is nothing to act on, so no menu.
+  function aim(e: MouseEvent) {
+    const row = (e.target as Element).closest<HTMLElement>('[data-event]');
+    const hit = row ? events.find((x) => x.id === Number(row.dataset.event)) : undefined;
+    if (!hit) return void e.stopPropagation();
+    target = hit;
+  }
+  // Event actions only, in the order the menu shows them. Each one runs its registry command, as the command menu does.
+  const ORDER = ['event.open', 'event.edit', 'event.delete', 'event.link'];
+  const ctx = (): Ctx => ({ route: '/events', layout: null, selection: [], focusedIssueId: null, openIssueId: null, api, navigate });
+  const items = $derived.by(() => {
+    if (!menuOpen || !target) return [];
+    const live = listCommands(ctx());
+    return ORDER.flatMap((id) => live.filter((c) => c.id === id));
   });
 
   onMount(load);
@@ -76,24 +114,35 @@
   {/snippet}
 </PageHeader>
 
-<main class="body">
-  {#if loaded && events.length === 0}
-    <EmptyState title="No events yet" hint="An event is something on a date: a meeting, a launch, a deadline day. Link it to the issues it is about.">
-      {#snippet action()}<Button variant="primary" icon="plus" onclick={() => (creating = true)}>New event</Button>{/snippet}
-    </EmptyState>
-  {:else if loaded}
-    <h3>Upcoming</h3>
-    {#if upcoming.length}{@render days(upcoming)}{:else}<p class="none">Nothing coming up.</p>{/if}
-    {#if past.length}
-      <h3><button type="button" class="toggle" aria-expanded={showPast} onclick={() => (showPast = !showPast)}>Past ({past.length})</button></h3>
-      {#if showPast}{@render days(past)}{/if}
-    {/if}
-  {/if}
-</main>
+<ContextMenu bind:open={menuOpen}>
+  {#snippet area()}
+    <div class="fill" role="presentation" oncontextmenucapture={aim}>
+      <main class="body">
+        {#if loaded && events.length === 0}
+          <EmptyState title="No events yet" hint="An event is something on a date: a meeting, a launch, a deadline day. Link it to the issues it is about.">
+            {#snippet action()}<Button variant="primary" icon="plus" onclick={() => (creating = true)}>New event</Button>{/snippet}
+          </EmptyState>
+        {:else if loaded}
+          <h3>Upcoming</h3>
+          {#if upcoming.length}{@render days(upcoming)}{:else}<p class="none">Nothing coming up.</p>{/if}
+          {#if past.length}
+            <h3><button type="button" class="toggle" aria-expanded={showPast} onclick={() => (showPast = !showPast)}>Past ({past.length})</button></h3>
+            {#if showPast}{@render days(past)}{/if}
+          {/if}
+        {/if}
+      </main>
+    </div>
+  {/snippet}
+  {#each items as c (c.id)}
+    <MenuItem label={c.label} icon={c.icon} shortcut={c.shortcut} onSelect={() => c.run?.(ctx())} />
+  {/each}
+</ContextMenu>
 
 <EventForm bind:open={creating} onsaved={(e) => navigate(`/event/${e.id}`)} />
+{#if target}<EventForm bind:open={editing} event={target} onsaved={load} />{/if}
 
 <style>
+  .fill { min-height: 100%; }
   .body { padding: 0 var(--s-7) var(--s-7); display: grid; gap: var(--s-3); }
   .group { display: grid; }
   .rows { list-style: none; margin: 0; padding: 0; }
