@@ -5,9 +5,10 @@
   import type { Label } from '../../lib/bindings';
   import IconColorPicker from '../pickers/IconColorPicker.svelte';
   import Button from '../../ui/Button.svelte';
-  import Dialog from '../../ui/Dialog.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
-  import IconButton from '../../ui/IconButton.svelte';
+  import RowActions from '../../ui/RowActions.svelte';
+  import { rowActs, rowUi } from '../../lib/rowUi.svelte';
+  import { patch } from '../../lib/rowActions';
   import TextInput from '../../ui/TextInput.svelte';
   import './entities.css';
 
@@ -15,7 +16,6 @@
   let name = $state('');
   let look = $state<{ icon: string | null; color: string | null }>({ icon: null, color: null });
   let error = $state('');
-  let doomed = $state<Label | null>(null);
 
   const load = async () => (labels = await api.labels.list());
   onMount(load);
@@ -41,22 +41,19 @@
     const next = (e.target as HTMLInputElement).value.trim();
     if (next && next !== l.name) void write(() => api.labels.update({ ...l, name: next }));
   };
-  const remove = () => write(async () => {
-    await api.labels.delete(doomed!.id);
-    doomed = null;
-  });
 </script>
 
 <div class="es">
-  <SectionHead lede="Free-form tags you can put on any issue. Pick a colour and an icon so they read at a glance." />
+  <SectionHead lede="Free-form tags you can put on any issue or project. Pick a colour and an icon so they read at a glance." />
 
   {#if labels.length}
     <ul class="es-list">
       {#each labels as l (l.id)}
         <li class="es-row">
-          <IconColorPicker label={`Icon and colour of ${l.name}`} value={{ icon: l.icon, color: l.color }} onchange={(v) => write(() => api.labels.update({ ...l, icon: v.icon, color: v.color ?? l.color }))} />
-          <div class="es-name" onchange={(e) => rename(l, e)}><TextInput label={`Name of ${l.name}`} value={l.name} /></div>
-          <div class="es-tools"><IconButton icon="trash" label={`Delete ${l.name}`} onclick={() => (doomed = l)} /></div>
+          <RowActions label={l.name} actions={rowActs({ kind: 'label', id: l.id, name: l.name })}>
+            <IconColorPicker label={`Icon and colour of ${l.name}`} value={{ icon: l.icon, color: l.color }} onchange={(v) => patch({ kind: 'label', id: l.id, name: l.name }, { icon: v.icon, color: v.color ?? l.color })} bind:open={() => rowUi.picking === `label:${l.id}`, (o) => (rowUi.picking = o ? `label:${l.id}` : null)} />
+            <div class="es-name" onchange={(e) => rename(l, e)}><TextInput label={`Name of ${l.name}`} value={l.name} /></div>
+          </RowActions>
         </li>
       {/each}
     </ul>
@@ -72,9 +69,3 @@
   {#if error}<p class="es-err" role="alert">{error}</p>{/if}
 </div>
 
-<Dialog bind:open={() => doomed !== null, (v) => { if (!v) doomed = null; }} title={`Delete ${doomed?.name ?? 'label'}?`} description="It is removed from every issue that has it.">
-  {#snippet actions()}
-    <Button onclick={() => (doomed = null)}>Cancel</Button>
-    <Button variant="danger" onclick={remove}>Delete label</Button>
-  {/snippet}
-</Dialog>

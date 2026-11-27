@@ -23,9 +23,9 @@
     onchange,
     label = 'Icon and colour',
     colorOnly = false,
-  }: { value: IconColor; onchange: (v: IconColor) => void; label?: string; colorOnly?: boolean } = $props();
+    open = $bindable(false),
+  }: { value: IconColor; onchange: (v: IconColor) => void; label?: string; colorOnly?: boolean; open?: boolean } = $props();
 
-  let open = $state(false);
   let tab = $state<'icons' | 'emoji'>('icons');
   let query = $state('');
   let pasted = $state('');
@@ -97,7 +97,7 @@
     display: inline-grid;
     place-items: center;
     padding: 0;
-    border: 1px solid var(--border);
+    border: 1px solid transparent; /* the outline shows on hover, so a column of them stays quiet */
     border-radius: var(--r-ctl);
     background: transparent;
     transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);

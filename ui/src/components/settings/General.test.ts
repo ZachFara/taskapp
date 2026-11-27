@@ -44,6 +44,15 @@ describe('General', () => {
     expect(target.textContent).toMatch(/existing issue keys (do not|keep working)/i);
   });
 
+  it('offers only the week starts the core accepts', async () => {
+    const { target } = await mountSettings(General);
+    const trigger = field(target, 'Week starts on');
+    trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }));
+    await new Promise((r) => setTimeout(r, 0));
+    const offered = [...document.querySelectorAll('[role="option"]')].map((o) => o.textContent?.trim());
+    expect(offered).toEqual(['Sunday', 'Monday']);
+  });
+
   it('saves the time zone, theme and week start with the same keys as before', async () => {
     const { target, api } = await mountSettings(General);
     await pick(target, 'Time zone', 'Europe/Paris');
@@ -55,6 +64,25 @@ describe('General', () => {
     expect(await api.settings.get('theme')).toBe('dark');
   // Opening the time zone list renders every zone; under load that takes longer than the default 5s.
   }, 30_000);
+
+  it('picking an animation speed applies it at once and remembers it on this device', async () => {
+    const { target } = await mountSettings(General);
+    await pick(target, 'Animation speed', 'Slow');
+    expect(document.documentElement.style.getPropertyValue('--motion-scale')).toBe('1.6');
+    expect(localStorage.getItem('cairn.animationSpeed')).toBe('slow');
+    await pick(target, 'Animation speed', 'Off');
+    expect(document.documentElement.style.getPropertyValue('--motion-scale')).toBe('0');
+    localStorage.removeItem('cairn.animationSpeed');
+  });
+
+  it('picking a look applies it at once', async () => {
+    const { target } = await mountSettings(General);
+    await press(target, 'Jira');
+    expect(document.documentElement.dataset.skin).toBe('jira');
+    expect(target.querySelector('button[aria-pressed="true"]')?.textContent).toContain('Jira');
+    await press(target, 'Survey map');
+    expect(document.documentElement.hasAttribute('data-skin')).toBe(false);
+  });
 
   it('blank fields say what goes in them, and a time zone change waits for a restart', async () => {
     const { target } = await mountSettings(General);

@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{ChangeSource, Db, Error, Result, rows, workspace};
@@ -64,6 +66,7 @@ const USER_KEYS: &[&str] = &[
     "theme",
     "estimation",
     "point_scale",
+    "issue_fields",
     "insights_charts",
     "sidebar_sparklines",
     "reminders_list_id",
@@ -74,6 +77,7 @@ const USER_KEYS: &[&str] = &[
     "export_remote",
     "backup_dir",
     "default_view_template",
+    "default_status",
 ];
 
 /// Prefixes of keys the UI writes per item: `insights.<kind>.<id>` and `sidebar_*`.
@@ -106,12 +110,81 @@ pub async fn set_from_user(db: &Db, key: &str, value: &serde_json::Value) -> Res
         }
         "theme" => check_one_of(key, value, &["system", "light", "dark"])?,
         "week_start" => check_one_of(key, value, &["sunday", "monday"])?,
+        "issue_fields" => check_issue_fields(value)?,
+        "default_status" => {
+            let id = value.as_i64().ok_or_else(|| bad("a status id"))?;
+            if !crate::statuses::list(db)
+                .await?
+                .iter()
+                .any(|st| st.id.0 == id)
+            {
+                return Err(bad("an existing status"));
+            }
+        }
         "default_view_template" if !(value.is_null() || value.is_i64()) => {
             return Err(bad("a view template id or null"));
         }
         _ => {}
     }
     set(db, key, value).await
+}
+
+/// The built-in issue fields a workspace may switch off; status and title are always on.
+pub const ISSUE_FIELDS: &[&str] = &[
+    "priority",
+    "project",
+    "milestone",
+    "cycle",
+    "labels",
+    "start",
+    "due",
+    "estimate",
+    "points",
+    "parent",
+];
+
+/// `issue_fields` is an ordered list of `{field, on}`: known names only, each at most once.
+fn check_issue_fields(value: &serde_json::Value) -> Result<()> {
+    let bad = |why: String| Error::Invalid(format!("setting issue_fields: {why}"));
+    let list = value
+        .as_array()
+        .ok_or_else(|| bad("must be a list of {field, on}".into()))?;
+    let mut seen = Vec::new();
+    for item in list {
+        let name = item.get("field").and_then(|f| f.as_str());
+        let on = item.get("on").is_some_and(serde_json::Value::is_boolean);
+        match name {
+            Some(n) if on && ISSUE_FIELDS.contains(&n) && !seen.contains(&n) => seen.push(n),
+            Some(n) if on => return Err(bad(format!("unknown or repeated field `{n}`"))),
+            _ => {
+                return Err(bad(
+                    "each entry needs a field name and a true or false `on`".into(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Fields quick add must not read tokens for: those switched off in `issue_fields`, and points when `estimation`
+/// has them off.
+///
+/// # Errors
+/// Fails on a database error.
+pub async fn fields_off(db: &Db) -> Result<Vec<String>> {
+    let list = get::<Vec<serde_json::Value>>(db, "issue_fields")
+        .await?
+        .unwrap_or_default();
+    let mut off: Vec<String> = list
+        .iter()
+        .filter(|i| i.get("on") == Some(&serde_json::Value::Bool(false)))
+        .filter_map(|i| i.get("field")?.as_str().map(String::from))
+        .collect();
+    let est = get::<String>(db, "estimation").await?;
+    if matches!(est.as_deref(), Some("none" | "time")) {
+        off.push("points".into());
+    }
+    Ok(off)
 }
 
 fn check_one_of(key: &str, value: &serde_json::Value, allowed: &[&str]) -> Result<()> {
@@ -124,4 +197,39 @@ fn check_one_of(key: &str, value: &serde_json::Value, allowed: &[&str]) -> Resul
             allowed.join(", ")
         )))
     }
+}
+
+/// The folder a person typed in a path setting: `~` and `~/...` mean the home folder; anything else must be a full
+/// path, because a relative one would resolve against the app's working folder (the disk root when opened from Finder).
+///
+/// # Errors
+///
+/// `Invalid` when the text is empty, relative, or names another user's home (`~name`).
+pub fn user_path(text: &str, home: &Path) -> Result<PathBuf> {
+    let text = text.trim();
+    if text == "~" {
+        return Ok(home.to_path_buf());
+    }
+    if let Some(rest) = text.strip_prefix("~/") {
+        return Ok(home.join(rest));
+    }
+    let path = Path::new(text);
+    if path.is_absolute() {
+        return Ok(path.to_path_buf());
+    }
+    Err(Error::Invalid(format!(
+        "\"{text}\" is not a full path: start it with / or ~/"
+    )))
+}
+
+/// [`user_path`] with the current user's home folder.
+///
+/// # Errors
+///
+/// As [`user_path`], and `Invalid` when the home folder is unknown.
+pub fn home_path(text: &str) -> Result<PathBuf> {
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .ok_or_else(|| Error::Invalid("the home folder is unknown".into()))?;
+    user_path(text, &home)
 }

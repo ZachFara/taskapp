@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { askDelete } from '../../lib/rowUi.svelte';
+  import LabelPicker from './LabelPicker.svelte';
   import { api } from '../../lib/api';
   import type { Cycle, Issue, IssuePatch, Label, Milestone, Project, PropertyDef, Status, Value } from '../../lib/bindings';
   import Button from '../../ui/Button.svelte';
@@ -11,8 +13,10 @@
   import { dueFrom, dueParts, humanDate, isDate, isTime, minutes, PRIORITIES, priorityGlyph } from './format';
   import IssuePicker from './IssuePicker.svelte';
   import OptionList from './OptionList.svelte';
+  import { fieldList, fieldOn } from '../../lib/fields.svelte';
   import PointsRow from '../insights/PointsRow.svelte';
   import PropertyRow from './PropertyRow.svelte';
+  import PropertyRows from './PropertyRows.svelte';
 
   let { issue, save, act, openRow = $bindable(null) }: {
     issue: Issue;
@@ -49,27 +53,39 @@
   const milestone = $derived(milestones.find((m) => m.id === issue.milestone_id));
   const cycleName = (c: Cycle) => c.name ?? `Cycle ${c.number}`;
   // A definition scoped to another project does not apply to this issue.
-  const visible = $derived(defs.filter((d) => d.project_id === null || d.project_id === issue.project_id));
+  const visible = $derived(defs.filter((d) => d.applies_to !== 'Projects' && (d.project_id === null || d.project_id === issue.project_id)));
   const due = $derived(dueParts(issue.due));
   const num = (v: string | number | null) => (v === null ? null : Number(v));
 
   let draft = $state('');
   const setProp = (key: string, value: Value) => act(api.properties.setValue(issue.id, key, value));
   const toggleLabel = (id: number, on: boolean) => act(on ? api.labels.addLabel(issue.id, id) : api.labels.removeLabel(issue.id, id));
+  // A label renamed or deleted elsewhere (the delete dialog, settings) shows here at once.
+  $effect(() => {
+    const reload = () => void api.labels.list().then((l) => (labels = l));
+    addEventListener('rows:changed', reload);
+    return () => removeEventListener('rows:changed', reload);
+  });
+  const createLabel = async (name: string) => {
+    const made = await api.labels.create(name, 'gray', null);
+    labels = [...labels, made];
+    toggleLabel(made.id, true);
+  };
 </script>
 
 {#snippet none()}<span class="none">None</span>{/snippet}
 
 <section class="plate" aria-label="Properties">
   <PropertyRow id="status" name="Status" cmd="issue.detail.status" bind:openRow>
-    {#snippet value()}{#if status}<StatusGlyph category={status.category} />{status.name}{:else}{@render none()}{/if}{/snippet}
+    {#snippet value()}{#if status}<StatusGlyph category={status.category} icon={status.icon} color={status.color} />{status.name}{:else}{@render none()}{/if}{/snippet}
     {#snippet editor(close)}
       <OptionList label="Status" value={issue.status_id} options={statuses} onpick={(id) => { close(); save({ status_id: num(id) }); }}>
-        {#snippet lead(o)}<StatusGlyph category={statuses.find((s) => s.id === o.id)!.category} />{/snippet}
+        {#snippet lead(o)}{@const st = statuses.find((s) => s.id === o.id)!}<StatusGlyph category={st.category} icon={st.icon} color={st.color} />{/snippet}
       </OptionList>
     {/snippet}
   </PropertyRow>
 
+  {#snippet row_priority()}
   <PropertyRow id="priority" name="Priority" cmd="issue.detail.priority" bind:openRow>
     {#snippet value()}<PriorityGlyph level={priorityGlyph(issue.priority)} />{PRIORITIES[issue.priority]}{/snippet}
     {#snippet editor(close)}
@@ -78,7 +94,9 @@
       </OptionList>
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
+  {#snippet row_project()}
   <PropertyRow id="project" name="Project" cmd="issue.detail.project" bind:openRow>
     {#snippet value()}{#if project}<EntityIcon icon={project.icon ?? 'icon:project'} color={project.color} />{project.name}{:else}{@render none()}{/if}{/snippet}
     {#snippet editor(close)}
@@ -87,41 +105,47 @@
       </OptionList>
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
+  {#snippet row_milestone()}
   <PropertyRow id="milestone" name="Milestone" cmd="issue.detail.milestone" bind:openRow>
     {#snippet value()}{#if milestone}{milestone.name}{:else}{@render none()}{/if}{/snippet}
     {#snippet editor(close)}
       <OptionList label="Milestone" none="No milestone" value={issue.milestone_id} options={milestones} onpick={(id) => { close(); save({ milestone_id: num(id) }); }} />
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
+  {#snippet row_cycle()}
   <PropertyRow id="cycle" name="Cycle" cmd="issue.detail.cycle" bind:openRow>
     {#snippet value()}{#if cycle}{cycleName(cycle)}{:else}{@render none()}{/if}{/snippet}
     {#snippet editor(close)}
       <OptionList label="Cycle" none="No cycle" value={issue.cycle_id} options={cycles.map((c) => ({ id: c.id, name: cycleName(c) }))} onpick={(id) => { close(); save({ cycle_id: num(id) }); }} />
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
+  {#snippet row_labels()}
   <PropertyRow id="labels" name="Labels" cmd="issue.detail.labels" bind:openRow>
     {#snippet value()}
       {#each labels.filter((l) => issue.label_ids.includes(l.id)) as l (l.id)}<Pill color={l.color}>{l.name}</Pill>{:else}{@render none()}{/each}
     {/snippet}
     {#snippet editor()}
-      <ul class="checks" aria-label="Labels">
-        {#each labels as l (l.id)}
-          <li><Checkbox label={l.name} bind:checked={() => issue.label_ids.includes(l.id), (on) => toggleLabel(l.id, on)} /> {l.name}</li>
-        {:else}<li class="none">No labels yet</li>{/each}
-      </ul>
+      <LabelPicker {labels} selected={issue.label_ids} ontoggle={toggleLabel} oncreate={createLabel} ondelete={(l) => askDelete({ kind: 'label', id: l.id, name: l.name })} />
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
+  {#snippet row_start()}
   <PropertyRow id="start" name="Start" cmd="issue.detail.start" bind:openRow>
     {#snippet value()}{humanDate(issue.start_date)}{/snippet}
     {#snippet editor()}
       <TextInput type="date" label="Start date" value={issue.start_date ?? ''} oninput={(e) => { const v = (e.currentTarget as HTMLInputElement).value; if (isDate(v)) save({ start_date: v || null }); }} />
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
+  {#snippet row_due()}
   <PropertyRow id="due" name="Due" cmd="issue.detail.due" bind:openRow>
     {#snippet value()}{due.date ? `${humanDate(due.date)}${due.timed ? ` ${due.time}` : ''}` : 'None'}{/snippet}
     {#snippet editor()}
@@ -134,7 +158,9 @@
       </div>
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
+  {#snippet row_estimate()}
   <PropertyRow id="estimate" name="Estimate" cmd="issue.detail.estimate" bind:openRow>
     {#snippet value()}{#if issue.estimate_minutes !== null}{minutes(issue.estimate_minutes)}{:else}{@render none()}{/if}{/snippet}
     {#snippet editor(close)}
@@ -144,9 +170,11 @@
       </form>
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
-  <PointsRow {issue} {save} bind:openRow />
+  {#snippet row_points()}<PointsRow {issue} {save} bind:openRow />{/snippet}
 
+  {#snippet row_parent()}
   <PropertyRow id="parent" name="Parent" cmd="issue.detail.parent" bind:openRow>
     {#snippet value()}{#if parent}{parent.key} {parent.title}{:else}{@render none()}{/if}{/snippet}
     {#snippet editor(close)}
@@ -156,38 +184,16 @@
       </div>
     {/snippet}
   </PropertyRow>
+  {/snippet}
 
-  {#each visible as d (d.key)}
-    {@const v = issue.properties[d.key] ?? null}
-    <PropertyRow id={`prop:${d.key}`} name={d.name} bind:openRow>
-      {#snippet value()}
-        {#if d.kind === 'Checkbox'}{v === true ? 'Yes' : 'No'}
-        {:else if Array.isArray(v)}{#each v as x (x)}<Pill>{x}</Pill>{:else}{@render none()}{/each}
-        {:else if v === null || v === ''}{@render none()}{:else}{v}{/if}
-      {/snippet}
-      {#snippet editor(close)}
-        {#if d.kind === 'Select'}
-          <OptionList label={d.name} none="None" value={typeof v === 'string' ? v : null} options={d.options.map((o) => ({ id: o.value, name: o.value }))} onpick={(id) => { close(); setProp(d.key, id as string | null); }} />
-        {:else if d.kind === 'MultiSelect'}
-          {@const have = Array.isArray(v) ? v : []}
-          <ul class="checks" aria-label={d.name}>
-            {#each d.options as o (o.value)}
-              <li><Checkbox label={o.value} bind:checked={() => have.includes(o.value), (on) => setProp(d.key, on ? [...have, o.value] : have.filter((x) => x !== o.value))} /> {o.value}</li>
-            {/each}
-          </ul>
-        {:else if d.kind === 'Checkbox'}
-          <span class="inline"><Checkbox label={d.name} bind:checked={() => v === true, (on) => setProp(d.key, on)} /> {d.name}</span>
-        {:else if d.kind === 'Date'}
-          <TextInput type="date" label={d.name} value={typeof v === 'string' ? v : ''} oninput={(e) => { const t = (e.currentTarget as HTMLInputElement).value; if (isDate(t)) setProp(d.key, t || null); }} />
-        {:else}
-          <form class="stack" onsubmit={(e) => { e.preventDefault(); close(); setProp(d.key, draft.trim() === '' ? null : d.kind === 'Number' ? Number(draft) : draft); }}>
-            <TextInput type={d.kind === 'Number' ? 'number' : 'text'} label={`${d.name} value`} value={v === null ? '' : String(v)} oninput={(e) => (draft = (e.currentTarget as HTMLInputElement).value)} />
-            <Button type="submit" variant="primary">Set</Button>
-          </form>
-        {/if}
-      {/snippet}
-    </PropertyRow>
+  {#each fieldList() as f (f.field)}
+    {#if fieldOn(f.field)}
+      {@const rows = { priority: row_priority, project: row_project, milestone: row_milestone, cycle: row_cycle, labels: row_labels, start: row_start, due: row_due, estimate: row_estimate, points: row_points, parent: row_parent }}
+      {@render rows[f.field]()}
+    {/if}
   {/each}
+
+  <PropertyRows defs={visible} values={issue.properties} {setProp} bind:openRow />
 </section>
 
 <style>
@@ -195,6 +201,4 @@
   .none { color: var(--muted); font-weight: 400; }
   .stack { display: grid; gap: var(--s-4); }
   .inline { display: flex; align-items: center; gap: var(--s-4); }
-  .checks { list-style: none; display: grid; gap: var(--s-4); }
-  .checks li { display: flex; align-items: center; gap: var(--s-4); }
 </style>

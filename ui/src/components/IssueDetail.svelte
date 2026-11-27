@@ -18,6 +18,7 @@
   import Properties from './detail/Properties.svelte';
   import Relations from './detail/Relations.svelte';
   import SubIssues from './detail/SubIssues.svelte';
+  import IssueEvents from './events/IssueEvents.svelte';
 
   // One component for the full page (/issue/:key) and the side panel (mode 'panel', closed through `onclose`).
   let { params = {}, mode = 'page', onclose, onopen }: {
@@ -169,15 +170,15 @@
       {#snippet actions()}
         <IconButton icon="arrow-up" label="Previous issue" shortcut={shortcutFor('issue.detail.prev')} disabled={siblings.indexOf(key) < 1} onclick={() => step(-1)} />
         <IconButton icon="arrow-down" label="Next issue" shortcut={shortcutFor('issue.detail.next')} disabled={siblings.indexOf(key) < 0 || siblings.indexOf(key) >= siblings.length - 1} onclick={() => step(1)} />
-        <IconButton icon="pin" label={pin ? 'Unpin issue' : 'Pin issue'} shortcut={shortcutFor('issue.detail.pin')} pressed={!!pin} onclick={togglePin} />
-        <IconButton icon="archive" label={issue!.archived_at ? 'Restore issue' : 'Archive issue'} shortcut={shortcutFor('issue.detail.archive')} pressed={!!issue!.archived_at} onclick={toggleArchive} />
+        <IconButton icon="pin" label={pin ? 'Unpin issue' : 'Pin issue'} shortcut={shortcutFor('issue.pin')} pressed={!!pin} onclick={togglePin} />
+        <IconButton icon="archive" label={issue!.archived_at ? 'Restore issue' : 'Archive issue'} shortcut={shortcutFor('issue.archive')} pressed={!!issue!.archived_at} onclick={toggleArchive} />
         <IconButton icon="close" label="Close issue" shortcut="escape" onclick={close} />
       {/snippet}
     </PageHeader>
 
     <div class="scroll">
       <div class="hero" style:--tone={`var(--band-${tone})`}>
-        {#if status}<span class="st"><StatusGlyph category={status.category} size={20} />{status.name}</span>{/if}
+        {#if status}<span class="st"><StatusGlyph category={status.category} icon={status.icon} color={status.color} size={20} />{status.name}</span>{/if}
         {#if editingTitle}
           <form onsubmit={commitTitle} onfocusout={commitTitle} use:focusInput>
             <TextInput label="Title" bind:value={titleDraft} />
@@ -193,6 +194,7 @@
           <Description {issue} {save} bind:editing={editingDesc} />
           <SubIssues {issue} {act} {rev} {open} />
           <Relations {issue} {act} {rev} {open} />
+          <IssueEvents {issue} {act} {rev} />
           <Comments {issue} {act} {rev} />
           <History {issue} {rev} />
         </main>

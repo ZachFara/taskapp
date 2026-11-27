@@ -1,21 +1,25 @@
 <script lang="ts">
   import { Calendar, DayGrid, Interaction, TimeGrid } from '@event-calendar/core';
   import '@event-calendar/core/index.css';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
+  import { navigate } from '../../app/routes';
   import { getWeekStart } from '../../lib/theme.svelte';
   import { selection } from '../../lib/selection.svelte';
   import { api } from '../../lib/api';
   import { labelFor, shortcutFor } from '../../lib/commands';
-  import type { Due, Issue, SavedView, Status, StatusCategory, WorkBlock } from '../../lib/bindings';
+  import type { Due, Event, Issue, SavedView, Status, StatusCategory, WorkBlock } from '../../lib/bindings';
   import FieldValue from '../display/FieldValue.svelte';
   import { emptyCtx, loadCtx, showWeekends, type Ctx } from '../display/types';
   import Button from '../../ui/Button.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
+  import Icon from '../../ui/Icon.svelte';
   import IconButton from '../../ui/IconButton.svelte';
   import Skeleton from '../../ui/Skeleton.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import Tabs from '../../ui/Tabs.svelte';
+  import { calendarSpan } from '../events/format';
+  import { onRowsChanged } from './onRowsChanged';
 
   let { view }: { view: SavedView } = $props();
 
@@ -32,6 +36,7 @@
   };
 
   let blocks = $state<WorkBlock[]>([]);
+  let eventRows = $state<Event[]>([]);
   let issues = $state<Issue[]>([]);
   let statuses = $state<Status[]>([]);
   let loaded = $state(false);
@@ -76,13 +81,14 @@
     return new Date(asUtc - offsetMs(first, tz)).toISOString();
   }
 
-  const categoryOf = (i: Issue): StatusCategory => statuses.find((s) => s.id === i.status_id)?.category ?? 'Backlog';
+  const statusOf = (i: Issue) => statuses.find((s) => s.id === i.status_id);
+  const categoryOf = (i: Issue): StatusCategory => statusOf(i)?.category ?? 'Backlog';
   const isDue = (id: string) => id.startsWith('due-');
 
   function dueEvents(i: Issue) {
     const due: Due | null = i.due;
     if (!due) return [];
-    const extendedProps = { key: i.key, category: categoryOf(i), issue: i };
+    const extendedProps = { key: i.key, category: categoryOf(i), icon: statusOf(i)?.icon, color: statusOf(i)?.color, issue: i };
     const title = i.title;
     if ('Date' in due) {
       return [{ id: `due-${i.id}`, title, start: due.Date, allDay: true, editable: true, durationEditable: false, classNames: ['due'], extendedProps }];
@@ -102,10 +108,15 @@
         start: new Date(b.start_utc),
         end: new Date(b.end_utc),
         classNames: ['block'],
-        extendedProps: { key: issue?.key, category: issue ? categoryOf(issue) : 'Backlog', issue },
+        extendedProps: { key: issue?.key, category: issue ? categoryOf(issue) : 'Backlog', icon: issue ? statusOf(issue)?.icon : null, color: issue ? statusOf(issue)?.color : null, issue },
       };
     }),
     ...issues.flatMap(dueEvents),
+    // Events are not issue work: their own chip, opened (not dragged) from here.
+    ...eventRows.map((e) => {
+      const { start, end, allDay } = calendarSpan(e);
+      return { id: `event-${e.id}`, title: e.title, start, end, allDay, editable: false, classNames: ['event'], extendedProps: { isEvent: true } };
+    }),
   ]);
   const unscheduled = $derived(issues.filter((i) => !i.due));
 
@@ -161,7 +172,10 @@
 
   async function loadBlocks(start: Date, end: Date) {
     try {
-      blocks = await api.blocks.between(start.toISOString(), end.toISOString());
+      [blocks, eventRows] = await Promise.all([
+        api.blocks.between(start.toISOString(), end.toISOString()),
+        api.events.list(ymd(start), ymd(new Date(end.getTime() - 1))),
+      ]);
     } catch (e) {
       error = message(e);
     }
@@ -281,22 +295,35 @@
     eventDurationEditable: true,
     datesSet: (info: { start: Date; end: Date }) => onRange(info.start, info.end),
     eventClick: (info: { event: { id: string } }) => {
+      if (info.event.id.startsWith('event-')) return navigate(`/event/${info.event.id.slice('event-'.length)}`);
       selected = info.event.id.startsWith('block-') ? blockId(info.event.id) : null;
     },
     eventDrop: (info: any) => (isDue(info.event.id) ? moveDue(info) : onMove(info)),
     eventResize: onMove,
   };
 
+  let queryVersion = 0;
+  async function loadIssues() {
+    const mine = ++queryVersion;
+    const def = $state.snapshot(view.def);
+    try {
+      const result = await Promise.all([api.statuses.list(), api.views.query(def), loadCtx(def)]);
+      if (mine !== queryVersion) return;
+      [statuses, issues, ctx] = result;
+      loaded = true;
+    } catch (e) {
+      if (mine === queryVersion) error = message(e);
+    }
+  }
+  $effect(() => {
+    view.def;
+    untrack(loadIssues);
+  });
+  onRowsChanged(() => void loadIssues());
   onMount(async () => {
     selection.setLayout('calendar');
     options.firstDay = (await getWeekStart()) === 'monday' ? 1 : 0;
     calendar?.setOption('firstDay', options.firstDay);
-    try {
-      [statuses, issues, ctx] = await Promise.all([api.statuses.list(), api.views.query(view.def), loadCtx(view.def)]);
-      loaded = true;
-    } catch (e) {
-      error = message(e);
-    }
   });
 
   const modes = [
@@ -323,7 +350,7 @@
         {#snippet eventContent(info: any)}
           {@const x = info.event.extendedProps}
           <span class="chip" data-key={x.key} title={x.key}>
-            {#if x.category}<StatusGlyph category={x.category} size={12} />{/if}
+            {#if x.isEvent}<Icon name="calendar" size={12} />{:else if x.category}<StatusGlyph category={x.category} icon={x.icon} color={x.color} size={12} />{/if}
             <span class="text">{info.event.title}</span>
             {#if x.issue}{#each chipFields as f (f.Property ?? f.Fixed)}<span class="fv"><FieldValue field={f} issue={x.issue} {ctx} /></span>{/each}{/if}
           </span>
@@ -339,7 +366,7 @@
         <ul aria-label="Unscheduled">
           {#each unscheduled as issue (issue.id)}
             <li draggable="true" tabindex="0" data-key={issue.key} ondragstart={(e) => e.dataTransfer?.setData('text/plain', String(issue.id))}>
-              <StatusGlyph category={categoryOf(issue)} size={14} />
+              <StatusGlyph category={categoryOf(issue)} icon={statusOf(issue)?.icon} color={statusOf(issue)?.color} size={14} />
               <span class="key">{issue.key}</span>
               <span class="text">{issue.title}</span>
             </li>
@@ -394,6 +421,7 @@
   .grid :global(.ec-today .ec-day-num), .grid :global(.ec-today .ec-day-head) { color: var(--signal); }
   .grid :global(.ec-event) { border: 0; border-left: 3px solid var(--control); border-radius: var(--r-sm); }
   .grid :global(.ec-event.due) { border-left-color: var(--stone); }
+  .grid :global(.ec-event.event) { --ec-event-bg-color: var(--active); border-left-color: var(--signal); }
   .grid :global(.ec-event.block) { --ec-event-bg-color: var(--band-3); border-left-color: var(--accent); }
   .fv { flex: none; display: inline-flex; }
   .chip { display: flex; align-items: center; gap: var(--s-3); min-width: 0; padding: var(--s-1) var(--s-3); font-size: var(--fs-sm); }

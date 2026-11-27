@@ -165,4 +165,35 @@ describe('QuickAdd', () => {
     await oncreated.mock.calls[0][0].undo();
     expect(undo).toHaveBeenCalledTimes(1);
   });
+
+  it('quickadd_defaults_show_chips_merge_on_create_and_allow_token_override', async () => {
+    const statuses = await api.statuses.list();
+    const status = statuses[2];
+    const proj = await api.projects.create('alpha', 'Alpha', null, null);
+    const other = await api.projects.create('beta', 'Beta', null, null);
+    const label = await api.labels.create('triage', 'blue', null);
+    await refreshAll();
+    await unmount(app!);
+    document.body.innerHTML = '';
+    await open({
+      defaults: {
+        status_id: status.id,
+        project_id: proj.id,
+        priority: 2,
+        label_ids: [label.id],
+      },
+    });
+    expect(input().value).toBe('');
+    expect(chips()).toEqual([status.name, 'High', '#alpha', '@triage']);
+    const create = vi.spyOn(api.issues, 'create');
+    await type('From view #beta p1');
+    await enter();
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'From view',
+      status_id: status.id,
+      project_id: other.id,
+      priority: 1,
+      label_ids: [label.id],
+    }));
+  });
 });

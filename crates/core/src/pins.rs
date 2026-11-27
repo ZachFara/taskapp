@@ -10,6 +10,7 @@ fn kind_str(kind: PinKind) -> &'static str {
         PinKind::Cycle => "cycle",
         PinKind::Note => "note",
         PinKind::Url => "url",
+        PinKind::Folder => "folder",
     }
 }
 
@@ -21,6 +22,7 @@ fn pin_from_row((id, kind, target, title, position): PinRow) -> Result<Pin> {
         "cycle" => PinKind::Cycle,
         "note" => PinKind::Note,
         "url" => PinKind::Url,
+        "folder" => PinKind::Folder,
         other => return Err(Error::Invalid(format!("pin kind {other}"))),
     };
     Ok(Pin {
@@ -216,30 +218,38 @@ pub async fn reorder(db: &Db, ids_in_order: &[PinId]) -> Result<()> {
     Ok(())
 }
 
+/// The number alone identifies the issue, so a changed issue prefix does not orphan the pin.
+async fn resolve_issue(
+    db: &Db,
+    prefix: &str,
+    target: &str,
+) -> Result<Option<(String, bool, String)>> {
+    let Some(number) = target
+        .rsplit_once('-')
+        .and_then(|(_, n)| n.parse::<i64>().ok())
+    else {
+        return Ok(None);
+    };
+    Ok(sqlx::query_as::<_, (String, Option<String>)>(
+        "SELECT title, archived_at FROM issues WHERE number = ?",
+    )
+    .bind(number)
+    .fetch_optional(&db.pool)
+    .await?
+    .map(|(title, archived)| {
+        (
+            title,
+            archived.is_some(),
+            format!("/issue/{prefix}-{number}"),
+        )
+    }))
+}
+
 /// Label, archived flag and route for a pin's target, or `None` when the target is gone.
 async fn resolve(db: &Db, prefix: &str, pin: &Pin) -> Result<Option<(String, bool, String)>> {
     let t = pin.target.as_str();
     Ok(match pin.kind {
-        PinKind::Issue => {
-            // The number alone identifies the issue, so a changed issue prefix does not orphan the pin.
-            let number = t.rsplit_once('-').and_then(|(_, n)| n.parse::<i64>().ok());
-            match number {
-                None => None,
-                Some(number) => sqlx::query_as::<_, (String, Option<String>)>(
-                    "SELECT title, archived_at FROM issues WHERE number = ?",
-                )
-                .bind(number)
-                .fetch_optional(&db.pool)
-                .await?
-                .map(|(title, archived)| {
-                    (
-                        title,
-                        archived.is_some(),
-                        format!("/issue/{prefix}-{number}"),
-                    )
-                }),
-            }
-        }
+        PinKind::Issue => resolve_issue(db, prefix, t).await?,
         PinKind::Project => sqlx::query_as::<_, (String, Option<String>)>(
             "SELECT name, archived_at FROM projects WHERE slug = ?",
         )
@@ -270,6 +280,15 @@ async fn resolve(db: &Db, prefix: &str, pin: &Pin) -> Result<Option<(String, boo
                         )
                     })
             }
+        },
+        PinKind::Folder => match t.parse::<i64>() {
+            Err(_) => None,
+            Ok(id) => sqlx::query_scalar::<_, String>("SELECT name FROM view_folders WHERE id = ?")
+                .bind(id)
+                .fetch_optional(&db.pool)
+                .await?
+                // A folder has no page of its own: the sidebar draws its contents.
+                .map(|name| (name, false, "/views".to_owned())),
         },
         // Notes and links have no table to check, so they always resolve.
         PinKind::Note | PinKind::Url => Some((t.to_owned(), false, t.to_owned())),

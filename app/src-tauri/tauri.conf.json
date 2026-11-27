@@ -8,17 +8,41 @@
     "devUrl": "http://localhost:5173"
   },
   "app": {
-    "windows": [{ "title": "Cairn", "width": 1280, "height": 800 }],
-    "security": { "csp": null }
+    "windows": [
+      {
+        "title": "Cairn",
+        "width": 1280,
+        "height": 800,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
-    "targets": ["app"],
-    "externalBin": ["binaries/reminders-helper"],
-    "icon": ["icons/icon.png"],
-    "macOS": { "minimumSystemVersion": "14.0" }
+    "targets": [
+      "app"
+    ],
+    "externalBin": [
+      "binaries/reminders-helper"
+    ],
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.icns"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "14.0"
+    }
   },
   "plugins": {
-    "deep-link": { "desktop": { "schemes": ["taskapp"] } }
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "taskapp"
+        ]
+      }
+    }
   }
 }

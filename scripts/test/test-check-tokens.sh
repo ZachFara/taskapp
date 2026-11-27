@@ -17,6 +17,7 @@ expect nonzero "px font-size fails" 'a { font-size: 13px; }'
 expect nonzero "px in font shorthand fails" 'a { font: 600 13px/1 sans-serif; }'
 expect nonzero "raw ms duration fails" 'a { transition: color 120ms ease; }'
 expect nonzero "raw s duration fails" 'a { animation: spin 0.9s linear; }'
+expect nonzero "raw easing curve fails" 'a { transition: opacity var(--dur-2) cubic-bezier(0.2, 0.7, 0.2, 1); }'
 expect 0 "tokens pass" 'a { color: var(--ink); font-size: var(--fs-md); transition: color var(--dur-1) var(--ease); border: 1px solid var(--border); }'
 expect 0 "svelte blocks and anchors pass" '{#each items as i} <a href="#top">x</a> {/each}'
 # Old components are not restyled yet; the design system's own files must already pass.

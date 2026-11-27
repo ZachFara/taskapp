@@ -18,6 +18,8 @@ use tauri_plugin_deep_link::DeepLinkExt;
 
 use crate::sync_loop::{Real, Syncer, Timing};
 
+// Only debug builds write the bindings file; a release build must not carry an unused constant.
+#[cfg(debug_assertions)]
 const BINDINGS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../ui/src/lib/bindings.ts");
 
 /// Every command, with ids exported as plain numbers (row ids stay far below 2^53).
@@ -105,7 +107,8 @@ pub fn run() {
             let helper_path = sync_loop::resolve_helper(bundled);
             let backup_dir =
                 tauri::async_runtime::block_on(settings::get::<String>(&db, "backup_dir"))?
-                    .map_or_else(|| dir.join("backups"), PathBuf::from);
+                    .and_then(|typed| settings::home_path(&typed).ok())
+                    .unwrap_or_else(|| dir.join("backups"));
             let tz = taskapp_core::workspace::system_tz();
             tauri::async_runtime::block_on(default_timezone(&db, &tz))?;
             app.manage(AppState {

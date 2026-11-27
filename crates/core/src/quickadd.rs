@@ -9,13 +9,13 @@ use crate::{
 /// Pure: parses quick-add text relative to `today` in IANA zone `tz`.
 #[must_use]
 pub fn parse(input: &str, today: NaiveDate, tz: &str) -> ParsedQuickAdd {
-    parse_with(input, today, tz, true)
+    parse_with(input, today, tz, &[])
 }
 
-fn parse_with(input: &str, today: NaiveDate, tz: &str, points_on: bool) -> ParsedQuickAdd {
+fn parse_with(input: &str, today: NaiveDate, tz: &str, off: &[String]) -> ParsedQuickAdd {
     let tokens: Vec<&str> = input.split_whitespace().collect();
     let mut parts = Parts {
-        points_on,
+        off,
         ..Parts::default()
     };
     let mut title: Vec<&str> = Vec::new();
@@ -58,18 +58,19 @@ fn parse_with(input: &str, today: NaiveDate, tz: &str, points_on: bool) -> Parse
     }
 }
 
-/// [`parse`] for this workspace: a `3pt` token stays in the title when the `estimation` setting has points off.
+/// [`parse`] for this workspace: the token of a field switched off (`issue_fields`, or points through `estimation`)
+/// stays in the title.
 ///
 /// # Errors
 ///
 /// Fails on a database error.
 pub async fn parse_for(db: &Db, input: &str, today: NaiveDate, tz: &str) -> Result<ParsedQuickAdd> {
-    Ok(parse_with(input, today, tz, points_on(db).await?))
-}
-
-async fn points_on(db: &Db) -> Result<bool> {
-    let setting = settings::get::<String>(db, "estimation").await?;
-    Ok(!matches!(setting.as_deref(), Some("none" | "time")))
+    Ok(parse_with(
+        input,
+        today,
+        tz,
+        &settings::fields_off(db).await?,
+    ))
 }
 
 /// # Errors
@@ -151,6 +152,7 @@ pub async fn new_issue(db: &Db, input: &str, today: NaiveDate, tz: &str) -> Resu
 
 #[derive(Default)]
 struct Parts<'a> {
+    off: &'a [String],
     due_date: Option<NaiveDate>,
     time: Option<(NaiveTime, &'a str)>,
     start: Option<NaiveDate>,
@@ -159,30 +161,37 @@ struct Parts<'a> {
     labels: Vec<String>,
     estimate: Option<u32>,
     points: Option<f64>,
-    points_on: bool,
 }
 
 /// Consumes the token(s) at `i` into `p`; returns how many were consumed (0 = plain title word).
 fn take<'a>(tokens: &[&'a str], i: usize, today: NaiveDate, p: &mut Parts<'a>) -> usize {
     let raw = tokens[i];
     let w = raw.to_ascii_lowercase();
-    if let Some(prio) = priority(&w) {
+    let off = p.off;
+    let on = |f: &str| !off.iter().any(|o| o == f);
+    if let Some(prio) = priority(&w).filter(|_| on("priority")) {
         p.priority = Some(prio);
         return 1;
     }
-    if let Some(slug) = w.strip_prefix('#').filter(|s| !s.is_empty()) {
+    if let Some(slug) = w
+        .strip_prefix('#')
+        .filter(|s| !s.is_empty() && on("project"))
+    {
         p.slug = Some(slug.to_string());
         return 1;
     }
-    if let Some(label) = raw.strip_prefix('@').filter(|s| !s.is_empty()) {
+    if let Some(label) = raw
+        .strip_prefix('@')
+        .filter(|s| !s.is_empty() && on("labels"))
+    {
         p.labels.push(label.to_string());
         return 1;
     }
-    if let Some(minutes) = estimate(&w) {
+    if let Some(minutes) = estimate(&w).filter(|_| on("estimate")) {
         p.estimate = Some(minutes);
         return 1;
     }
-    if p.points_on {
+    if on("points") {
         if let Some(pts) = points(&w) {
             p.points = Some(pts);
             return 1;
@@ -194,21 +203,23 @@ fn take<'a>(tokens: &[&'a str], i: usize, today: NaiveDate, p: &mut Parts<'a>) -
         }
     }
     match w.as_str() {
-        "by" | "due" => date_at(tokens, i + 1, today).map_or(0, |(d, n)| {
+        "by" | "due" if on("due") => date_at(tokens, i + 1, today).map_or(0, |(d, n)| {
             p.due_date = Some(d);
             1 + n
         }),
-        "start" => date_at(tokens, i + 1, today).map_or(0, |(d, n)| {
+        "start" if on("start") => date_at(tokens, i + 1, today).map_or(0, |(d, n)| {
             p.start = Some(d);
             1 + n
         }),
-        "at" => tokens
+        "at" if on("due") => tokens
             .get(i + 1)
             .and_then(|t| time_at(t).map(|tm| (tm, *t)))
             .map_or(0, |found| {
                 p.time = Some(found);
                 2
             }),
+        "by" | "due" | "start" | "at" => 0,
+        _ if !on("due") => 0,
         _ => date_at(tokens, i, today).map_or(0, |(d, n)| {
             p.due_date = Some(d);
             n

@@ -7,10 +7,11 @@ use rmcp::model::Tool;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Map, Value, json};
 use taskapp_core::{
-    ChangeSource, Db, Issue, IssuePatch, NewIssue, PinKind, Project, PropertyDef, PropertyKind,
-    Relation, RelationKind, SelectOption, StatusCategory, TemplateInput, ViewDef, backup, comments,
-    cycles, history, import, insights, issues, labels, pins, projects, properties, relations,
-    search, statuses, templates, undo, view_templates, views, workspace,
+    ChangeSource, Db, EventInput, Issue, IssuePatch, NewIssue, PinKind, Project, PropertyDef,
+    PropertyKind, Relation, RelationKind, SelectOption, StatusCategory, TemplateInput, ViewDef,
+    backup, comments, cycles, events, history, import, insights, issues, labels, pins,
+    project_statuses, projects, properties, relations, search, statuses, templates, undo,
+    view_templates, views, workspace,
 };
 
 type Res<T> = Result<T, String>;
@@ -53,7 +54,7 @@ const TOOLS: &[Row] = &[
     ),
     (
         "add_relation",
-        "Link two issues. Args: from_key, to_key, kind (Blocks, Related or Duplicate).",
+        "Link two issues. Args: from_key, to_key, kind (an id or name: blocks, related, duplicate, follows, caused_by, part_of, or a custom kind).",
         &["from_key", "to_key", "kind"],
     ),
     (
@@ -64,8 +65,13 @@ const TOOLS: &[Row] = &[
     ("list_properties", "List custom property definitions.", &[]),
     (
         "create_property",
-        "Create a custom property. Args: key, name, kind, options, project_id, position.",
+        "Create a custom property. Args: key, name, kind, options, project_id, position, applies_to (Issues, Projects or Both; default Issues).",
         &["key", "name", "kind"],
+    ),
+    (
+        "set_property_applies_to",
+        "Choose what a property applies to; refused while values would be orphaned. Args: key, applies_to (Issues, Projects or Both).",
+        &["key", "applies_to"],
     ),
     (
         "rename_property",
@@ -95,6 +101,11 @@ const TOOLS: &[Row] = &[
     ),
     ("list_projects", "List projects.", &[]),
     (
+        "list_project_statuses",
+        "List the statuses projects can have.",
+        &[],
+    ),
+    (
         "create_project",
         "Create a project. Args: slug, name, icon and color (optional).",
         &["slug", "name"],
@@ -109,6 +120,21 @@ const TOOLS: &[Row] = &[
         "create_cycle",
         "Create a cycle. Args: start_date, end_date, name, icon, color (optional).",
         &["start_date", "end_date"],
+    ),
+    (
+        "list_events",
+        "List events overlapping a date range, oldest first. Args: from, to (dates, both optional).",
+        &[],
+    ),
+    (
+        "create_event",
+        "Create an event in local time. Args: title, starts_at (2026-01-10T09:00:00), ends_at, all_day, place, notes, icon, color (optional except title and starts_at).",
+        &["title", "starts_at"],
+    ),
+    (
+        "link_event",
+        "Link an event to an issue. Args: id (event id), key (issue key).",
+        &["id", "key"],
     ),
     ("list_labels", "List labels.", &[]),
     (
@@ -125,7 +151,7 @@ const TOOLS: &[Row] = &[
     ("unpin", "Remove a pin. Args: id.", &["id"]),
     (
         "update_project",
-        "Change a project, including doc_link. Args: id plus any of name, description, doc_link, start_date, target_date (null clears).",
+        "Change a project, including doc_link. Args: id plus any of name, description, doc_link, start_date, target_date (null clears), status_id, priority (0 none, 1 urgent, 2 high, 3 medium, 4 low), label_ids (the full list), properties (the full map of custom values).",
         &["id"],
     ),
     (
@@ -257,6 +283,7 @@ fn ce(e: &taskapp_core::Error) -> String {
 
 /// Every argument name a tool reads. A name outside this list is a typo, so the call is refused.
 const ARG_NAMES: &[&str] = &[
+    "all_day",
     "body",
     "category",
     "color",
@@ -266,6 +293,7 @@ const ARG_NAMES: &[&str] = &[
     "description",
     "doc_link",
     "end_date",
+    "ends_at",
     "from",
     "icon",
     "id",
@@ -278,10 +306,12 @@ const ARG_NAMES: &[&str] = &[
     "migration",
     "name",
     "new_name",
+    "notes",
     "options",
     "overrides",
     "patch",
     "periods",
+    "place",
     "plan",
     "points",
     "project_id",
@@ -289,6 +319,7 @@ const ARG_NAMES: &[&str] = &[
     "scope",
     "slug",
     "start_date",
+    "starts_at",
     "target",
     "target_date",
     "template_id",
@@ -298,6 +329,11 @@ const ARG_NAMES: &[&str] = &[
     "to",
     "value",
     "view_id",
+    "applies_to",
+    "label_ids",
+    "priority",
+    "properties",
+    "status_id",
 ];
 
 /// The first argument name a tool does not read. `create_issue` takes its whole object as `NewIssue`, which
@@ -374,6 +410,9 @@ impl Server {
             "undo" => ok(&undo::undo(&self.db).await.map_err(|e| ce(&e))?),
             "redo" => ok(&undo::redo(&self.db).await.map_err(|e| ce(&e))?),
             "undo_status" => ok(&undo::undo_status(&self.db).await.map_err(|e| ce(&e))?),
+            "list_project_statuses" => {
+                ok(&project_statuses::list(&self.db).await.map_err(|e| ce(&e))?)
+            }
             "search_issues" | "query_view" | "get_issue" | "create_issue" | "update_issue"
             | "archive_issue" | "add_comment" | "add_relation" | "remove_relation"
             | "bulk_update" | "get_history" | "set_points" => self.issue_tool(name, args).await,
@@ -388,6 +427,7 @@ impl Server {
             "list_properties"
             | "create_property"
             | "rename_property"
+            | "set_property_applies_to"
             | "change_property_kind"
             | "delete_property"
             | "set_property" => self.property_tool(name, args).await,
@@ -395,6 +435,7 @@ impl Server {
                 self.import_tool(name, args).await
             }
             "workspace_status" | "workspace_setup" => self.workspace_tool(name, args).await,
+            "list_events" | "create_event" | "link_event" => self.event_tool(name, args).await,
             _ => self.org_tool(name, args).await,
         }
     }
@@ -606,9 +647,16 @@ impl Server {
                     "options": a.get("options").cloned().unwrap_or(json!([])),
                     "project_id": a.get("project_id").cloned().unwrap_or(Value::Null),
                     "position": a.get("position").cloned().unwrap_or(json!(0)),
+                    "applies_to": a.get("applies_to").cloned().unwrap_or(json!("Issues")),
                 }))
                 .map_err(|e| e.to_string())?;
                 ok(&properties::create_def(db, def, s)
+                    .await
+                    .map_err(|e| ce(&e))?)
+            }
+            "set_property_applies_to" => {
+                let (key, to) = (arg::<String>(a, "key")?, arg(a, "applies_to")?);
+                ok(&properties::set_applies_to(db, &key, to, s)
                     .await
                     .map_err(|e| ce(&e))?)
             }
@@ -718,6 +766,35 @@ impl Server {
         }
     }
 
+    async fn event_tool(&self, name: &str, a: &Value) -> Res<Value> {
+        let (db, s) = (&self.db, src(a));
+        match name {
+            "list_events" => ok(&events::list(db, opt(a, "from")?, opt(a, "to")?)
+                .await
+                .map_err(|e| ce(&e))?),
+            "create_event" => {
+                let input = EventInput {
+                    title: arg(a, "title")?,
+                    starts_at: arg(a, "starts_at")?,
+                    ends_at: opt(a, "ends_at")?,
+                    all_day: opt(a, "all_day")?.unwrap_or(false),
+                    place: opt(a, "place")?,
+                    notes: opt(a, "notes")?.unwrap_or_default(),
+                    icon: opt(a, "icon")?,
+                    color: opt(a, "color")?,
+                    archived: false,
+                };
+                ok(&events::create(db, input, s).await.map_err(|e| ce(&e))?)
+            }
+            _ => {
+                let issue = self.issue_by_key(a, "key").await?;
+                let done = events::link(db, arg(a, "id")?, issue.id, s).await;
+                done.map_err(|e| ce(&e))?;
+                Ok(json!({ "ok": true }))
+            }
+        }
+    }
+
     async fn org_tool(&self, name: &str, a: &Value) -> Res<Value> {
         let db = &self.db;
         let s = src(a);
@@ -795,6 +872,10 @@ impl Server {
             "target_date",
             "icon",
             "color",
+            "status_id",
+            "priority",
+            "label_ids",
+            "properties",
         ] {
             if let Some(v) = a.get(k) {
                 merged[k] = v.clone();

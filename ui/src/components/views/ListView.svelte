@@ -1,7 +1,13 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
+  import { fieldOn } from '../../lib/fields.svelte';
   import { api } from '../../lib/api';
-  import type { Cycle, FieldRef, Issue, IssuePatch, Label, Project, SavedView, Status, StatusCategory } from '../../lib/bindings';
+  import type { Cycle, FieldRef, Issue, IssuePatch, Label, Project, SavedView, Sort, Status, StatusCategory } from '../../lib/bindings';
+  import { nextSort, sortable } from '../../lib/viewSort';
+  import SortHeading from './SortHeading.svelte';
   import { listState } from '../../lib/listState.svelte';
+  import { defaultStatusId, issues as issueStore, selectedIssueId } from '../../lib/stores.svelte';
+  import { defaultsFromFilter, mergeIssueDefaults } from '../filters/defaults';
   import { selection } from '../../lib/selection.svelte';
   import { navigate } from '../../app/routes';
   import Checkbox from '../../ui/Checkbox.svelte';
@@ -9,8 +15,10 @@
   import EntityIcon from '../../ui/EntityIcon.svelte';
   import Icon from '../../ui/Icon.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
+  import { flash } from '../../lib/motion.svelte';
   import CommandButton from '../CommandButton.svelte';
   import IssueMenu from './IssueMenu.svelte';
+  import IconButton from '../../ui/IconButton.svelte';
   import Menu from '../../ui/Menu.svelte';
   import MenuItem from '../../ui/MenuItem.svelte';
   import Pill from '../../ui/Pill.svelte';
@@ -24,6 +32,7 @@
   import { dueDay as dueDayIn, isOverdue } from './dates';
   import FieldValue from '../display/FieldValue.svelte';
   import { LEADING, LIST_DEFAULT, density, emptyCtx, fieldName, loadCtx, pointsName, pointsTotal, shown, showEmptyGroups, subIssues, type Ctx } from '../display/types';
+  import { onRowsChanged } from './onRowsChanged';
 
   // shortcut: row and band heights default to the token values when the CSS is not loaded (tests), upgrade if rows vary in height
   const BAND = 30;
@@ -31,10 +40,16 @@
   const WINDOW_ABOVE = 300;
   const FALLBACK_VIEWPORT = 800;
 
-  let { view }: { view: SavedView } = $props();
+  let { view, onsort }: { view: SavedView; onsort?: (field: FieldRef) => void } = $props();
+  let localSort = $state.raw<Sort[] | null>(null);
+  const activeSort = $derived((localSort ?? view.def.sorts)[0] ?? null);
+  function sortHeading(field: FieldRef) {
+    if (onsort) onsort(field);
+    else localSort = nextSort(localSort, field);
+  }
 
   const storeKey = (id: number) => `cairn.list.collapsed.${id}`;
-  type Group = { key: string; kind: 'status' | 'project' | 'cycle' | 'priority' | 'label' | 'points' | 'none'; ref?: Project | Cycle | Label; name: string; category: StatusCategory; order: number; patch: IssuePatch; rows: Issue[] };
+  type Group = { key: string; kind: 'status' | 'project' | 'cycle' | 'priority' | 'label' | 'points' | 'none'; ref?: Project | Cycle | Label; name: string; category: StatusCategory; icon?: string | null; color?: string | null; order: number; patch: IssuePatch; rows: Issue[] };
   type Item = { head: Group; collapsed: boolean } | { row: Issue; depth: number; kids: number };
 
   let issues = $state.raw<Issue[]>([]);
@@ -105,22 +120,28 @@
     }
   }
 
+  let queryVersion = 0;
   async function load() {
+    const mine = ++queryVersion;
+    const def = $state.snapshot({ ...view.def, sorts: localSort ?? view.def.sorts });
     const [st, pr, cy, lb, rows, c] = await Promise.all([
-      api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.views.query(view.def), loadCtx(view.def),
+      api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.views.query(def), loadCtx(def),
     ]);
+    if (mine !== queryVersion) return;
     ctx = c;
     statuses = st;
     projects = pr;
     cycles = cy;
     labels = lb;
-    issues = subIssues(view.def) === 'hide' ? rows.filter((i) => i.parent_id === null) : rows;
+    issues = subIssues(def) === 'hide' ? rows.filter((i) => i.parent_id === null) : rows;
     loaded = true;
   }
   $effect(() => {
     view;
-    load();
+    localSort;
+    untrack(load);
   });
+  onRowsChanged(() => void load());
 
   const groupField = $derived(view.def.group_by?.Fixed === 'Points' && !ctx.points ? null : (view.def.group_by?.Fixed ?? null));
   const groups = $derived.by<Group[]>(() => {
@@ -138,7 +159,7 @@
       const base = { category: 'Unstarted' as StatusCategory, patch: {}, kind: 'none' as Group['kind'] };
       if (groupField === 'Status') {
         const s = statuses.find((x) => x.id === i.status_id);
-        put(i, { kind: 'status', key: `s${s?.id ?? 'x'}`, name: s?.name ?? 'Unknown', category: s?.category ?? 'Backlog', order: s?.position ?? Infinity, patch: s ? { status_id: s.id } : {} });
+        put(i, { kind: 'status', key: `s${s?.id ?? 'x'}`, name: s?.name ?? 'Unknown', category: s?.category ?? 'Backlog', icon: s?.icon, color: s?.color, order: s?.position ?? Infinity, patch: s ? { status_id: s.id } : {} });
       } else if (groupField === 'Project') {
         put(i, { key: `p${i.project_id}`, ...base, kind: 'project', ref: projects.find((p) => p.id === i.project_id), ...named(projects, i.project_id, 'No project', (p) => p.name), patch: { project_id: i.project_id } });
       } else if (groupField === 'Cycle') {
@@ -157,7 +178,7 @@
     if (showEmptyGroups(view.def)) {
       const empty = (g: Omit<Group, 'rows'>) => by.has(g.key) || by.set(g.key, { ...g, rows: [] });
       const base = { category: 'Unstarted' as StatusCategory, patch: {} };
-      if (groupField === 'Status') for (const s of statuses) empty({ key: `s${s.id}`, kind: 'status', name: s.name, category: s.category, order: s.position, patch: { status_id: s.id } });
+      if (groupField === 'Status') for (const s of statuses) empty({ key: `s${s.id}`, kind: 'status', name: s.name, category: s.category, icon: s.icon, color: s.color, order: s.position, patch: { status_id: s.id } });
       if (groupField === 'Project') for (const p of projects) empty({ key: `p${p.id}`, ...base, kind: 'project', ref: p, name: p.name, order: projects.indexOf(p), patch: { project_id: p.id } });
       if (groupField === 'Cycle') for (const c of cycles) empty({ key: `c${c.id}`, ...base, kind: 'cycle', name: c.name ?? `Cycle ${c.number}`, order: cycles.indexOf(c), patch: { cycle_id: c.id } });
     }
@@ -253,9 +274,12 @@
     await load();
   }
   async function add(g: Group) {
-    const made = await api.issues.create({ title: 'Untitled', ...g.patch });
+    const defaults = defaultsFromFilter(view.def.filter, { statuses, projects, propertyDefs: ctx.defs, defaultStatusId: defaultStatusId.value });
+    const made = await api.issues.create({ title: 'Untitled', ...mergeIssueDefaults(defaults, g.patch) });
     await load();
+    if (!issueStore.some((i) => i.id === made.id)) issueStore.push(made);
     selection.focus(made.id);
+    selectedIssueId.value = made.id;
     draft = made.title;
     listState.editing = made.id;
   }
@@ -319,9 +343,9 @@
 {:else}
   <IssueMenu>
   <div class="wrap" use:watchWidth>
-  <div class="heads" style:grid-template-columns={columns} aria-hidden="true">
-    <span></span><span></span><span></span><span></span><span>Title</span>
-    {#each fields as f (f.Property ?? f.Fixed)}<span data-right={rightAligned(f) ? '' : undefined}>{fieldName(f, ctx.defs)}</span>{/each}
+  <div class="heads" style:grid-template-columns={columns}>
+    <span></span><span>{#if fieldOn('priority')}<SortHeading field={{ Fixed: 'Priority' }} label="Priority" display="P" sort={activeSort} onclick={sortHeading} />{/if}</span><span><SortHeading field={{ Fixed: 'Key' }} label="Key" sort={activeSort} onclick={sortHeading} /></span><span><SortHeading field={{ Fixed: 'Status' }} label="Status" display="S" sort={activeSort} onclick={sortHeading} /></span><span><SortHeading field={{ Fixed: 'Title' }} label="Title" sort={activeSort} onclick={sortHeading} /></span>
+    {#each fields as f (f.Property ?? f.Fixed)}<span data-right={rightAligned(f) ? '' : undefined}>{#if sortable(f)}<SortHeading field={f} label={fieldName(f, ctx.defs)} sort={activeSort} onclick={sortHeading} />{:else}{fieldName(f, ctx.defs)}{/if}</span>{/each}
   </div>
   <div class="scroller" role="presentation" bind:this={scroller} onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}>
     <ul class="list" role="grid" aria-multiselectable="true" data-density={compact ? 'compact' : undefined} aria-label={view.name} style:height="{total}px">
@@ -333,6 +357,8 @@
               count={item.head.rows.length}
               total={pointsTotal(item.head.rows, shown(view.def, LIST_DEFAULT), ctx)}
               category={item.head.kind === 'status' ? item.head.category : undefined}
+              icon={item.head.icon}
+              color={item.head.color}
               tone={item.head.kind === 'priority' ? (Math.min(4, Math.max(1, item.head.order)) as 1 | 2 | 3 | 4) : 1}
               collapsed={item.collapsed}
               ontoggle={() => toggleGroup(item.head.key)}
@@ -348,6 +374,7 @@
           <li
             class="row"
             role="row"
+            use:flash={{ id: i.id, sig: `${i.status_id}:${i.priority}`, key: i.key }}
             aria-selected={chosen}
             data-key={i.key}
             data-id={i.id}
@@ -367,7 +394,7 @@
                 <Checkbox checked={chosen} label={`Select ${i.key}`} />
               {/if}
             </span>
-            <span class="prio"><PriorityGlyph level={priorityGlyph(i.priority)} /></span>
+            <span class="prio">{#if fieldOn('priority')}<PriorityGlyph level={priorityGlyph(i.priority)} />{/if}</span>
             <span class="key">{i.key}</span>
             {#snippet statusBtn(tp: Record<string, unknown>)}
               <button
@@ -382,7 +409,7 @@
                   openMenu(i.id, r.left, r.bottom);
                 }}
               >
-                <StatusGlyph category={st?.category ?? 'Backlog'} label={st?.name ?? 'Unknown'} />
+                <StatusGlyph category={st?.category ?? 'Backlog'} icon={st?.icon} color={st?.color} label={st?.name ?? 'Unknown'} />
               </button>
             {/snippet}
             <!-- shortcut: only the hovered or focused row carries a Tooltip (one per row costs ~30% at 1000 rows), upgrade to one delegated tooltip -->
@@ -409,6 +436,17 @@
                 <FieldValue field={f} issue={i} {ctx} />
               </span>
             {/each}
+            <!-- shortcut: only the hovered or focused row renders its actions (a tooltip per row costs the 1000-row budget) -->
+            {#if hovered === i.id || selection.focused === i.id}
+              <span class="hover-acts">
+                <!-- The "…" opens the issue menu that right-click opens: the menu's own listener on the list picks the row. -->
+                <IconButton icon="more" label={`More actions for ${i.key}`} onclick={(e) => {
+                  e.stopPropagation();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  e.currentTarget.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: r.left, clientY: r.bottom }));
+                }} />
+              </span>
+            {/if}
           </li>
         {/if}
       {/each}
@@ -448,6 +486,8 @@
     transition: background var(--dur-1) var(--ease);
   }
   .row:hover { background: var(--raised); }
+  /* Overlays the row's right end, so nothing shifts when it appears. */
+  .hover-acts { position: absolute; right: var(--s-7); display: flex; gap: var(--s-1); background: var(--raised); }
   .row[data-selected] { background: var(--selection); }
   .row[aria-current='true'] { box-shadow: inset 3px 0 0 var(--signal); background: var(--active); }
   .row[aria-current='true'][data-selected] { background: var(--selection); }

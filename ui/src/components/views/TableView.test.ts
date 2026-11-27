@@ -1,6 +1,6 @@
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { setApi } from '../../lib/api';
+import { api, setApi } from '../../lib/api';
 import type { Issue, PropertyDef, SavedView, Status } from '../../lib/bindings';
 import { createMockApi } from '../../lib/api.mock';
 import { attachKeys } from '../../lib/commands';
@@ -144,6 +144,12 @@ afterEach(async () => {
 });
 
 describe('TableView', () => {
+  it('updates_after_an_issue_is_created_outside_the_table', async () => {
+    await open();
+    const made = await api.issues.create({ title: 'New row', status_id: 1 });
+    await vi.waitFor(() => expect(rowKeys()).toContain(made.key));
+  });
+
   it('sort_click_header_orders_rows_then_reverses', async () => {
     await open();
     expect(rowKeys()).toEqual(['ABC-1', 'ABC-2', 'ABC-3']);

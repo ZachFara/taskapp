@@ -38,6 +38,20 @@ const button = (root: ParentNode, text: string) => [...root.querySelectorAll<HTM
 const group = (t: HTMLElement, name: string) => t.querySelector<HTMLElement>(`[data-group="${name}"]`);
 
 describe('CyclesPage', () => {
+  it('lists a folder of cycles inside the band that has them, and hides a folder with none there', async () => {
+    const api = createMockApi({ ...fixtures, cycles, viewFolders: [{ id: 1, name: 'Sprints', position: 0, section: 'cycle', parent_id: null }, { id: 2, name: 'Old', position: 1, section: 'cycle', parent_id: 1 }] });
+    await api.folders.placeItem('cycle', 2, 1, null);
+    await api.folders.placeItem('cycle', 1, 2, null);
+    const target = await open(api);
+    expect(group(target, 'current')!.querySelector('[data-folder-id="1"]')!.textContent).toContain('Sprints');
+    expect(group(target, 'current')!.querySelector('[data-folder-id="2"]')).toBeNull();
+    group(target, 'past')!.querySelector('button')!.click(); // past is collapsed until opened
+    flushSync();
+    const past = group(target, 'past')!;
+    expect(past.querySelector('[data-folder-id="2"]')).not.toBeNull();
+    expect(past.querySelector('[data-cycle="1"]')).not.toBeNull();
+  });
+
   it('group headers carry a cycle icon, never a status glyph', async () => {
     const target = await open(createMockApi({ ...fixtures, cycles }));
     for (const band of ['current', 'upcoming', 'past']) {

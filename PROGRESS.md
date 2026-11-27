@@ -66,37 +66,64 @@ crates, bundle id and data directory to Cairn; relative dates in filters ("due w
 changing the time zone without a restart; keyboard resize of panels; the eight commands the devserver does not serve
 have no contract case (backup, export, calendar, reminders, sync).
 
-Added by the owner on 2026-11-22 (later, not built):
-- **Themes.** Several themes, each with a light and a dark variant, chosen in settings. The current look ("Survey
-  map") is one. Others to design: one in the style of Linear, one in the style of Jira, a Cupertino (Apple-like) one,
-  an Obsidian-like light and dark pair, and a minimal scholastic one after the owner's notes vault (deep night-blue
-  ground, gold and rubricated red, blackletter display type, a small-caps serif, faint star field, ornament bands) with
-  no images of saints or people. Tokens are already role-based, so a theme is a block of values plus fonts; type and
-  ornament per theme need a small extension. Use each product's general feel, not its logo, name or artwork.
-- **Split the `test-ui` CI job.** It now runs about 1,100 unit tests, 365 contract cases against a built devserver and
-  the Playwright walk tests in one job; consider separate unit, contract and walk jobs (the walk job's cold-start
-  `page.goto` timed out twice and forced a rerun).
-- **Ephemeral view filters.** Quick filters at the view level that are not saved with the view, to slim down a long
-  list for the moment (by status, project, priority and the other fields), in a clickable menu or bar that collapses
-  easily when not wanted; clearing them returns to the saved view.
-- **Resizable panes by dragging.** Every pane edge can be dragged to resize, including the left sidebar (today only the
-  issue and insights panels have a grip, pointer-only); widths remembered; keyboard resize.
-- **Compact links with optional previews.** A pasted URL in a description, comment or project description (including
-  app links such as `obsidian://open?...`) shows as a short link chip with the site or app icon and a readable name
-  (page title, or the file name for an Obsidian link) instead of the raw encoded URL, the way chat apps unfurl links;
-  editing shows the raw URL again; an optional richer preview (title, summary, image) that can be switched off in
-  settings; web previews must not fetch anything unless the setting is on.
-- **Choose your own icons, where the thing is.** The owner could not find how to pick an icon: today the icon and
-  colour picker exists only inside Settings (statuses, labels, projects, cycles, templates). Make it reachable in
-  place: click the icon on the project page, the view header, a sidebar row, a label or status, and in the command
-  menu ("Change icon"); allow emoji and, later, custom uploaded icons.
-- **Interface size.** The owner finds the app most comfortable at a browser zoom between 110% and 125%: add an
-  "Interface size" setting (100, 110, 115, 125%) applied to the whole interface, with a larger default, and check
-  layouts at the effective narrower width.
-- **Guide stays honest.** A test that fails when docs/GUIDE.md's keyboard tables differ from the command registry
-  (drafted, not merged).
+Still open after plan 3 (not built):
+- **Sync, the rest.** "Pull and apply" brings across issues, comments, relations, relation kinds, work blocks and
+  events only; statuses, labels, projects, settings and deletions do not cross, and the next export from a machine
+  overwrites those remote files (docs/decisions/0017-sync-between-machines.md). Never run against a real remote.
+- **Backups.** Kept. Remove only after the owner has proven restore on real data (decision 0017).
+- **Scholastic theme ornaments** (star field, ornament bands, display type) and per-theme border weights: need
+  component work, not only token values.
+- **Link previews.** Chips are built; a preview needs a network call the app does not make.
+- **Hover actions** on Events rows; row actions are not listed in the command menu (they need a row).
+- **Interface size 125%** clips the Calendar tab and the quick-add placeholder at narrow widths; the issue-row hover
+  actions cover the edge of the due date.
+- Event dialog fields have no visible labels; the command menu "Recent" row has no status glyph; picking a layout tab
+  adds an undo step; `export_pull` and `export_now` are app-only, so they have no contract case.
 
-The raw ledger of plan 2 is docs/review/plan-2/ledger.md. Decisions: docs/decisions/0010 to 0016.
+## Status (plan 3)
+Dated 2026-11-23. The owner's later list was built on `plan-3` while the owner was away ("take stuff from the TODO
+list and do it"). Eleven tasks in parallel (6 Sonnet, 5 Haiku), one integrator for the five that conflicted, one final
+walk-through. Briefs were files; every task opened one PR into plan-3; merges were serial through scripts/land.sh.
+
+| Task | Built | PR |
+|---|---|---|
+| Release build fix | `cargo tauri build` failed on a debug-only constant; CI now checks release | #126 (on plan-3) |
+| Export folder `~` | export and backup folders typed with `~` now work; relative paths refused | #126 |
+| Themes | six looks, light and dark each: Survey map, Linear, Jira, Cupertino, Obsidian, Scholastic | #128 |
+| CI | test-ui split in three jobs; walk cold start made robust; guide keyboard test; five small bugs | #129 |
+| Links | compact link chips; one allowlist of what the app opens (http, https, mailto, obsidian open) | #127 |
+| Search | part-word search in the real backend; issues listed in the command menu; `/` issue search | #133 |
+| Icon | Mac application icon and favicon | #131 |
+| Fields | Settings > Fields: switch and order built-in issue fields | #134 |
+| View UI | quick (unsaved) filter bar; resizable sidebar and issue panel; interface size 100 to 125% | #130 via #138 |
+| Relations | relation kinds as data, three new built-in kinds, custom kinds (migration 0011) | #136 via #138 |
+| Events | events with their own page, linked to many issues, on the calendar (migration 0012) | #137 via #138 |
+| Hover actions | row actions on hover, right-click and menu key; icons changed in place | #132 via #138 |
+| Sync | `taskapp restore`; fuller export; refuse to overwrite remote commits; "Pull and apply" | #135 via #138 |
+| Walk fixes | seven defects found by the final walk-through, walk tests for events, relations, fields | #139 |
+
+### How plan 3 was verified
+- CI green on every PR (12 checks after the split). Full suites also run locally once, by the integrator: Rust tests
+  for core, export, commands, cli, mcp; 963 UI unit tests; 421 contract cases mock against devserver; 43 walk tests.
+- Final walk-through in a headless browser on the mock and on the real backend (throwaway database): ten flows, 116 (mock) and 118 (real)
+  screenshots, every one opened by the walker, a sample opened by the orchestrator; zero console errors.
+- Release build of the Mac app from plan-3 succeeded with the icon bundled. The app was not launched.
+- Not verified: the installed Mac app; sync against a real remote; Reminders and Google Calendar (unchanged).
+
+### Rulings (plan 3)
+36. Every row action is a registry command that takes its row as target (hover task had built plain handlers).
+37. Deleting a relation kind that is in use is refused; built-in kinds cannot be edited or deleted.
+38. Obsidian links: only `obsidian://open` with `vault` and `file` is a link; enforced at render, at click and in
+    `openExternal` (found by the automated security review).
+39. A pulled export tree with a symlink or submodule is rejected before merge; export code never follows links (same
+    source).
+40. **Needs the owner's OK:** scripts/check-boundaries.sh now lets the CLI depend on the export crate (the restore
+    command needs it). This loosens a check; it is on plan-3 only until the owner approves the PR to main.
+
+### Mistakes by the orchestrator (plan 3)
+- Twice started building an idea the owner meant for later (interface size, then the icon); stopped both times.
+- CI built only in debug, so the release build was broken on main until the owner hit it.
+- Queued five landings one by one although the branches shared files; they conflicted and needed one batch.
 
 ## Status (plan 1)
 Dated 2026-11-21. Plan 1 complete on `plan-1`: every task T0-T35, the final review (4 Sonnet reviewers: 0 Critical,

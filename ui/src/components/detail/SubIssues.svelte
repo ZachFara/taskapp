@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api } from '../../lib/api';
   import type { Issue, Status } from '../../lib/bindings';
+  import Collapse from '../../ui/Collapse.svelte';
   import SectionHeading from './SectionHeading.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import { pct } from './format';
@@ -17,7 +18,8 @@
     rev;
     Promise.all([api.issues.children(issue.id), api.statuses.list()]).then(([c, s]) => ([children, statuses] = [c, s]));
   });
-  const cat = (i: Issue) => statuses.find((s) => s.id === i.status_id)?.category ?? 'Backlog';
+  const st = (i: Issue) => statuses.find((s) => s.id === i.status_id);
+  const cat = (i: Issue) => st(i)?.category ?? 'Backlog';
   const done = $derived(children.filter((c) => cat(c) === 'Completed').length);
   const attach = (child: Issue) => child.id !== issue.id && act(api.issues.update(child.id, { parent_id: issue.id }));
   const create = (t: string) => act(api.issues.create({ title: t, parent_id: issue.id, project_id: issue.project_id }));
@@ -32,7 +34,7 @@
 
 <section aria-label="Sub-issues" bind:this={sec}>
   <SectionHeading name="Sub-issues" count={children.length} {collapsed} ontoggle={() => (collapsed = !collapsed)} onadd={() => add?.querySelector('input')?.focus()} />
-  {#if !collapsed}
+  <Collapse open={!collapsed}>
     {#if children.length}
       <div class="progress" role="progressbar" aria-label="Sub-issue progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={pct(done, children.length)}>
         <span class="bar" style:width={`${pct(done, children.length)}%`}></span>
@@ -40,7 +42,7 @@
       </div>
       <ul>
         {#each children as c (c.id)}
-          <li><button type="button" onclick={() => open(c.key)}><StatusGlyph category={cat(c)} /><span class="key">{c.key}</span>{c.title}</button></li>
+          <li><button type="button" onclick={() => open(c.key)}><StatusGlyph category={cat(c)} icon={st(c)?.icon} color={st(c)?.color} /><span class="key">{c.key}</span>{c.title}</button></li>
         {/each}
       </ul>
     {:else}
@@ -49,7 +51,7 @@
     <div class="add" bind:this={add}>
       <IssuePicker selfId={issue.id} label="New sub-issue title" placeholder="Add a sub-issue: type a title and press Enter, or pick one" pick={attach} {create} />
     </div>
-  {/if}
+  </Collapse>
 </section>
 
 <style>

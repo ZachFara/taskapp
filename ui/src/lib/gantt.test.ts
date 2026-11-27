@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Bar, Issue, Project } from './bindings';
-import { buildRows, dragDates, localDay, rollup, saturdays, shiftLocalDays, tickLabel, unscheduled, zoomBy } from './gantt';
+import { axis, buildRows, dragDates, localDay, rollup, saturdays, shiftLocalDays, unscheduled, zoomBy } from './gantt';
 import { fixtures } from './api.mock';
 
 const issue = (id: number, o: Partial<Issue> = {}): Issue => ({ ...fixtures.issues[0], id, key: `ABC-${id}`, title: `t${id}`, parent_id: null, project_id: 1, start_date: null, due: null, estimate_minutes: null, ...o });
@@ -79,9 +79,13 @@ describe('gantt date math', () => {
     expect(saturdays('2026-11-26', 12)).toEqual([2, 9]);
   });
 
-  it('tick_labels_follow_the_zoom', () => {
-    expect(tickLabel('2026-12-07', 'Day')).toBe('Mon 7');
-    expect(tickLabel('2026-12-07', 'Week')).toBe('Dec 7');
-    expect(tickLabel('2026-12-07', 'Quarter')).toBe('Dec 2026');
+  it('axis_has_one_tick_per_unit_and_bands_that_tile_the_range', () => {
+    const day = axis('2026-11-29', 5, 'Day');
+    expect(day.ticks.map((t) => `${t.sub} ${t.label}`)).toEqual(['Sun 29', 'Mon 30', 'Tue 1', 'Wed 2', 'Thu 3']);
+    expect(day.bands).toEqual([{ k: 0, len: 2, label: 'November 2026' }, { k: 2, len: 3, label: 'December 2026' }]);
+    expect(axis('2026-12-01', 15, 'Week').ticks).toEqual([{ k: 6, label: 'Dec 7' }, { k: 13, label: 'Dec 14' }]);
+    const q = axis('2026-12-20', 30, 'Quarter');
+    expect(q.ticks).toEqual([{ k: 12, label: 'Jan' }]);
+    expect(q.bands.map((b) => b.label)).toEqual(['2026', '2027']);
   });
 });

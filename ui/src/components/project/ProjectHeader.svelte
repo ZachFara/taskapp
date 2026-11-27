@@ -9,6 +9,7 @@
   import Popover from '../../ui/Popover.svelte';
   import TextInput from '../../ui/TextInput.svelte';
   import { humanDate } from '../detail/format';
+  import { images, openLinks, renderMarkdown } from '../detail/markdown';
   import ProgressSummary from '../insights/ProgressSummary.svelte';
 
   let { project, progress, renaming = $bindable(false), onsaved }: {
@@ -71,11 +72,15 @@
 
     {#if editingDesc}
       <form class="descform" onsubmit={saveDescription}>
-        <TextArea label="Description" bind:value={desc} />
+        <TextArea label="Description" images bind:value={desc} />
         <Button variant="primary" type="submit">Save</Button>
       </form>
     {:else if project.description}
-      <p class="desc" data-testid="description">{project.description}</p>
+      <!-- Clicking the text edits it (links still open); the keyboard path is the "Edit project description" command. -->
+      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+      <div class="desc md" data-testid="description" use:openLinks use:images={project.description}
+        onclick={(e) => { if (!(e.target as Element).closest('a')) dispatchEvent(new Event('command:project.description.edit')); }}
+      >{@html renderMarkdown(project.description)}</div>
     {:else}
       <div><Button icon="plus" onclick={() => { desc = ''; editingDesc = true; }}>Add description</Button></div>
     {/if}
@@ -114,7 +119,7 @@
   .main { position: relative; display: grid; gap: var(--s-6); max-width: 64ch; flex: 1; }
   .title { display: flex; align-items: center; gap: var(--s-5); }
   h2 { font-size: var(--fs-display); font-weight: 800; letter-spacing: -0.03em; line-height: var(--lh-tight); }
-  .desc { font-size: var(--fs-lg); line-height: var(--lh-body); }
+  .desc { font-size: var(--fs-lg); line-height: var(--lh-body); cursor: text; }
   form { display: flex; gap: var(--s-4); align-items: center; }
   .descform { align-items: flex-start; flex-direction: column; }
   .facts { position: relative; --chart-bg: var(--band-1); display: grid; gap: var(--s-5); min-width: 280px; margin: 0; }
@@ -124,4 +129,5 @@
   .date.unset { color: var(--muted); font-weight: 400; background: transparent; border-style: dashed; }
   .date:hover { border-color: var(--muted); }
   .progress dd { display: grid; gap: var(--s-3); }
+  .md :global(img), .desc :global(img) { max-width: 100%; border-radius: var(--r-sm); cursor: zoom-in; }
 </style>

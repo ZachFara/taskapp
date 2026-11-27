@@ -322,6 +322,7 @@ async fn project_delete_refuses_while_scoped_defs_exist() -> R {
         options: vec![],
         project_id: Some(p.id),
         position: 0,
+        applies_to: taskapp_core::PropertyAppliesTo::Issues,
     };
     properties::create_def(&db, def, ChangeSource::Ui).await?;
     let i = issue(&db, Some(p.id), 1, false).await?;

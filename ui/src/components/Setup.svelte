@@ -1,9 +1,10 @@
 <script lang="ts">
   import { navigate } from '../app/routes';
   import { api } from '../lib/api';
-  import { setTheme } from '../lib/theme.svelte';
+  import { initTheme, setTheme } from '../lib/theme.svelte';
   import Button from '../ui/Button.svelte';
   import Contour from '../ui/Contour.svelte';
+  import RestoreForm from './RestoreForm.svelte';
   import Select from '../ui/Select.svelte';
   import Tabs from '../ui/Tabs.svelte';
   import TextInput from '../ui/TextInput.svelte';
@@ -22,7 +23,12 @@
   let busy = $state(false);
   let failed = $state(false);
   let created = $state(false);
+  let mode = $state<'new' | 'restore'>('new');
 
+  const choices = [
+    { id: 'new', label: 'Start a new workspace' },
+    { id: 'restore', label: 'Restore from an export' },
+  ];
   const keyOk = $derived(/^[A-Z]{2,5}$/.test(key));
   const nameOk = $derived(name.trim() !== '');
   const error = $derived(
@@ -35,6 +41,12 @@
     if (theme === 'system') el.removeAttribute('data-theme');
     else el.dataset.theme = theme;
   });
+
+  // The restored settings may hold a theme; read it before the workspace opens.
+  async function restored() {
+    await initTheme(api);
+    ondone();
+  }
 
   async function create(e: SubmitEvent) {
     e.preventDefault();
@@ -82,8 +94,16 @@
         <Button variant="primary" onclick={() => { navigate('/settings/import'); ondone(); }}>Import from CSV</Button>
       </div>
     </section>
+  {:else if mode === 'restore'}
+    <section class="card" aria-label="Restore from an export">
+      <Tabs label="First run" segmented bind:value={mode} tabs={choices} />
+      <h2>Restore from an export</h2>
+      <p class="note">Load everything back from an export folder or the Git repository it was pushed to.</p>
+      <RestoreForm onrestored={restored} />
+    </section>
   {:else}
   <form class="card" onsubmit={create} novalidate>
+    <Tabs label="First run" segmented bind:value={mode} tabs={choices} />
     <h2>Create your workspace</h2>
 
     <label class="row">

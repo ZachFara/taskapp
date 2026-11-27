@@ -25,7 +25,8 @@ export const dismiss = () => show(null);
 const STEPS: Record<string, string> = {
   issues_create: 'Created issue', issues_update: 'Updated issue', issues_bulk_update: 'Updated issues', issues_archive: 'Archived issue',
   issues_delete: 'Deleted issue', properties_set_value: 'Set property value', comments_add: 'Added comment', pins_pin: 'Pinned', pins_unpin: 'Unpinned',
-  views_save: 'Changed view', views_delete: 'Deleted view', views_create_from_template: 'Created view from template',
+  views_save: 'Changed view', views_save_project: 'Changed view', views_delete: 'Deleted view', views_create_from_template: 'Created view from template',
+  folders_create: 'Create folder', folders_rename: 'Rename folder', folders_delete: 'Delete folder', folders_place: 'Move folder', folders_place_item: 'Move to folder',
   views_save_as_template: 'Saved view as template', views_reset_to_template: 'Reset view to template',
   view_templates_create: 'Created view template', view_templates_update: 'Changed view template', view_templates_delete: 'Deleted view template',
 };
@@ -40,7 +41,7 @@ export function stepLabel(raw: string): string {
 // (`u` still undoes it).
 // The backend words every view save "Changed display of <name>"; the page announces the saves that matter (a filter
 // or a rename) itself, so the generic one is dropped.
-const QUIET = new Set(['views_save']);
+const QUIET = new Set(['views_save', 'views_save_project']);
 const quiet = (label: string) => QUIET.has(label) || label.startsWith('Changed display of ');
 
 /** An undoable change the app names itself. */

@@ -91,25 +91,24 @@ describe('icons', () => {
 });
 
 describe('glyphs', () => {
-  it('status glyphs differ in how many stones are solid', () => {
-    const solid: Record<string, number> = {};
-    for (const category of ['Backlog', 'Unstarted', 'Started', 'Completed', 'Canceled']) {
+  it('status glyphs differ by category, and a chosen icon replaces the default', () => {
+    const markup = ['Backlog', 'Unstarted', 'Started', 'Completed', 'Canceled'].map((category) => {
       document.body.innerHTML = '';
       render(StatusGlyph, { category });
-      solid[category] = document.querySelectorAll('rect[fill="currentColor"]:not([fill-opacity])').length;
-    }
-    expect(solid).toEqual({ Backlog: 0, Unstarted: 1, Started: 2, Completed: 3, Canceled: 0 });
+      return document.querySelector('svg')!.innerHTML;
+    });
+    expect(new Set(markup).size).toBe(5);
     document.body.innerHTML = '';
-    render(StatusGlyph, { category: 'Canceled' });
-    expect(document.querySelector('path')).not.toBeNull();
+    render(StatusGlyph, { category: 'Started', icon: 'icon:star', color: 'red' });
+    expect(document.querySelector('[data-icon=star]')).not.toBeNull();
   });
-  it('priority glyphs have one more ring per level and a core only when urgent', () => {
-    const rings = [0, 1, 2, 3, 4].map((level) => {
+  it('priority glyphs fill one more bar per level; urgent fills all three', () => {
+    const bars = [0, 1, 2, 3, 4].map((level) => {
       document.body.innerHTML = '';
       render(PriorityGlyph, { level });
-      return [document.querySelectorAll('ellipse').length, document.querySelectorAll('circle').length];
+      return document.querySelectorAll('rect').length === 3 ? document.querySelectorAll('rect.on').length : -1;
     });
-    expect(rings).toEqual([[1, 0], [1, 0], [2, 0], [3, 0], [3, 1]]);
+    expect(bars).toEqual([0, 1, 2, 3, 3]);
   });
 });
 
@@ -144,6 +143,18 @@ describe('layout pieces', () => {
     const tabs = [...document.querySelectorAll('[role=tab]')];
     expect(tabs.map((t) => t.textContent?.trim())).toEqual(['A', 'B']);
     expect(tabs[1].getAttribute('data-state')).toBe('active');
+  });
+  it('Tabs show a tooltip only when it adds a shortcut, not to repeat the visible name', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+    render(Tabs, { value: 'a', tabs: [{ id: 'a', label: 'Plain', icon: 'list' }, { id: 'b', label: 'Keyed', shortcut: 'B' }] });
+    const [plain, keyed] = [...document.querySelectorAll<HTMLElement>('.cx-tabwrap')];
+    plain.focus();
+    plain.dispatchEvent(new FocusEvent('focus'));
+    await settle();
+    expect(document.querySelector('.cx-tip')).toBeNull();
+    keyed.dispatchEvent(new FocusEvent('focus'));
+    await settle();
+    expect(document.querySelector('.cx-tip')?.textContent).toContain('Keyed');
   });
   it('GroupHeader deepens the band with the status category and toggles', () => {
     const steps: Record<string, string | undefined> = {};

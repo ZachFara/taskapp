@@ -3,26 +3,32 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use taskapp_core::{
-    ChangeSource, CycleId, Db, Due, Error, IssueId, IssuePatch, LabelId, Measure, NewIssue, PinId,
-    PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind, Relation, RelationKind, Result,
-    SelectOption, StatusId, TemplateId, ViewDef, ViewId, ViewTemplateId, backup, comments, cycles,
-    history, import, insights, issues, labels, pins, projects, properties, quickadd, relations,
-    search, templates, undo, view_templates, views,
+    ChangeSource, CycleId, Db, Due, Error, EventId, EventInput, IssueId, IssuePatch, Measure,
+    NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind, Relation,
+    RelationKind, Result, SelectOption, TemplateId, ViewDef, ViewId, ViewTemplateId, backup,
+    comments, cycles, events, history, import, insights, issues, labels, pins, project_statuses,
+    projects, properties, quickadd, relations, search, statuses, templates, undo, view_templates,
+    views,
 };
 
 use crate::{
-    Cmd, CommentCmd, CycleCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd, PinCmd, ProjectCmd,
-    PropertyCmd, RelationCmd, ScopeArgs, TemplateCmd, ViewCmd,
+    Cmd, CommentCmd, CycleCmd, EventCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd, PinCmd,
+    ProjectCmd, PropertyCmd, RelationCmd, ScopeArgs, StatusCmd, TemplateCmd, ViewCmd,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
 
 pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
     match cmd {
+        Cmd::Api(crate::ApiCmd::Call { name, args }) => {
+            let args = serde_json::from_str(&args)
+                .map_err(|e| Error::Invalid(format!("arguments must be a JSON object: {e}")))?;
+            crate::api::call(db, dir, &name, args).await
+        }
         Cmd::Undo => val(undo::undo(db).await?),
         Cmd::Setup { name, key, tz } => {
             val(taskapp_core::workspace::setup(db, &name, &key, tz.as_deref()).await?)
@@ -30,6 +36,8 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Redo => val(undo::redo(db).await?),
         Cmd::Template(cmd) => template(db, cmd).await,
         Cmd::Insights(cmd) => insights(db, cmd).await,
+        Cmd::Event(cmd) => event(db, cmd).await,
+        Cmd::Status(cmd) => status(db, cmd).await,
         cmd => run_group(db, dir, cmd).await,
     }
 }
@@ -47,12 +55,16 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Relation(cmd) => relation(db, cmd).await,
         Cmd::Pin(cmd) => pin(db, cmd).await,
         Cmd::Import(cmd) => import(db, cmd).await,
-        Cmd::Backup(_) => Err(Error::Invalid(
-            "backup runs before the database opens".into(),
+        Cmd::Backup(_) | Cmd::Restore { .. } | Cmd::Guide | Cmd::Api(_) => Err(Error::Invalid(
+            "this command runs before the database opens".into(),
         )),
-        Cmd::Undo | Cmd::Redo | Cmd::Setup { .. } | Cmd::Template(_) | Cmd::Insights(_) => {
-            handled_in_run()
-        }
+        Cmd::Undo
+        | Cmd::Redo
+        | Cmd::Setup { .. }
+        | Cmd::Template(_)
+        | Cmd::Insights(_)
+        | Cmd::Status(_)
+        | Cmd::Event(_) => handled_in_run(),
         Cmd::History { key } => {
             let id = issue_id(db, &key).await?;
             val(history::list_for(db, "issue", &id.0.to_string()).await?)
@@ -102,18 +114,22 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
                 Some(key) => Some(issue_id(db, &key).await?),
                 None => None,
             };
+            let status_id = crate::references::status(db, status.as_deref()).await?;
+            let project_id = crate::references::project(db, project.as_deref()).await?;
+            let cycle_id = crate::references::cycle(db, cycle.as_deref()).await?;
+            let label_ids = crate::references::labels(db, &labels).await?;
             let new = NewIssue {
                 created_at: created_at.as_deref().map(timestamp).transpose()?,
                 completed_at: completed_at.as_deref().map(timestamp).transpose()?,
                 properties: property_map(&properties)?,
                 parent_id,
-                cycle_id: cycle.map(CycleId),
-                label_ids: (!labels.is_empty()).then(|| labels.into_iter().map(LabelId).collect()),
+                cycle_id,
+                label_ids: (!labels.is_empty()).then_some(label_ids),
                 title,
                 description,
                 priority: check_priority(priority)?,
-                status_id: status.map(StatusId),
-                project_id: project.map(ProjectId),
+                status_id,
+                project_id,
                 due: due.as_deref().map(date).transpose()?.map(Due::Date),
                 estimate_minutes: estimate,
                 points,
@@ -143,11 +159,16 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         clear_due,
         points,
         clear_points,
+        start,
+        estimate,
+        project,
     } = cmd
     else {
         unreachable!("issue_update is only called with Update");
     };
     let id = issue_id(db, &key).await?;
+    let status_id = crate::references::status(db, status.as_deref()).await?;
+    let project_id = crate::references::project(db, project.as_deref()).await?;
     let due = if clear_due {
         Some(None)
     } else {
@@ -160,13 +181,16 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         title,
         description,
         priority: check_priority(priority)?,
-        status_id: status.map(StatusId),
+        status_id,
         due,
         points: if clear_points {
             Some(None)
         } else {
             points.map(Some)
         },
+        start_date: start.as_deref().map(date).transpose()?.map(Some),
+        estimate_minutes: estimate.map(Some),
+        project_id: project_id.map(Some),
         ..IssuePatch::default()
     };
     val(issues::update(db, id, patch, SRC).await?)
@@ -209,10 +233,66 @@ async fn insights(db: &Db, cmd: InsightsCmd) -> Result<Value> {
     }
 }
 
+/// A category or other unit enum from its serialised name.
+fn named<T: serde::de::DeserializeOwned>(text: &str) -> Result<T> {
+    serde_json::from_value(json!(text)).map_err(|e| Error::Invalid(e.to_string()))
+}
+
+async fn status(db: &Db, cmd: StatusCmd) -> Result<Value> {
+    match cmd {
+        StatusCmd::List => val(statuses::list(db).await?),
+        StatusCmd::Create {
+            name,
+            category,
+            color,
+        } => val(statuses::create(db, &name, named(&category)?, &color, None, SRC).await?),
+    }
+}
+
+/// Creates a saved view, or replaces the one with `id` keeping the icon and colour the user gave it.
+async fn save_view(
+    db: &Db,
+    name: &str,
+    def: &str,
+    id: Option<i64>,
+    entity: String,
+) -> Result<Value> {
+    let def: ViewDef = serde_json::from_str(def).map_err(|e| Error::Invalid(e.to_string()))?;
+    let entity = serde_json::from_value(Value::String(entity))
+        .map_err(|_| Error::Invalid("entity is `issue` or `project`".into()))?;
+    let look = match id {
+        Some(id) => views::list(db)
+            .await?
+            .into_iter()
+            .find(|v| v.id == ViewId(id))
+            .map(|v| taskapp_core::palette::Look {
+                icon: v.icon,
+                color: v.color,
+            }),
+        None => None,
+    };
+    let saved = views::save_as(
+        db,
+        id.map(ViewId),
+        (name, entity),
+        def,
+        look.unwrap_or_default(),
+        SRC,
+    );
+    val(saved.await?)
+}
+
 async fn view(db: &Db, cmd: ViewCmd) -> Result<Value> {
     let (def, id) = match cmd {
         ViewCmd::Query { def, id } => (def, id),
         ViewCmd::Templates => return val(view_templates::list(db).await?),
+        ViewCmd::List => return val(views::list(db).await?),
+        ViewCmd::Save {
+            name,
+            def,
+            id,
+            entity,
+        } => return save_view(db, &name, &def, id, entity).await,
         ViewCmd::SaveAsTemplate { view_id, name } => {
             let t = view_templates::from_view(db, ViewId(view_id), name.as_deref(), SRC);
             return val(t.await?);
@@ -253,6 +333,7 @@ async fn property(db: &Db, dir: &Path, cmd: PropertyCmd) -> Result<Value> {
             name,
             kind: kind_name,
             options,
+            applies_to,
         } => {
             let def = PropertyDef {
                 key,
@@ -261,6 +342,7 @@ async fn property(db: &Db, dir: &Path, cmd: PropertyCmd) -> Result<Value> {
                 options: select_options(&options),
                 project_id: None,
                 position: 0,
+                applies_to: applies_to_of(&applies_to)?,
             };
             val(properties::create_def(db, def, SRC).await?)
         }
@@ -291,9 +373,81 @@ async fn property(db: &Db, dir: &Path, cmd: PropertyCmd) -> Result<Value> {
     }
 }
 
+fn applies_to_of(s: &str) -> Result<taskapp_core::PropertyAppliesTo> {
+    use taskapp_core::PropertyAppliesTo as A;
+    match s {
+        "issues" => Ok(A::Issues),
+        "projects" => Ok(A::Projects),
+        "both" => Ok(A::Both),
+        other => Err(Error::Invalid(format!(
+            "applies-to {other}: use issues, projects or both"
+        ))),
+    }
+}
+
+async fn project_set(
+    db: &Db,
+    slug: &str,
+    status: Option<String>,
+    priority: Option<u8>,
+    label_names: &[String],
+    property: &[String],
+) -> Result<Value> {
+    let mut p = projects::list(db)
+        .await?
+        .into_iter()
+        .find(|p| p.slug == slug)
+        .ok_or_else(|| Error::NotFound(format!("project {slug}")))?;
+    if let Some(name) = status {
+        let all = project_statuses::list(db).await?;
+        let found = all.iter().find(|s| s.name.eq_ignore_ascii_case(&name));
+        p.status_id = found
+            .ok_or_else(|| Error::NotFound(format!("project status {name}")))?
+            .id;
+    }
+    if let Some(n) = priority {
+        p.priority = n;
+    }
+    if !label_names.is_empty() {
+        let all = labels::list(db).await?;
+        p.label_ids = label_names
+            .iter()
+            .map(|n| {
+                all.iter()
+                    .find(|l| l.name.eq_ignore_ascii_case(n))
+                    .map(|l| l.id)
+                    .ok_or_else(|| Error::NotFound(format!("label {n}")))
+            })
+            .collect::<Result<_>>()?;
+    }
+    for kv in property.chunks(2) {
+        let value = serde_json::from_str::<Value>(&kv[1])
+            .map_err(|e| Error::Invalid(format!("value is not JSON: {e}")))?;
+        if value.is_null() {
+            p.properties.remove(&kv[0]);
+        } else {
+            p.properties.insert(kv[0].clone(), value);
+        }
+    }
+    val(projects::update(db, p, SRC).await?)
+}
+
 async fn project(db: &Db, cmd: ProjectCmd) -> Result<Value> {
     match cmd {
         ProjectCmd::List => val(projects::list(db).await?),
+        ProjectCmd::Statuses => val(project_statuses::list(db).await?),
+        ProjectCmd::StatusCreate {
+            name,
+            category,
+            color,
+        } => val(project_statuses::create(db, &name, named(&category)?, &color, None, SRC).await?),
+        ProjectCmd::Set {
+            slug,
+            status,
+            priority,
+            labels,
+            property,
+        } => project_set(db, &slug, status, priority, &labels, &property).await,
         ProjectCmd::Create {
             slug,
             name,
@@ -327,6 +481,46 @@ async fn cycle(db: &Db, cmd: CycleCmd) -> Result<Value> {
     }
 }
 
+async fn event(db: &Db, cmd: EventCmd) -> Result<Value> {
+    match cmd {
+        EventCmd::List { from, to } => {
+            let (from, to) = (from.as_deref().map(date), to.as_deref().map(date));
+            val(events::list(db, from.transpose()?, to.transpose()?).await?)
+        }
+        EventCmd::Create {
+            title,
+            start,
+            end,
+            all_day,
+            place,
+            notes,
+        } => {
+            let input = EventInput {
+                title,
+                starts_at: local_time(&start)?,
+                ends_at: end.as_deref().map(local_time).transpose()?,
+                all_day,
+                place,
+                notes: notes.unwrap_or_default(),
+                icon: None,
+                color: None,
+                archived: false,
+            };
+            val(events::create(db, input, SRC).await?)
+        }
+        EventCmd::Link { id, key } => {
+            events::link(db, EventId(id), issue_id(db, &key).await?, SRC).await?;
+            Ok(json!({ "ok": true }))
+        }
+    }
+}
+
+fn local_time(text: &str) -> Result<NaiveDateTime> {
+    NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M")
+        .or_else(|_| date(text).map(|d| d.and_time(chrono::NaiveTime::MIN)))
+        .map_err(|_| Error::Invalid(format!("not a time (YYYY-MM-DDTHH:MM): {text}")))
+}
+
 async fn template(db: &Db, cmd: TemplateCmd) -> Result<Value> {
     Ok(match cmd {
         TemplateCmd::List => val(templates::list(db).await?)?,
@@ -354,6 +548,15 @@ async fn label(db: &Db, cmd: LabelCmd) -> Result<Value> {
         LabelCmd::Create { name, color, icon } => {
             val(labels::create(db, &name, &color, icon, SRC).await?)
         }
+        LabelCmd::Add { key, label } => {
+            let found = labels::list(db)
+                .await?
+                .into_iter()
+                .find(|l| l.name.eq_ignore_ascii_case(&label));
+            let found = found.ok_or_else(|| Error::NotFound(format!("label {label}")))?;
+            labels::add_label(db, issue_id(db, &key).await?, found.id, SRC).await?;
+            val(issues::get_by_key(db, &key).await?)
+        }
     }
 }
 
@@ -365,7 +568,7 @@ async fn relation(db: &Db, cmd: RelationCmd) -> Result<Value> {
     let rel = Relation {
         from: issue_id(db, &from).await?,
         to: issue_id(db, &to).await?,
-        kind: relation_kind(&kind)?,
+        kind: RelationKind::new(&kind),
     };
     if add {
         relations::add(db, rel, SRC).await?;
@@ -392,7 +595,7 @@ async fn pin(db: &Db, cmd: PinCmd) -> Result<Value> {
 }
 
 /// Snapshot before a destructive property change, as the MCP server does.
-async fn snapshot(db: &Db, dir: &Path, reason: &str) -> Result<()> {
+pub(crate) async fn snapshot(db: &Db, dir: &Path, reason: &str) -> Result<()> {
     backup::snapshot(db, dir, reason).await?;
     Ok(())
 }
@@ -458,15 +661,6 @@ fn property_kind(name: &str) -> Result<PropertyKind> {
     })
 }
 
-fn relation_kind(name: &str) -> Result<RelationKind> {
-    Ok(match name {
-        "blocks" => RelationKind::Blocks,
-        "related" => RelationKind::Related,
-        "duplicate" => RelationKind::Duplicate,
-        _ => return Err(Error::Invalid(format!("unknown relation kind: {name}"))),
-    })
-}
-
 fn pin_kind(name: &str) -> Result<PinKind> {
     Ok(match name {
         "issue" => PinKind::Issue,
@@ -475,6 +669,7 @@ fn pin_kind(name: &str) -> Result<PinKind> {
         "cycle" => PinKind::Cycle,
         "note" => PinKind::Note,
         "url" => PinKind::Url,
+        "folder" => PinKind::Folder,
         _ => return Err(Error::Invalid(format!("unknown pin kind: {name}"))),
     })
 }

@@ -1,11 +1,12 @@
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{NaiveDate, Utc};
 use serde_json::{Value, json};
-use sqlx::SqliteConnection;
+use sqlx::{Row, SqliteConnection, sqlite::SqliteRow};
 
 use crate::{
-    ChangeSource, Db, Error, Milestone, MilestoneId, Project, ProjectId, Result,
+    ChangeSource, Db, Error, LabelId, Milestone, MilestoneId, Project, ProjectId, ProjectStatusId,
+    PropertyAppliesTo, Result,
     history::{self, Edit},
-    palette, rows,
+    palette, properties, rows,
 };
 
 /// Icon and color are checked the same way on create and update.
@@ -74,58 +75,64 @@ async fn edit(
     history::record(tx, src, entity, &id.to_string(), &edit).await
 }
 
-async fn find(tx: &mut SqliteConnection, id: ProjectId) -> Result<Project> {
-    let r = sqlx::query!(
-        r#"SELECT id AS "id!: i64", slug, name, description, doc_link,
-                  start_date AS "start_date: NaiveDate", target_date AS "target_date: NaiveDate",
-                  archived_at AS "archived_at: DateTime<Utc>", icon, color
-           FROM projects WHERE id = ?"#,
-        id.0
-    )
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or_else(|| Error::NotFound(format!("project {}", id.0)))?;
+const COLS: &str =
+    "id, slug, name, description, doc_link, start_date, target_date, archived_at, icon, color,
+    status_id, priority, properties";
+
+fn project_from_row(r: &SqliteRow, label_ids: Vec<LabelId>) -> Result<Project> {
+    let props: String = r.get("properties");
     Ok(Project {
-        id: ProjectId(r.id),
-        slug: r.slug,
-        name: r.name,
-        description: r.description,
-        doc_link: r.doc_link,
-        start_date: r.start_date,
-        target_date: r.target_date,
-        archived_at: r.archived_at,
-        icon: r.icon,
-        color: r.color,
+        id: ProjectId(r.get("id")),
+        slug: r.get("slug"),
+        name: r.get("name"),
+        description: r.get("description"),
+        doc_link: r.get("doc_link"),
+        start_date: r.get("start_date"),
+        target_date: r.get("target_date"),
+        archived_at: r.get("archived_at"),
+        icon: r.get("icon"),
+        color: r.get("color"),
+        status_id: ProjectStatusId(r.get("status_id")),
+        priority: r.get("priority"),
+        label_ids,
+        properties: serde_json::from_str(&props).map_err(|e| Error::Invalid(e.to_string()))?,
     })
+}
+
+async fn label_ids(tx: &mut SqliteConnection, id: i64) -> Result<Vec<LabelId>> {
+    let ids: Vec<i64> = sqlx::query_scalar(
+        "SELECT label_id FROM project_labels WHERE project_id = ? ORDER BY label_id",
+    )
+    .bind(id)
+    .fetch_all(tx)
+    .await?;
+    Ok(ids.into_iter().map(LabelId).collect())
+}
+
+pub(crate) async fn find(tx: &mut SqliteConnection, id: ProjectId) -> Result<Project> {
+    let r = sqlx::query(&format!("SELECT {COLS} FROM projects WHERE id = ?"))
+        .bind(id.0)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| Error::NotFound(format!("project {}", id.0)))?;
+    let labels = label_ids(tx, id.0).await?;
+    project_from_row(&r, labels)
 }
 
 /// # Errors
 ///
 /// Fails on a database error or invalid arguments.
 pub async fn list(db: &Db) -> Result<Vec<Project>> {
-    let rows = sqlx::query!(
-        r#"SELECT id AS "id!: i64", slug, name, description, doc_link,
-                  start_date AS "start_date: NaiveDate", target_date AS "target_date: NaiveDate",
-                  archived_at AS "archived_at: DateTime<Utc>", icon, color
-           FROM projects ORDER BY id"#
-    )
-    .fetch_all(&db.pool)
-    .await?;
-    Ok(rows
-        .into_iter()
-        .map(|r| Project {
-            id: ProjectId(r.id),
-            slug: r.slug,
-            name: r.name,
-            description: r.description,
-            doc_link: r.doc_link,
-            start_date: r.start_date,
-            target_date: r.target_date,
-            archived_at: r.archived_at,
-            icon: r.icon,
-            color: r.color,
-        })
-        .collect())
+    let mut conn = db.pool.acquire().await?;
+    let rows = sqlx::query(&format!("SELECT {COLS} FROM projects ORDER BY id"))
+        .fetch_all(&mut *conn)
+        .await?;
+    let mut out = Vec::with_capacity(rows.len());
+    for r in &rows {
+        let labels = label_ids(&mut conn, r.get("id")).await?;
+        out.push(project_from_row(r, labels)?);
+    }
+    Ok(out)
 }
 
 /// # Errors
@@ -162,6 +169,10 @@ pub async fn create(
         new: Some(&created),
     };
     history::record(&mut tx, src, "project", &id.to_string(), &edit).await?;
+    let status_id: i64 = sqlx::query_scalar("SELECT status_id FROM projects WHERE id = ?")
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
     tx.commit().await?;
     Ok(Project {
         id: ProjectId(id),
@@ -174,6 +185,10 @@ pub async fn create(
         archived_at: None,
         icon,
         color,
+        status_id: ProjectStatusId(status_id),
+        priority: 0,
+        label_ids: vec![],
+        properties: serde_json::Map::new(),
     })
 }
 
@@ -199,7 +214,69 @@ async fn record_edits(
     let (before, after) = (json!(old.icon), json!(new.icon));
     edit(tx, src, target, "icon", before, after).await?;
     let (before, after) = (json!(old.color), json!(new.color));
-    edit(tx, src, target, "color", before, after).await
+    edit(tx, src, target, "color", before, after).await?;
+    let (before, after) = (json!(old.status_id.0), json!(new.status_id.0));
+    edit(tx, src, target, "status_id", before, after).await?;
+    let (before, after) = (json!(old.priority), json!(new.priority));
+    edit(tx, src, target, "priority", before, after).await?;
+    let (before, after) = (json!(old.label_ids), json!(new.label_ids));
+    edit(tx, src, target, "label_ids", before, after).await?;
+    let (before, after) = (json!(old.properties), json!(new.properties));
+    edit(tx, src, target, "properties", before, after).await
+}
+
+/// Priority, status and every custom property value must exist and fit.
+async fn check_fields(tx: &mut SqliteConnection, p: &Project) -> Result<()> {
+    if p.priority > 4 {
+        return Err(Error::Invalid("priority is 0 to 4".into()));
+    }
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM project_statuses WHERE id = ?")
+        .bind(p.status_id.0)
+        .fetch_one(&mut *tx)
+        .await?;
+    if n == 0 {
+        return Err(Error::NotFound(format!("project status {}", p.status_id.0)));
+    }
+    for (key, value) in &p.properties {
+        let def = properties::get_def(tx, key).await?;
+        if def.applies_to == PropertyAppliesTo::Issues {
+            return Err(Error::Invalid(format!("{key} does not apply to projects")));
+        }
+        properties::validate(&def, value)?;
+    }
+    Ok(())
+}
+
+/// Brings `project_labels` to `want`: removed rows are deleted, added ones inserted, each recorded for undo.
+async fn set_labels(
+    tx: &mut SqliteConnection,
+    src: ChangeSource,
+    id: i64,
+    want: &[LabelId],
+) -> Result<()> {
+    let have = label_ids(tx, id).await?;
+    let before = rows::snap(tx, "project_labels", "project_id = ?", id).await?;
+    for l in have.iter().filter(|l| !want.contains(l)) {
+        sqlx::query("DELETE FROM project_labels WHERE project_id = ? AND label_id = ?")
+            .bind(id)
+            .bind(l.0)
+            .execute(&mut *tx)
+            .await?;
+    }
+    rows::changed(tx, src, before).await?;
+    for l in want.iter().filter(|l| !have.contains(l)) {
+        let row = sqlx::query(
+            "INSERT OR IGNORE INTO project_labels (project_id, label_id) VALUES (?, ?)",
+        )
+        .bind(id)
+        .bind(l.0)
+        .execute(&mut *tx)
+        .await?;
+        if row.rows_affected() == 1 {
+            rows::created(tx, src, "project_labels", row.last_insert_rowid()).await?;
+        }
+    }
+    Ok(())
 }
 
 /// # Errors
@@ -210,6 +287,9 @@ pub async fn update(db: &Db, mut project: Project, src: ChangeSource) -> Result<
     project.color = check_look(project.icon.as_deref(), project.color.as_deref())?;
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let old = find(&mut tx, project.id).await?;
+    check_fields(&mut tx, &project).await?;
+    project.label_ids.sort_by_key(|l| l.0);
+    project.label_ids.dedup();
     let before = rows::by_key(&mut tx, "projects", project.id.0).await?;
     let pins = rows::snap(
         &mut tx,
@@ -219,22 +299,27 @@ pub async fn update(db: &Db, mut project: Project, src: ChangeSource) -> Result<
     )
     .await?;
     record_edits(&mut tx, src, &old, &project).await?;
-    sqlx::query!(
+    sqlx::query(
         "UPDATE projects SET slug = ?, name = ?, description = ?, doc_link = ?, start_date = ?,
-                target_date = ?, archived_at = ?, icon = ?, color = ? WHERE id = ?",
-        project.slug,
-        project.name,
-        project.description,
-        project.doc_link,
-        project.start_date,
-        project.target_date,
-        project.archived_at,
-        project.icon,
-        project.color,
-        project.id.0
+                target_date = ?, archived_at = ?, icon = ?, color = ?, status_id = ?, priority = ?,
+                properties = ? WHERE id = ?",
     )
+    .bind(&project.slug)
+    .bind(&project.name)
+    .bind(&project.description)
+    .bind(&project.doc_link)
+    .bind(project.start_date)
+    .bind(project.target_date)
+    .bind(project.archived_at)
+    .bind(&project.icon)
+    .bind(&project.color)
+    .bind(project.status_id.0)
+    .bind(project.priority)
+    .bind(serde_json::to_string(&project.properties).map_err(|e| Error::Invalid(e.to_string()))?)
+    .bind(project.id.0)
     .execute(&mut *tx)
     .await?;
+    set_labels(&mut tx, src, project.id.0, &project.label_ids).await?;
     // Project pins are keyed by slug, so a rename must carry them along.
     sqlx::query("UPDATE pins SET target = ? WHERE kind = 'project' AND target = ?")
         .bind(&project.slug)
@@ -297,10 +382,12 @@ pub async fn delete(db: &Db, id: ProjectId, src: ChangeSource) -> Result<()> {
     }
     unlink_issues(&mut tx, src, id.0).await?;
     let milestones = rows::snap(&mut tx, "milestones", "project_id = ?", id.0).await?;
+    let labels = rows::snap(&mut tx, "project_labels", "project_id = ?", id.0).await?;
     let before = rows::by_key(&mut tx, "projects", id.0).await?;
     sqlx::query!("DELETE FROM projects WHERE id = ?", id.0)
         .execute(&mut *tx)
         .await?;
+    rows::changed(&mut tx, src, labels).await?;
     rows::changed(&mut tx, src, milestones).await?;
     rows::changed(&mut tx, src, before).await?;
     let deleted = json!(old.slug);

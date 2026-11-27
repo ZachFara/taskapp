@@ -1,5 +1,8 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { cubicOut } from 'svelte/easing';
+  import { fly } from 'svelte/transition';
+  import { ms } from '../lib/motion.svelte';
   import Icon from './Icon.svelte';
 
   // The toast surface. A queue and timers belong to whoever owns the messages; this only draws one.
@@ -12,7 +15,7 @@
   const icon = { info: null, success: 'check', error: 'flag' } as const;
 </script>
 
-<div class="toast" role={tone === 'error' ? 'alert' : 'status'} data-tone={tone}>
+<div class="toast" in:fly|global={{ y: 12, duration: ms('--dur-3'), easing: cubicOut }} out:fly|global={{ y: 12, duration: ms('--dur-out') }} role={tone === 'error' ? 'alert' : 'status'} data-tone={tone}>
   {#if icon[tone]}<span class="lead"><Icon name={icon[tone]} /></span>{/if}
   <span class="msg">{@render children()}</span>
   {#if action}<span class="act">{@render action()}</span>{/if}

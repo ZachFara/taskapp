@@ -1,19 +1,24 @@
 import type { Api } from './api';
 import { hexOf, iconOk, keyFor } from './api.mock.palette';
 import { planCsv, projectSlug } from './api.mock.import';
+import { FIELDS } from './issueFields';
 import { parseQuickadd } from './api.mock.quickadd';
 import * as insights from './api.mock.insights';
 import { stepLabel } from './api.mock.stepLabel';
+import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
+import { attachmentsApi } from './api.mock.attachments';
+import { foldersApi } from './api.mock.folders';
 import { scrubDef, seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
-  AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
-  NewIssue, Pin, Project, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
-  TemplateInput, Value, ViewDef, ViewTemplate, WorkBlock,
+  AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, Event, EventInput, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
+  NewIssue, Pin, Placement, Project, ProjectRow, ProjectStatus, ProjectStatusCategory, PropertyAppliesTo, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
+  TemplateInput, Value, ViewDef, ViewEntity, ViewFolder, ViewTemplate, WorkBlock,
 } from './bindings';
 
 export type MockSeed = {
   statuses: Status[];
   projects: Project[];
+  projectStatuses?: ProjectStatus[];
   propertyDefs: PropertyDef[];
   issues: Issue[];
   labels?: Label[];
@@ -24,6 +29,7 @@ export type MockSeed = {
   relations?: Relation[];
   templates?: IssueTemplate[];
   viewTemplates?: ViewTemplate[];
+  viewFolders?: ViewFolder[];
   workspace?: Workspace;
   /** Changes that predate the mock, for progress charts (the real seed writes the same rows). */
   history?: Change[];
@@ -88,12 +94,19 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const s = structuredClone(seed);
   let workspace: Workspace = s.workspace ?? { setup_done: false, name: null, key: 'ABC', timezone: tz };
   const labels = s.labels ?? [];
+  const projectStatuses = (s.projectStatuses ??= structuredClone(projectStatusSeed));
   const cycles = s.cycles ?? [];
+  const events: Event[] = [];
   const views = s.views ?? [];
   const viewTemplates: ViewTemplate[] = s.viewTemplates ?? [];
+  const folders: ViewFolder[] = s.viewFolders ?? [];
+  // shortcut: a deleted item's placement stays until its id is reused, when it would show in the old folder; fixtures never reuse ids.
+  const placed: Placement[] = [];
   const milestones: Milestone[] = s.milestones ?? [];
   const comments: Comment[] = [];
   const relations: Relation[] = s.relations ?? [];
+  const relationKinds = builtInKinds();
+  const kinds = relationKindsApi(relationKinds, relations, fail);
   const pins: Pin[] = s.pins ?? [];
   const blocks: WorkBlock[] = [];
   const changes: Change[] = [...(s.history ?? [])];
@@ -101,7 +114,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, s.propertyDefs, labels, cycles, templates, relations, comments, views, milestones, pins, viewTemplates, importLog] as unknown[][];
+  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -156,6 +169,17 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     return status();
   };
   const settings = new Map<string, Value>([['issue_prefix', workspace.key], ['estimation', 'both'], ['point_scale', 'fibonacci']]);
+  // The same checks and words as the real backend (crates/core/src/settings.rs), so the contract cases agree.
+  const checkIssueFields = (v: unknown) => {
+    const bad = (why: string) => fail('Invalid', `setting issue_fields: ${why}`);
+    if (!Array.isArray(v)) return bad('must be a list of {field, on}');
+    const seen = new Set<string>();
+    for (const i of v) {
+      if (typeof i?.field !== 'string' || typeof i.on !== 'boolean') return bad('each entry needs a field name and a true or false `on`');
+      if (!(FIELDS as readonly string[]).includes(i.field) || seen.has(i.field)) return bad(`unknown or repeated field \`${i.field}\``);
+      seen.add(i.field);
+    }
+  };
   const choices: Record<string, string[]> = { estimation: ['none', 'points', 'time', 'both'], point_scale: ['fibonacci', 'linear', 'powers', 'tshirt'] };
   const now = () => new Date().toISOString();
   // Issue history only, in the order the backend records it; other entities' history is not shown by any screen.
@@ -173,13 +197,36 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     void rows.splice(rows.indexOf(find(rows, id, what)), 1);
   const category = (i: Issue) => s.statuses.find((st) => st.id === i.status_id)?.category;
 
+  const projectStatusOf = (p: Project) => projectStatuses.find((x) => x.id === p.status_id);
+  const progressOf = (id: number): [number, number] => {
+    const rows = s.issues.filter((i) => i.project_id === id && !i.archived_at);
+    return [rows.filter((i) => category(i) === 'Completed').length, rows.length];
+  };
+  // What a project view can filter and sort by (core: views::project_col); creation and update times have no column yet.
+  function projectValue(p: Project, f: FieldRef): Value {
+    if (f.Property !== undefined) {
+      if (!s.propertyDefs.some((d) => d.key === f.Property && d.applies_to !== 'Issues')) fail('Invalid', 'unknown property');
+      return p.properties[f.Property] ?? null;
+    }
+    const [done, total] = progressOf(p.id);
+    const by: Partial<Record<FixedField, Value>> = {
+      Title: p.name, Status: p.status_id, StatusCategory: projectStatusOf(p)?.category.toLowerCase() ?? null, Priority: p.priority,
+      Label: p.label_ids, StartDate: p.start_date, TargetDate: p.target_date, Archived: p.archived_at !== null,
+      IssueCount: total, Progress: total ? (100 * done) / total : 0,
+    };
+    if (!(f.Fixed! in by)) fail('Invalid', 'not a project field');
+    return by[f.Fixed!]!;
+  }
+
   function fieldValue(i: Issue, f: FieldRef): Value {
     const prop = f.Property;
     if (prop !== undefined) {
       if (!s.propertyDefs.some((d) => d.key === prop)) fail('Invalid', 'unknown property');
       return i.properties[prop] ?? null;
     }
-    const by: Record<FixedField, Value> = {
+    if (f.Fixed === 'TargetDate' || f.Fixed === 'Progress' || f.Fixed === 'IssueCount') fail('Invalid', 'a project field, not an issue field');
+    const by: Record<Exclude<FixedField, 'TargetDate' | 'Progress' | 'IssueCount'>, Value> = {
+      ProjectStatus: s.projects.find((x) => x.id === i.project_id)?.status_id ?? null,
       Title: i.title, Status: i.status_id, StatusCategory: category(i)?.toLowerCase() ?? null, Priority: i.priority,
       Project: i.project_id, Milestone: i.milestone_id, Cycle: i.cycle_id, Label: i.label_ids,
       Parent: i.parent_id, StartDate: i.start_date, DueDate: dueDay(i), Estimate: i.estimate_minutes, Points: i.points,
@@ -187,20 +234,21 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       Archived: i.archived_at !== null, Key: i.id,
       SubIssueProgress: s.issues.filter((c) => c.parent_id === i.id && !c.archived_at).length,
       RelationCount: relations.filter((r) => r.from === i.id || r.to === i.id).length,
+      RelationKind: relations.filter((r) => r.from === i.id || r.to === i.id).map((r) => r.kind),
       CommentCount: comments.filter((c) => c.issue_id === i.id).length,
     };
-    return by[f.Fixed!];
+    return by[f.Fixed as keyof typeof by];
   }
 
   const isEmpty = (v: Value) => v === null || v === '' || (Array.isArray(v) && v.length === 0);
   const eq = (have: Value, want: Value) =>
     Array.isArray(have) && !Array.isArray(want) ? have.includes(want) : have === want;
-  const holds = (i: Issue, f: Filter): boolean => {
-    if (f.And) return f.And.every((x) => holds(i, x));
-    if (f.Or) return f.Or.some((x) => holds(i, x));
-    if (f.Not) return !holds(i, f.Not);
+  const holds = <T,>(i: T, f: Filter, get: (r: T, f: FieldRef) => Value): boolean => {
+    if (f.And) return f.And.every((x) => holds(i, x, get));
+    if (f.Or) return f.Or.some((x) => holds(i, x, get));
+    if (f.Not) return !holds(i, f.Not, get);
     const { field, op, value: want } = f.Cond!;
-    const have = fieldValue(i, field);
+    const have = get(i, field);
     const list = Array.isArray(want) ? want : [want];
     const cmp = (test: (a: number | string, b: number | string) => boolean) =>
       have !== null && want !== null && typeof have === typeof want && test(have as string, want as string);
@@ -221,14 +269,14 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       case 'IsNotEmpty': return !isEmpty(have);
     }
   };
-  const query = (stored: ViewDef) => {
+  // Filter, then sort (nulls last in either direction), like core's compiled query; `get` reads a field of a row.
+  function arrange<T extends { id: number; archived_at: string | null }>(all: T[], stored: ViewDef, defs: PropertyDef[], get: (r: T, f: FieldRef) => Value) {
     // A reference to a property that no longer exists is dropped, like core does.
-    const def = scrubDef(stored, (k) => !s.propertyDefs.some((d) => d.key === k));
-    const rows = s.issues.filter((i) => (def.include_archived || !i.archived_at) && (!def.filter || holds(i, def.filter)));
+    const def = scrubDef(stored, (k) => !defs.some((d) => d.key === k));
+    const rows = all.filter((i) => (def.include_archived || !i.archived_at) && (!def.filter || holds(i, def.filter, get)));
     for (const { field, descending } of [...def.sorts].reverse()) {
-      // nulls sort last in either direction
       rows.sort((a, b) => {
-        const [x, y] = [fieldValue(a, field), fieldValue(b, field)];
+        const [x, y] = [get(a, field), get(b, field)];
         if (x === y) return 0;
         if (x === null) return 1;
         if (y === null) return -1;
@@ -236,8 +284,26 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       });
     }
     return rows;
-  };
+  }
+  const query = (stored: ViewDef) => arrange(s.issues, stored, s.propertyDefs, fieldValue);
+  const queryProjects = (stored: ViewDef): ProjectRow[] =>
+    arrange(s.projects, stored, s.propertyDefs.filter((d) => d.applies_to !== 'Issues'), projectValue).map((project) => {
+      const [issue_done, issue_total] = progressOf(project.id);
+      return { project, issue_total, issue_done };
+    });
 
+  // A new view lists `entity`; an existing one keeps what it lists.
+  const saveView = async (id: number | null, name: string, d: ViewDef, icon: string | null, color: string | null, entity: ViewEntity) => {
+    checkIcon(icon);
+    const key = colorKey(color);
+    if (id === null) {
+      const v = { id: next(views), name, entity, def: withDisplay(d), position: Math.max(-1, ...views.map((x) => x.position)) + 1, icon: icon ?? null, color: key, template_id: null, folder_id: null };
+      views.push(v);
+      return v;
+    }
+    const v = find(views, id, 'view');
+    return Object.assign(v, { name, def: withDisplay(d), icon: icon ?? v.icon, color: key ?? v.color });
+  };
   const viewIssues = (id: number) => query(find(views, id, 'view').def);
   const checkIssue = (i: Issue, props: Record<string, Value>) => {
     if (!i.title.trim()) fail('Invalid', 'title is empty');
@@ -256,7 +322,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     const issue: Issue = {
       id: number, key: `${settings.get('issue_prefix')}-${number}`, title: (input.title ?? '').trim(),
       description: input.description ?? '',
-      status_id: input.status_id ?? [...s.statuses].sort((a, b) => a.position - b.position)[0].id,
+      // The chosen starting status, else the first (also when the chosen one was deleted), as the backend.
+      status_id: input.status_id ?? (s.statuses.find((st) => st.id === settings.get('default_status')) ?? [...s.statuses].sort((a, b) => a.position - b.position)[0]).id,
       priority: input.priority ?? 0, project_id: input.project_id ?? null, milestone_id: input.milestone_id ?? null,
       parent_id: input.parent_id ?? null, cycle_id: input.cycle_id ?? null, label_ids: [...new Set(input.label_ids ?? [])].sort((a, b) => a - b),
       start_date: input.start_date ?? null, due: input.due ?? null, estimate_minutes: input.estimate_minutes ?? null, points: input.points ?? null,
@@ -320,7 +387,12 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     return { id, name: input.name, slug: input.slug, icon: input.icon ?? null, color: colorKey(input.color), body };
   };
   const today = () => new Date().toLocaleDateString('sv', { timeZone: tz });
-  const parse = (input: string) => parseQuickadd(input, today(), tz, !['none', 'time'].includes(String(settings.get('estimation'))));
+  // Fields the quick add must not read: switched off in `issue_fields`, and points when estimation has none.
+  const fieldsOff = () => [
+    ...((settings.get('issue_fields') as { field: string; on: boolean }[] | undefined) ?? []).filter((f) => !f.on).map((f) => f.field),
+    ...(['none', 'time'].includes(String(settings.get('estimation'))) ? ['points'] : []),
+  ];
+  const parse = (input: string) => parseQuickadd(input, today(), tz, fieldsOff());
   // Ports of schedule.rs: a bar is start..due, or one end derived from the estimate (1 day = 480 minutes, at least 1).
   const barFor = (i: Issue): Bar | null => {
     const due = dueDay(i);
@@ -357,7 +429,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   };
   const blockedBy = () => {
     const m = new Map<number, number[]>();
-    for (const r of relations) if (r.kind === 'Blocks') m.set(r.from, [...(m.get(r.from) ?? []), r.to]);
+    for (const r of relations) if (r.kind === 'blocks') m.set(r.from, [...(m.get(r.from) ?? []), r.to]);
     return m;
   };
   const shiftDependents = (moved: Reschedule): Reschedule[] => {
@@ -410,6 +482,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   };
   const upsert = <T extends { id: number }>(rows: T[], row: T, what: string) =>
     Object.assign(find(rows, row.id, what), row);
+  const projectDefaults = () => ({ status_id: [...projectStatuses].sort((a, b) => a.position - b.position)[0].id, priority: 0, label_ids: [] as number[], properties: {} as Record<string, Value> });
   const def = (key: string) => s.propertyDefs.find((d) => d.key === key) ?? fail('NotFound', `property ${key}`);
   const backups: string[] = [];
   const importLog: { external_id: string; issue_id: number }[] = [];
@@ -425,6 +498,15 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   // Same checks as core's palette: an icon is `icon:<id>` or `emoji:<emoji>`, a colour a palette key or a hex near one.
   const checkIcon = (icon?: string | null) => icon == null || iconOk(icon) || fail('Invalid', `icon ${icon} must be icon:<id> or emoji:<emoji>`);
   const colorKey = (color?: string | null) => (color == null ? null : (keyFor(color) ?? fail('Invalid', `color ${color} is not a palette key`)));
+  // Times are local wall-clock text; the backend always writes seconds.
+  const clock = (t: string) => (t.length === 16 ? `${t}:00` : t);
+  const eventOf = (id: number, i: EventInput, issue_ids: number[]): Event => {
+    const [starts_at, ends_at] = [clock(i.starts_at), i.ends_at === null ? null : clock(i.ends_at)];
+    if (!i.title.trim()) fail('Invalid', 'an event needs a title');
+    if (ends_at !== null && ends_at < starts_at) fail('Invalid', 'an event cannot end before it starts');
+    checkIcon(i.icon);
+    return { id, ...i, starts_at, ends_at, color: colorKey(i.color), issue_ids };
+  };
   const off = { reminders: 'Off', gcal: 'Off', export: 'Off', backup: 'Off' } as const;
 
   const api: MockApi = {
@@ -572,12 +654,44 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return nothing(remove(s.statuses, id, 'status'));
       },
     },
+    project: {
+      statusesList: async () => [...projectStatuses].sort((a, b) => a.position - b.position),
+      statusesCreate: async (name, category, color, icon) => {
+        checkIcon(icon);
+        if (!name.trim()) fail('Invalid', 'project status name is empty');
+        const key = colorKey(color)!;
+        if (projectStatuses.some((x) => x.name === name)) fail('Conflict', `project status ${name} already exists`);
+        const st = { id: next(projectStatuses), name, category, color: key, color_hex: hexOf(key)!, icon: icon ?? null, position: Math.max(-1, ...projectStatuses.map((x) => x.position)) + 1 };
+        projectStatuses.push(st);
+        return st;
+      },
+      statusesUpdate: async (id, name, color, icon) => {
+        const st = find(projectStatuses, id, 'project status');
+        checkIcon(icon);
+        if (name !== null && !name.trim()) fail('Invalid', 'project status name is empty');
+        const key = colorKey(color) ?? st.color;
+        if (name && projectStatuses.some((x) => x.id !== id && x.name === name)) fail('Conflict', `project status ${name} already exists`);
+        return Object.assign(st, { name: name ?? st.name, color: key, color_hex: hexOf(key)!, icon: icon ?? st.icon });
+      },
+      statusesReorder: async (ids) => {
+        reposition(projectStatuses, ids, (x) => x.id, 'project status');
+        return null;
+      },
+      statusesDelete: async (id, moveProjectsTo) => {
+        if (id === moveProjectsTo) fail('Invalid', 'cannot move projects into the deleted status');
+        find(projectStatuses, id, 'project status');
+        find(projectStatuses, moveProjectsTo, 'project status');
+        s.projects.forEach((p) => p.status_id === id && (p.status_id = moveProjectsTo));
+        return nothing(remove(projectStatuses, id, 'project status'));
+      },
+    },
     properties: {
       listDefs: async () => [...s.propertyDefs].sort((a, b) => a.position - b.position),
       createDef: async (d) => {
         if (s.propertyDefs.some((x) => x.key === d.key)) fail('Conflict', `property ${d.key} exists`);
+        if (d.applies_to === 'Projects' && d.project_id !== null) fail('Invalid', 'a projects-only property cannot be limited to one project');
         // The position is the next free one whatever the caller sends, like the backend.
-        const made = { ...d, position: Math.max(-1, ...s.propertyDefs.map((x) => x.position)) + 1 };
+        const made = { ...d, applies_to: d.applies_to ?? 'Issues', position: Math.max(-1, ...s.propertyDefs.map((x) => x.position)) + 1 };
         s.propertyDefs.push(made);
         return made;
       },
@@ -591,6 +705,18 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         });
         if (bad.length) fail('Conflict', `values do not fit ${kind}: ${bad.map((i) => i.key).join(', ')}`);
         const text = (v: Value): string => (typeof v === 'string' ? v : Array.isArray(v) ? v.map(text).join(', ') : JSON.stringify(v));
+        const badProjects = s.projects.filter((p) => {
+          const v = p.properties[key];
+          if (v == null) return false;
+          return kind === 'Number' ? Number.isNaN(Number(v)) : kind === 'Select' && !options.some((o) => o.value === v);
+        });
+        if (badProjects.length) fail('Conflict', `cannot convert ${key} to ${kind} on projects ${badProjects.map((p) => p.slug).join(', ')}`);
+        for (const p of s.projects) {
+          const v = p.properties[key];
+          if (v == null) continue;
+          if (kind === 'Number') p.properties[key] = Number(v);
+          else if (kind === 'Text') p.properties[key] = text(v);
+        }
         for (const i of s.issues) {
           const v = i.properties[key];
           if (v == null) continue;
@@ -603,8 +729,16 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         reposition(s.propertyDefs, keys, (d) => d.key, 'property');
         return null;
       },
+      setAppliesTo: async (key, appliesTo) => {
+        const d = def(key);
+        const held = (rows: { properties: Record<string, Value> }[]) => rows.filter((r) => r.properties[key] != null).length;
+        if (appliesTo === 'Projects' && held(s.issues)) fail('Conflict', `${key} has values on ${held(s.issues)} issues`);
+        if (appliesTo === 'Issues' && held(s.projects)) fail('Conflict', `${key} has values on ${held(s.projects)} projects`);
+        return Object.assign(d, { applies_to: appliesTo, project_id: appliesTo === 'Projects' ? null : d.project_id });
+      },
       setScope: async (key, project) => {
         const d = def(key);
+        if (d.applies_to === 'Projects' && project !== null) fail('Invalid', 'a projects-only property cannot be limited to one project');
         const bad = s.issues.filter((i) => i.properties[key] != null && project !== null && i.project_id !== project);
         if (bad.length) fail('Conflict', `${key} has values on issues outside the project: ${bad.map((i) => i.key).join(', ')}`);
         return Object.assign(d, { project_id: project });
@@ -612,12 +746,14 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       deleteDef: async (key) => {
         s.propertyDefs.splice(s.propertyDefs.indexOf(def(key)), 1);
         s.issues.forEach((i) => delete i.properties[key]);
+        s.projects.forEach((p) => delete p.properties[key]);
         [...views, ...viewTemplates].forEach((v) => (v.def = scrubDef(v.def, (k) => k === key)));
         return null;
       },
       setValue: async (issue, key, value) => {
         const d = def(key);
         const i = getIssue(issue);
+        if (d.applies_to === 'Projects') fail('Invalid', `${key} applies to projects only`);
         if (d.project_id !== null && d.project_id !== i.project_id) fail('Invalid', `${key} is scoped to another project than ${i.key}`);
         if (value !== null && !validValue(d, value)) fail('Invalid', `${JSON.stringify(value)} is not a valid ${d.kind} for ${key}`);
         const old = i.properties[key] ?? null;
@@ -635,24 +771,30 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       create: async (slug, name, icon, color) => {
         if (s.projects.some((p) => p.slug === slug)) fail('Db', 'error returned from database: (code: 2067) UNIQUE constraint failed: projects.slug');
         checkIcon(icon);
-        const p = { id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: icon ?? null, color: colorKey(color) };
+        const p = { id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: icon ?? null, color: colorKey(color), ...projectDefaults() };
         s.projects.push(p);
         return p;
       },
       update: async (p) => {
         checkIcon(p.icon);
+        find(s.projects, p.id, 'project');
         if (s.projects.some((x) => x.id !== p.id && x.slug === p.slug)) fail('Db', 'error returned from database: (code: 2067) UNIQUE constraint failed: projects.slug');
-        return upsert(s.projects, { ...p, color: colorKey(p.color) }, 'project');
+        if (p.priority > 4) fail('Invalid', 'priority is 0 to 4');
+        find(projectStatuses, p.status_id, 'project status');
+        for (const [k, v] of Object.entries(p.properties)) {
+          const d = def(k);
+          if (d.applies_to === 'Issues') fail('Invalid', `${k} does not apply to projects`);
+          if (!validValue(d, v)) fail('Invalid', `${JSON.stringify(v)} is not a valid ${d.kind} for ${k}`);
+        }
+        for (const l of p.label_ids) find(labels, l, 'label');
+        return upsert(s.projects, { ...p, color: colorKey(p.color), label_ids: [...new Set(p.label_ids)].sort((a, b) => a - b) }, 'project');
       },
       delete: async (id) => {
         remove(s.projects, id, 'project');
         s.issues.forEach((i) => i.project_id === id && (i.project_id = null));
         return null;
       },
-      progress: async (id) => {
-        const rows = s.issues.filter((i) => i.project_id === id && !i.archived_at);
-        return [rows.filter((i) => category(i) === 'Completed').length, rows.length];
-      },
+      progress: async (id) => progressOf(id),
       listMilestones: async (project) => milestones.filter((m) => m.project_id === project),
       createMilestone: async (project, name, targetDate) => {
         const m = { id: next(milestones), project_id: find(s.projects, project, 'project').id, name, target_date: targetDate };
@@ -679,6 +821,35 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       delete: async (id) => {
         remove(cycles, id, 'cycle');
         s.issues.forEach((i) => i.cycle_id === id && (i.cycle_id = null));
+        return null;
+      },
+    },
+    events: {
+      list: async (from, to) =>
+        events
+          .filter((e) => !e.archived && (from === null || (e.ends_at ?? e.starts_at).slice(0, 10) >= from) && (to === null || e.starts_at.slice(0, 10) <= to))
+          .sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.id - b.id),
+      get: async (id) => ({ ...find(events, id, 'event') }),
+      create: async (input) => {
+        const e = eventOf(next(events), input, []);
+        events.push(e);
+        return { ...e };
+      },
+      update: async (id, input) => {
+        const old = eventOf(id, input, []);
+        const e = find(events, id, 'event');
+        return { ...Object.assign(e, { ...old, issue_ids: e.issue_ids }) };
+      },
+      delete: async (id) => nothing(remove(events, id, 'event')),
+      link: async (event, issue) => {
+        const e = find(events, event, 'event');
+        getIssue(issue);
+        if (!e.issue_ids.includes(issue)) e.issue_ids = [...e.issue_ids, issue].sort((a, b) => a - b);
+        return null;
+      },
+      unlink: async (event, issue) => {
+        const e = find(events, event, 'event');
+        e.issue_ids = e.issue_ids.filter((x) => x !== issue);
         return null;
       },
     },
@@ -717,6 +888,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         for (const i of s.issues) if (i.label_ids.includes(id)) rec(i.id, 'label', id, null);
         remove(labels, id, 'label');
         s.issues.forEach((i) => (i.label_ids = i.label_ids.filter((x) => x !== id)));
+        s.projects.forEach((p) => (p.label_ids = p.label_ids.filter((x) => x !== id)));
         return null;
       },
       addLabel: async (issue, label) => {
@@ -735,6 +907,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return null;
       },
     },
+    attachments: attachmentsApi(fail),
     comments: {
       list: async (issue) => comments.filter((c) => c.issue_id === issue),
       addComment: async (issue, body) => {
@@ -747,34 +920,41 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       delete: async (id) => nothing(remove(comments, id, 'comment')),
     },
     relations: {
-      add: async (rel) => {
-        if (rel.from === rel.to) fail('Invalid', 'an issue cannot relate to itself');
+      add: async (given) => {
+        if (given.from === given.to) fail('Invalid', 'an issue cannot relate to itself');
+        const rel = { ...given, kind: kinds.resolve(given.kind) };
         if (!s.issues.some((i) => i.id === rel.from) || !s.issues.some((i) => i.id === rel.to)) fail('NotFound', `issue ${rel.from} or ${rel.to}`);
         const same = (r: Relation) => r.from === rel.from && r.to === rel.to && r.kind === rel.kind;
         if (relations.some(same)) return null;
-        if (rel.kind === 'Blocks') {
+        if (rel.kind === 'blocks') {
           // Adding from -> to must not let `to` reach `from` through blocking edges.
           const seen = new Set<number>();
-          const reach = (id: number): boolean => id === rel.from || (!seen.has(id) && seen.add(id) && relations.some((r) => r.kind === 'Blocks' && r.from === id && reach(r.to)));
+          const reach = (id: number): boolean => id === rel.from || (!seen.has(id) && seen.add(id) && relations.some((r) => r.kind === 'blocks' && r.from === id && reach(r.to)));
           if (reach(rel.to)) fail('Conflict', 'would create a dependency cycle');
         }
         relations.push(rel);
         return null;
       },
-      remove: async (rel) => {
+      remove: async (given) => {
+        const rel = { ...given, kind: kinds.resolve(given.kind) };
         const at = relations.findIndex((r) => r.from === rel.from && r.to === rel.to && r.kind === rel.kind);
         if (at >= 0) relations.splice(at, 1);
         return null;
       },
       forIssue: async (id) => relations.filter((r) => r.from === id || r.to === id),
     },
+    relation: {
+      kindsList: kinds.list, kindsCreate: kinds.create, kindsUpdate: kinds.update, kindsDelete: kinds.delete,
+    },
     schedule: {
-      bars: async (viewId) => viewIssues(viewId).flatMap((i) => barFor(i) ?? []),
-      criticalPath: async (viewId) => criticalPath(viewIssues(viewId)),
+      bars: async (d) => query(d).flatMap((i) => barFor(i) ?? []),
+      criticalPath: async (d) => criticalPath(query(d)),
       shiftDependents: async (moved) => shiftDependents(moved),
     },
     views: {
-      query: async (d) => query(d),
+      // Fresh copies through JSON, as the backend sends them: a view that reloads in place must see new objects to redraw.
+      query: async (d) => JSON.parse(JSON.stringify(query(d))),
+      queryProjects: async (d) => JSON.parse(JSON.stringify(queryProjects(d))),
       list: async () => views,
       stats: async (d) =>
         query(d).map((i) => {
@@ -785,20 +965,11 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
             comments: comments.filter((c) => c.issue_id === i.id).length,
           };
         }),
-      save: async (id, name, d, icon, color) => {
-        checkIcon(icon);
-        const key = colorKey(color);
-        if (id === null) {
-          const v = { id: next(views), name, def: withDisplay(d), position: views.length, icon: icon ?? null, color: key, template_id: null };
-          views.push(v);
-          return v;
-        }
-        const v = find(views, id, 'view');
-        return Object.assign(v, { name, def: withDisplay(d), icon: icon ?? v.icon, color: key ?? v.color });
-      },
+      save: (id, name, d, icon, color) => saveView(id, name, d, icon, color, 'issue'),
+      saveProject: (id, name, d, icon, color) => saveView(id, name, d, icon, color, 'project'),
       createFromTemplate: async (templateId, name) => {
         const t = find(viewTemplates, templateId, 'view template');
-        const v = { id: next(views), name: name ?? t.name, def: withDisplay(t.def), position: views.length, icon: t.icon, color: t.color, template_id: t.id };
+        const v = { id: next(views), name: name ?? t.name, entity: 'issue' as const, def: withDisplay(t.def), position: Math.max(-1, ...views.map((x) => x.position)) + 1, icon: t.icon, color: t.color, template_id: t.id, folder_id: null };
         views.push(v);
         return v;
       },
@@ -821,6 +992,13 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return null;
       },
     },
+    folders: foldersApi(
+      folders, placed, views,
+      (sec) => ({ pin: pins.map((x) => x.id), view: views.map((x) => x.id), project: s.projects.map((x) => x.id), cycle: cycles.map((x) => x.id) })[sec],
+      (sec, id) => (sec === 'pin' ? pins.find((x) => x.id === id)!.position : 1_000_000),
+      (sec, id, position) => { if (sec === 'pin') pins.find((x) => x.id === id)!.position = position; },
+      fail,
+    ),
     view: {
       templatesList: async () => viewTemplates,
       templatesCreate: async (name, d, icon, color) => {
@@ -864,7 +1042,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       search: async (text, limit) => {
         const words = (t: string) => t.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
         const phrases = text.split(/\s+/).filter(Boolean).map(words).filter((p) => p.length);
-        const has = (hay: string[], p: string[]) => hay.some((_, i) => p.every((w, k) => hay[i + k] === w));
+        // Like the backend's "word"* phrases: the words are adjacent, and the last one may be only the start of a word.
+        const has = (hay: string[], p: string[]) => hay.some((_, i) => p.every((w, k) => (k === p.length - 1 ? hay[i + k]?.startsWith(w) : hay[i + k] === w)));
         return phrases.length
           ? s.issues.filter((i) => {
               const hay = words([i.title, i.description, ...comments.filter((c) => c.issue_id === i.id).map((c) => c.body)].join(' '));
@@ -916,6 +1095,9 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           } else if (pin.kind === 'Cycle') {
             const c = cycles.find((x) => String(x.number) === t);
             hit = c ? [c.name ?? `Cycle ${c.number}`, false, `/cycles#${c.number}`] : null;
+          } else if (pin.kind === 'Folder') {
+            const f = folders.find((x) => String(x.id) === t);
+            hit = f ? [f.name, false, '/views'] : null;
           } else hit = [t, false, t];
           return hit ? [{ pin, label: pin.title ?? hit[0], archived: hit[1], route: hit[2] }] : [];
         });
@@ -964,6 +1146,9 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     settings: {
       get: async (key) => settings.get(key) ?? null,
       set: async (key, value) => {
+        if (key === 'issue_fields') checkIssueFields(value);
+        if (key === 'default_status' && !(typeof value === 'number' && s.statuses.some((st) => st.id === value)))
+          fail('Invalid', `setting default_status must be ${typeof value === 'number' ? 'an existing status' : 'a status id'}`);
         const allowed = choices[key];
         if (allowed && !(typeof value === 'string' && allowed.includes(value))) fail('Invalid', `setting ${key} must be one of ${allowed.join(', ')}`);
         return nothing(settings.set(key, value));
@@ -998,7 +1183,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           const base = projectSlug(name);
           let slug = base;
           for (let n = 2; s.projects.some((p) => p.slug === slug); n++) slug = `${base}-${n}`;
-          s.projects.push({ id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null });
+          s.projects.push({ id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null, ...projectDefaults() });
         }
         for (const c of plan.cycles ?? []) {
           if (!cycles.some((x) => x.start_date === c.start_date)) cycles.push({ id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name: c.name, start_date: c.start_date, end_date: c.end_date, icon: null, color: null });
@@ -1030,24 +1215,36 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         for (const r of plan.relations ?? []) {
           const [from, to] = [known(r.from), known(r.to)];
           if (from === undefined || to === undefined) warnings.push(`relation ${r.from} -> ${r.to} skipped: an issue was not imported`);
-          else if (!relations.some((x) => x.from === from && x.to === to && x.kind === r.kind)) relations.push({ from, to, kind: r.kind });
+          else if (!relations.some((x) => x.from === from && x.to === to && x.kind === kinds.resolve(r.kind))) relations.push({ from, to, kind: kinds.resolve(r.kind) });
         }
         return { created: ids.size, warnings };
       },
     },
-    export: { now: ok },
+    export: { now: ok, pull: async () => ({ created: 0, warnings: [] }) },
+    // Same checks as the real command; a source containing "bad" stands for an export that does not parse.
+    restore: {
+      fromExport: async (source) => {
+        const text = source.trim();
+        if (!text) fail('Invalid', 'enter the export folder or the Git address');
+        if (/^[a-z]+:\/\//i.test(text) && !/^(https|ssh):\/\//.test(text)) fail('Invalid', 'use an https:// or ssh:// Git URL, or git@host:path');
+        await new Promise((r) => setTimeout(r, 400));
+        if (text.includes('bad')) fail('Invalid', 'statuses.yaml: invalid export file');
+        workspace = { ...workspace, setup_done: true };
+        return text;
+      },
+    },
     sync: { status: async () => off, now: async () => off },
     gcal: { connect: ok, listCalendars: async () => [['primary', 'Primary']] },
     reminders: { listLists: async () => [['1', 'Reminders']] },
   };
   const commandOf = (mod: string, fn: string) => `${mod}_${fn.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}`;
   const mutating = (
-    'issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.delete ' +
+    'issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
     'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
     'projects.create projects.update projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
-    'cycles.create cycles.update cycles.delete templates.create templates.update templates.delete templates.apply ' +
+    'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink templates.create templates.update templates.delete templates.apply ' +
     'labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
-    'relations.add relations.remove views.save views.delete views.reorder views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
+    'relations.add relations.remove relation.kindsCreate relation.kindsUpdate relation.kindsDelete views.save views.saveProject views.delete views.reorder folders.create folders.rename folders.delete folders.place folders.placeItem views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
     'view.templatesCreate view.templatesUpdate view.templatesDelete pins.pin pins.unpin pins.reorder pins.set import.apply'
   ).split(' ');
   for (const name of mutating) {
@@ -1067,10 +1264,21 @@ const statuses: Status[] = (
   ] as const
 ).map(([name, category, color], position) => ({ id: position + 1, name, category, position, color, color_hex: hexOf(color)!, icon: null }));
 
+export const projectStatusSeed: ProjectStatus[] = (
+  [
+    ['Planned', 'Planned', 'gray'], ['In progress', 'Started', 'amber'], ['Paused', 'Paused', 'orange'],
+    ['Done', 'Completed', 'indigo'], ['Cancelled', 'Cancelled', 'gray'],
+  ] as [string, ProjectStatusCategory, string][]
+).map(([name, category, color], position) => ({ id: position + 1, name, category, position, color, color_hex: hexOf(color)!, icon: null }));
+
 const project = (id: number, slug: string, name: string): Project =>
-  ({ id, slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null });
+  ({ id, slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null, status_id: 1, priority: 0, label_ids: [], properties: {} });
+const day = (n: number) => addDays(new Date().toISOString().slice(0, 10), n);
+// The last two are under way with dates (the devserver seed does the same); the first has none.
 const projects: Project[] = [
-  project(1, 'website', 'Website relaunch'), project(2, 'mobile', 'Mobile app'), project(3, 'office', 'Office move'),
+  project(1, 'website', 'Website relaunch'),
+  { ...project(2, 'mobile', 'Mobile app'), status_id: 2, priority: 3, start_date: day(-3), target_date: day(45) },
+  { ...project(3, 'office', 'Office move'), status_id: 2, priority: 2, start_date: day(-14), target_date: day(30) },
 ];
 
 const labels: Label[] = (
@@ -1082,7 +1290,6 @@ const labels: Label[] = (
 
 // Everything dated is relative to today (UTC), so the workspace always has overdue and this-week work.
 // The devserver seed (crates/devserver/src/seed.rs) builds the same data; the contract tests compare the two.
-const day = (n: number) => addDays(new Date().toISOString().slice(0, 10), n);
 const cycles: Cycle[] = [
   { id: 1, number: 1, name: 'Sprint 1', start_date: day(-6), end_date: day(7), icon: null, color: null },
   { id: 2, number: 2, name: 'Sprint 2', start_date: day(8), end_date: day(21), icon: null, color: null },
@@ -1093,9 +1300,9 @@ const milestones: Milestone[] = [
 ];
 
 const propertyDefs: PropertyDef[] = [
-  { key: 'area', name: 'Area', kind: 'Select', options: [{ value: 'home', color: '#4caf50' }, { value: 'work', color: '#2196f3' }], project_id: null, position: 0 },
-  { key: 'effort', name: 'Effort', kind: 'Number', options: [], project_id: null, position: 1 },
-  { key: 'review_on', name: 'Review on', kind: 'Date', options: [], project_id: null, position: 2 },
+  { key: 'area', name: 'Area', kind: 'Select', options: [{ value: 'home', color: '#4caf50' }, { value: 'work', color: '#2196f3' }], project_id: null, position: 0, applies_to: 'Issues' },
+  { key: 'effort', name: 'Effort', kind: 'Number', options: [], project_id: null, position: 1, applies_to: 'Issues' },
+  { key: 'review_on', name: 'Review on', kind: 'Date', options: [], project_id: null, position: 2, applies_to: 'Issues' },
 ];
 
 type Row = {
@@ -1158,7 +1365,7 @@ const issues: Issue[] = rows.map((r, k) => {
   };
 });
 const relations: Relation[] = [
-  { from: 4, to: 6, kind: 'Blocks' }, { from: 16, to: 18, kind: 'Blocks' }, { from: 10, to: 11, kind: 'Related' },
+  { from: 4, to: 6, kind: 'blocks' }, { from: 16, to: 18, kind: 'blocks' }, { from: 10, to: 11, kind: 'related' },
 ];
 const templates: IssueTemplate[] = [
   {
@@ -1175,9 +1382,9 @@ const templates: IssueTemplate[] = [
 ];
 
 // The views the migration seeds, with icons and the groupings the screens expect, plus one for the week ahead.
-const view = (id: number, name: string, layout: Layout, group_by: FieldRef | null, filter: Filter, icon: string): SavedView => ({
-  id, name, position: id - 1, icon: `icon:${icon}`, color: null,
-  def: withDisplay({ filter, group_by, layout }), template_id: null,
+const view = (id: number, name: string, layout: Layout, group_by: FieldRef | null, filter: Filter | null, icon: string, entity: ViewEntity = 'issue'): SavedView => ({
+  id, name, entity, position: id - 1, icon: `icon:${icon}`, color: null,
+  def: withDisplay({ filter, group_by, layout }), template_id: null, folder_id: null,
 });
 const category = (op: 'In' | 'Neq', value: Value): Filter => ({ Cond: { field: { Fixed: 'StatusCategory' }, op, value } });
 const views: SavedView[] = [
@@ -1186,6 +1393,9 @@ const views: SavedView[] = [
   view(3, 'Timeline: all projects', 'Gantt', { Fixed: 'Project' }, category('Neq', 'completed'), 'timeline'),
   // shortcut: the 7 days are fixed when the data is made; saved filters have no relative dates yet.
   view(4, 'This week', 'List', null, { And: [category('In', ['unstarted', 'started']), { Cond: { field: { Fixed: 'DueDate' }, op: 'Lte', value: day(7) } }] }, 'calendar'),
+  // Two project views; their fields are project fields (the devserver seed makes the same two).
+  view(5, 'Project board', 'Board', { Fixed: 'Status' }, null, 'board', 'project'),
+  view(6, 'Project timeline', 'Gantt', null, { Cond: { field: { Fixed: 'StatusCategory' }, op: 'NotIn', value: ['completed', 'cancelled'] } }, 'timeline', 'project'),
 ];
 
 export const fixtures: MockSeed = {

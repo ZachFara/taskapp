@@ -1,33 +1,46 @@
 <script lang="ts">
   import { api } from '../../lib/api';
-  import type { Issue, Relation, RelationKind } from '../../lib/bindings';
+  import type { Issue, Relation, RelationKindDef } from '../../lib/bindings';
+  import Collapse from '../../ui/Collapse.svelte';
   import SectionHeading from './SectionHeading.svelte';
   import IconButton from '../../ui/IconButton.svelte';
   import Select from '../../ui/Select.svelte';
   import IssuePicker from './IssuePicker.svelte';
 
   let { issue, act, rev, open }: { issue: Issue; act: (p: Promise<unknown>) => void; rev: number; open: (key: string) => void } = $props();
-  type Row = { rel: Relation; label: string; other: Issue };
+  type Row = { rel: Relation; other: Issue };
   let rows = $state<Row[]>([]);
-  let choice = $state('blocks');
+  // "<kind id>:f" reads from this issue, "<kind id>:r" from the other one.
+  let choice = $state('blocks:f');
   let collapsed = $state(false);
+  let kinds = $state<RelationKindDef[]>([]);
 
-  const labelOf = (r: Relation) =>
-    r.kind === 'Blocks' ? (r.from === issue.id ? 'blocks' : 'blocked by') : r.kind === 'Related' ? 'related' : 'duplicate';
+  const labelOf = (r: Relation) => {
+    const k = kinds.find((x) => x.id === r.kind);
+    return k ? (r.from === issue.id ? k.forward : k.reverse) : r.kind;
+  };
+  const items = $derived(kinds.flatMap((k) => [
+    { value: `${k.id}:f`, label: k.forward },
+    ...(k.symmetric ? [] : [{ value: `${k.id}:r`, label: k.reverse }]),
+  ]));
 
+  $effect(() => {
+    rev;
+    api.relation.kindsList().then((k) => (kinds = k));
+  });
   $effect(() => {
     rev;
     api.relations.forIssue(issue.id).then(async (rels) => {
       rows = await Promise.all(
-        rels.map(async (rel) => ({ rel, label: labelOf(rel), other: await api.issues.get(rel.from === issue.id ? rel.to : rel.from) })),
+        rels.map(async (rel) => ({ rel, other: await api.issues.get(rel.from === issue.id ? rel.to : rel.from) })),
       );
     });
   });
 
   let sec = $state<HTMLElement>();
   function add(other: Issue) {
-    const kind: RelationKind = choice === 'related' ? 'Related' : choice === 'duplicate' ? 'Duplicate' : 'Blocks';
-    const [from, to] = choice === 'blocked_by' ? [other.id, issue.id] : [issue.id, other.id];
+    const [kind, side] = choice.split(':');
+    const [from, to] = side === 'r' ? [other.id, issue.id] : [issue.id, other.id];
     act(api.relations.add({ from, to, kind }));
   }
   // The command menu focuses the same control the section's button does.
@@ -41,23 +54,21 @@
 
 <section aria-label="Relations" bind:this={sec}>
   <SectionHeading name="Relations" count={rows.length} {collapsed} ontoggle={() => (collapsed = !collapsed)} />
-  {#if !collapsed}
+  <Collapse open={!collapsed}>
     {#if !rows.length}<p class="none">No relations</p>{/if}
     <ul>
       {#each rows as r (`${r.rel.from}-${r.rel.to}-${r.rel.kind}`)}
         <li>
-          <button type="button" class="go" onclick={() => open(r.other.key)}><em>{r.label}</em> <b>{r.other.key}</b> {r.other.title}</button>
+          <button type="button" class="go" onclick={() => open(r.other.key)}><em>{labelOf(r.rel)}</em> <b>{r.other.key}</b> {r.other.title}</button>
           <IconButton icon="close" label="Remove relation to {r.other.key}" onclick={() => act(api.relations.remove(r.rel))} />
         </li>
       {/each}
     </ul>
     <div class="add">
-      <Select label="Relation kind" bind:value={choice} items={[
-        { value: 'blocks', label: 'blocks' }, { value: 'blocked_by', label: 'blocked by' },
-        { value: 'related', label: 'related' }, { value: 'duplicate', label: 'duplicate' }]} />
+      <Select label="Relation kind" bind:value={choice} {items} />
       <IssuePicker selfId={issue.id} label="Find issue" pick={add} />
     </div>
-  {/if}
+  </Collapse>
 </section>
 
 <style>

@@ -7,11 +7,12 @@ use std::{
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use sqlx::{Sqlite, Transaction};
-use taskapp_core::{Db, Error, IssueId, Result, ViewDef, search};
+use taskapp_core::{Db, Error, IssueId, Result, ViewDef, attachments, search};
 
 use crate::files::{
-    CommentText, CycleRow, ImportLogRow, IssueFront, IssueTemplateFile, LabelRow, PinRow,
-    ProjectFile, PropertyFile, StatusRow, ViewFile, ViewTemplateFile, invalid, parse_issue,
+    AttachmentFile, CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile,
+    LabelRow, PinRow, ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow,
+    ViewFile, ViewFolderFile, ViewTemplateFile, invalid, parse_issue, plain_dir, read_plain,
 };
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -31,29 +32,98 @@ pub async fn rebuild(dir: &Path, db_path: &Path) -> Result<Db> {
         )));
     }
     let db = Db::open(db_path).await?;
+    restore_into(&db, dir).await?;
+    Ok(db)
+}
+
+/// Replaces everything in an open database with the export's content, in one transaction: a folder
+/// that fails to parse leaves the database as it was. Settings the export does not carry (this
+/// machine's own) stay; the change history goes, because its row ids name rows that no longer exist.
+///
+/// # Errors
+///
+/// As [`rebuild`]; nothing is changed then.
+pub async fn restore_into(db: &Db, dir: &Path) -> Result<()> {
     let mut tx = db.pool.begin().await?;
-    restore_tables(&mut tx, dir).await?;
+    wipe(&mut tx).await?;
+    restore_tables(db, &mut tx, dir).await?;
     restore_issues(&mut tx, dir).await?;
     tx.commit().await?;
     // reindex rebuilds every search row at once; the id argument is not used.
-    search::reindex(&db, IssueId(0)).await?;
-    Ok(db)
+    search::reindex(db, IssueId(0)).await?;
+    Ok(())
+}
+
+/// Per-machine settings in `local.yaml` (the export folder, the remote, the backup folder): written
+/// by every export, applied only when the person asks.
+///
+/// # Errors
+///
+/// Fails when the file is malformed or a setting cannot be written.
+pub async fn apply_local(db: &Db, dir: &Path) -> Result<()> {
+    let local: BTreeMap<String, String> = if fs::symlink_metadata(dir.join("local.yaml")).is_ok() {
+        read_yaml(&dir.join("local.yaml"))?
+    } else {
+        BTreeMap::new()
+    };
+    for key in crate::write::LOCAL_KEYS {
+        if let Some(v) = local.get(key) {
+            taskapp_core::settings::set(db, key, v).await?;
+        }
+    }
+    Ok(())
+}
+
+/// Empties every table the export fills. Order follows the foreign keys.
+async fn wipe(tx: &mut Tx<'_>) -> Result<()> {
+    for sql in [
+        "DELETE FROM changes",
+        "DELETE FROM attachments",
+        "DELETE FROM event_issues",
+        "DELETE FROM events",
+        "DELETE FROM relations",
+        "DELETE FROM issue_labels",
+        "DELETE FROM comments",
+        "DELETE FROM work_blocks",
+        "DELETE FROM import_log",
+        "DELETE FROM issues",
+        "DELETE FROM property_defs",
+        "DELETE FROM milestones",
+        "DELETE FROM project_labels",
+        "DELETE FROM projects",
+        "DELETE FROM cycles",
+        "DELETE FROM labels",
+        "DELETE FROM pins",
+        "DELETE FROM views",
+        "DELETE FROM view_folders",
+        "DELETE FROM view_templates",
+        "DELETE FROM issue_templates",
+        "DELETE FROM statuses",
+        "DELETE FROM relation_kinds WHERE built_in = 0",
+    ] {
+        sqlx::query(sql).execute(&mut **tx).await?;
+    }
+    Ok(())
 }
 
 /// `(number, frontmatter, description, comments)` for one issue file.
 type IssueEntry = (i64, IssueFront, String, Vec<CommentText>);
 
-async fn restore_tables(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+async fn restore_tables(db: &Db, tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     restore_settings(tx, dir).await?;
     restore_statuses(tx, dir).await?;
     restore_labels(tx, dir).await?;
+    restore_project_statuses(tx, dir).await?;
+    restore_relation_kinds(tx, dir).await?;
     restore_cycles(tx, dir).await?;
     restore_projects(tx, dir).await?;
     restore_properties(tx, dir).await?;
     restore_view_templates(tx, dir).await?;
+    restore_view_folders(tx, dir).await?;
     restore_views(tx, dir).await?;
     restore_pins(tx, dir).await?;
     restore_issue_templates(tx, dir).await?;
+    restore_attachments(db, tx, dir).await?;
     Ok(())
 }
 
@@ -67,16 +137,53 @@ async fn restore_issues(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     for (number, front, _, comments) in &issues {
         link_issue(tx, &prefix, *number, front, comments).await?;
     }
+    restore_events(tx, dir, &prefix).await?;
     restore_import_log(tx, dir).await
 }
 
-fn read_yaml<T: DeserializeOwned>(path: &Path) -> Result<T> {
-    serde_yaml_ng::from_str(&fs::read_to_string(path)?).map_err(invalid)
+/// After the issues, so the links can name them.
+async fn restore_events(tx: &mut Tx<'_>, dir: &Path, prefix: &str) -> Result<()> {
+    for path in files_in(dir, "events", "yaml")? {
+        let e: EventFile = read_yaml(&path)?;
+        sqlx::query(
+            "INSERT INTO events (id, title, starts_at, ends_at, all_day, place, notes, icon, color,
+               archived, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(e.id)
+        .bind(e.title)
+        .bind(e.starts_at)
+        .bind(e.ends_at)
+        .bind(e.all_day)
+        .bind(e.place)
+        .bind(e.notes)
+        .bind(e.icon)
+        .bind(e.color)
+        .bind(e.archived)
+        .bind(e.created_at)
+        .bind(e.updated_at)
+        .execute(&mut **tx)
+        .await?;
+        for key in &e.issues {
+            sqlx::query(
+                "INSERT INTO event_issues (event_id, issue_id)
+                 VALUES (?, (SELECT id FROM issues WHERE number = ?))",
+            )
+            .bind(e.id)
+            .bind(number_of(prefix, key)?)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn read_yaml<T: DeserializeOwned>(path: &Path) -> Result<T> {
+    serde_yaml_ng::from_str(&read_plain(path)?).map_err(invalid)
 }
 
 /// A list file that older exports do not have reads as empty.
-fn read_list<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>> {
-    if path.exists() {
+pub(crate) fn read_list<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>> {
+    if fs::symlink_metadata(path).is_ok() {
         read_yaml(path)
     } else {
         Ok(vec![])
@@ -84,15 +191,22 @@ fn read_list<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>> {
 }
 
 /// The sorted files in `dir/sub` with the given extension.
-fn files_in(dir: &Path, sub: &str, ext: &str) -> Result<Vec<PathBuf>> {
+pub(crate) fn files_in(dir: &Path, sub: &str, ext: &str) -> Result<Vec<PathBuf>> {
     let folder = dir.join(sub);
-    if !folder.is_dir() {
+    if !plain_dir(dir, sub)? {
         return Ok(vec![]);
     }
     let mut paths = Vec::new();
     for entry in fs::read_dir(&folder)? {
-        let path = entry?.path();
+        let entry = entry?;
+        let path = entry.path();
         if path.extension().is_some_and(|e| e == ext) {
+            if !entry.file_type()?.is_file() {
+                return Err(Error::Invalid(format!(
+                    "{} is not a regular file",
+                    path.display()
+                )));
+            }
             paths.push(path);
         }
     }
@@ -141,6 +255,30 @@ async fn restore_statuses(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     Ok(())
 }
 
+async fn restore_project_statuses(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let statuses: Vec<ProjectStatusRow> = read_list(&dir.join("project_statuses.yaml"))?;
+    if statuses.is_empty() {
+        return Ok(());
+    }
+    // The export is the whole list, so it replaces the seeded one.
+    sqlx::query("DELETE FROM project_statuses")
+        .execute(&mut **tx)
+        .await?;
+    for s in statuses {
+        sqlx::query(
+            "INSERT INTO project_statuses (name, category, position, color, icon) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(s.name)
+        .bind(s.category)
+        .bind(s.position)
+        .bind(s.color)
+        .bind(s.icon)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
 async fn restore_labels(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let labels: Vec<LabelRow> = read_yaml(&dir.join("labels.yaml"))?;
     for l in labels {
@@ -154,11 +292,30 @@ async fn restore_labels(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     Ok(())
 }
 
+async fn restore_relation_kinds(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let kinds: Vec<RelationKindRow> = read_list(&dir.join("relation_kinds.yaml"))?;
+    for k in kinds {
+        sqlx::query(
+            "INSERT INTO relation_kinds (id, name, forward, reverse, symmetric, built_in, position)
+             VALUES (?, ?, ?, ?, ?, 0, ?)",
+        )
+        .bind(k.id)
+        .bind(k.name)
+        .bind(k.forward)
+        .bind(k.reverse)
+        .bind(k.symmetric)
+        .bind(k.position)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
 async fn restore_cycles(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let cycles: Vec<CycleRow> = read_yaml(&dir.join("cycles.yaml"))?;
     for c in cycles {
         sqlx::query(
-            "INSERT INTO cycles (number, name, start_date, end_date, icon, color) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO cycles (number, name, start_date, end_date, icon, color, folder_id, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(c.number)
         .bind(c.name)
@@ -166,6 +323,8 @@ async fn restore_cycles(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         .bind(c.end_date)
         .bind(c.icon)
         .bind(c.color)
+        .bind(c.folder_id)
+        .bind(c.position)
             .execute(&mut **tx)
             .await?;
     }
@@ -177,7 +336,10 @@ async fn restore_projects(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         let p: ProjectFile = read_yaml(&path)?;
         let id = sqlx::query(
             "INSERT INTO projects (slug, name, description, doc_link, start_date, target_date,
-               archived_at, created_at, icon, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+               archived_at, created_at, icon, color, status_id, priority, properties, folder_id, position)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               COALESCE((SELECT id FROM project_statuses WHERE name = ?),
+                        (SELECT id FROM project_statuses ORDER BY position, id LIMIT 1)), ?, ?, ?, ?)",
         )
         .bind(&p.slug)
         .bind(p.name)
@@ -189,9 +351,24 @@ async fn restore_projects(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         .bind(p.created_at)
         .bind(p.icon)
         .bind(p.color)
+        .bind(p.status)
+        .bind(p.priority)
+        .bind(Value::Object(p.properties).to_string())
+        .bind(p.folder_id)
+        .bind(p.position)
         .execute(&mut **tx)
         .await?
         .last_insert_rowid();
+        for label in p.labels {
+            sqlx::query(
+                "INSERT INTO project_labels (project_id, label_id)
+                 VALUES (?, (SELECT id FROM labels WHERE name = ?))",
+            )
+            .bind(id)
+            .bind(label)
+            .execute(&mut **tx)
+            .await?;
+        }
         for m in p.milestones {
             sqlx::query("INSERT INTO milestones (project_id, name, target_date) VALUES (?, ?, ?)")
                 .bind(id)
@@ -208,8 +385,8 @@ async fn restore_properties(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let props: Vec<PropertyFile> = read_yaml(&dir.join("properties.yaml"))?;
     for p in props {
         sqlx::query(
-            "INSERT INTO property_defs (key, name, kind, options, project_id, position)
-             VALUES (?, ?, ?, ?, (SELECT id FROM projects WHERE slug = ?), ?)",
+            "INSERT INTO property_defs (key, name, kind, options, project_id, position, applies_to)
+             VALUES (?, ?, ?, ?, (SELECT id FROM projects WHERE slug = ?), ?, ?)",
         )
         .bind(p.key)
         .bind(p.name)
@@ -217,6 +394,7 @@ async fn restore_properties(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         .bind(p.options.to_string())
         .bind(p.project)
         .bind(p.position)
+        .bind(p.applies_to)
         .execute(&mut **tx)
         .await?;
     }
@@ -231,16 +409,33 @@ async fn restore_views(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         // Parsing here rejects a definition the app could not run.
         serde_json::from_value::<ViewDef>(v.definition.clone()).map_err(invalid)?;
         sqlx::query(
-            "INSERT INTO views (name, definition, position, icon, color, template_id) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO views (name, entity, definition, position, icon, color, template_id, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(v.name)
+        .bind(v.entity)
         .bind(v.definition.to_string())
         .bind(v.position)
         .bind(v.icon)
         .bind(v.color)
         .bind(v.template_id)
+        .bind(v.folder_id)
         .execute(&mut **tx)
         .await?;
+    }
+    Ok(())
+}
+
+async fn restore_view_folders(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let folders: Vec<ViewFolderFile> = read_list(&dir.join("view_folders.yaml"))?;
+    for f in folders {
+        sqlx::query("INSERT INTO view_folders (id, name, position, section, parent_id) VALUES (?, ?, ?, ?, ?)")
+            .bind(f.id)
+            .bind(f.name)
+            .bind(f.position)
+            .bind(f.section)
+            .bind(f.parent_id)
+            .execute(&mut **tx)
+            .await?;
     }
     Ok(())
 }
@@ -285,13 +480,14 @@ async fn restore_import_log(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let log: Vec<ImportLogRow> = read_list(&dir.join("import_log.yaml"))?;
     for l in log {
         sqlx::query(
-            "INSERT INTO import_log (external_id, source, issue_id, imported_at)
-             VALUES (?, ?, (SELECT id FROM issues WHERE number = ?), ?)",
+            "INSERT INTO import_log (external_id, source, issue_id, imported_at, source_deleted)
+             VALUES (?, ?, (SELECT id FROM issues WHERE number = ?), ?, ?)",
         )
         .bind(l.external_id)
         .bind(l.source)
         .bind(l.issue)
         .bind(l.imported_at)
+        .bind(l.source_deleted)
         .execute(&mut **tx)
         .await?;
     }
@@ -301,13 +497,16 @@ async fn restore_import_log(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
 async fn restore_pins(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let pins: Vec<PinRow> = read_yaml(&dir.join("pins.yaml"))?;
     for p in pins {
-        sqlx::query("INSERT INTO pins (kind, target, title, position) VALUES (?, ?, ?, ?)")
-            .bind(p.kind)
-            .bind(p.target)
-            .bind(p.title)
-            .bind(p.position)
-            .execute(&mut **tx)
-            .await?;
+        sqlx::query(
+            "INSERT INTO pins (kind, target, title, position, folder_id) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(p.kind)
+        .bind(p.target)
+        .bind(p.title)
+        .bind(p.position)
+        .bind(p.folder_id)
+        .execute(&mut **tx)
+        .await?;
     }
     Ok(())
 }
@@ -316,7 +515,7 @@ fn read_issues(dir: &Path, prefix: &str) -> Result<Vec<IssueEntry>> {
     files_in(dir, "issues", "md")?
         .iter()
         .map(|path| {
-            let (front, description, comments) = parse_issue(&fs::read_to_string(path)?)?;
+            let (front, description, comments) = parse_issue(&read_plain(path)?)?;
             Ok((number_of(prefix, &front.key)?, front, description, comments))
         })
         .collect()
@@ -404,11 +603,13 @@ async fn link_issue(
         .execute(&mut **tx)
         .await?;
     }
-    for (kind, targets) in [
+    let legacy = [
         ("blocks", &f.blocks),
         ("related", &f.related),
         ("duplicate", &f.duplicate),
-    ] {
+    ];
+    let others = f.relations.iter().map(|(k, v)| (k.as_str(), v));
+    for (kind, targets) in legacy.into_iter().chain(others) {
         for target in targets {
             sqlx::query(
                 "INSERT INTO relations (from_id, to_id, kind) VALUES (
@@ -423,6 +624,17 @@ async fn link_issue(
     }
     for c in comments {
         insert_comment(tx, number, c).await?;
+    }
+    for b in &f.work_blocks {
+        sqlx::query(
+            "INSERT INTO work_blocks (issue_id, start_utc, end_utc)
+             VALUES ((SELECT id FROM issues WHERE number = ?), ?, ?)",
+        )
+        .bind(number)
+        .bind(b.start)
+        .bind(b.end)
+        .execute(&mut **tx)
+        .await?;
     }
     Ok(())
 }
@@ -439,4 +651,47 @@ async fn insert_comment(tx: &mut Tx<'_>, number: i64, c: &CommentText) -> Result
     .execute(&mut **tx)
     .await?;
     Ok(())
+}
+
+/// Brings the exported images back: each is read from `attachments/`, checked by its bytes and hash, and
+/// stored under its old id, because markdown points at the id. The file name comes from the hash, not the manifest.
+pub(crate) async fn restore_attachments(db: &Db, tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let list: Vec<AttachmentFile> = read_list(&dir.join("attachments.yaml"))?;
+    for a in list {
+        let bytes = read_image(dir, &a.sha256)?;
+        let img = attachments::inspect(&bytes)?;
+        if img.sha256 != a.sha256 {
+            return Err(invalid(format!(
+                "attachment {} does not match its hash",
+                a.id
+            )));
+        }
+        attachments::write_file(db, &img, &bytes)?;
+        sqlx::query("INSERT OR IGNORE INTO attachments (id, sha256, file, mime, bytes, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind(a.id)
+            .bind(&img.sha256)
+            .bind(img.file())
+            .bind(img.mime)
+            .bind(i64::try_from(bytes.len()).map_err(invalid)?)
+            .bind(a.created_at)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
+}
+
+/// The bytes of `attachments/<sha256>.<ext>`; the hash is checked to be plain hex so it cannot name another path.
+fn read_image(dir: &Path, sha256: &str) -> Result<Vec<u8>> {
+    if sha256.len() != 64 || !sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(invalid(format!("{sha256:?} is not an image hash")));
+    }
+    for ext in ["png", "jpg", "gif", "webp"] {
+        let path = dir.join("attachments").join(format!("{sha256}.{ext}"));
+        if fs::symlink_metadata(&path).is_ok_and(|m| m.is_file()) {
+            return Ok(fs::read(path)?);
+        }
+    }
+    Err(invalid(format!(
+        "attachments/{sha256} is missing from the export"
+    )))
 }

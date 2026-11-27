@@ -1,14 +1,13 @@
 //! Tauri wrappers: one per command in `taskapp_commands`, generated from its list, plus the commands that
 //! need a sync crate (the app is the only place allowed to use those together).
 
-use std::path::Path;
 use std::sync::Arc;
 
 use crate::sync_loop::{Real, Syncer};
 use taskapp_commands::AppState;
 
-use taskapp_core::{Db, Error, Result, SyncStatus, settings};
-use tauri::State;
+use taskapp_core::{Applied, Db, Error, Result, SyncStatus, settings};
+use tauri::{Manager, State};
 use tauri_specta::{Builder, collect_commands};
 
 macro_rules! wrap {
@@ -35,7 +34,8 @@ macro_rules! wrap {
         pub fn builder() -> Builder<tauri::Wry> {
             Builder::new().commands(collect_commands![
                 $($name,)*
-                gcal_list_calendars, gcal_connect, reminders_list_lists, sync_now, export_now
+                gcal_list_calendars, gcal_connect, reminders_list_lists, sync_now, export_now, export_pull,
+                restore_from_export
             ])
         }
     };
@@ -105,10 +105,74 @@ async fn export_snapshot(db: &Db) -> Result<()> {
         .await?
         .ok_or_else(|| Error::Invalid("choose an export directory first".into()))?;
     let remote = setting("export_remote").await?;
-    let dir = Path::new(&dir);
-    taskapp_export::write::write_snapshot(db, dir).await?;
-    taskapp_export::git::commit_and_push(dir, "export", remote.as_deref()).await?;
-    Ok(())
+    let dir = settings::home_path(&dir)?;
+    taskapp_export::sync::export(db, &dir, remote.as_deref()).await
+}
+
+/// Fast-forwards the export folder to the remote and applies the incoming issues as one undoable step,
+/// then writes the export again so both sides agree. `created` counts issues created or changed;
+/// `warnings` are conflicts, kept so Settings can show them.
+///
+/// # Errors
+/// Fails when no export directory or remote is set, the histories diverged, or git fails.
+#[tauri::command]
+#[specta::specta]
+pub async fn export_pull(state: State<'_, AppState>) -> Result<Applied> {
+    let db = &state.db;
+    let dir: String = settings::get(db, "export_dir").await?.unwrap_or_default();
+    let remote: String = settings::get(db, "export_remote")
+        .await?
+        .unwrap_or_default();
+    if dir.is_empty() || remote.is_empty() {
+        return Err(Error::Invalid(
+            "set an export directory and a Git remote first".into(),
+        ));
+    }
+    let dir = settings::home_path(&dir)?;
+    let out = taskapp_export::sync::pull_and_apply(db, &dir, &remote).await?;
+    taskapp_export::sync::export(db, &dir, Some(&remote)).await?;
+    let last = serde_json::json!({"at": chrono::Utc::now(), "changed": out.created, "conflicts": out.warnings});
+    settings::set(db, "last_remote_sync", &last).await?;
+    Ok(out)
+}
+
+/// Replaces this workspace with an export: a folder, or a Git URL (https or ssh) cloned with the machine's
+/// own git into `clone_to` (default: the app data folder). A backup of the current database is written
+/// first. Afterwards the export settings point at the restored folder. Returns that folder.
+///
+/// # Errors
+/// Fails on a bad source, a failed clone or an export that does not parse; the workspace is unchanged then.
+#[tauri::command]
+#[specta::specta]
+pub async fn restore_from_export(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    source: String,
+    clone_to: Option<String>,
+    apply_local: bool,
+) -> Result<String> {
+    let data = app
+        .path()
+        .data_dir()
+        .map_err(|e| Error::Invalid(e.to_string()))?
+        .join("taskapp");
+    let backups = match settings::get::<String>(&state.db, "backup_dir").await? {
+        Some(typed) if !typed.is_empty() => settings::home_path(&typed)?,
+        _ => data.join("backups"),
+    };
+    let clone_to = match clone_to.filter(|c| !c.trim().is_empty()) {
+        Some(typed) => settings::home_path(typed.trim())?,
+        None => data.join("export"),
+    };
+    let out = taskapp_export::restore::restore_from_export(
+        &state.db,
+        &source,
+        &clone_to,
+        &backups,
+        apply_local,
+    )
+    .await?;
+    Ok(out.dir.display().to_string())
 }
 
 #[cfg(test)]

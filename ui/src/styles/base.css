@@ -61,11 +61,49 @@ h1, h2, h3, h4, h5, h6, p { margin: 0; }
 
 * { scrollbar-width: thin; scrollbar-color: var(--control) transparent; }
 
+/* Reduced motion switches animation off unless the user picked an animation speed (data-motion-set, motion.svelte.ts). */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  :root:not([data-motion-set]) *, :root:not([data-motion-set]) *::before, :root:not([data-motion-set]) *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
 }
+
+/* Motion, shared by every layer. Layers arrive over --dur-2 (menus, popovers, tooltips) or --dur-4 (dialogs, the
+   command menu) and leave faster, over --dur-out: bits-ui keeps a layer mounted until its closing animation ends.
+   A layer that opens from a side sets --cx-dx / --cx-dy. Off makes every duration 0, so nothing plays. */
+@keyframes cx-fade { from { opacity: 0; } }
+@keyframes cx-fade-out { to { opacity: 0; } }
+@keyframes cx-in { from { opacity: 0; transform: translate(var(--cx-dx, 0px), var(--cx-dy, -6px)) scale(0.96); } }
+@keyframes cx-out { to { opacity: 0; transform: translate(var(--cx-dx, 0px), var(--cx-dy, -6px)) scale(0.98); } }
+@keyframes cx-in-centred { from { opacity: 0; transform: translate(-50%, 8px) scale(0.96); } }
+@keyframes cx-out-centred { to { opacity: 0; transform: translate(-50%, 6px) scale(0.98); } }
+@keyframes cx-pop { from { transform: scale(0.8); } }
+@keyframes cx-flash { 0% { background: var(--selection); } }
+@keyframes cx-page { from { opacity: 0; transform: translate(var(--cx-px, 0px), 6px); } }
+@keyframes cx-row-in { from { opacity: 0; transform: translateY(6px); } }
+@keyframes cx-slide { from { opacity: 0; transform: translateX(var(--cx-sx, 24px)); } }
+.cx-surface, .cx-tip { animation: cx-in var(--dur-2) var(--ease); }
+.cx-surface[data-state='closed'], .cx-tip[data-state='closed'] { animation: cx-out var(--dur-out) var(--ease-in) forwards; }
+.cx-surface[data-side='top'], .cx-tip[data-side='top'] { --cx-dy: 6px; }
+.cx-surface[data-side='left'], .cx-tip[data-side='left'] { --cx-dx: 6px; --cx-dy: 0px; }
+.cx-surface[data-side='right'], .cx-tip[data-side='right'] { --cx-dx: -6px; --cx-dy: 0px; }
+.cx-overlay, .cp-overlay { animation: cx-fade var(--dur-4) var(--ease); }
+.cx-overlay[data-state='closed'], .cp-overlay[data-state='closed'] { animation: cx-fade-out var(--dur-out) var(--ease-in) forwards; }
+.cx-dialog, .cp { animation: cx-in-centred var(--dur-4) var(--ease-spring); }
+.cx-dialog[data-state='closed'], .cp[data-state='closed'] { animation: cx-out-centred var(--dur-out) var(--ease-in) forwards; }
+.cx-flash { animation: cx-flash var(--dur-3) var(--ease) 2; }
+.cx-page { animation: cx-page var(--dur-page) var(--ease); }
+.cx-slide { animation: cx-slide var(--dur-3) var(--ease); }
+
+/* Bare URLs in rendered markdown (components/detail/markdown.ts) */
+.md a.chip { display: inline-flex; align-items: center; gap: var(--s-2); max-width: 100%; padding: 0 var(--s-2); border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--raised); color: var(--ink); text-decoration: none; vertical-align: baseline; }
+.md a.chip:hover { background: var(--active); }
+.md a.chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Portaled layers (menus, popovers, tooltips, dialogs) sit outside the app root, so they take the interface zoom here.
+   bits-ui measures the unzoomed wrapper, so the heights it allows and the anchor widths it sets are divided by the zoom. */
+.cx-surface, .cx-tip, .cx-dialog { zoom: var(--ui-zoom, 1); }
+.cx-surface { max-height: calc(var(--bits-floating-available-height, 100vh) / var(--ui-zoom, 1)); overflow: auto; }

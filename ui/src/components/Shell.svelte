@@ -1,6 +1,9 @@
 <script lang="ts">
+  import RowDialogHost from './RowDialogHost.svelte';
   import type { Snippet } from 'svelte';
   import { onMount } from 'svelte';
+  import { cubicOut } from 'svelte/easing';
+  import { fly } from 'svelte/transition';
   import { api } from '../lib/api';
   import type { SyncStatus } from '../lib/bindings';
   import { shortcutFor } from '../lib/commands';
@@ -10,6 +13,10 @@
   import CommandButton from './CommandButton.svelte';
   import Kbd from '../ui/Kbd.svelte';
   import Tooltip from '../ui/Tooltip.svelte';
+  import Splitter from './Splitter.svelte';
+  import { clampWidth, readFlag, readWidth, writeFlag, writeWidth } from '../lib/paneSize';
+  import '../lib/interfaceSize.svelte'; // applies the saved interface size before the first paint
+  import { ms, replay } from '../lib/motion.svelte'; // also applies the saved animation speed before the first paint
 
   // The frame: sidebar and top bar are one field, the page is a sheet set into it, the issue panel docks inside the sheet.
   let {
@@ -19,22 +26,75 @@
     crumb = [],
     panelOpen = false,
     onsearch,
-  }: { sidebar?: Snippet; panel?: Snippet; children: Snippet; crumb?: string[]; panelOpen?: boolean; onsearch?: () => void } = $props();
+    route = '',
+  }: { sidebar?: Snippet; panel?: Snippet; children: Snippet; crumb?: string[]; panelOpen?: boolean; onsearch?: () => void; route?: string } = $props();
 
   let sync = $state<SyncStatus | null>(null);
   const syncError = $derived(
     sync ? Object.values(sync).map((s) => (s === 'Off' ? undefined : s?.Error?.message)).find((m) => m !== undefined) : undefined,
   );
 
+  // Sidebar and panel widths are per device; the commands below are the keys and the menu entries for them.
+  const SIDE = { key: 'cairn.sidebarWidth', def: 232, min: 180, max: 360 };
+  const PANEL = { key: 'cairn.panelWidth', def: 380, min: 280 };
+  const COLLAPSED = 'cairn.sidebarCollapsed';
+  let sideW = $state<number | null>(readWidth(SIDE.key));
+  let panelW = $state<number | null>(readWidth(PANEL.key));
+  let collapsed = $state(readFlag(COLLAPSED));
+  let side: HTMLElement;
+  // Widths are CSS px. Pointer positions are visual px, so they are divided by the interface zoom.
+  const zoom = () => Number(getComputedStyle(document.documentElement).getPropertyValue('--ui-zoom')) || 1;
+  const sideWidth = () => sideW ?? (parseFloat(getComputedStyle(side).getPropertyValue('--sidebar-w')) || SIDE.def);
+  let sheet: HTMLElement;
+  let panelEl: HTMLElement;
+  // A page change replays a quick rise on the sheet's content (the issue page slides in from the right instead).
+  let mainEl: HTMLElement;
+  let shown = route;
+  $effect(() => {
+    if (route === shown) return;
+    shown = route;
+    mainEl.style.setProperty('--cx-px', route.startsWith('/issue/') ? '24px' : '0px');
+    replay(mainEl, 'cx-page');
+  });
+  // The panel may take 70% of the sheet at most, so the list keeps room.
+  const clampSide = (w: number) => clampWidth(w, SIDE.min, SIDE.max);
+  const clampPanel = (w: number) => clampWidth(w, PANEL.min, sheet.clientWidth * 0.7);
+  const setSide = (w: number | null) => {
+    sideW = w === null ? null : clampSide(w);
+    writeWidth(SIDE.key, sideW);
+  };
+  const setPanel = (w: number | null) => {
+    panelW = w === null ? null : clampPanel(w);
+    writeWidth(PANEL.key, panelW);
+  };
+  const panelWidth = () => panelW ?? (parseFloat(getComputedStyle(panelEl).getPropertyValue('--panel-w')) || PANEL.def);
+
   onMount(() => {
     void refreshAll().catch(() => {});
     void api.sync.status().then((s) => (sync = s)).catch(() => {});
+    const on = (type: string, fn: () => void) => {
+      addEventListener(type, fn);
+      return () => removeEventListener(type, fn);
+    };
+    const offs = [
+      on('command:sidebar.toggle', () => {
+        collapsed = !collapsed;
+        writeFlag(COLLAPSED, collapsed);
+      }),
+      on('command:pane.sidebar.wider', () => setSide(sideWidth() + 16)),
+      on('command:pane.sidebar.narrower', () => setSide(sideWidth() - 16)),
+      on('command:pane.sidebar.reset', () => setSide(null)),
+      on('command:pane.panel.wider', () => setPanel(panelWidth() + 16)),
+      on('command:pane.panel.narrower', () => setPanel(panelWidth() - 16)),
+      on('command:pane.panel.reset', () => setPanel(null)),
+    ];
+    return () => offs.forEach((f) => f());
   });
 
   // The legend is read from the registry, so a rebound key or a new command shows up without touching this list.
   const legend: [string[], string][] = [
     [['move.down', 'move.up'], 'move'],
-    [['move.select'], 'select'],
+    [['select.toggle'], 'select'],
     [['move.open'], 'open'],
     [['issue.status'], 'status'],
     [['palette.open'], 'commands'],
@@ -45,25 +105,9 @@
       .filter((h) => h.keys.length),
   );
 
-  // The panel is dragged by its left edge; its width lives in the --panel-w token's place, clamped to the sheet.
-  let width = $state<number | null>(null);
-  let sheet: HTMLElement;
-  function resize(e: PointerEvent) {
-    const move = (m: PointerEvent) => {
-      const room = sheet.getBoundingClientRect().right - m.clientX;
-      width = Math.round(Math.min(sheet.clientWidth * 0.7, Math.max(280, room)));
-    };
-    const stop = () => {
-      removeEventListener('pointermove', move);
-      removeEventListener('pointerup', stop);
-    };
-    e.preventDefault();
-    addEventListener('pointermove', move);
-    addEventListener('pointerup', stop);
-  }
 </script>
 
-<div class="app cairn-root" data-on-frame>
+<div class="app cairn-root" data-on-frame style:--sidebar-w={collapsed ? '0px' : sideW === null ? null : `${sideW}px`}>
   <div class="brand">
     <span class="mark"><Icon name="cairn" size={24} /></span>
     <span class="wordmark">Cairn</span>
@@ -89,10 +133,14 @@
       <CommandButton command="theme.cycle" iconOnly />
     </div>
   </header>
-  <aside class="sidebar">{@render sidebar?.()}</aside>
-  <div class="sheet" bind:this={sheet}>
+  <aside class="sidebar" bind:this={side} hidden={collapsed}>
+    {@render sidebar?.()}
+    <div class="edge side"><Splitter label="Resize sidebar" clamp={clampSide} fromPointer={(x) => x / zoom()} onchange={setSide} onreset={() => setSide(null)} /></div>
+  </aside>
+  <div class="sheet" bind:this={sheet} data-panel={panelOpen ? '' : undefined}>
     <div class="main">
-      <main>{@render children()}</main>
+      <main bind:this={mainEl}>{@render children()}</main>
+      <RowDialogHost />
       <footer class="legend">
         {#each hints as h (h.text)}
           <span><Kbd keys={h.keys} />{h.text}</span>
@@ -107,10 +155,10 @@
       </footer>
     </div>
     {#if panelOpen}
-      <aside class="panel" style:--panel-w={width === null ? null : `${width}px`}>
-        <Tooltip label="Resize panel">
-          {#snippet children(props)}<button {...props} class="grip" type="button" aria-label="Resize panel" onpointerdown={resize}></button>{/snippet}
-        </Tooltip>
+      <aside class="panel" in:fly={{ x: 40, duration: ms('--dur-3'), easing: cubicOut }} out:fly={{ x: 40, duration: ms('--dur-out') }} bind:this={panelEl} style:--panel-w={panelW === null ? null : `${panelW}px`}>
+        <div class="edge panel-edge">
+          <Splitter label="Resize panel" clamp={clampPanel} fromPointer={(x) => (sheet.getBoundingClientRect().right - x) / zoom()} onchange={setPanel} onreset={() => setPanel(null)} />
+        </div>
         <div class="contour" aria-hidden="true"><Contour rings={11} size={380} /></div>
         <div class="body">{@render panel?.()}</div>
       </aside>
@@ -121,7 +169,11 @@
 <style>
   .app {
     display: grid;
-    height: 100vh;
+    zoom: var(--ui-zoom, 1);
+    /* Fill the window by its edges, not by a height: Chromium multiplies a height by the zoom and WebKit (the Mac
+       app) does not, so any height here is wrong in one of them. */
+    position: fixed;
+    inset: 0;
     grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
     grid-template-rows: var(--topbar-h) minmax(0, 1fr);
     grid-template-areas: 'brand top' 'side sheet';
@@ -141,7 +193,7 @@
   .tools { display: flex; align-items: center; justify-content: flex-end; gap: var(--s-2); }
   .tools :global(.ib) { color: var(--frame-ink); background: var(--frame-raised); }
   .tools :global(.ib:hover:not(:disabled)) { background: var(--frame-inset); color: var(--frame-ink); }
-  .sidebar { grid-area: side; min-height: 0; overflow: auto; }
+  .sidebar { position: relative; grid-area: side; min-height: 0; overflow: auto; }
   .sheet { grid-area: sheet; display: flex; min-width: 0; min-height: 0; margin: 0 var(--sheet-inset) var(--sheet-inset) 0; overflow: hidden; background: var(--sheet); color: var(--ink); border: 1px solid var(--border); border-radius: var(--r-sheet); position: relative; }
   .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   main { flex: 1; min-height: 0; overflow: auto; }
@@ -151,12 +203,17 @@
   .dot { width: var(--s-4); height: var(--s-4); border-radius: var(--r-round); background: var(--positive); }
   .dot.error { background: var(--signal); }
   .panel { position: relative; flex: none; width: var(--panel-w); min-height: 0; display: flex; flex-direction: column; background: var(--raised); border-left: 1px solid var(--border); overflow: hidden; }
+  /* The panel moves by transform (fly), not width: the list beside it keeps its layout, and dims a little. */
+  .main { transition: opacity var(--dur-3) var(--ease); }
+  .sheet[data-panel] .main { opacity: 0.85; }
   /* Narrow window: the panel floats over the sheet so the list keeps its width. */
   @media (max-width: 1100px) {
     .panel { position: absolute; top: 0; right: 0; bottom: 0; z-index: var(--z-sticky); box-shadow: var(--shadow-float); }
   }
   .body { position: relative; flex: 1; min-height: 0; overflow: auto; }
   .contour { position: absolute; right: calc(var(--s-10) * -2); bottom: calc(var(--s-10) * -1); color: var(--border); pointer-events: none; }
-  .grip { position: absolute; z-index: var(--z-sticky); left: calc(var(--s-2) * -1); top: 0; bottom: 0; width: var(--s-4); padding: 0; border: 0; background: transparent; cursor: col-resize; }
-  .grip:hover, .grip:active { background: var(--control); opacity: 0.5; }
+  .edge { position: absolute; top: 0; bottom: 0; width: var(--s-4); z-index: var(--z-sticky); }
+  .edge.side { right: 0; }
+  .edge.panel-edge { left: calc(var(--s-2) * -1); }
+  .brand { overflow: hidden; }
 </style>

@@ -5,6 +5,7 @@ import { createMockApi } from '../lib/api.mock';
 import { defineCommand } from '../lib/commands/registry';
 import { selection } from '../lib/selection.svelte';
 import { refreshAll } from '../lib/stores.svelte';
+import '../lib/commands/defs/nav.search';
 import CommandPalette from './CommandPalette.svelte';
 
 // Glyph assertions below are the Mac ones whatever machine runs them.
@@ -84,7 +85,7 @@ defineCommand({ id: 'settings.statuses', label: 'Statuses', icon: 'circle', grou
 describe('CommandPalette', () => {
   it('each_settings_page_is_listed_once', async () => {
     await type('statuses');
-    expect(rows().filter((r) => /statuses/i.test(r)).length).toBe(1);
+    expect(rows().filter((r) => /statuses/i.test(r) && !/project/i.test(r)).length).toBe(1);
   });
 
   it('lists_commands_in_a_listbox_with_the_registry_shortcut', async () => {
@@ -107,7 +108,7 @@ describe('CommandPalette', () => {
     press('Enter');
     await settle();
     expect(ran).toHaveBeenCalledWith('ctx', [a.id, b.id]);
-    expect(onclose).toHaveBeenCalled();
+    await vi.waitFor(() => expect(onclose).toHaveBeenCalled());
   });
 
   it('a start page opens the menu straight at that page with an empty query', async () => {
@@ -140,7 +141,7 @@ describe('CommandPalette', () => {
     press('Enter');
     await settle();
     expect(picked).toHaveBeenCalledWith('Beta');
-    expect(onclose).toHaveBeenCalled();
+    await vi.waitFor(() => expect(onclose).toHaveBeenCalled());
   });
 
   it('escape_closes_one_level_then_the_menu', async () => {
@@ -152,8 +153,7 @@ describe('CommandPalette', () => {
     expect(document.querySelector('.crumb')).toBeNull();
     expect(onclose).not.toHaveBeenCalled();
     press('Escape');
-    await settle();
-    expect(onclose).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(onclose).toHaveBeenCalledTimes(1)); // after the exit animation
   });
 
   it('issue_search_result_navigates', async () => {
@@ -170,6 +170,11 @@ describe('CommandPalette', () => {
     await type('quokka');
     press('Enter');
     await settle();
+    // Running a row closes the menu (it leaves after its exit animation), so open a fresh one for the next pick.
+    unmount(app!);
+    document.body.innerHTML = '';
+    app = mount(CommandPalette, { target: document.body, props: { onclose, oncreate } });
+    await settle();
     await type('zebra plain');
     press('Enter');
     await settle();
@@ -185,6 +190,21 @@ describe('CommandPalette', () => {
     expect(group!.textContent).toContain(i.key);
     expect(group!.textContent).toContain('Zebra plain');
     expect(group!.querySelector('[role=option]')!.textContent).toContain('Zebra plain');
+  });
+
+  it('shows the current status glyph for a recent issue after reopening', async () => {
+    const issue = await api.issues.create({ title: 'Quokka status' });
+    await type('quokka status');
+    press('Enter');
+    await settle();
+    await api.issues.update(issue.id, { status_id: 4 });
+    unmount(app!);
+    document.body.innerHTML = '';
+    app = mount(CommandPalette, { target: document.body, props: { onclose, oncreate } });
+    await settle();
+    const group = document.querySelector('[role=group][aria-label=Recent]')!;
+    const row = [...group.querySelectorAll('[role=option]')].find((r) => r.textContent?.includes(issue.key))!;
+    await vi.waitFor(() => expect(row.querySelector('[data-category="Completed"]')).not.toBeNull());
   });
 
   it('multi_pick_page_stays_open_and_shows_checkmarks', async () => {
@@ -247,5 +267,25 @@ describe('CommandPalette', () => {
   it('input_keeps_focus', async () => {
     await type('zebra');
     expect(document.activeElement).toBe(input());
+  });
+
+  it('a_word_prefix_finds_the_issue_under_an_Issues_heading_first', async () => {
+    const i = await api.issues.create({ title: 'Walrus crash on save' });
+    await type('cras');
+    expect(document.querySelector('[role=group]')?.getAttribute('aria-label')).toBe('Issues');
+    expect(document.querySelector('[role=group][aria-label=Issues]')?.textContent).toContain(i.key);
+  });
+
+  it('the_root_offers_search_issues_and_running_it_gives_an_issues_only_search', async () => {
+    await api.issues.create({ title: 'Walrus issues only' });
+    await type('search issues');
+    expect(rows()[0]).toContain('Search issues…');
+    press('Enter');
+    await settle();
+    expect(input().placeholder).toBe('Search issues…');
+    expect(document.querySelector('[role=group][aria-label=Navigation]')).toBeNull();
+    await type('walrus');
+    expect(rows().length).toBeGreaterThan(0);
+    expect(rows().every((r) => /^[A-Z]+-\d+ /.test(r.trim()))).toBe(true);
   });
 });

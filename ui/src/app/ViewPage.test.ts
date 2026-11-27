@@ -1,12 +1,13 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setApi, type Api } from '../lib/api';
 import { createMockApi, fixtures } from '../lib/api.mock';
 import type { SavedView, ViewDef } from '../lib/bindings';
 import { listCommands, shortcutFor } from '../lib/commands';
-import { refreshAll } from '../lib/stores.svelte';
+import { currentViewId, refreshAll, selectedIssueId } from '../lib/stores.svelte';
 import ViewPage from './ViewPage.svelte';
+import { pick } from '../components/settings/testing';
 
 // Popovers and user-event are slow on a loaded machine.
 vi.setConfig({ testTimeout: 30000 });
@@ -32,9 +33,151 @@ async function open(over: Partial<ViewDef> = {}, name = 'Mine') {
   return r;
 }
 const saved = async () => (await mock.views.list())[0];
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  currentViewId.value = null;
+  selectedIssueId.value = null;
+});
 
 describe('ViewPage', () => {
+  it('sorts_list_headings_temporarily_across_refresh_and_layout_changes', async () => {
+    const user = userEvent.setup();
+    const savedSort = [{ field: { Fixed: 'Title' as const }, descending: false }];
+    const { container } = await open({ sorts: savedSort });
+    await screen.findByText('Alpha task');
+    expect(screen.getByRole('button', { name: 'Sort by Priority' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sort by Status' })).toBeTruthy();
+    const order = () => [...container.querySelectorAll<HTMLElement>('[data-key]')].map((row) => row.textContent ?? '').filter((s) => /Alpha task|Beta task/.test(s)).map((s) => s.includes('Alpha task') ? 'Alpha' : 'Beta');
+    await user.click(screen.getByRole('button', { name: 'Sort by Title' }));
+    await user.click(screen.getByRole('button', { name: 'Sort by Title' }));
+    await waitFor(() => expect(order()).toEqual(['Beta', 'Alpha']));
+    await mock.issues.create({ title: 'Gamma task' } as never);
+    await screen.findByText('Gamma task');
+    expect(order()).toEqual(['Beta', 'Alpha']);
+    await user.click(screen.getByRole('tab', { name: /Table/ }));
+    await waitFor(() => expect(order()).toEqual(['Beta', 'Alpha']));
+    await waitFor(async () => expect((await saved()).def.layout).toBe('Table'));
+    expect((await saved()).def.sorts).toEqual(savedSort);
+  });
+
+  it('does_not_save_sort_picker_changes', async () => {
+    const user = userEvent.setup();
+    await open();
+    await screen.findByText('Alpha task');
+    await user.click(screen.getByRole('button', { name: 'Sort' }));
+    await pick(document.body, 'Sort by', 'Title');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sort: Title' })).toBeTruthy());
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect((await saved()).def.sorts).toEqual([]);
+  });
+
+  it('carries_a_table_heading_sort_into_the_list', async () => {
+    const user = userEvent.setup();
+    const { container } = await open({ layout: 'Table' });
+    await screen.findByText('Alpha task');
+    await user.click(screen.getByRole('button', { name: 'Title' }));
+    await user.click(screen.getByRole('button', { name: 'Title' }));
+    await waitFor(() => expect(container.querySelector('th[data-col="fixed:Title"]')?.getAttribute('aria-sort')).toBe('descending'));
+    await user.click(screen.getByRole('tab', { name: /List/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sort by Title' }).textContent).toContain('↓'));
+    const rows = [...container.querySelectorAll<HTMLElement>('li[data-key]')].map((r) => r.textContent ?? '');
+    expect(rows.findIndex((r) => r.includes('Beta task'))).toBeLessThan(rows.findIndex((r) => r.includes('Alpha task')));
+    await waitFor(async () => expect((await saved()).def.layout).toBe('List'));
+    expect((await saved()).def.sorts).toEqual([]);
+  });
+
+  it('restores_the_saved_sort_after_visiting_another_view', async () => {
+    const user = userEvent.setup();
+    const savedSort = [{ field: { Fixed: 'Title' as const }, descending: true }];
+    const page = await open({ sorts: savedSort });
+    await screen.findByText('Alpha task');
+    await user.click(screen.getByRole('button', { name: 'Sort by Title' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sort by Title' }).textContent).toContain('↑'));
+    const other = await mock.views.save(null, 'Other', def());
+    await page.rerender({ params: { id: String(other.id) } });
+    await screen.findByRole('heading', { name: 'Other' });
+    await page.rerender({ params: { id: '1' } });
+    await screen.findByRole('heading', { name: 'Mine' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sort by Title' }).textContent).toContain('↓'));
+    expect((await saved()).def.sorts).toEqual(savedSort);
+  });
+
+  it('updates_a_filtered_empty_view_when_an_issue_is_created', async () => {
+    await open({ filter: { Cond: { field: { Fixed: 'Title' }, op: 'Contains', value: 'Gamma' } } });
+    await screen.findByText('Nothing matches these filters');
+    await mock.issues.create({ title: 'Gamma task' } as never);
+    await screen.findByText('Gamma task');
+    expect(screen.queryByText('Nothing matches these filters')).toBeNull();
+  });
+
+  it('updates_a_list_when_an_issue_changes', async () => {
+    await open();
+    await screen.findByText('Alpha task');
+    const alpha = (await mock.views.query(def())).find((i) => i.title === 'Alpha task')!;
+    const query = mock.views.query;
+    vi.spyOn(mock.views, 'query').mockImplementation(async (d) => structuredClone(await query(d)));
+    await mock.issues.update(alpha.id, { title: 'Updated task' });
+    await screen.findByText('Updated task');
+    expect(screen.queryByText('Alpha task')).toBeNull();
+  });
+
+  it('can_open_a_refreshed_issue_after_visiting_a_different_table_view', async () => {
+    const user = userEvent.setup();
+    await open();
+    await screen.findByText('Alpha task');
+    const other = await mock.views.save(null, 'Other', def({
+      filter: { Cond: { field: { Fixed: 'Title' }, op: 'Contains', value: 'absent' } },
+    }));
+    currentViewId.value = other.id;
+    const alpha = (await mock.views.query(def())).find((i) => i.title === 'Alpha task')!;
+    const query = mock.views.query;
+    vi.spyOn(mock.views, 'query').mockImplementation(async (d) => structuredClone(await query(d)));
+    await mock.issues.update(alpha.id, { title: 'Updated task' });
+    await user.click(await screen.findByText('Updated task'));
+    await waitFor(() => expect(selectedIssueId.value).toBe(alpha.id));
+  });
+
+  it('updates_board_rows_when_the_quick_filter_changes', async () => {
+    const user = userEvent.setup();
+    await open({ layout: 'Board' });
+    await screen.findByText('Alpha task');
+    await user.click(screen.getByRole('button', { name: 'Quick filter' }));
+    await user.type(await screen.findByLabelText('Quick filter text'), 'Beta');
+    await waitFor(() => expect(screen.queryByText('Alpha task')).toBeNull());
+  });
+
+  it('updates_table_rows_when_the_quick_filter_changes', async () => {
+    const user = userEvent.setup();
+    await open({ layout: 'Table' });
+    await screen.findByText('Alpha task');
+    await user.click(screen.getByRole('button', { name: 'Quick filter' }));
+    await user.type(await screen.findByLabelText('Quick filter text'), 'Beta');
+    await waitFor(() => expect(screen.queryByText('Alpha task')).toBeNull());
+    expect(screen.getByText('Beta task')).toBeTruthy();
+  });
+
+  it('keeps_the_latest_board_filter_when_an_older_query_finishes_late', async () => {
+    const user = userEvent.setup();
+    await open({ layout: 'Board' });
+    await screen.findByText('Alpha task');
+    const releases: (() => void)[] = [];
+    const query = mock.views.query;
+    vi.spyOn(mock.views, 'query').mockImplementation(async (d) => {
+      const result = structuredClone(await query(d));
+      if (d.filter?.Cond?.value === 'Beta') await new Promise<void>((resolve) => releases.push(resolve));
+      return result;
+    });
+    await user.click(screen.getByRole('button', { name: 'Quick filter' }));
+    const input = await screen.findByLabelText('Quick filter text');
+    await fireEvent.input(input, { target: { value: 'Beta' } });
+    await waitFor(() => expect(releases.length).toBeGreaterThan(1));
+    await fireEvent.input(input, { target: { value: 'Alpha' } });
+    await waitFor(() => expect(screen.getByText('Alpha task')).toBeTruthy());
+    releases.forEach((release) => release());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.getByText('Alpha task')).toBeTruthy();
+  });
+
   it('switching_layout_renders_it_and_persists', async () => {
     const user = userEvent.setup();
     const { container } = await open();
@@ -79,6 +222,47 @@ describe('ViewPage', () => {
     await user.click(screen.getByRole('button', { name: 'Remove filter Status category' }));
     await screen.findByText('Alpha task');
     await waitFor(async () => expect((await saved()).def.filter).toBeNull(), { timeout: 2000 });
+  });
+
+  it('switching_to_another_view_shows_that_views_chips_and_saves_to_the_right_view', async () => {
+    mock = createMockApi({ ...fixtures, views: [] });
+    setApi(mock);
+    const [first, second] = await mock.statuses.list();
+    const only = (id: number) => def({ filter: { Cond: { field: { Fixed: 'Status' }, op: 'In', value: [id] } } });
+    await mock.views.save(null, 'One', only(first.id), null, null);
+    await mock.views.save(null, 'Two', only(second.id), null, null);
+    const [one, two] = await mock.views.list();
+    await refreshAll();
+    const r = render(ViewPage, { params: { id: String(one.id) } });
+    await screen.findByRole('button', { name: new RegExp(`^Status is any of ${first.name}`) });
+    await r.rerender({ params: { id: String(two.id) } });
+    // The chip is the new view's, not the one the page showed before.
+    await screen.findByRole('button', { name: new RegExp(`^Status is any of ${second.name}`) });
+    await new Promise((ok) => setTimeout(ok, 600));
+    const after = await mock.views.list();
+    expect(after.find((v) => v.id === one.id)!.def.filter).toEqual(only(first.id).filter);
+    expect(after.find((v) => v.id === two.id)!.def.filter).toEqual(only(second.id).filter);
+  });
+
+  it('quick_filter_narrows_without_saving_until_saved', async () => {
+    const user = userEvent.setup();
+    await open();
+    await screen.findByText('Beta task');
+    await user.click(screen.getByRole('button', { name: 'Quick filter' }));
+    await user.type(await screen.findByLabelText('Quick filter text'), 'Alpha');
+    await waitFor(() => expect(screen.queryByText('Beta task')).toBeNull());
+    expect(screen.getByText('Temporary')).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 600));
+    expect((await saved()).def.filter).toBeNull();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.getByText('Beta task')).toBeTruthy());
+    await user.click(screen.getByRole('button', { name: 'Quick filter' }));
+    await user.type(await screen.findByLabelText('Quick filter text'), 'Alpha');
+    await user.click(await screen.findByRole('button', { name: 'Save to view' }));
+    await waitFor(async () => expect((await saved()).def.filter).toEqual({
+      Cond: { field: { Fixed: 'Title' }, op: 'Contains', value: 'Alpha' },
+    }), { timeout: 2000 });
+    expect(await screen.findByRole('button', { name: /^Title contains Alpha/ })).toBeTruthy(); // the kept filter is now a chip
   });
 
   it('empty_result_offers_clear_filters', async () => {

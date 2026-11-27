@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import { createMockApi, fixtures, type MockSeed } from '../../lib/api.mock';
 import { setApi } from '../../lib/api';
+import { loadFields } from '../../lib/fields.svelte';
 import { refreshAll } from '../../lib/stores.svelte';
 import type { Issue, SavedView, ViewDef } from '../../lib/bindings';
 import BoardView from '../views/BoardView.svelte';
@@ -28,6 +29,7 @@ async function render(comp: Parameters<typeof mount>[0], props: Record<string, u
   const api = createMockApi({ ...fixtures, issues: ISSUES, views: [] } as MockSeed);
   await api.settings.set('estimation', estimation);
   setApi(api);
+  await loadFields();
   await refreshAll();
   const target = document.body.appendChild(document.createElement('div'));
   live = mount(comp, { target, props });
@@ -43,6 +45,13 @@ describe('Points in the Display panel', () => {
   const panel = (estimation: string) => render(DisplayPanel, { def: def(), onchange: () => {} }, '[data-field="F:Status"]', estimation);
   it('is offered as a hidden field', async () => {
     expect((await panel('both')).querySelector('[data-section="Hidden"] [data-field="F:Points"]')).not.toBeNull();
+  });
+  it('stays in the saved columns while its field is off', async () => {
+    const onchange = vi.fn();
+    const t = await render(DisplayPanel, { def: def({ columns: [{ Fixed: 'Status' }, { Fixed: 'Points' }] }), onchange }, '[data-field="F:Status"]', 'none');
+    (t.querySelector('[data-field="F:Status"] input[type="checkbox"], [data-field="F:Status"] [role="switch"]') as HTMLElement).click();
+    flushSync();
+    expect(onchange).toHaveBeenCalledWith({ columns: [{ Fixed: 'Points' }] });
   });
   it.each(['none', 'time'])('is not offered when estimation is %s', async (e) => {
     expect((await panel(e)).querySelector('[data-field="F:Points"]')).toBeNull();

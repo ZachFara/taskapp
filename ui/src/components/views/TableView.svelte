@@ -11,7 +11,9 @@
   import { workspaceZone, dayText, dueDay, isOverdue } from './dates';
   import EmptyState from '../../ui/EmptyState.svelte';
   import GroupHeader from '../../ui/GroupHeader.svelte';
+  import { flash } from '../../lib/motion.svelte';
   import IconButton from '../../ui/IconButton.svelte';
+    import { fixedOn } from '../../lib/fields.svelte';
     import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
     import { priorityGlyph, priorityName, priorityOrder } from '../../lib/priority';
   import Select from '../../ui/Select.svelte';
@@ -22,8 +24,11 @@
   import DisplayPanel from '../display/DisplayPanel.svelte';
   import FieldValue from '../display/FieldValue.svelte';
   import { emptyCtx, loadCtx, pointsTotal, pointsName, type Ctx, type DisplayDef } from '../display/types';
+  import { onRowsChanged } from './onRowsChanged';
+  import { sortable } from '../../lib/viewSort';
+  import SortHeading from './SortHeading.svelte';
 
-  let { view }: { view: SavedView } = $props();
+  let { view, onsort }: { view: SavedView; onsort?: (field: FieldRef) => void } = $props();
 
   type EditKind = PropertyKind | 'Status' | 'Priority' | 'Project' | 'Labels' | 'Read';
   // Fixed fields a table can show and edit. Others are left out of the column picker and skipped in views.
@@ -70,7 +75,7 @@
     base
       .filter((ref) => ctx.points || ref.Fixed !== 'Points')
       .map((ref, index) => ({ ref, index, id: colId(ref), kind: kindOf(ref), label: label(ref) }))
-      .filter((c): c is typeof c & { kind: EditKind } => c.kind !== null),
+      .filter((c): c is typeof c & { kind: EditKind } => c.kind !== null && fixedOn(c.ref.Fixed)),
   );
   function label(ref: FieldRef) {
     return ref.Property !== undefined ? (propertyDefs.find((d) => d.key === ref.Property)?.name ?? '') : FIXED[ref.Fixed!]!.label;
@@ -81,6 +86,11 @@
   let error = $state<string | null>(null);
   let activeCol = $state(0);
   let sort = $state<{ col: string; dir: 'asc' | 'desc' } | null>(null);
+  const activeSort = $derived(sort ?? (onsort && view.def.sorts[0] ? { col: colId(view.def.sorts[0].field), dir: view.def.sorts[0].descending ? 'desc' as const : 'asc' as const } : null));
+  $effect(() => {
+    view.def.sorts;
+    if (onsort) sort = null;
+  });
   let widths = $state<Record<string, number>>({});
   let collapsed = $state(new Set<string>());
   let loaded = $state(false);
@@ -90,6 +100,19 @@
   let labels = $state.raw<Label[]>([]);
   let tz = $state('UTC');
   let ctx = $state.raw<Ctx>(emptyCtx);
+  let tableIssues = $state.raw<Issue[]>([]);
+  let queryVersion = 0;
+  async function loadRows(d: typeof view.def) {
+    const mine = ++queryVersion;
+    const rows = await api.views.query(d);
+    if (mine === queryVersion) tableIssues = rows;
+  }
+  $effect(() => {
+    const d = $state.snapshot(view.def);
+    issues.map((issue) => issue.id);
+    untrack(() => void loadRows(d));
+  });
+  onRowsChanged(() => void loadRows($state.snapshot(view.def)));
   $effect(() => {
     const d = $state.snapshot(def);
     loadCtx(d).then((c) => (ctx = c));
@@ -104,6 +127,7 @@
   const raw = (i: Issue, ref: FieldRef): Value => {
     if (ref.Property !== undefined) return i.properties[ref.Property] ?? null;
     switch (ref.Fixed) {
+      case 'Key': return Number(i.key.slice(i.key.lastIndexOf('-') + 1));
       case 'Title': return i.title;
       case 'Status': return i.status_id;
       case 'Priority': return i.priority;
@@ -137,10 +161,10 @@
   }
   const sorted = $derived.by(() => {
     const s = sort;
-    const col = s && cols.find((c) => c.id === s.col);
-    if (!s || !col) return issues;
+    const col = s && (s.col === 'fixed:Key' ? { ref: { Fixed: 'Key' as const } } : cols.find((c) => c.id === s.col));
+    if (!s || !col) return tableIssues;
     const sign = s.dir === 'asc' ? 1 : -1;
-    return [...issues].sort((x, y) => {
+    return [...tableIssues].sort((x, y) => {
       const a = sortValue(x, col.ref);
       const b = sortValue(y, col.ref);
       // Empty cells sort last in both directions.
@@ -149,12 +173,12 @@
     });
   });
 
-  type Group = { name: string; category: StatusCategory; status: boolean; priority?: number; rows: Issue[] };
-  const groupOf = (i: Issue): { name: string; category: StatusCategory; status: boolean; priority?: number } => {
+  type Group = { name: string; category: StatusCategory; status: boolean; icon?: string | null; color?: string | null; priority?: number; rows: Issue[] };
+  const groupOf = (i: Issue): { name: string; category: StatusCategory; status: boolean; icon?: string | null; color?: string | null; priority?: number } => {
     const field = groupBy;
     if (field?.Fixed === 'Status') {
       const st = statuses.find((s) => s.id === i.status_id);
-      return { name: st?.name ?? 'Unknown', category: st?.category ?? 'Backlog', status: true };
+      return { name: st?.name ?? 'Unknown', category: st?.category ?? 'Backlog', status: true, icon: st?.icon, color: st?.color };
     }
     if (field?.Fixed === 'Points') return { name: pointsName(i.points), category: 'Backlog' as StatusCategory, status: false };
     if (field?.Fixed === 'Priority') return { name: priorityName(i.priority), category: 'Backlog' as StatusCategory, status: false, priority: i.priority };
@@ -174,7 +198,7 @@
       byName.set(g.name, hit);
     }
     if ((def as DisplayDef).show_empty_groups && groupBy?.Fixed === 'Status')
-      for (const st of statuses) if (!byName.has(st.name)) byName.set(st.name, { name: st.name, category: st.category, status: true, rows: [], order: st.position });
+      for (const st of statuses) if (!byName.has(st.name)) byName.set(st.name, { name: st.name, category: st.category, status: true, icon: st.icon, color: st.color, rows: [], order: st.position });
     return [...byName.values()].sort((a, b) => a.order - b.order);
   });
   function groupOrder(i: Issue): number {
@@ -360,6 +384,12 @@
   const removeColumn = (index: number) => void saveColumns(base.filter((_, i) => i !== index));
 
   function cycleSort(id: string) {
+    const col = id === 'fixed:Key' ? { ref: { Fixed: 'Key' as const } } : cols.find((c) => c.id === id);
+    if (onsort && col && sortable(col.ref)) {
+      sort = null;
+      onsort(col.ref);
+      return;
+    }
     sort = sort?.col !== id ? { col: id, dir: 'asc' } : sort.dir === 'asc' ? { col: id, dir: 'desc' } : null;
   }
 
@@ -411,11 +441,11 @@
       </colgroup>
       <thead>
         <tr>
-          <th scope="col" class="key-head">Key</th>
+          <th scope="col" class="key-head" aria-sort={activeSort?.col === 'fixed:Key' ? (activeSort.dir === 'asc' ? 'ascending' : 'descending') : undefined}><SortHeading field={{ Fixed: 'Key' }} label="Key" sort={activeSort?.col === 'fixed:Key' ? { field: { Fixed: 'Key' }, descending: activeSort.dir === 'desc' } : null} onclick={() => cycleSort('fixed:Key')} /></th>
           {#each cols as col (col.id)}
-            <th scope="col" data-col={col.id} data-sticky={col.id === 'fixed:Title' ? '' : undefined} class:num={col.kind === 'Number'} aria-sort={sort?.col === col.id ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+            <th scope="col" data-col={col.id} data-sticky={col.id === 'fixed:Title' ? '' : undefined} class:num={col.kind === 'Number'} aria-sort={activeSort?.col === col.id ? (activeSort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
               <span class="head">
-                <Button variant="quiet" icon={sort?.col === col.id ? (sort.dir === 'asc' ? 'chevron-up' : 'chevron-down') : undefined} onclick={() => cycleSort(col.id)}>{col.label}</Button>
+                <Button variant="quiet" icon={activeSort?.col === col.id ? (activeSort.dir === 'asc' ? 'chevron-up' : 'chevron-down') : undefined} onclick={() => cycleSort(col.id)}>{col.label}</Button>
                 <span class="tools">
                 <span class="flip"><IconButton icon="chevron-right" label="Move {col.label} left" onclick={() => moveColumn(col.index, -1)} /></span>
                 <IconButton icon="chevron-right" label="Move {col.label} right" onclick={() => moveColumn(col.index, 1)} />
@@ -438,7 +468,7 @@
           {#if grouped}
             <tr class="band-row">
               <td colspan={cols.length + 1}>
-                <GroupHeader name={g.name || 'None'} count={g.rows.length} total={pointsTotal(g.rows, cols.map((c) => c.ref), ctx)} category={g.status ? g.category : undefined} tone={g.priority ? (Math.min(4, Math.max(1, g.priority)) as 1 | 2 | 3 | 4) : 1} collapsed={collapsed.has(g.name)} ontoggle={() => toggleGroup(g.name)}>
+                <GroupHeader name={g.name || 'None'} count={g.rows.length} total={pointsTotal(g.rows, cols.map((c) => c.ref), ctx)} category={g.status ? g.category : undefined} icon={g.icon} color={g.color} tone={g.priority ? (Math.min(4, Math.max(1, g.priority)) as 1 | 2 | 3 | 4) : 1} collapsed={collapsed.has(g.name)} ontoggle={() => toggleGroup(g.name)}>
                   {#snippet leading()}{#if g.priority !== undefined}<PriorityGlyph level={priorityGlyph(g.priority)} />{/if}{/snippet}
                 </GroupHeader>
               </td>
@@ -446,7 +476,7 @@
           {/if}
           {#if !collapsed.has(g.name)}
             {#each g.rows as issue (issue.id)}
-              <tr data-key={issue.key} data-id={issue.id} aria-selected={rowSelected(issue)} data-focused={issue.id === activeRowId ? '' : undefined}>
+              <tr use:flash={{ id: issue.id, sig: `${issue.status_id}:${issue.priority}`, key: issue.key }} data-key={issue.key} data-id={issue.id} aria-selected={rowSelected(issue)} data-focused={issue.id === activeRowId ? '' : undefined}>
                 <th scope="row" class="key-cell">{issue.key}</th>
                 {#each cols as col, c (col.id)}
                   {@const isEditing = editing !== null && visibleIds[editing.row] === issue.id && editing.col === c}

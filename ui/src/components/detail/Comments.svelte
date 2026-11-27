@@ -2,10 +2,11 @@
   import { api } from '../../lib/api';
   import type { Comment, Issue } from '../../lib/bindings';
   import Button from '../../ui/Button.svelte';
+  import Collapse from '../../ui/Collapse.svelte';
   import SectionHeading from './SectionHeading.svelte';
   import TextArea from '../../ui/TextArea.svelte';
   import { humanDate } from './format';
-  import { renderMarkdown } from './markdown';
+  import { images, openLinks, renderMarkdown } from './markdown';
 
   let { issue, act, rev }: { issue: Issue; act: (p: Promise<unknown>) => void; rev: number } = $props();
   let comments = $state<Comment[]>([]);
@@ -28,20 +29,20 @@
 
 <section aria-label="Comments" bind:this={sec}>
   <SectionHeading name="Comments" count={comments.length} {collapsed} ontoggle={() => (collapsed = !collapsed)} />
-  {#if !collapsed}
+  <Collapse open={!collapsed}>
     {#each comments as c (c.id)}
       <article class="comment">
         <time datetime={c.created_at}>{humanDate(c.created_at.slice(0, 10))} {c.created_at.slice(11, 16)}</time>
-        <div class="md">{@html renderMarkdown(c.body)}</div>
+        <div class="md" use:openLinks use:images={c.body}>{@html renderMarkdown(c.body)}</div>
       </article>
     {:else}
       <p class="none">No comments yet</p>
     {/each}
     <div class="new">
-      <TextArea label="New comment" rows={3} placeholder="Leave a comment (markdown)" bind:value={draft} />
+      <TextArea label="New comment" images rows={3} placeholder="Leave a comment (markdown)" bind:value={draft} />
       <Button variant="primary" disabled={!draft.trim()} onclick={() => { act(api.comments.addComment(issue.id, draft)); draft = ''; }}>Comment</Button>
     </div>
-  {/if}
+  </Collapse>
 </section>
 
 <style>
@@ -50,4 +51,5 @@
   .md :global(p) { margin: var(--s-2) 0; }
   .none { padding: var(--s-4) var(--s-5); color: var(--muted); }
   .new { display: grid; justify-items: start; gap: var(--s-4); padding: var(--s-5); }
+  .md :global(img) { max-width: 100%; border-radius: var(--r-sm); cursor: zoom-in; }
 </style>

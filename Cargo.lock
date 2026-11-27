@@ -5174,6 +5174,7 @@ dependencies = [
  "serde",
  "serde_json",
  "taskapp-core",
+ "taskapp-export",
  "tempfile",
  "tokio",
 ]
@@ -5198,6 +5199,7 @@ dependencies = [
  "chrono-tz",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "specta",
  "sqlx",
  "tempfile",

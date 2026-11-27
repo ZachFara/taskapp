@@ -326,6 +326,7 @@ async fn update_merges_properties_and_validates_defined_keys() -> R {
         options: vec![],
         project_id: None,
         position: 0,
+        applies_to: taskapp_core::PropertyAppliesTo::Issues,
     };
     properties::create_def(&db, num, ChangeSource::Ui).await?;
     let i = issues::create(&db, new("a"), ChangeSource::Ui).await?;
@@ -404,5 +405,70 @@ async fn get_by_key_takes_only_the_forms_the_app_shows() -> R {
         let got = issues::get_by_key(&db, key).await;
         assert!(matches!(got, Err(Error::NotFound(_))), "{key}: {got:?}");
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn search_matches_the_start_of_any_word() -> R {
+    let db = Db::open_in_memory().await?;
+    issues::create(&db, new("Crash on save"), ChangeSource::Ui).await?;
+    assert_eq!(search::search(&db, "cras", 10).await?.len(), 1);
+    assert_eq!(search::search(&db, "sav", 10).await?.len(), 1);
+    assert_eq!(search::search(&db, "cra sav", 10).await?.len(), 1);
+    assert_eq!(search::search(&db, "rash", 10).await?.len(), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_new_issue_starts_in_the_chosen_status_or_else_the_first() -> R {
+    let db = Db::open_in_memory().await?;
+    let first = statuses::list(&db).await?[0].id;
+    let inbox = statuses::create(
+        &db,
+        "Inbox",
+        StatusCategory::Backlog,
+        "gray",
+        None,
+        ChangeSource::Ui,
+    )
+    .await?;
+    assert_eq!(
+        issues::create(&db, new("a"), ChangeSource::Ui)
+            .await?
+            .status_id,
+        first
+    );
+    taskapp_core::settings::set_from_user(&db, "default_status", &serde_json::json!(inbox.id.0))
+        .await?;
+    assert_eq!(
+        issues::create(&db, new("b"), ChangeSource::Ui)
+            .await?
+            .status_id,
+        inbox.id
+    );
+    // An explicit status still wins.
+    let given = NewIssue {
+        status_id: Some(first),
+        ..new("c")
+    };
+    assert_eq!(
+        issues::create(&db, given, ChangeSource::Ui)
+            .await?
+            .status_id,
+        first
+    );
+    // A deleted or unknown choice is refused, and a stale one falls back to the first status.
+    assert!(
+        taskapp_core::settings::set_from_user(&db, "default_status", &serde_json::json!(999))
+            .await
+            .is_err()
+    );
+    taskapp_core::settings::set(&db, "default_status", &999).await?;
+    assert_eq!(
+        issues::create(&db, new("d"), ChangeSource::Ui)
+            .await?
+            .status_id,
+        first
+    );
     Ok(())
 }

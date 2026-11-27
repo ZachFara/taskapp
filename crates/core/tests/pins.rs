@@ -306,3 +306,16 @@ async fn a_pin_records_the_source_that_made_it() -> R {
     assert_eq!(log[0].source, taskapp_core::ChangeSource::Agent);
     Ok(())
 }
+
+#[tokio::test]
+async fn a_folder_pin_resolves_by_name_and_goes_with_its_folder() -> R {
+    use taskapp_core::{ChangeSource, FolderSection, view_folders};
+    let db = Db::open_in_memory().await?;
+    let f = view_folders::create(&db, FolderSection::View, None, "Work", ChangeSource::Ui).await?;
+    let pin = pins::pin(&db, PinKind::Folder, &f.id.0.to_string(), None).await?;
+    let list = pins::list_resolved(&db).await?;
+    assert_eq!((list[0].pin.id, list[0].label.as_str()), (pin.id, "Work"));
+    view_folders::delete(&db, f.id, ChangeSource::Ui).await?;
+    assert_eq!(pins::list_resolved(&db).await?.len(), 0);
+    Ok(())
+}

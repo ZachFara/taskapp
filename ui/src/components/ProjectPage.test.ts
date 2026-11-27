@@ -35,6 +35,23 @@ afterEach(() => {
 });
 
 describe('ProjectPage', () => {
+  it('keeps_a_heading_sort_in_the_project_toolbar_and_other_layouts', async () => {
+    const mock = createMockApi(seed());
+    await mock.issues.create({ title: 'Alpha project sort', project_id: 1 });
+    await mock.issues.create({ title: 'Zebra project sort', project_id: 1 });
+    const target = await open('/project/website', mock);
+    await vi.waitFor(() => expect(target.textContent).toContain('Zebra project sort'));
+    target.querySelector<HTMLButtonElement>('button[aria-label="Sort by Title"]')!.click();
+    await vi.waitFor(() => expect(target.querySelector('[data-testid="issues-toolbar"]')?.textContent).toContain('Sort: Title'));
+    target.querySelector<HTMLButtonElement>('button[aria-label="Sort by Title"]')!.click();
+    await vi.waitFor(() => expect(target.querySelector('button[aria-label="Sort by Title"]')?.textContent).toContain('↓'));
+    target.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Table"]')!.click();
+    await vi.waitFor(() => {
+      const rows = [...target.querySelectorAll<HTMLElement>('tr[data-key]')].map((r) => r.textContent ?? '');
+      expect(rows.findIndex((r) => r.includes('Zebra project sort'))).toBeLessThan(rows.findIndex((r) => r.includes('Alpha project sort')));
+    });
+  });
+
   it('doc_link_button_shown_only_when_set', async () => {
     const without = await open('/project/website');
     expect(without.querySelector('[data-testid="open-obsidian"]')).toBeNull();
@@ -67,6 +84,16 @@ describe('ProjectPage', () => {
     const target = await open('/project/website', seed([{ description: 'Ship the rewrite' }]));
     expect(target.querySelector('[data-testid="description"]')?.textContent).toContain('Ship the rewrite');
     expect(target.textContent).not.toContain('Add description');
+  });
+
+  it('description_click_opens_editor_but_a_link_does_not', async () => {
+    const target = await open('/project/website', seed([{ description: 'Ship the [rewrite](https://example.com) soon' }]));
+    const desc = target.querySelector<HTMLElement>('[data-testid="description"]')!;
+    desc.querySelector('a')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await tick();
+    expect(target.querySelector('textarea')).toBeNull();
+    desc.click();
+    await vi.waitFor(() => expect(target.querySelector('textarea')?.value).toContain('Ship the [rewrite]'));
   });
 
   it('project_issues_filtered_to_project', async () => {
@@ -206,5 +233,28 @@ describe('ProjectPage', () => {
     const ok = [...document.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === 'Archive')!;
     ok.click();
     await vi.waitFor(async () => expect((await api.projects.list())[0].archived_at).not.toBeNull());
+  });
+});
+
+describe('ProjectPage details', () => {
+  it('shows status, priority and labels, and a priority edit is one update', async () => {
+    const mock = createMockApi(seed());
+    const update = vi.spyOn(mock.projects, 'update');
+    const target = await open('/project/website', mock);
+    expect(target.querySelector('section[aria-label="Project details"]')?.textContent).toContain('Planned');
+    target.querySelector<HTMLButtonElement>('section[aria-label="Project details"] button[aria-label="Priority"]')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[role="option"]')).not.toBeNull());
+    [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((o) => o.textContent?.includes('High'))!.click();
+    await vi.waitFor(() => expect(update).toHaveBeenCalledOnce());
+    expect(update.mock.calls[0][0].priority).toBe(2);
+  });
+
+  it('lists custom properties that apply to projects, not issue-only ones', async () => {
+    const mock = createMockApi(seed());
+    await mock.properties.createDef({ key: 'sponsor', name: 'Sponsor', kind: 'Text', options: [], project_id: null, position: 0, applies_to: 'Projects' });
+    const target = await open('/project/website', mock);
+    const plate = target.querySelector('section[aria-label="Project details"]')!;
+    await vi.waitFor(() => expect(plate.querySelector('button[aria-label="Sponsor"]')).not.toBeNull());
+    expect(plate.querySelector('button[aria-label="Effort"]')).toBeNull();
   });
 });

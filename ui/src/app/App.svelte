@@ -1,19 +1,24 @@
 <script lang="ts">
-  import { onMount, setContext, untrack } from 'svelte';
+  import { onMount, setContext, tick, untrack } from 'svelte';
   import { matchRoute, navigate } from './routes';
   import { api } from '../lib/api';
   import { attachKeys, type Ctx, type Layout } from '../lib/commands';
   import { selection } from '../lib/selection.svelte';
-  import { issues, projects, selectedIssueId, views } from '../lib/stores.svelte';
+  import { issues, projects, refreshAll, selectedIssueId, views } from '../lib/stores.svelte';
+  import { viewContext } from '../lib/viewContext.svelte';
+  import { defaultsFromFilter, mergeIssueDefaults, type IssueDefaults } from '../components/filters/defaults';
   import { initTheme } from '../lib/theme.svelte';
   import CheatSheet from '../components/CheatSheet.svelte';
   import CommandPalette from '../components/CommandPalette.svelte';
   import IssueDetail from '../components/IssueDetail.svelte';
   import QuickAdd from '../components/QuickAdd.svelte';
+  import RestoreDialog from '../components/RestoreDialog.svelte';
   import Setup from '../components/Setup.svelte';
   import Shell from '../components/Shell.svelte';
   import Sidebar from '../components/Sidebar.svelte';
+  import ImageViewer from '../components/ImageViewer.svelte';
   import UndoToast from '../components/UndoToast.svelte';
+  import { fresh } from '../lib/motion.svelte';
   import { dismiss, onWrote, undoToast } from '../components/undoState.svelte';
 
   let path = $state(location.pathname);
@@ -23,16 +28,20 @@
   // 'loading' draws nothing, so a set-up workspace never flashes the setup screen.
   let setup = $state<'loading' | 'needed' | 'done'>('loading');
   let overlay = $state<'palette' | 'quickadd' | null>(null);
+  let quickAddDefaults = $state<IssueDefaults | null>(null);
   let refreshed = $state(0); // bumps when a command wrote, so the open view loads its rows again
   let palettePage = $state<string | undefined>();
+  let paletteIssues = $state(false);
+  let restoreOpen = $state(false);
   let cheat = $state(false); // CheatSheet opens itself on help.shortcuts; this only lets the root close it
+  let createdIssue = $state<{ id: number; key: string } | null>(null);
 
   // Rows from every view select through `selectedIssueId`; the peek key goes through the selection store.
   const panelId = $derived(selectedIssueId.value ?? selection.peeked);
   // An id missing from the store (deleted, or outside the current view) falls through to the panel's not-found message.
   const pageKey = $derived(path.startsWith('/issue/') ? decodeURIComponent(path.split('/')[2] ?? '') : null);
   const pageIssueId = $derived(pageKey === null ? null : (issues.find((i) => i.key === pageKey)?.id ?? null));
-  const panelKey = $derived(panelId === null ? null : (issues.find((i) => i.id === panelId)?.key ?? `#${panelId}`));
+  const panelKey = $derived(panelId === null ? null : (issues.find((i) => i.id === panelId)?.key ?? (createdIssue?.id === panelId ? createdIssue.key : `#${panelId}`)));
 
   // What commands see; getters keep it live, so the key engine never holds a stale copy.
   const ctx: Ctx = {
@@ -63,14 +72,15 @@
     if (f !== null && untrack(() => selectedIssueId.value) !== null) selectedIssueId.value = f;
   });
 
-  const LABELS: Record<string, string> = { my: 'My issues', inbox: 'Inbox', pinned: 'Pinned', cycles: 'Cycles', projects: 'Projects', views: 'Views', settings: 'Settings', design: 'Design' };
+  const LABELS: Record<string, string> = { my: 'My issues', inbox: 'Inbox', pinned: 'Pinned', cycles: 'Cycles', events: 'Events', event: 'Events', projects: 'Projects', views: 'Views', settings: 'Settings', design: 'Design' };
   const crumb = $derived.by(() => {
     const [a, b] = path.split('/').slice(1);
     if (!a) return ['Pinned'];
     if (a === 'view') return ['Views', views.find((v) => String(v.id) === b)?.name ?? b];
     if (a === 'project') return ['Projects', projects.find((p) => p.slug === b)?.name ?? b];
     if (a === 'issue') return ['Issues', b];
-    return [LABELS[a] ?? a, ...(b ? [b[0].toUpperCase() + b.slice(1)] : [])];
+    if (a === 'event') return ['Events']; // the page heading names it
+    return [LABELS[a] ?? a, ...(b ? [b[0].toUpperCase() + b.slice(1).replace(/-/g, ' ')] : [])];
   });
 
   onMount(() => {
@@ -84,22 +94,58 @@
 
   $effect(() => (setup === 'done' ? attachKeys(() => ctx) : undefined));
 
+  async function openQuickAdd(extra: IssueDefaults | null = null) {
+    let fromView: IssueDefaults | null = null;
+    if (viewContext.inView) {
+      const filter = viewContext.filter;
+      const route = path;
+      try {
+        const [statuses, projects, propertyDefs, defaultStatus] = await Promise.all([
+          api.statuses.list(), api.projects.list(), api.properties.listDefs(), api.settings.get('default_status'),
+        ]);
+        if (route !== path || filter !== viewContext.filter) return;
+        fromView = defaultsFromFilter(filter, {
+          statuses, projects, propertyDefs, defaultStatusId: typeof defaultStatus === 'number' ? defaultStatus : null,
+        });
+      } catch {
+        undoToast.value = { label: 'Could not load view defaults', tone: 'error' };
+        return;
+      }
+    }
+    const merged = mergeIssueDefaults(fromView, extra);
+    quickAddDefaults = Object.keys(merged).length ? merged : null;
+    overlay = 'quickadd';
+  }
+
   // Registry commands that open a root surface announce themselves as window events.
   $effect(() => {
     const on: [string, (e: Event) => void][] = [
-      ['command:palette.open', (e) => ((palettePage = (e as CustomEvent<{ page?: string } | null>).detail?.page), (overlay = 'palette'))],
-      ['command:nav.search', () => ((palettePage = undefined), (overlay = 'palette'))],
-      ['command:issue.create', () => (overlay = 'quickadd')],
-      ['command:view.refresh', () => refreshed++],
+      ['command:palette.open', (e) => ((palettePage = (e as CustomEvent<{ page?: string } | null>).detail?.page), (paletteIssues = false), (overlay = 'palette'))],
+      ['command:nav.search', () => ((palettePage = undefined), (paletteIssues = true), (overlay = 'palette'))],
+      ['command:issue.create', (e) => openQuickAdd((e as CustomEvent<{ defaults?: IssueDefaults } | null>).detail?.defaults ?? null)],
+      ['command:view.refresh', () => {
+        if (path.startsWith('/view/')) dispatchEvent(new Event('rows:changed'));
+        else if (path === '/my') {
+          dispatchEvent(new Event('rows:changed'));
+          void refreshAll({ filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false });
+        }
+        else refreshed++;
+      }],
+      ['command:settings.restore', () => (restoreOpen = true)],
     ];
     on.forEach(([n, f]) => addEventListener(n, f));
     return () => on.forEach(([n, f]) => removeEventListener(n, f));
   });
 
+  // The panel keeps showing the issue it had while it slides out.
+  let shownKey = $state<string | null>(null);
+  $effect(() => { if (panelKey !== null) shownKey = panelKey; });
+
   // Moving to another page leaves the panel behind.
   $effect(() => {
     path;
     selectedIssueId.value = null;
+    createdIssue = null;
     dismiss(); // a message about the page left behind
   });
 
@@ -115,9 +161,33 @@
       }
     });
 
-  async function created({ issue }: { issue: { key: string } }) {
+  // The data under every store changed: load it again, show the start page, and say what happened.
+  async function restored(folder: string) {
+    restoreOpen = false;
+    await refreshAll();
+    refreshed++;
+    navigate('/');
+    await tick(); // moving pages clears the toast, so say it after
+    undoToast.value = { label: `Restored from ${folder}`, tone: 'success' };
+  }
+
+  async function created({ issue, mode }: { issue: { id?: number; key: string }; mode?: 'close' | 'open' | 'keep' }) {
     const key = issue.key;
-    overlay = null;
+    fresh.key = key; // its row flashes once when it appears
+    if (mode !== 'keep') overlay = null;
+    const inView = viewContext.inView;
+    const activeDef = viewContext.viewDef;
+    if (mode !== 'open') {
+      if (typeof issue.id === 'number') createdIssue = { id: issue.id, key };
+      await refreshAll(activeDef ?? undefined).catch(() => {});
+      if (inView) {
+        dispatchEvent(new Event('rows:changed'));
+        if (mode !== 'keep' && typeof issue.id === 'number') {
+          selection.focus(issue.id);
+          selectedIssueId.value = issue.id;
+        }
+      }
+    }
     // The write's own toast names the backend's step; wait for it, then say what was made.
     await onWrote();
     if (key) undoToast.value = { label: `Created ${key}`, tone: 'success', action: { run: 'undo', text: 'Undo' } };
@@ -129,11 +199,11 @@
 {#if setup === 'needed'}
   <Setup ondone={() => (setup = 'done')} />
 {:else if setup === 'done'}
-  <Shell {crumb} panelOpen={panelKey !== null} onsearch={() => ((palettePage = undefined), (overlay = 'palette'))}>
+  <Shell {crumb} route={path} panelOpen={panelKey !== null} onsearch={() => ((palettePage = undefined), (paletteIssues = false), (overlay = 'palette'))}>
     {#snippet sidebar()}<Sidebar route={path} />{/snippet}
     {#snippet panel()}
-      {#if panelKey !== null}
-        {#key panelKey}<IssueDetail params={{ key: panelKey }} mode="panel" onclose={closePanel} onopen={(k) => navigate(`/issue/${k}`)} />{/key}
+      {#if shownKey !== null}
+        {#key shownKey}<IssueDetail params={{ key: shownKey }} mode="panel" onclose={closePanel} onopen={(k) => navigate(`/issue/${k}`)} />{/key}
       {/if}
     {/snippet}
     {#if Page}
@@ -143,13 +213,16 @@
     {/if}
   </Shell>
 
+  <RestoreDialog bind:open={restoreOpen} onrestored={restored} />
+
   {#if overlay === 'palette'}
-    <CommandPalette page={palettePage} onclose={() => (overlay = null)} oncreate={() => (overlay = 'quickadd')} />
+    <CommandPalette page={palettePage} issues={paletteIssues} onclose={() => overlay === 'palette' && (overlay = null)} oncreate={() => openQuickAdd()} />
   {:else if overlay === 'quickadd'}
-    <QuickAdd onclose={() => (overlay = null)} oncreated={created} />
+    <QuickAdd defaults={quickAddDefaults} onclose={() => (overlay = null)} oncreated={created} />
   {/if}
   <CheatSheet bind:open={cheat} />
   <div class="toasts"><UndoToast /></div>
+  <ImageViewer />
 {/if}
 
 <style>

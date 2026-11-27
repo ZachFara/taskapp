@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { fieldOn } from '../../lib/fields.svelte';
+  import { untrack } from 'svelte';
   import { api } from '../../lib/api';
   import type { Issue, IssuePatch, SavedView, StatusCategory } from '../../lib/bindings';
   import { selection } from '../../lib/selection.svelte';
@@ -15,6 +16,8 @@
   import { BOARD_DEFAULT, density, emptyCtx, loadCtx, pointsName, pointsTotal, shown, type Ctx } from '../display/types';
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
   import { priorityGlyph } from '../detail/format';
+  import { onRowsChanged } from './onRowsChanged';
+  import type { IssueDefaults } from '../filters/defaults';
 
   let { view }: { view: SavedView } = $props();
 
@@ -24,6 +27,7 @@
     category: StatusCategory;
     holds: (i: Issue) => boolean;
     patch: (i: Issue) => IssuePatch;
+    defaults: IssueDefaults;
   };
 
   const groupBy = $derived(view.def.group_by?.Fixed === 'Points' && !ctx.points ? null : view.def.group_by);
@@ -45,22 +49,24 @@
         category: 'Unstarted',
         holds: (i) => bucket(i) === value,
         patch: (i) => ({ properties: { ...i.properties, [def.key]: value } }),
+        defaults: { properties: { [def.key]: value } },
       }));
       cols.push({
         name: 'None',
         category: 'Unstarted',
         holds: (i) => bucket(i) === null,
         patch: (i) => ({ properties: { ...i.properties, [def.key]: null } }),
+        defaults: { properties: { [def.key]: null } },
       });
       return cols;
     }
     if (groupBy?.Fixed === 'Points') {
       const values = [...new Set(issues.map((i) => i.points))].sort((a, b) => (a ?? Infinity) - (b ?? Infinity));
-      return values.map((v) => ({ name: pointsName(v), category: 'Unstarted', holds: (i) => i.points === v, patch: () => ({ points: v }) }));
+      return values.map((v) => ({ name: pointsName(v), category: 'Unstarted', holds: (i) => i.points === v, patch: () => ({ points: v }), defaults: { points: v } }));
     }
     return [...statuses]
       .sort((a, b) => a.position - b.position)
-      .map((s) => ({ name: s.name, category: s.category, holds: (i) => i.status_id === s.id, patch: () => ({ status_id: s.id }) }));
+      .map((s) => ({ name: s.name, category: s.category, icon: s.icon, color: s.color, holds: (i) => i.status_id === s.id, patch: () => ({ status_id: s.id }), defaults: { status_id: s.id } }));
   });
 
   // Per-viewer layout memory. Storage can be blocked (private window), so every access is guarded.
@@ -101,14 +107,22 @@
   let loaded = $state(false);
   let error: string | null = $state(null);
   let ctx = $state.raw<Ctx>(emptyCtx);
+  let queryVersion = 0;
   // Key and priority are always on the card; the rest follow the view.
   const fields = $derived(shown(view.def, BOARD_DEFAULT, true).filter((f) => f.Fixed !== 'Key' && f.Fixed !== 'Priority' && (ctx.points || f.Fixed !== 'Points')));
 
   async function reload() {
-    issues = await api.views.query($state.snapshot(view.def));
+    const mine = ++queryVersion;
+    const rows = await api.views.query($state.snapshot(view.def));
+    if (mine !== queryVersion) return;
+    issues = rows;
     loaded = true;
   }
-  onMount(reload);
+  $effect(() => {
+    view.def;
+    untrack(reload);
+  });
+  onRowsChanged(() => void reload());
   $effect(() => {
     const d = $state.snapshot(view.def);
     loadCtx(d).then((c) => (ctx = c));
@@ -207,9 +221,11 @@
         count={cards.length}
         total={pointsTotal(cards, fields, ctx)}
         category={col.category}
+        icon={col.icon}
+        color={col.color}
         {collapsed}
         ontoggle={() => toggleCollapsed(col)}
-        onadd={() => dispatchEvent(new CustomEvent('command:issue.create'))}
+        onadd={() => dispatchEvent(new CustomEvent('command:issue.create', { detail: { defaults: col.defaults } }))}
       />
       {#if !collapsed}
         {#if cards.length}
@@ -234,7 +250,7 @@
               >
                 <span class="top">
                   <span class="key">{i.key}</span>
-                  <PriorityGlyph level={priorityGlyph(i.priority)} size={14} />
+                  {#if fieldOn('priority')}<PriorityGlyph level={priorityGlyph(i.priority)} size={14} />{/if}
                 </span>
                 <span class="title">{i.title}</span>
                 <span class="foot">

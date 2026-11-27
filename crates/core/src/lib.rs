@@ -1,15 +1,18 @@
 //! Core: SQLite database and every domain operation.
 //! One plain async function per UI command.
 
+mod command_registry;
 mod db;
 mod error;
 mod model;
 
+pub mod attachments;
 pub mod backup;
 pub mod blocks;
 pub mod bulk;
 pub mod comments;
 pub mod cycles;
+pub mod events;
 pub mod history;
 pub mod import;
 pub mod insights;
@@ -17,9 +20,11 @@ pub mod issues;
 pub mod labels;
 pub mod palette;
 pub mod pins;
+pub mod project_statuses;
 pub mod projects;
 pub mod properties;
 pub mod quickadd;
+pub mod relation_kinds;
 pub mod relations;
 pub mod rows;
 pub mod schedule;
@@ -28,6 +33,7 @@ pub mod settings;
 pub mod statuses;
 pub mod templates;
 pub mod undo;
+pub mod view_folders;
 pub mod view_templates;
 pub mod views;
 pub mod workspace;

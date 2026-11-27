@@ -136,10 +136,12 @@ pub async fn delete(db: &Db, id: LabelId, src: ChangeSource) -> Result<()> {
         };
         history::record(&mut tx, src, "issue", &issue_id.to_string(), &edit).await?;
     }
+    let on_projects = rows::snap(&mut tx, "project_labels", "label_id = ?", lid).await?;
     let before = rows::by_key(&mut tx, "labels", lid).await?;
     sqlx::query!("DELETE FROM labels WHERE id = ?", lid)
         .execute(&mut *tx)
         .await?;
+    rows::changed(&mut tx, src, on_projects).await?;
     rows::changed(&mut tx, src, before).await?;
     let deleted = json!(name);
     let edit = Edit {

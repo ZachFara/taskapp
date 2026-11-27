@@ -98,6 +98,12 @@ const columnNames = (root: Element) =>
   [...root.querySelectorAll('[data-column]')].map((c) => c.getAttribute('data-column'));
 
 describe('BoardView', () => {
+  it('updates_after_an_issue_is_created_outside_the_board', async () => {
+    const root = await render(seed());
+    const made = await api.issues.create({ title: 'New card', status_id: 1 });
+    await vi.waitFor(() => expect(card(root, made.key)?.textContent).toContain('New card'));
+  });
+
   it('shows_only_the_filtered_issues_and_hides_excluded_columns', async () => {
     const view: SavedView = {
       ...boardView(),
@@ -224,5 +230,20 @@ describe('BoardView', () => {
     flushSync();
     expect(columnNames(root)).not.toContain('Doing');
     expect(columnNames(root)).toContain('Todo');
+  });
+
+  it('column_add_button_passes_column_defaults_to_issue_create', async () => {
+    const root = await render(seed());
+    let detail: unknown = null;
+    const onCreate = (e: Event) => {
+      detail = (e as CustomEvent).detail;
+    };
+    addEventListener('command:issue.create', onCreate);
+    try {
+      column(root, 'Doing').querySelector<HTMLButtonElement>('button[aria-label="Add to Doing"]')!.click();
+      expect(detail).toEqual({ defaults: { status_id: 2 } });
+    } finally {
+      removeEventListener('command:issue.create', onCreate);
+    }
   });
 });

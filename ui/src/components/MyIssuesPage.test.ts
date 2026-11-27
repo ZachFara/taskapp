@@ -13,6 +13,18 @@ afterEach(() => {
 });
 
 describe('MyIssuesPage', () => {
+  it('updates_when_an_open_issue_is_created', async () => {
+    const mock = createMockApi(fixtures);
+    setApi(mock);
+    const status = (await mock.statuses.list()).find((x) => x.category === 'Started')!;
+    const target = document.createElement('div');
+    document.body.append(target);
+    live = mount(MyIssuesPage, { target });
+    await vi.waitFor(() => expect(target.querySelectorAll('.band .name').length).toBeGreaterThan(0));
+    await mock.issues.create({ title: 'New open issue', status_id: status.id });
+    await vi.waitFor(() => expect(target.textContent).toContain('New open issue'));
+  });
+
   it('my_issues_hides_done_and_canceled_groups', async () => {
     const mock = createMockApi(fixtures);
     setApi(mock);

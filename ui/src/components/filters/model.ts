@@ -16,7 +16,8 @@ export const opsFor = (kind: PropertyKind) => operators[kind];
 const fixedKinds: Record<FixedField, PropertyKind> = {
   Title: 'Text', Status: 'Select', StatusCategory: 'Select', Priority: 'Number', Project: 'Select',
   Milestone: 'Number', Cycle: 'Select', Label: 'MultiSelect', Parent: 'Number', StartDate: 'Date',
-  DueDate: 'Date', Estimate: 'Number', Points: 'Number', CreatedAt: 'Date', UpdatedAt: 'Date', CompletedAt: 'Date', Archived: 'Checkbox',
+  DueDate: 'Date', Estimate: 'Number', Points: 'Number', CreatedAt: 'Date', UpdatedAt: 'Date', CompletedAt: 'Date', Archived: 'Checkbox', RelationKind: 'Select',
+  ProjectStatus: 'Select', TargetDate: 'Date', Progress: 'Number', IssueCount: 'Number',
 };
 export const fixedKind = (f: FixedField) => fixedKinds[f];
 

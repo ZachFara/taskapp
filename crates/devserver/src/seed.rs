@@ -5,8 +5,8 @@ use serde_json::{Map, Value, json};
 use taskapp_core::{
     ChangeSource::Ui, Db, Due, Error, IssueId, LabelId, MilestoneId, NewIssue, ProjectId,
     PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, StatusId,
-    TemplateInput, ViewDef, ViewId, cycles, history, issues, labels, palette::Look, projects,
-    properties, relations, templates, views, workspace,
+    TemplateInput, ViewDef, ViewEntity, ViewId, cycles, history, issues, labels, palette::Look,
+    projects, properties, relations, templates, views, workspace,
 };
 
 fn def(
@@ -29,6 +29,7 @@ fn def(
             .collect(),
         project_id: None,
         position,
+        applies_to: taskapp_core::PropertyAppliesTo::Issues,
     }
 }
 
@@ -378,7 +379,7 @@ static ROWS: [Row; 24] = [
 ];
 
 /// Fills an empty database with a believable workspace: three projects, six labels, two cycles, two milestones,
-/// two issue templates, three view templates, four views, three properties, 24 issues. Statuses and the first three views come from the migration.
+/// two issue templates, three view templates, six views, three properties, 24 issues. Statuses and the first three views come from the migration.
 ///
 /// # Errors
 /// Fails when a core call fails, for example on a database that already holds these rows.
@@ -389,9 +390,9 @@ pub async fn run(db: &Db) -> Result<()> {
         issue(db, today, row, k).await?;
     }
     for (from, to, kind) in [
-        (4, 6, RelationKind::Blocks),
-        (16, 18, RelationKind::Blocks),
-        (10, 11, RelationKind::Related),
+        (4, 6, RelationKind::new("blocks")),
+        (16, 18, RelationKind::new("blocks")),
+        (10, 11, RelationKind::new("related")),
     ] {
         let (from, to) = (IssueId(from), IssueId(to));
         relations::add(db, Relation { from, to, kind }, Ui).await?;
@@ -441,6 +442,26 @@ fn at(today: NaiveDate, days: i64) -> NaiveDate {
     .unwrap_or(today)
 }
 
+/// Two projects are under way with dates, so project views have something to lay out; the website one has none.
+async fn date_projects(db: &Db) -> Result<()> {
+    let today = Utc::now().date_naive();
+    for (slug, status, priority, (from, to)) in
+        [("office", 2, 2, (-14, 30)), ("mobile", 2, 3, (-3, 45))]
+    {
+        let mut p = projects::list(db)
+            .await?
+            .into_iter()
+            .find(|p| p.slug == slug)
+            .ok_or_else(|| Error::NotFound(slug.into()))?;
+        p.status_id = taskapp_core::ProjectStatusId(status);
+        p.priority = priority;
+        p.start_date = Some(at(today, from));
+        p.target_date = Some(at(today, to));
+        projects::update(db, p, Ui).await?;
+    }
+    Ok(())
+}
+
 async fn reference_data(db: &Db) -> Result<()> {
     for (slug, name) in [
         ("website", "Website relaunch"),
@@ -449,6 +470,7 @@ async fn reference_data(db: &Db) -> Result<()> {
     ] {
         projects::create(db, slug, name, None, None, Ui).await?;
     }
+    date_projects(db).await?;
     for (name, color, icon) in [
         ("Bug", "red", "flag"),
         ("Feature", "blue", "bolt"),
@@ -569,6 +591,26 @@ async fn seed_views(db: &Db, today: NaiveDate) -> Result<()> {
             color: None,
         };
         views::save(db, id.map(ViewId), name, d, look, Ui).await?;
+    }
+    // Two project views: a status board and a timeline of what is not finished.
+    let live = json!({"Cond": {"field": {"Fixed": "StatusCategory"}, "op": "NotIn", "value": ["completed", "cancelled"]}});
+    for (name, d, icon) in [
+        (
+            "Project board",
+            def(Value::Null, json!({"Fixed": "Status"}), "Board")?,
+            "board",
+        ),
+        (
+            "Project timeline",
+            def(live, Value::Null, "Gantt")?,
+            "timeline",
+        ),
+    ] {
+        let look = Look {
+            icon: Some(format!("icon:{icon}")),
+            color: None,
+        };
+        views::save_as(db, None, (name, ViewEntity::Project), d, look, Ui).await?;
     }
     Ok(())
 }

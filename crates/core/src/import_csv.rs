@@ -194,6 +194,7 @@ fn infer(name: &str, values: &[&str]) -> PropertyDef {
         options,
         project_id: None,
         position: 0,
+        applies_to: crate::PropertyAppliesTo::Issues,
     }
 }
 

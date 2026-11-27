@@ -3,7 +3,8 @@
   // density and layout options. Every change is reported as a partial ViewDef.
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
-  import type { FieldRef, PropertyDef, ViewDef } from '../../lib/bindings';
+  import type { FieldRef, PropertyDef, ViewDef, ViewEntity } from '../../lib/bindings';
+  import { PROJECT_BUILT_IN, PROJECT_DEFAULT } from '../../lib/projectViews';
   import { fieldKey } from '../filters/lookup';
   import Button from '../../ui/Button.svelte';
   import Icon from '../../ui/Icon.svelte';
@@ -11,27 +12,32 @@
   import Select from '../../ui/Select.svelte';
   import Switch from '../../ui/Switch.svelte';
   import TextInput from '../../ui/TextInput.svelte';
-  import { pointsOn, readEstimation } from '../insights/estimation';
-  import { BUILT_IN, KIND_ICON, defaultFor, density, sameField, showEmptyGroups, showWeekends, shown, subIssues, type DisplayDef, type SubIssues } from './types';
+  import { fixedOn } from '../../lib/fields.svelte';
+  import { BUILT_IN, KIND_ICON, defaultFor, density, sameField, showEmptyGroups, showWeekends, shown, stored, subIssues, type DisplayDef, type SubIssues } from './types';
 
-  let { def, onchange }: { def: ViewDef; onchange: (patch: Partial<DisplayDef>) => void } = $props();
+  let { def, onchange, entity = 'issue' }: { def: ViewDef; onchange: (patch: Partial<DisplayDef>) => void; entity?: ViewEntity } = $props();
+  const project = $derived(entity === 'project');
+  // The issue-field switches in Settings do not apply to projects.
+  const on_ = (f: FieldRef['Fixed']) => project || fixedOn(f);
 
   type Entry = { field: FieldRef; name: string; kind?: PropertyDef['kind'] };
   let defs = $state<PropertyDef[]>([]);
   let query = $state('');
   let dragFrom = $state<string | null>(null);
   let focused = $state<string | null>(null);
-  let pointsShown = $state(true);
   onMount(async () => {
-    defs = await api.properties.listDefs();
-    pointsShown = pointsOn((await readEstimation()).estimation);
+    defs = (await api.properties.listDefs()).filter((d) => (project ? d.applies_to !== 'Issues' : d.applies_to !== 'Projects'));
   });
 
   // The board draws its cards from card_fields when set; every other layout from columns.
   const card = $derived(def.layout === 'Board');
-  const edit = (list: FieldRef[]): Partial<DisplayDef> => (card ? { card_fields: list } : { columns: list });
-  const universe = $derived<Entry[]>([...BUILT_IN.filter((b) => pointsShown || b.field.Fixed !== 'Points'), ...defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name, kind: p.kind }))]);
-  const on = $derived(shown(def, defaultFor(def.layout), card));
+  // A field switched off in Settings is not shown but stays in the saved list, so it is back when the field is on again.
+  const edit = (list: FieldRef[], reset = false): Partial<DisplayDef> => {
+    const kept = reset ? list : [...list, ...stored(def, card).filter((f) => !on_(f.Fixed))];
+    return card ? { card_fields: kept } : { columns: kept };
+  };
+  const universe = $derived<Entry[]>([...(project ? PROJECT_BUILT_IN : BUILT_IN).filter((b) => on_(b.field.Fixed)), ...defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name, kind: p.kind }))]);
+  const on = $derived(project ? (stored(def, card).length ? stored(def, card) : PROJECT_DEFAULT[def.layout]) : shown(def, defaultFor(def.layout), card));
   const match = (e: Entry) => e.name && e.name.toLowerCase().includes(query.trim().toLowerCase());
   const entryOf = (f: FieldRef) => universe.find((u) => sameField(u.field, f));
   const byName = (a: Entry, b: Entry) => a.name.localeCompare(b.name);
@@ -73,7 +79,7 @@
     };
   });
   const L = $derived(def.layout);
-  const dated = $derived(L === 'Gantt' || L === 'Calendar');
+  const dated = $derived(!project && (L === 'Gantt' || L === 'Calendar'));
   const grouped = $derived(L === 'List' || L === 'Table');
 </script>
 
@@ -112,7 +118,7 @@
       <p class="none">No field matches "{query}".</p>
     {/each}
   </div>
-  <Button icon="undo" onclick={() => onchange(edit([]))}>Reset to default</Button>
+  <Button icon="undo" onclick={() => onchange(edit([], true))}>Reset to default</Button>
   <div class="opts">
     {#if L !== 'Gantt' && L !== 'Calendar'}
       <div class="opt"><span>Compact rows</span><Switch label="Compact rows" bind:checked={() => density(def) === 'compact', (v) => onchange({ density: v ? 'compact' : 'comfortable' })} /></div>
@@ -121,7 +127,7 @@
       <div class="opt"><span>Show empty groups</span><Switch label="Show empty groups" bind:checked={() => showEmptyGroups(def), (v) => onchange({ show_empty_groups: v })} /></div>
     {/if}
     <div class="opt"><span>Show archived</span><Switch label="Show archived" bind:checked={() => def.include_archived, (v) => onchange({ include_archived: v })} /></div>
-    {#if L === 'List'}
+    {#if L === 'List' && !project}
       <div class="opt"><span>Sub-issues</span><Select label="Sub-issues" items={[{ value: 'nest', label: 'Nested' }, { value: 'flat', label: 'Flat' }, { value: 'hide', label: 'Hidden' }]} bind:value={() => subIssues(def), (v) => onchange({ show_sub_issues: v as SubIssues })} /></div>
     {/if}
     {#if dated}<div class="opt"><span>Show weekends</span><Switch label="Show weekends" bind:checked={() => showWeekends(def), (v) => onchange({ show_weekends: v })} /></div>{/if}

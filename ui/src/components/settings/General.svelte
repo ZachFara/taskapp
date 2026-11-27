@@ -5,7 +5,9 @@
   import Button from '../../ui/Button.svelte';
   import Select from '../../ui/Select.svelte';
   import TextInput from '../../ui/TextInput.svelte';
-  import { setTheme, theme } from '../../lib/theme.svelte';
+  import { SKINS, setSkin, setTheme, theme } from '../../lib/theme.svelte';
+  import { interfaceSize, setInterfaceSize, SIZES } from '../../lib/interfaceSize.svelte';
+  import { motion, setSpeed, type Speed } from '../../lib/motion.svelte';
   import Switch from '../../ui/Switch.svelte';
   import { estimationItems, scaleItems } from '../insights/estimation';
 
@@ -24,10 +26,16 @@
     { value: 'light', label: 'Light' },
     { value: 'dark', label: 'Dark' },
   ];
+  const sizeItems = SIZES.map((n) => ({ value: String(n), label: `${n}%` }));
+  const speedItems = [
+    { value: 'off', label: 'Off' },
+    { value: 'fast', label: 'Fast' },
+    { value: 'normal', label: 'Normal' },
+    { value: 'slow', label: 'Slow' },
+  ];
   const weekItems = [
     { value: 'sunday', label: 'Sunday' },
     { value: 'monday', label: 'Monday' },
-    { value: 'saturday', label: 'Saturday' },
   ];
 
   let name = $state('');
@@ -114,6 +122,30 @@
       <Select label="Theme" items={themeItems} bind:value={themeChoice} />
     </div>
     <div class="st-field">
+      <span>Interface size</span>
+      <Select label="Interface size" items={sizeItems} bind:value={() => String(interfaceSize.size), (v) => setInterfaceSize(Number(v))} />
+      <span class="st-hint">Scales the whole app on this device. Applies at once; no need to save.</span>
+      <span>Look</span>
+      <div class="skins" role="group" aria-label="Look">
+        {#each SKINS as s (s.id)}
+          <button type="button" class="skin" aria-pressed={theme.skin === s.id} onclick={() => setSkin(s.id)}>
+            <span class="sw">
+              {#each ['light', 'dark'] as m (m)}
+                <span class="half" data-skin={s.id} data-theme={m}><i></i><b></b></span>
+              {/each}
+            </span>
+            {s.label}
+          </button>
+        {/each}
+      </div>
+      <span class="st-hint">Applies at once. Light, dark or system above works with every look.</span>
+    </div>
+    <div class="st-field">
+      <span>Animation speed</span>
+      <Select label="Animation speed" items={speedItems} bind:value={() => motion.speed, (v) => setSpeed(v as Speed)} />
+      <span class="st-hint">How long dialogs, menus and the issue panel take to arrive. Off is the default when the system asks for reduced motion. Applies at once.</span>
+    </div>
+    <div class="st-field">
       <span>Estimation</span>
       <Select label="Estimation" items={estimationItems} bind:value={estimation} />
       <span class="st-hint">None and Time hide points everywhere.</span>
@@ -138,3 +170,13 @@
     {#if saved}<span class="st-status" data-state="ok" data-status>Saved</span>{/if}
   </div>
 </form>
+
+<style>
+  .skins { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: var(--s-4); }
+  .skin { display: grid; gap: var(--s-3); padding: var(--s-3); background: var(--card); border: 1px solid var(--border); border-radius: var(--r-pop); color: var(--ink); font-size: var(--fs-sm); text-align: left; }
+  .skin[aria-pressed='true'] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .sw { display: grid; grid-template-columns: 1fr 1fr; border-radius: var(--r-ctl); overflow: hidden; border: 1px solid var(--border); }
+  .half { display: grid; gap: var(--s-2); align-content: center; height: 40px; padding: 0 var(--s-3); background: var(--sheet); border-left: 4px solid var(--frame); }
+  .half i { height: 4px; width: 60%; background: var(--ink); border-radius: var(--r-round); }
+  .half b { height: 4px; width: 100%; background: var(--accent); border-radius: var(--r-round); }
+</style>

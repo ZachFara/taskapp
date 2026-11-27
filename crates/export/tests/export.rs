@@ -10,7 +10,7 @@ use serde_json::json;
 use taskapp_core::{
     ChangeSource, Db, Due, IssueId, Layout, NewIssue, PinKind, PropertyDef, PropertyKind, Relation,
     RelationKind, StatusCategory, ViewDef, comments, cycles, issues, labels, pins, projects,
-    properties, relations, settings, views,
+    properties, relation_kinds, relations, settings, views,
 };
 use taskapp_export::{git, rebuild, write};
 
@@ -91,7 +91,7 @@ async fn link_and_comment(db: &Db, docs: IssueId, ship: IssueId) -> R {
         Relation {
             from: docs,
             to: ship,
-            kind: RelationKind::Blocks,
+            kind: RelationKind::new("blocks"),
         },
         SRC,
     )
@@ -115,6 +115,7 @@ async fn seed_rest(db: &Db, docs: IssueId, ship: IssueId) -> R {
             options: vec![],
             project_id: None,
             position: 0,
+            applies_to: taskapp_core::PropertyAppliesTo::Issues,
         },
         SRC,
     )
@@ -144,6 +145,15 @@ async fn seed_rest(db: &Db, docs: IssueId, ship: IssueId) -> R {
             include_archived: false,
             ..ViewDef::default()
         },
+        taskapp_core::palette::Look::default(),
+        SRC,
+    )
+    .await?;
+    views::save_as(
+        db,
+        None,
+        ("Active projects", taskapp_core::ViewEntity::Project),
+        ViewDef::default(),
         taskapp_core::palette::Look::default(),
         SRC,
     )
@@ -313,8 +323,17 @@ async fn secrets_never_exported() -> R {
     write::write_snapshot(&db, dir.path()).await?;
     for (path, bytes) in tree(dir.path()) {
         let text = String::from_utf8(bytes)?;
-        assert!(!text.contains("TOPSECRET"), "{path} leaks a secret");
+        // local.yaml carries the folder and remote by design (tested apart); no credential may reach it.
+        let marker = if path == "local.yaml" {
+            "TOPSECRET-4"
+        } else {
+            "TOPSECRET"
+        };
+        assert!(!text.contains(marker), "{path} leaks a secret");
     }
+    let local = fs::read_to_string(dir.path().join("local.yaml"))?;
+    assert!(local.contains("example.invalid/r.git"));
+    assert!(!local.contains("token") && !local.contains("secret"));
     let settings_file = fs::read_to_string(dir.path().join("settings.yaml"))?;
     assert!(
         settings_file.contains("gcal_enabled"),
@@ -514,24 +533,29 @@ async fn dump(
         "statuses",
         "labels",
         "projects",
+        "project_statuses",
         "milestones",
         "cycles",
         "views",
         "issue_templates",
         "view_templates",
+        "view_folders",
         "property_defs",
         "pins",
         "import_log",
+        "relation_kinds",
+        "events",
+        "work_blocks",
     ] {
         let cols: Vec<String> = sqlx::query_scalar(
-            "SELECT name FROM pragma_table_info(?1) WHERE (name != 'id' OR ?1 = 'view_templates')
-               AND (name NOT LIKE '%!_id' ESCAPE '!' OR name = 'template_id') ORDER BY cid",
+            "SELECT name FROM pragma_table_info(?1) WHERE (name != 'id' OR ?1 IN ('view_templates', 'view_folders'))
+               AND (name NOT LIKE '%!_id' ESCAPE '!' OR name IN ('template_id', 'folder_id')) ORDER BY cid",
         )
         .bind(t)
         .fetch_all(&db.pool)
         .await?;
         let mut fields: Vec<String> = cols.iter().map(|c| format!("'{c}', \"{c}\"")).collect();
-        if t == "import_log" {
+        if t == "import_log" || t == "work_blocks" {
             fields.push("'issue', (SELECT number FROM issues WHERE id = issue_id)".into());
         }
         let sql = format!(
@@ -567,11 +591,22 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
         "UPDATE cycles SET icon = 'icon:repeat', color = 'blue'",
         "INSERT INTO view_templates (id, name, definition, position, icon, color)
            VALUES (7, 'Board', '{\"filter\":null,\"sorts\":[],\"group_by\":null,\"layout\":\"Board\",\"columns\":[],\"include_archived\":false}', 0, 'icon:kanban', 'indigo')",
-        "UPDATE views SET icon = 'icon:star', color = 'yellow', template_id = 7 WHERE id = (SELECT min(id) FROM views)",
+        "INSERT INTO view_folders (id, name, position) VALUES (3, 'Work', 0)",
+        "INSERT INTO view_folders (id, name, position, section, parent_id) VALUES (4, 'Inner', 1, 'project', NULL), (5, 'Deep', 2, 'project', 4)",
+        "UPDATE projects SET folder_id = 5, position = 2",
+        "UPDATE cycles SET folder_id = NULL, position = 3",
+        "UPDATE pins SET folder_id = 3",
+        "UPDATE views SET icon = 'icon:star', color = 'yellow', template_id = 7, folder_id = 3 WHERE id = (SELECT min(id) FROM views)",
         "INSERT INTO issue_templates (name, slug, icon, color, body)
            VALUES ('Bug report', 'bug-report', 'icon:bug', 'red', '{\"title_prefix\":\"Bug: \",\"fields\":{\"priority\":2},\"sub_issues\":[]}')",
         "INSERT INTO import_log (external_id, source, issue_id, imported_at)
            VALUES ('row-1', 'csv', (SELECT id FROM issues WHERE number = 1), '2026-01-02T03:04:05Z')",
+        "INSERT INTO events (id, title, starts_at, ends_at, all_day, place, notes, icon, color)
+           VALUES (4, 'Offsite', '2026-12-10 09:00:00', '2026-12-11 17:00:00', 0, 'Lisbon', 'Bring slides', 'icon:flag', 'teal')",
+        "INSERT INTO event_issues (event_id, issue_id) VALUES (4, (SELECT id FROM issues WHERE number = 1))",
+        "UPDATE import_log SET source_deleted = 1",
+        "INSERT INTO work_blocks (issue_id, start_utc, end_utc)
+           VALUES ((SELECT id FROM issues WHERE number = 2), '2026-01-05T09:00:00+00:00', '2026-01-05T10:30:00+00:00')",
     ] {
         sqlx::query(sql).execute(&db.pool).await?;
     }
@@ -582,6 +617,12 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
     for (table, rows) in &want {
         assert_eq!(&got[table], rows, "table {table}");
     }
+    let linked = sqlx::query_scalar::<_, i64>(
+        "SELECT i.number FROM event_issues e JOIN issues i ON i.id = e.issue_id WHERE e.event_id = 4",
+    )
+    .fetch_all(&rebuilt.pool)
+    .await?;
+    assert_eq!(linked, vec![1]);
     Ok(())
 }
 
@@ -601,5 +642,325 @@ async fn a_hand_edited_slug_or_prefix_still_cannot_become_a_file_name() -> R {
         assert!(result.is_err(), "a hand-edited {what} was written");
         assert_eq!(fs::read_dir(dir.path())?.count(), 0, "nothing is written");
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn custom_relation_kinds_and_their_relations_survive_export_and_rebuild() -> R {
+    let db = seeded().await?;
+    let k = relation_kinds::create(&db, "Mentors", "mentors", "mentored by", false, SRC).await?;
+    for (from, to, kind) in [(1, 2, k.id.0.as_str()), (2, 1, "follows")] {
+        relations::add(
+            &db,
+            Relation {
+                from: IssueId(from),
+                to: IssueId(to),
+                kind: RelationKind::new(kind),
+            },
+            SRC,
+        )
+        .await?;
+    }
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    assert_eq!(
+        relation_kinds::list(&rebuilt).await?,
+        relation_kinds::list(&db).await?
+    );
+    for id in [1, 2] {
+        assert_eq!(
+            relations::for_issue(&rebuilt, IssueId(id)).await?,
+            relations::for_issue(&db, IssueId(id)).await?
+        );
+    }
+    Ok(())
+}
+
+/// A source database exported, committed and pushed to a local bare repo, then cloned the way the app does.
+async fn pushed_and_cloned(db: &Db, root: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let repo = temp_repo(root);
+    let bare = root.join("remote.git");
+    git_in(
+        root,
+        &["init", "-q", "--bare", bare.to_str().expect("test io")],
+    );
+    write::write_snapshot(db, &repo).await?;
+    git::commit_and_push(&repo, "export", bare.to_str()).await?;
+    let clone = root.join("clone");
+    git_in(
+        root,
+        &[
+            "clone",
+            "-q",
+            bare.to_str().expect("test io"),
+            clone.to_str().expect("test io"),
+        ],
+    );
+    Ok(clone)
+}
+
+/// Leftovers a restore must clear: a label, a view folder, a project status and a project's label.
+async fn seed_stale(used: &Db) -> R {
+    labels::create(used, "stale-label", "red", None, SRC).await?;
+    taskapp_core::view_folders::create(
+        used,
+        taskapp_core::FolderSection::Pin,
+        None,
+        "stale-folder",
+        SRC,
+    )
+    .await?;
+    settings::set(used, "estimation", &"points").await?;
+    for sql in [
+        "INSERT INTO project_statuses (name, category, position, color) VALUES ('Stale', 'paused', 9, 'red')",
+        "INSERT INTO project_labels (project_id, label_id) SELECT p.id, l.id FROM projects p, labels l WHERE l.name = 'stale-label'",
+        "UPDATE projects SET priority = 4, properties = '{\"stale\":1}', status_id = (SELECT id FROM project_statuses WHERE name = 'Stale')",
+    ] {
+        sqlx::query(sql).execute(&used.pool).await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn restore_replaces_a_used_workspace_keeps_a_backup_and_continues_the_history() -> R {
+    let src = seeded().await?;
+    settings::set(
+        &src,
+        "export_remote",
+        &"https://me:hunter2@example.invalid/x.git",
+    )
+    .await?;
+    settings::set(&src, "backup_dir", &"/somewhere/else").await?;
+    let root = tempfile::tempdir()?;
+    let clone = pushed_and_cloned(&src, root.path()).await?;
+    assert!(!fs::read_to_string(clone.join("local.yaml"))?.contains("hunter2"));
+
+    // A workspace with other data and a change history of its own.
+    // A file database, as in the app (VACUUM INTO writes nothing for a memory one).
+    let used = Db::open(&root.path().join("used.db")).await?;
+    let (docs, ship) = seed_issues(&used).await?;
+    seed_rest(&used, docs, ship).await?;
+    seed_stale(&used).await?;
+    let backups = root.path().join("backups");
+    let out = taskapp_export::restore::restore_from_dir(
+        &used,
+        &clone,
+        Some("git@example.invalid:me/x.git"),
+        &backups,
+        false,
+    )
+    .await?;
+
+    assert_eq!(dump(&used).await?, dump(&src).await?);
+    assert!(
+        out.backup.exists(),
+        "the old database was backed up first: {:?}",
+        out.backup
+    );
+    let history: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM changes WHERE entity != 'row:settings'")
+            .fetch_one(&used.pool)
+            .await?;
+    let rows: Vec<(String, String, String)> =
+        sqlx::query_as("SELECT entity, entity_id, field FROM changes")
+            .fetch_all(&used.pool)
+            .await?;
+    assert_eq!(
+        history, 0,
+        "old row ids would point at the wrong rows: {rows:?}"
+    );
+    let get = |k: &'static str| settings::get::<String>(&used, k);
+    assert_eq!(get("export_dir").await?.as_deref(), clone.to_str());
+    assert_eq!(
+        get("export_remote").await?.as_deref(),
+        Some("git@example.invalid:me/x.git")
+    );
+    assert_eq!(
+        get("backup_dir").await?,
+        None,
+        "local settings are offered, not forced"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_next_export_after_a_restore_builds_on_the_cloned_history() -> R {
+    let src = seeded().await?;
+    let root = tempfile::tempdir()?;
+    let clone = pushed_and_cloned(&src, root.path()).await?;
+    let fresh = Db::open_in_memory().await?;
+    taskapp_export::restore::restore_from_dir(&fresh, &clone, None, &root.path().join("b"), false)
+        .await?;
+
+    // The next export differs only in local.yaml and setup_done (this machine's settings) and builds on the clone's history.
+    write::write_snapshot(&fresh, &clone).await?;
+    assert_eq!(
+        git_in(&clone, &["status", "--porcelain", "-uall"])
+            .lines()
+            .count(),
+        2
+    );
+    git_in(&clone, &["config", "user.name", "t"]);
+    git_in(&clone, &["config", "user.email", "t@example.invalid"]);
+    assert!(git::commit_and_push(&clone, "export", None).await?);
+    assert_eq!(commit_count(&clone), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn restore_offers_the_local_settings_when_asked() -> R {
+    let src = seeded().await?;
+    settings::set(&src, "backup_dir", &"~/Backups").await?;
+    let root = tempfile::tempdir()?;
+    let clone = pushed_and_cloned(&src, root.path()).await?;
+    let fresh = Db::open_in_memory().await?;
+    taskapp_export::restore::restore_from_dir(&fresh, &clone, None, &root.path().join("b"), true)
+        .await?;
+    assert_eq!(
+        settings::get::<String>(&fresh, "backup_dir")
+            .await?
+            .as_deref(),
+        Some("~/Backups")
+    );
+    assert_eq!(
+        settings::get::<bool>(&fresh, "setup_done").await?,
+        Some(true)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_broken_export_leaves_the_workspace_as_it_was() -> R {
+    let src = seeded().await?;
+    let root = tempfile::tempdir()?;
+    let clone = pushed_and_cloned(&src, root.path()).await?;
+    fs::write(clone.join("statuses.yaml"), "not: [a list")?;
+    let used = seeded().await?;
+    let before = dump(&used).await?;
+    let err = taskapp_export::restore::restore_from_dir(
+        &used,
+        &clone,
+        None,
+        &root.path().join("b"),
+        false,
+    )
+    .await;
+    assert!(err.is_err());
+    assert_eq!(dump(&used).await?, before);
+    let issues: i64 = sqlx::query_scalar("SELECT count(*) FROM issues")
+        .fetch_one(&used.pool)
+        .await?;
+    assert!(issues > 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_folder_with_a_symlink_is_refused() -> R {
+    let src = seeded().await?;
+    let root = tempfile::tempdir()?;
+    let clone = pushed_and_cloned(&src, root.path()).await?;
+    fs::remove_file(clone.join("pins.yaml"))?;
+    std::os::unix::fs::symlink("/etc/hosts", clone.join("pins.yaml"))?;
+    let used = Db::open_in_memory().await?;
+    let err = taskapp_export::restore::restore_from_dir(
+        &used,
+        &clone,
+        None,
+        &root.path().join("b"),
+        false,
+    )
+    .await;
+    assert!(err.is_err());
+    Ok(())
+}
+
+#[tokio::test]
+async fn project_status_priority_labels_and_properties_survive_export_and_rebuild() -> R {
+    let db = seeded().await?;
+    for sql in [
+        "INSERT INTO project_statuses (name, category, position, color, icon) VALUES ('Blocked', 'paused', 9, 'red', 'icon:flag')",
+        "INSERT INTO property_defs (key, name, kind, options, project_id, position, applies_to)
+           VALUES ('sponsor', 'Sponsor', '\"Text\"', '[]', NULL, 5, 'projects')",
+        "UPDATE projects SET priority = 3, properties = '{\"sponsor\":\"sam\"}',
+           status_id = (SELECT id FROM project_statuses WHERE name = 'Blocked')",
+        "INSERT INTO project_labels (project_id, label_id) SELECT p.id, l.id FROM projects p, labels l",
+    ] {
+        sqlx::query(sql).execute(&db.pool).await?;
+    }
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    let q = "SELECT s.name || '|' || p.priority || '|' || p.properties || '|' ||
+               (SELECT group_concat(name) FROM (SELECT l.name FROM project_labels pl JOIN labels l ON l.id = pl.label_id WHERE pl.project_id = p.id ORDER BY l.name))
+             FROM projects p JOIN project_statuses s ON s.id = p.status_id ORDER BY p.slug";
+    let want: Vec<String> = sqlx::query_scalar(q).fetch_all(&db.pool).await?;
+    let got: Vec<String> = sqlx::query_scalar(q).fetch_all(&rebuilt.pool).await?;
+    assert!(
+        !want.is_empty() && want[0].starts_with("Blocked|3|"),
+        "{want:?}"
+    );
+    assert_eq!(got, want);
+    let applies: String =
+        sqlx::query_scalar("SELECT applies_to FROM property_defs WHERE key = 'sponsor'")
+            .fetch_one(&rebuilt.pool)
+            .await?;
+    assert_eq!(applies, "projects");
+    assert_eq!(
+        dump(&db).await?["project_statuses"],
+        dump(&rebuilt).await?["project_statuses"]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn images_in_use_are_exported_and_rebuilt() -> R {
+    let db = Db::open_in_memory().await?;
+    let png = b"\x89PNG\r\n\x1a\nused".to_vec();
+    let jpg = b"\xff\xd8\xffunused".to_vec();
+    let used = taskapp_core::attachments::add(&db, &png, "image/png").await?;
+    let unused = taskapp_core::attachments::add(&db, &jpg, "image/jpeg").await?;
+    let desc = format!("see ![shot](attachment:{})", used.id.0);
+    issues::create(
+        &db,
+        NewIssue {
+            title: "T".into(),
+            description: Some(desc),
+            ..NewIssue::default()
+        },
+        SRC,
+    )
+    .await?;
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    assert!(
+        src.path()
+            .join(format!("attachments/{}.png", used.sha256))
+            .is_file()
+    );
+    assert!(
+        !src.path()
+            .join(format!("attachments/{}.jpg", unused.sha256))
+            .exists()
+    );
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("new.db")).await?;
+    let got = taskapp_core::attachments::get(&rebuilt, used.id).await?;
+    assert_eq!(got.bytes, png);
+    assert!(
+        dst.path()
+            .join(format!("attachments/{}.png", used.sha256))
+            .is_file()
+    );
+    // A link in place of the image file is refused.
+    let target = src.path().join("outside.png");
+    fs::write(&target, &png)?;
+    let file = src.path().join(format!("attachments/{}.png", used.sha256));
+    fs::remove_file(&file)?;
+    std::os::unix::fs::symlink(&target, &file)?;
+    assert!(
+        rebuild::rebuild(src.path(), &dst.path().join("again.db"))
+            .await
+            .is_err()
+    );
     Ok(())
 }

@@ -26,12 +26,18 @@ beforeAll(async () => {
   vite = spawn('pnpm', ['exec', 'vite', '--host', 'localhost', '--port', String(port), '--strictPort'], {
     cwd: uiDir, env: { ...process.env, VITE_API_MODE: 'mock' }, stdio: 'ignore', detached: true,
   });
-  for (let i = 0; i < 300; i++) {
-    if (await fetch(base).then(() => true, () => false)) break;
-    await new Promise((r) => setTimeout(r, 200));
+  let up = false;
+  for (let i = 0; i < 300 && !up; i++) {
+    up = await fetch(base).then(() => true, () => false);
+    if (!up) await new Promise((r) => setTimeout(r, 200));
   }
+  if (!up) throw new Error(`vite did not answer on ${base}`);
   browser = await chromium.launch();
-}, 120_000);
+  // The first load compiles every module, which is slower than the 5s page timeout the tests use; pay that here.
+  const warm = await browser.newPage();
+  await warm.goto(base, { timeout: 90_000 });
+  await warm.close();
+}, 180_000);
 
 afterAll(async () => {
   await browser?.close();
@@ -41,7 +47,7 @@ afterAll(async () => {
 async function open(path = '/view/1', viewport = { width: 1440, height: 900 }) {
   await page?.close();
   page = await browser.newPage({ viewport });
-  page.setDefaultTimeout(5_000);
+  page.setDefaultTimeout(Number(process.env.WALK_TIMEOUT ?? 5_000)); // WALK_TIMEOUT: more time on a loaded machine
   await page.goto(base + path);
   await page.locator('[data-key], aside.sidebar').first().waitFor();
   if (path.startsWith('/view/')) await page.locator('li[data-key], li[data-issue]').first().waitFor();
@@ -146,6 +152,13 @@ describe('walk', { timeout: 20_000 }, () => {
     await pw(panel).toHaveCount(0);
   });
 
+  it('M1 c then typing at once: every character lands in the title while the dialog arrives', async () => {
+    await open();
+    await press('c');
+    await page.keyboard.type('Quick motion title');
+    await pw(page.getByLabel('Title, with quick-add tokens')).toHaveValue('Quick motion title');
+  });
+
   it('F6 the created toast has a readable Undo; u with nothing to undo is quiet', async () => {
     await open();
     await press('c');
@@ -172,6 +185,16 @@ describe('walk', { timeout: 20_000 }, () => {
     expect(heads.filter((h) => /^Navigat/.test(h)).length).toBe(1);
     expect(names).toContain('New issue');
     expect(names).not.toContain('Create issue');
+  });
+
+  it('F10 / searches issues by the start of a word; Enter opens the issue', async () => {
+    await open();
+    await press('/');
+    await pw(palette().getByRole('combobox')).toHaveAttribute('aria-label', 'Search issues');
+    await page.keyboard.type('offl');
+    await pw(palette().getByRole('option').first()).toContainText('Offline mode research');
+    await press('Enter');
+    await page.waitForURL(/\/issue\/ABC-/);
   });
 
   it('5 j moves five rows', async () => {
@@ -207,14 +230,14 @@ describe('walk', { timeout: 20_000 }, () => {
     // Away from the template and back.
     await page.getByRole('tab', { name: 'List' }).click();
     await page.waitForTimeout(600);
-    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Reset to template' }).click();
     await pw(page.getByRole('tab', { name: 'Board' })).toHaveAttribute('aria-selected', 'true');
-    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('menuitem', { name: 'New view...' }).click();
     await pw(page.getByRole('dialog', { name: 'New view' }).getByRole('button', { name: /Copy of current view/ })).toBeVisible();
     await press('Escape');
-    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Save as template' }).click();
     // In-app navigation: a reload would reset the mock.
     await page.evaluate(() => { history.pushState(null, '', '/views'); dispatchEvent(new PopStateEvent('popstate')); });
@@ -267,5 +290,91 @@ describe('walk', { timeout: 20_000 }, () => {
     await press('s');
     await page.waitForTimeout(300);
     await pw(palette()).toBeHidden();
+  });
+
+  // In-app navigation, so the mock keeps what the test just wrote.
+  const go = async (path: string) => {
+    await page.evaluate((p) => { history.pushState(null, '', p); dispatchEvent(new PopStateEvent('popstate')); }, path);
+    await page.waitForTimeout(400);
+  };
+
+  it('P3 an event is created, linked to an issue, unlinked, and the unlink is undone', async () => {
+    await open('/events');
+    await page.getByRole('button', { name: 'New event' }).first().click();
+    await page.getByLabel('Event title').fill('Launch review');
+    await page.getByLabel('Date', { exact: true }).fill('2026-11-25');
+    await page.getByRole('checkbox', { name: 'All day' }).click();
+    await page.getByLabel('From').fill('10:00');
+    await page.getByLabel('To', { exact: true }).fill('11:30');
+    await page.getByRole('button', { name: 'Create event' }).click();
+    await page.waitForURL(/\/event\/\d+/);
+    await page.getByLabel('Link an issue').fill('Redesign');
+    await page.locator('.results button', { hasText: 'ABC-1' }).click();
+    await pw(page.getByRole('button', { name: 'Unlink ABC-1' })).toBeVisible();
+    const eventUrl = new URL(page.url()).pathname;
+    await go('/issue/ABC-1');
+    await pw(page.locator('section[aria-label=Events]')).toContainText('Launch review');
+    await go(eventUrl);
+    await page.getByRole('button', { name: 'Unlink ABC-1' }).click();
+    await pw(page.getByRole('button', { name: 'Unlink ABC-1' })).toHaveCount(0);
+    await press('Meta+z');
+    await pw(page.getByRole('button', { name: 'Unlink ABC-1' })).toBeVisible(); // the page reloads on undo
+  });
+
+  it('P3 a custom relation kind reads both ways and cannot be deleted while used', async () => {
+    await open('/settings/relations');
+    await page.getByLabel('Kind name').fill('Mentors');
+    await page.getByLabel('Forward label').fill('mentors');
+    await page.getByLabel('Reverse label').fill('is mentored by');
+    await page.getByRole('button', { name: 'Add kind' }).click();
+    await go('/issue/ABC-1');
+    await page.getByLabel('Relation kind').click();
+    await page.getByRole('option', { name: 'mentors', exact: true }).click();
+    await page.getByLabel('Find issue').fill('Migrate');
+    await page.locator('.results button', { hasText: 'ABC-4' }).click();
+    await go('/issue/ABC-4');
+    await pw(page.getByText('is mentored by').first()).toBeVisible();
+    await go('/settings/relations');
+    await page.getByRole('button', { name: 'Delete Mentors' }).click();
+    await page.getByRole('button', { name: 'Delete kind' }).click();
+    await pw(page.getByRole('alert')).toContainText('Mentors');
+    await pw(page.getByRole('button', { name: 'Delete kind' })).toHaveCount(0); // the dialog closed, the message shows
+  });
+
+  it('P3 a field switched off disappears from the issue panel and filters, and comes back', async () => {
+    await open('/settings/fields');
+    await page.getByLabel('Show Due').click();
+    await go('/issue/ABC-1');
+    await pw(page.getByText('Estimate', { exact: true })).toBeVisible();
+    expect(await page.getByText('Due', { exact: true }).count()).toBe(0);
+    await go('/view/1');
+    await page.getByRole('button', { name: 'Add filter' }).click();
+    await pw(page.getByRole('menuitem', { name: 'Project', exact: true })).toBeVisible();
+    expect(await page.getByRole('menuitem', { name: 'Due', exact: true }).count()).toBe(0);
+    await press('Escape');
+    await go('/settings/fields');
+    await page.getByLabel('Show Due').click();
+    await go('/issue/ABC-1');
+    await pw(page.getByText('Due', { exact: true })).toBeVisible();
+  });
+  it('IMAGES pasting an image into a description shows it in the description', async () => {
+    await open('/issue/ABC-1');
+    await page.getByRole('button', { name: 'Edit description' }).click();
+    const box = page.getByRole('textbox', { name: 'Description text' });
+    await box.focus();
+    // A real 1x1 PNG, pasted as the clipboard would carry it.
+    await box.evaluate((el) => {
+      const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
+      const data = new DataTransfer();
+      data.items.add(new File([png], 'shot.png', { type: 'image/png' }));
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    });
+    await pw(box).toHaveValue(/!\[shot\]\(attachment:\d+\)/);
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    const img = page.getByRole('region', { name: 'Description' }).locator('img[data-attachment]');
+    await pw(img).toHaveAttribute('src', /^blob:/);
+    await page.waitForFunction(() => (document.querySelector('img[data-attachment]') as HTMLImageElement)?.naturalWidth > 0);
+    await img.click();
+    await pw(page.getByRole('dialog', { name: 'Image' }).locator('img')).toBeVisible();
   });
 });

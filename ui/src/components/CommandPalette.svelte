@@ -2,10 +2,12 @@
   import { Dialog } from 'bits-ui';
   import { getContext, onMount, tick, untrack } from 'svelte';
   import { navigate } from '../app/routes';
+  import type { Status } from '../lib/bindings';
   import { api } from '../lib/api';
   import type { Cycle, Issue, Label } from '../lib/bindings';
   import { listCommands, sectionOf, shortcutFor, type Command, type CommandPage, type Ctx } from '../lib/commands';
   import { rank } from '../lib/commands/match';
+  import { replay } from '../lib/motion.svelte';
   import { selection } from '../lib/selection.svelte';
   import { issues, projects, statuses, views } from '../lib/stores.svelte';
   import EntityIcon from '../ui/EntityIcon.svelte';
@@ -14,7 +16,7 @@
   import Skeleton from '../ui/Skeleton.svelte';
   import StatusGlyph from '../ui/StatusGlyph.svelte';
 
-  let { onclose, oncreate, page: startPage }: { onclose: () => void; oncreate: () => void; page?: string } = $props();
+  let { onclose, oncreate, page: startPage, issues: startIssues }: { onclose: () => void; oncreate: () => void; page?: string; issues?: boolean } = $props();
 
   // A page may also be multi-pick (stays open, items show a check) or free-input (`parse` turns the typed text into
   // one preview row); the registry type does not carry these yet, so they are read here as optional extras.
@@ -34,7 +36,7 @@
     keywords?: string[];
     icon?: string;
     entity?: { icon: string | null | undefined; color: string | null | undefined };
-    category?: string;
+    status?: Status;
     keys?: string | string[];
     more?: boolean;
     checked?: boolean;
@@ -43,13 +45,37 @@
     run: () => void | Promise<void>;
   };
 
+  // `open` ends the menu's life with its exit animation; `onclose` tells the app once that has played.
+  let open = $state(true);
+  // Focus goes back at once, so keys typed during the exit animation reach the screen, not the leaving field.
+  const prevFocus = document.activeElement as HTMLElement | null;
+  const close = () => {
+    open = false;
+    inputEl?.blur();
+    prevFocus?.isConnected && prevFocus.focus?.();
+  };
   let query = $state('');
   let active = $state(0);
+  // Search issues only (opened by `/` or the "Search issues…" row): no commands, no views, no projects.
+  let issuesOnly = $state(startIssues ?? false);
   let stack = $state<{ title: string; cmd: Command; page: Page; loading?: boolean }[]>([]);
   let found = $state<Issue[]>([]);
   let cycles = $state<Cycle[]>([]);
   let labels = $state<Label[]>([]);
   let inputEl = $state<HTMLInputElement>();
+  let listEl = $state<HTMLElement>();
+  // Rows stagger in once, as the menu opens; typing must not replay it. A page change slides the list sideways.
+  let opening = $state(true);
+  onMount(() => { const t = setTimeout(() => (opening = false), 400); return () => clearTimeout(t); });
+  let depth = 0;
+  $effect(() => {
+    const d = stack.length;
+    if (listEl && d !== depth) {
+      listEl.style.setProperty('--cx-px', d > depth ? '24px' : '-24px');
+      replay(listEl, 'cx-page');
+    }
+    depth = d;
+  });
   let seq = 0;
 
   // Recently chosen rows, newest first, kept across reloads. A row that only navigates keeps its path and label, since
@@ -64,6 +90,18 @@
       return [];
     }
   })();
+  let recentIssues = $state<Record<string, Issue>>({});
+  onMount(() => {
+    let mounted = true;
+    for (const r of recent) {
+      const match = /^issue:(\d+)$/.exec(r.id);
+      if (!match) continue;
+      void api.issues.get(Number(match[1])).then((issue) => {
+        if (mounted) recentIssues[r.id] = issue;
+      }).catch(() => {});
+    }
+    return () => { mounted = false; };
+  });
   const remember = (row: Row) => {
     recent.splice(0, recent.length, { id: row.id, label: row.label, path: row.path, icon: row.icon }, ...recent.filter((x) => x.id !== row.id).slice(0, 7));
     try {
@@ -132,8 +170,13 @@
       group: sectionOf(c) === 'Issue' ? contextTitle : sectionOf(c),
       icon: c.icon,
       keys: shortcutFor(c.id),
-      more: !!c.page,
+      more: !!c.page || c.id === 'nav.search',
       run: () => {
+        if (c.id === 'nav.search') {
+          query = '';
+          issuesOnly = true;
+          return;
+        }
         if (c.page) {
           query = '';
           active = 0;
@@ -147,7 +190,7 @@
 
   const targetRows = $derived.by((): Row[] => [
     ...found.map((i) => ({
-      id: `issue:${i.id}`, label: `${i.key} ${i.title}`, group: 'Issues', category: statuses.find((s) => s.id === i.status_id)?.category,
+      id: `issue:${i.id}`, label: `${i.key} ${i.title}`, group: 'Issues', status: statuses.find((s) => s.id === i.status_id),
       path: `/issue/${i.key}`, run: nav(`/issue/${i.key}`),
     })),
     ...views.map((v) => ({ id: `view:${v.id}`, label: v.name, group: 'Views', entity: { icon: v.icon ?? 'icon:view', color: v.color }, icon: v.icon ? undefined : 'layers', path: `/view/${v.id}`, run: nav(`/view/${v.id}`) })),
@@ -162,7 +205,10 @@
     return top?.parse && q ? top.parse(q) : null;
   });
 
-  // Groups in display order: context first, then the user's commands, then things to jump to.
+  const isIssue = (r: Row) => r.id.startsWith('issue:');
+  const issueRows = $derived(targetRows.filter(isIssue));
+
+  // Groups in display order: matching issues first, then context, the user's commands, then things to jump to.
   const groups = $derived.by(() => {
     const top = stack.at(-1);
     let rows: Row[];
@@ -176,19 +222,22 @@
             const again = (await Promise.resolve(top.cmd.page!(ctx()))) as Page;
             stack[stack.length - 1] = { ...top, page: { ...again, items: await again.items } };
             await tick();
-          } else onclose();
+          } else close();
         },
       }));
-      if (parsed) rows = [{ id: 'parsed', label: parsed.label, group: 'Preview', icon: 'check', run: async () => { await parsed.run?.(); onclose(); } }, ...rows];
-    } else rows = [...commandRows(), ...targetRows];
+      if (parsed) rows = [{ id: 'parsed', label: parsed.label, group: 'Preview', icon: 'check', run: async () => { await parsed.run?.(); close(); } }, ...rows];
+    } else rows = issuesOnly ? issueRows : [...commandRows(), ...targetRows];
     const q = query.trim();
-    const ranked = parsed || !q ? rows : rank(q, rows.map((r) => ({ ...r, keywords: [r.label, ...(r.keywords ?? [])] })), recent.map((r) => r.id)) as Row[];
+    // Issues come from the backend already matched, so they are listed as found and never re-ranked by letters.
+    const others = rank(q, rows.filter((r) => !isIssue(r)).map((r) => ({ ...r, keywords: [r.label, ...(r.keywords ?? [])] })), recent.map((r) => r.id)) as Row[];
+    const ranked = parsed || !q || issuesOnly ? rows : [...rows.filter(isIssue), ...others];
     const out: { name: string; rows: Row[] }[] = [];
-    if (!top && !q) {
+    if (!top && !q && !issuesOnly) {
       const recents = recent
         .flatMap((r): Row[] => {
           const live = rows.find((x) => x.id === r.id);
-          return live ? [live] : r.path ? [{ id: r.id, label: r.label, icon: r.icon, group: 'Recent', path: r.path, run: nav(r.path) }] : [];
+          const issue = recentIssues[r.id];
+          return live ? [live] : r.path ? [{ id: r.id, label: r.label, icon: r.icon, status: statuses.find((s) => s.id === issue?.status_id), group: 'Recent', path: r.path, run: nav(r.path) }] : [];
         })
         .slice(0, 5);
       if (recents.length) out.push({ name: 'Recent', rows: recents });
@@ -234,11 +283,11 @@
       remember(row);
     }
     // A command that opens a page keeps the menu; a plain command closes it first so focus returns to the screen.
-    if (!isPage && !(row.more)) onclose();
+    if (!isPage && !(row.more)) close();
     await row.run();
   }
 
-  const back = () => (stack.length ? (stack.pop(), (query = '')) : onclose());
+  const back = () => (stack.length ? (stack.pop(), (query = '')) : close());
 
   function onkeydown(e: KeyboardEvent) {
     const n = flat.length;
@@ -264,7 +313,7 @@
   const numbered = $derived((index = 0, groups.map((g) => ({ ...g, rows: g.rows.map((r) => ({ r, n: index++ })) }))));
 </script>
 
-<Dialog.Root open onOpenChange={(o) => !o && onclose()}>
+<Dialog.Root bind:open onOpenChangeComplete={(o) => !o && onclose()}>
   <Dialog.Portal>
     <Dialog.Overlay class="cp-overlay" />
     <Dialog.Content
@@ -286,14 +335,14 @@
           aria-expanded="true"
           aria-controls="cp-list"
           aria-activedescendant={flat.length ? `cp-${active}` : undefined}
-          aria-label={stack.length ? stack.at(-1)!.title : 'Search commands, issues, views and projects'}
-          placeholder={stack.length ? 'Filter…' : 'Type a command, issue, view or project'}
+          aria-label={stack.length ? stack.at(-1)!.title : issuesOnly ? 'Search issues' : 'Search commands, issues, views and projects'}
+          placeholder={stack.length ? 'Filter…' : issuesOnly ? 'Search issues…' : 'Type a command, issue, view or project'}
           autocomplete="off"
           spellcheck="false"
         />
         <Kbd keys="Esc" />
       </div>
-      <div class="list" id="cp-list" role="listbox" aria-multiselectable={stack.at(-1)?.page.multi || undefined}>
+      <div class="list" class:opening bind:this={listEl} id="cp-list" role="listbox" aria-multiselectable={stack.at(-1)?.page.multi || undefined}>
         {#each numbered as g (g.name)}
           <div role="group" aria-label={g.name}>
             <h4 class:ctx={g.name === contextTitle}>{g.name}</h4>
@@ -301,6 +350,7 @@
               <!-- Mouse down must not steal focus from the field. -->
               <div
                 id="cp-{n}"
+                style:--i={n}
                 class="row"
                 class:cur={n === active}
                 role="option"
@@ -313,7 +363,7 @@
                 onkeydown={() => {}}
               >
                 <span class="ico">
-                  {#if r.category}<StatusGlyph category={r.category as never} />
+                  {#if r.status}<StatusGlyph category={r.status.category} icon={r.status.icon} color={r.status.color} />
                   {:else if r.entity}<EntityIcon icon={r.entity.icon} color={r.entity.color} />
                   {:else if r.icon}<Icon name={r.icon} />{/if}
                 </span>
@@ -328,7 +378,7 @@
         {:else}
           {#if stack.at(-1)?.loading}
             <div class="skel" aria-busy="true"><Skeleton height="var(--row-h)" /></div>
-          {:else}<p class="empty">No matches</p>{/if}
+          {:else}<p class="empty">{issuesOnly && !query.trim() ? 'Type an issue title, word or key' : 'No matches'}</p>{/if}
         {/each}
       </div>
       <div class="foot">
@@ -342,13 +392,13 @@
 </Dialog.Root>
 
 <style>
-  :global(.cp-overlay) { position: fixed; inset: 0; z-index: var(--z-dialog); background: var(--overlay); animation: cp-fade var(--dur-2) var(--ease); }
+  :global(.cp-overlay) { position: fixed; inset: 0; z-index: var(--z-dialog); background: var(--overlay); }
   :global(.cp) {
     position: fixed; z-index: var(--z-dialog); top: 14%; left: 50%; transform: translateX(-50%);
     width: min(640px, calc(100% - var(--s-9)));
     display: grid; grid-template-rows: auto minmax(0, 1fr) auto; max-height: 68vh;
     background: var(--sheet); color: var(--ink); border: 1px solid var(--control); border-radius: 0;
-    box-shadow: var(--shadow-float); font-family: var(--font); animation: cp-fade var(--dur-2) var(--ease);
+    box-shadow: var(--shadow-float); font-family: var(--font);
   }
   :global(.cp-sr) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .field { display: flex; align-items: center; gap: var(--s-4); padding: var(--s-5) var(--s-6); border-bottom: 1px solid var(--control); color: var(--muted); }
@@ -358,7 +408,8 @@
   .list { overflow-y: auto; padding-bottom: var(--s-2); }
   h4 { margin: 0; padding: var(--s-2) var(--s-6); background: var(--band-1); color: var(--band-ink); font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
   h4.ctx { background: var(--band-3); }
-  .row { display: flex; align-items: center; gap: var(--s-5); height: var(--row-h); padding: 0 var(--s-6); border-left: 3px solid transparent; font-size: var(--fs-md); cursor: default; }
+  .row { display: flex; align-items: center; gap: var(--s-5); height: var(--row-h); padding: 0 var(--s-6); border-left: 3px solid transparent; font-size: var(--fs-md); cursor: default; transition: background var(--dur-1) var(--ease); }
+  .opening .row { animation: cx-row-in var(--dur-4) var(--ease) backwards; animation-delay: calc(min(var(--i), 8) * var(--dur-stagger)); }
   .row.cur { background: var(--selection); border-left-color: var(--accent); }
   .ico { display: grid; place-items: center; width: var(--icon); color: var(--muted); }
   .lab { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
@@ -369,5 +420,4 @@
   .empty { margin: 0; padding: var(--s-8) var(--s-6); text-align: center; color: var(--muted); }
   .foot { display: flex; align-items: center; gap: var(--s-7); padding: var(--s-3) var(--s-6); border-top: 1px solid var(--border); background: var(--raised); color: var(--muted); font-size: var(--fs-xs); }
   .foot span { display: inline-flex; align-items: center; gap: var(--s-2); }
-  @keyframes cp-fade { from { opacity: 0; } }
 </style>

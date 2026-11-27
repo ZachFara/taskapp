@@ -401,6 +401,21 @@ fn setup_sets_the_key_for_new_issues() {
 }
 
 #[test]
+fn a_project_view_is_saved_from_the_command_line() {
+    let (_d, db) = fresh();
+    let def = r#"{"filter":null,"sorts":[],"group_by":{"Fixed":"Status"},"layout":"Board","columns":[],"include_archived":false}"#;
+    let v = run_json(
+        &db,
+        &["view", "save", "Mine", "--def", def, "--entity", "project"],
+    );
+    assert_eq!(v["entity"], "project");
+    assert_eq!(
+        run_json(&db, &["view", "save", "Plain", "--def", def])["entity"],
+        "issue"
+    );
+}
+
+#[test]
 fn view_templates_from_the_command_line() {
     let (_d, db) = fresh();
     let t = run_json(&db, &["view", "save-as-template", "1", "--name", "ABC t"]);
@@ -475,4 +490,180 @@ fn points_flags_and_insights() {
             .status
             .success()
     );
+}
+
+#[test]
+fn events_are_created_linked_and_listed() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Parent"]);
+    let made = run_json(
+        &db,
+        &[
+            "event",
+            "create",
+            "Demo",
+            "--start",
+            "2026-12-10T09:30",
+            "--place",
+            "Room 4",
+        ],
+    );
+    assert_eq!(made["starts_at"], "2026-12-10T09:30:00");
+    let id = made["id"].to_string();
+    run(&db, &["event", "link", &id, "ABC-1"]);
+    let day = run_json(
+        &db,
+        &[
+            "event",
+            "list",
+            "--from",
+            "2026-12-10",
+            "--to",
+            "2026-12-10",
+        ],
+    );
+    assert_eq!(day[0]["issue_ids"].as_array().map(Vec::len), Some(1));
+    let later = run_json(&db, &["event", "list", "--from", "2026-12-11"]);
+    assert_eq!(later.as_array().map(Vec::len), Some(0));
+}
+
+#[test]
+fn restore_builds_a_new_database_from_an_export_and_refuses_an_existing_one() {
+    let (_src, src_db) = fresh();
+    run(&src_db, &["add", "Keep me"]);
+    run(
+        &src_db,
+        &["event", "create", "Demo", "--start", "2026-12-10T09:30"],
+    );
+    let export = tempfile::tempdir().expect("tempdir");
+    tokio::runtime::Runtime::new()
+        .expect("runtime")
+        .block_on(async {
+            let db = taskapp_core::Db::open(&src_db).await.expect("open");
+            taskapp_export::write::write_snapshot(&db, export.path())
+                .await
+                .expect("export");
+        });
+    let from = export.path().to_str().expect("utf8");
+
+    let (_dst, dst_db) = fresh();
+    let out = run(&dst_db, &["restore", "--from", from]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        run_json(&dst_db, &["issue", "get", "ABC-1"])["title"],
+        "Keep me"
+    );
+    assert_eq!(run_json(&dst_db, &["event", "list"])[0]["title"], "Demo");
+
+    let again = run(&dst_db, &["restore", "--from", from]);
+    assert!(!again.status.success());
+    assert!(String::from_utf8_lossy(&again.stderr).contains("already exists"));
+}
+
+#[test]
+fn a_status_then_a_view_filtered_on_it_can_be_created() {
+    let (_d, db) = fresh();
+    let status = run_json(&db, &["status", "create", "Inbox", "--category", "Backlog"]);
+    let id = status["id"].as_i64().expect("status id");
+    let def = format!(
+        r#"{{"filter":{{"Cond":{{"field":{{"Fixed":"Status"}},"op":"In","value":[{id}]}}}},"sorts":[],"group_by":null,"layout":"List","columns":[],"include_archived":false}}"#
+    );
+    let view = run_json(&db, &["view", "save", "Inbox", "--def", &def]);
+    assert_eq!(view["name"], "Inbox");
+    let views = run_json(&db, &["view", "list"]);
+    assert!(
+        views
+            .as_array()
+            .expect("views")
+            .iter()
+            .any(|v| v["name"] == "Inbox")
+    );
+    let project = run_json(
+        &db,
+        &[
+            "project",
+            "status-create",
+            "Backlog",
+            "--category",
+            "Planned",
+        ],
+    );
+    assert_eq!(project["name"], "Backlog");
+    assert!(
+        !run(&db, &["status", "create", "X", "--category", "nope"])
+            .status
+            .success()
+    );
+}
+
+#[test]
+fn replacing_a_view_keeps_its_icon() {
+    let (_d, db) = fresh();
+    let def = r#"{"filter":null,"sorts":[],"group_by":null,"layout":"List","columns":[],"include_archived":false}"#;
+    let made = run_json(&db, &["view", "save", "Mine", "--def", def]);
+    let id = made["id"].as_i64().expect("id");
+    let conn = rusqlite_free_icon(&db, id);
+    assert!(conn);
+    let again = run_json(
+        &db,
+        &[
+            "view",
+            "save",
+            "Mine",
+            "--def",
+            def,
+            "--id",
+            &id.to_string(),
+        ],
+    );
+    assert_eq!(again["icon"], "icon:moon");
+}
+
+/// Sets an icon on a view straight in the database file (the CLI has no icon command).
+fn rusqlite_free_icon(db: &Path, id: i64) -> bool {
+    std::process::Command::new("sqlite3")
+        .arg(db)
+        .arg(format!(
+            "UPDATE views SET icon = 'icon:moon' WHERE id = {id}"
+        ))
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+#[test]
+fn a_label_is_put_on_an_issue_by_its_name() {
+    let (_d, db) = fresh();
+    run_json(&db, &["add", "Write the docs"]);
+    let label = run_json(&db, &["label", "create", "By AI", "purple"]);
+    let issue = run_json(&db, &["label", "add", "ABC-1", "by ai"]);
+    assert_eq!(issue["label_ids"], serde_json::json!([label["id"]]));
+    assert!(
+        !run(&db, &["label", "add", "ABC-1", "nope"])
+            .status
+            .success()
+    );
+}
+
+#[test]
+fn update_sets_the_start_date_and_estimate() {
+    let (_d, db) = fresh();
+    run_json(&db, &["add", "Plan it"]);
+    let issue = run_json(
+        &db,
+        &[
+            "issue",
+            "update",
+            "ABC-1",
+            "--start",
+            "2026-12-01",
+            "--estimate",
+            "960",
+        ],
+    );
+    assert_eq!(issue["start_date"], "2026-12-01");
+    assert_eq!(issue["estimate_minutes"], 960);
 }

@@ -103,7 +103,8 @@ const points = (w: string) => {
   return n === null ? null : pointsNumber(n);
 };
 
-export function parseQuickadd(input: string, today: string, tz: string, pointsOn = true): ParsedQuickAdd {
+export function parseQuickadd(input: string, today: string, tz: string, off: string[] = []): ParsedQuickAdd {
+  const on = (f: string) => !off.includes(f);
   const tokens = input.split(/\s+/).filter(Boolean);
   const out = { dueDate: null as string | null, time: null as [[number, number], string] | null, start: null as string | null, priority: null as number | null, slug: null as string | null, labels: [] as string[], estimate: null as number | null, points: null as number | null };
   const title: string[] = [];
@@ -115,18 +116,18 @@ export function parseQuickadd(input: string, today: string, tz: string, pointsOn
       const r = dateAt(tokens, at, today);
       if (r) { set(r[0]); used = extra + r[1]; }
     };
-    if (priority(w) !== null) { out.priority = priority(w); used = 1; }
-    else if (w.length > 1 && w.startsWith('#')) { out.slug = w.slice(1); used = 1; }
-    else if (raw.length > 1 && raw.startsWith('@')) { out.labels.push(raw.slice(1)); used = 1; }
-    else if (estimate(w) !== null) { out.estimate = estimate(w); used = 1; }
-    else if (pointsOn && points(w) !== null) { out.points = points(w); used = 1; }
-    else if (pointsOn && pointsNumber(w) !== null && /^pts?$/i.test(tokens[i + 1] ?? '')) { out.points = pointsNumber(w); used = 2; }
-    else if (w === 'by' || w === 'due') date(i + 1, (d) => (out.dueDate = d), 1);
-    else if (w === 'start') date(i + 1, (d) => (out.start = d), 1);
-    else if (w === 'at') {
+    if (on('priority') && priority(w) !== null) { out.priority = priority(w); used = 1; }
+    else if (on('project') && w.length > 1 && w.startsWith('#')) { out.slug = w.slice(1); used = 1; }
+    else if (on('labels') && raw.length > 1 && raw.startsWith('@')) { out.labels.push(raw.slice(1)); used = 1; }
+    else if (on('estimate') && estimate(w) !== null) { out.estimate = estimate(w); used = 1; }
+    else if (on('points') && points(w) !== null) { out.points = points(w); used = 1; }
+    else if (on('points') && pointsNumber(w) !== null && /^pts?$/i.test(tokens[i + 1] ?? '')) { out.points = pointsNumber(w); used = 2; }
+    else if ((w === 'by' || w === 'due') && on('due')) date(i + 1, (d) => (out.dueDate = d), 1);
+    else if (w === 'start' && on('start')) date(i + 1, (d) => (out.start = d), 1);
+    else if (w === 'at' && on('due')) {
       const t = timeAt(tokens[i + 1]);
       if (t) { out.time = [t, tokens[i + 1]]; used = 2; }
-    } else date(i, (d) => (out.dueDate = d), 0);
+    } else if (on('due')) date(i, (d) => (out.dueDate = d), 0);
     if (used === 0) { title.push(raw); i += 1; } else i += used;
   }
   let due: Due | null = out.dueDate ? { Date: out.dueDate } : null;

@@ -1,17 +1,20 @@
 <script lang="ts">
   import { api } from '../lib/api';
-  import type { Issue, Layout, Milestone, Project, ResolvedPin, Status, ViewDef } from '../lib/bindings';
+  import type { FieldRef, Issue, Layout, Milestone, Project, ResolvedPin, Status, ViewDef } from '../lib/bindings';
+  import { nextSort } from '../lib/viewSort';
   import { navigate } from '../app/routes';
   import { openExternal } from '../lib/openExternal';
   import Button from '../ui/Button.svelte';
   import Dialog from '../ui/Dialog.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import IconButton from '../ui/IconButton.svelte';
+  import IconColorPicker from './pickers/IconColorPicker.svelte';
   import PageHeader from '../ui/PageHeader.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
   import Tabs from '../ui/Tabs.svelte';
   import ViewEditor from './ViewEditor.svelte';
   import ProjectHeader from './project/ProjectHeader.svelte';
+  import ProjectDetails from './project/ProjectDetails.svelte';
   import ProjectIssues from './project/ProjectIssues.svelte';
   import { shortcutFor } from '../lib/commands/registry';
   import Milestones from './project/Milestones.svelte';
@@ -30,9 +33,11 @@
   let layout = $state<Layout>('List');
   // raw: ViewEditor and the views clone it.
   let def = $state.raw<ViewDef>({ filter: null, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false });
+  const sortHeading = (field: FieldRef) => (def = { ...def, sorts: nextSort(def.sorts, field) ?? [] });
   let renaming = $state(false);
   let confirming = $state(false);
   let insights = $state(false);
+  let iconOpen = $state(false);
 
   const pinned = $derived(pins.find((p) => p.pin.kind === 'Project' && p.pin.target === slug));
   // Only Obsidian and https links get a button; anything else (javascript:, http:, file:) is dropped.
@@ -68,6 +73,12 @@
     pins = await api.pins.listResolved();
   }
 
+  async function changeLook(c: { icon: string | null; color: string | null }) {
+    if (!project) return;
+    await api.projects.update({ ...project, icon: c.icon, color: c.color });
+    await reload(slug);
+  }
+
   async function archive() {
     if (!project) return;
     confirming = false;
@@ -80,11 +91,20 @@
     void reload(slug);
   });
 
+  // A command-menu edit (status, priority, labels) lands on the backend; show it.
+  $effect(() => {
+    const again = () => void reload(slug);
+    addEventListener('rows:changed', again);
+    return () => removeEventListener('rows:changed', again);
+  });
+
   // The command registry fires these; the page owns the state they act on.
   $effect(() => {
     const pin = () => void togglePin();
     const ask = () => (confirming = true);
     const panel = () => (insights = !insights);
+    const icon = () => (iconOpen = true);
+    addEventListener('command:icon.change', icon);
     const rename = () => (renaming = true);
     addEventListener('command:project.rename', rename);
     addEventListener('command:project.pin', pin);
@@ -95,6 +115,7 @@
       removeEventListener('command:project.pin', pin);
       removeEventListener('command:project.archive', ask);
       removeEventListener('command:insights.toggle', panel);
+      removeEventListener('command:icon.change', icon);
     };
   });
 </script>
@@ -110,6 +131,7 @@
 {:else}
   <div class="page">
     <PageHeader title={crumb} icon={project.icon ?? 'icon:project'} color={project.color}>
+      {#snippet iconEdit()}<IconColorPicker label={`Icon and colour of ${project!.name}`} value={{ icon: project!.icon, color: project!.color }} onchange={changeLook} bind:open={iconOpen} />{/snippet}
       {#snippet actions()}
         {#if docHref}
           <Button icon="link" tooltip={{ label: 'Open the project doc' }} onclick={() => openExternal(docHref)}><span data-testid="open-obsidian">Open doc</span></Button>
@@ -123,6 +145,7 @@
     <div class="cols">
     <div class="scroll">
       <ProjectHeader {project} {progress} bind:renaming onsaved={(p) => (project = p)} />
+      <div class="details"><ProjectDetails {project} onsaved={(p) => (project = p)} /></div>
       <div class="ms">
         <Milestones projectId={project.id} {milestones} issues={rows} {statuses} onchange={() => reload(slug)} />
       </div>
@@ -130,7 +153,7 @@
         <Tabs tabs={layouts} bind:value={layout as string} label="Layout" />
         <ViewEditor {def} onchange={(p) => (def = { ...def, ...p })} />
       </div>
-      <div class="issues"><ProjectIssues projectId={project.id} {layout} {def} /></div>
+      <div class="issues"><ProjectIssues projectId={project.id} {layout} {def} onsort={sortHeading} /></div>
     </div>
     {#if insights}<InsightsPanel kind="project" id={project.id} title={project.name} onclose={() => (insights = false)} />{/if}
     </div>
@@ -148,6 +171,7 @@
   .page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
   .cols { flex: 1; min-height: 0; display: flex; }
   .scroll { flex: 1; min-height: 0; overflow-y: auto; }
+  .details { padding: var(--s-5) var(--s-7) 0; }
   .ms { padding: var(--s-7); }
   .toolbar { display: flex; align-items: center; gap: var(--s-7); flex-wrap: wrap; padding: 0 var(--s-7); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
   .crumb { font-size: var(--fs-lg); font-weight: 600; color: var(--muted); }

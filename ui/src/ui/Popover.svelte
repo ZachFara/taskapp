@@ -14,7 +14,7 @@
     {#snippet child({ props })}{@render trigger(props)}{/snippet}
   </Popover.Trigger>
   <Popover.Portal>
-    <Popover.Content class="cx-surface cx-popover" sideOffset={4} align="start" collisionPadding={8}>
+    <Popover.Content class="cx-surface cx-popover" sideOffset={4} align="start" collisionPadding={10}>
       {@render children()}
     </Popover.Content>
   </Popover.Portal>

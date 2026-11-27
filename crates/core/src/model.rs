@@ -1,6 +1,6 @@
 //! Every type shared across crates. Ids and enums derive `Copy`/`Eq`/`Hash` where cheap, for use as map keys.
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 
@@ -13,16 +13,20 @@ macro_rules! ids {
 ids!(
     IssueId,
     StatusId,
+    ProjectStatusId,
     ProjectId,
     MilestoneId,
     CycleId,
     LabelId,
     ViewId,
     ViewTemplateId,
+    ViewFolderId,
     CommentId,
     WorkBlockId,
     PinId,
-    TemplateId
+    TemplateId,
+    EventId,
+    AttachmentId
 );
 
 /// A patch field that can also be cleared: absent is `None`, set to null is `Some(None)`.
@@ -79,11 +83,28 @@ pub enum PropertyKind {
     NoteLink,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
-pub enum RelationKind {
-    Blocks,
-    Related,
-    Duplicate,
+/// The id of a row in `relation_kinds`: "blocks", "related", "duplicate", or any other kind's slug.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(transparent)]
+pub struct RelationKind(pub String);
+
+impl RelationKind {
+    #[must_use]
+    pub fn new(id: &str) -> Self {
+        Self(id.to_owned())
+    }
+}
+
+/// A kind of relation: `forward` reads from the `from` issue ("blocks"), `reverse` from the `to` issue ("blocked by").
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct RelationKindDef {
+    pub id: RelationKind,
+    pub name: String,
+    pub forward: String,
+    pub reverse: String,
+    pub symmetric: bool,
+    pub built_in: bool,
+    pub position: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -206,6 +227,28 @@ pub struct Status {
     pub icon: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+pub enum ProjectStatusCategory {
+    Planned,
+    Started,
+    Paused,
+    Completed,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct ProjectStatus {
+    pub id: ProjectStatusId,
+    pub name: String,
+    pub category: ProjectStatusCategory,
+    pub position: i32,
+    /// A palette key.
+    pub color: String,
+    /// The reference hex for `color`, for showing it without the palette.
+    pub color_hex: String,
+    pub icon: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct Project {
     pub id: ProjectId,
@@ -218,6 +261,11 @@ pub struct Project {
     pub archived_at: Option<DateTime<Utc>>,
     pub icon: Option<String>,
     pub color: Option<String>,
+    pub status_id: ProjectStatusId,
+    /// The issue scale: 0 none, 1 urgent, 2 high, 3 medium, 4 low.
+    pub priority: u8,
+    pub label_ids: Vec<LabelId>,
+    pub properties: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -239,6 +287,36 @@ pub struct Cycle {
     pub color: Option<String>,
 }
 
+/// Times are local wall-clock (no zone); an all-day event keeps midnight and the UI ignores the time.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct Event {
+    pub id: EventId,
+    pub title: String,
+    pub starts_at: NaiveDateTime,
+    pub ends_at: Option<NaiveDateTime>,
+    pub all_day: bool,
+    pub place: Option<String>,
+    pub notes: String,
+    pub icon: Option<String>,
+    pub color: Option<String>,
+    pub archived: bool,
+    pub issue_ids: Vec<IssueId>,
+}
+
+/// What create and update take: everything on [`Event`] except the id and the links.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct EventInput {
+    pub title: String,
+    pub starts_at: NaiveDateTime,
+    pub ends_at: Option<NaiveDateTime>,
+    pub all_day: bool,
+    pub place: Option<String>,
+    pub notes: String,
+    pub icon: Option<String>,
+    pub color: Option<String>,
+    pub archived: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct Label {
     pub id: LabelId,
@@ -257,6 +335,23 @@ pub struct Comment {
     pub body: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+/// A stored image; its bytes come from `attachments::get`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct Attachment {
+    pub id: AttachmentId,
+    pub sha256: String,
+    pub mime: String,
+    pub bytes: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+/// An image's bytes and type, as `attachments_get` returns them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct AttachmentData {
+    pub mime: String,
+    pub bytes: Vec<u8>,
 }
 
 /// One edit for a whole selection: the patch, labels to add or remove, and a relation from each issue to `add_relation.1`.
@@ -284,14 +379,26 @@ pub struct SelectOption {
     pub color: String,
 }
 
+/// Which entities a custom property applies to.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub enum PropertyAppliesTo {
+    #[default]
+    Issues,
+    Projects,
+    Both,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct PropertyDef {
     pub key: String,
     pub name: String,
     pub kind: PropertyKind,
     pub options: Vec<SelectOption>,
+    /// Limits the issue side to one project; never set for a projects-only property.
     pub project_id: Option<ProjectId>,
     pub position: i32,
+    #[serde(default)]
+    pub applies_to: PropertyAppliesTo,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -302,6 +409,7 @@ pub enum PinKind {
     Cycle,
     Note,
     Url,
+    Folder,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -353,6 +461,16 @@ pub enum FixedField {
     SubIssueProgress,
     RelationCount,
     CommentCount,
+    /// Filter only: the issue has a relation of the given kind id(s), on either end.
+    RelationKind,
+    /// An issue's project status; on a project view, use `Status`.
+    ProjectStatus,
+    /// Project views only.
+    TargetDate,
+    /// Project views only: the percent of the project's issues that are completed.
+    Progress,
+    /// Project views only: the project's issues, archived ones left out.
+    IssueCount,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -468,16 +586,65 @@ impl Default for ViewDef {
     }
 }
 
+/// What a saved view lists. A project view's fields are project fields.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum ViewEntity {
+    #[default]
+    Issue,
+    Project,
+}
+
+/// A project as a project view lists it, with its issue counts (archived issues left out).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct ProjectRow {
+    pub project: Project,
+    pub issue_total: u32,
+    pub issue_done: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct SavedView {
     pub id: ViewId,
     pub name: String,
+    pub entity: ViewEntity,
     pub def: ViewDef,
     pub position: i32,
     pub icon: Option<String>,
     pub color: Option<String>,
     /// The template the view was made from, for "Reset to template".
     pub template_id: Option<ViewTemplateId>,
+    /// The sidebar folder the view sits in; `None` is the top level.
+    pub folder_id: Option<ViewFolderId>,
+}
+
+/// The sidebar section a folder belongs to; its items live in the table of the same name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum FolderSection {
+    Pin,
+    View,
+    Project,
+    Cycle,
+}
+
+/// A sidebar folder. It holds items of its own section and folders of that section, nested by `parent_id`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct ViewFolder {
+    pub id: ViewFolderId,
+    pub name: String,
+    pub position: i32,
+    pub section: FolderSection,
+    pub parent_id: Option<ViewFolderId>,
+}
+
+/// Where one pin, view, project or cycle sits: the folder (`None` is the section's top level) and its place there.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct Placement {
+    pub section: FolderSection,
+    pub id: i64,
+    pub folder_id: Option<ViewFolderId>,
+    pub position: i32,
 }
 
 /// A saved view definition that new views start from.

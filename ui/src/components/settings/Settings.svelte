@@ -5,12 +5,15 @@
   import Calendar from './Calendar.svelte';
   import Cycles from './Cycles.svelte';
   import Export from './Export.svelte';
+  import Fields from './Fields.svelte';
   import General from './General.svelte';
   import ImportPage from '../import/ImportPage.svelte';
   import Labels from './Labels.svelte';
+  import ProjectStatuses from './ProjectStatuses.svelte';
   import Projects from './Projects.svelte';
   import Properties from './Properties.svelte';
   import Reminders from './Reminders.svelte';
+  import RelationKinds from './RelationKinds.svelte';
   import Statuses from './Statuses.svelte';
   import Templates from './Templates.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
@@ -21,10 +24,13 @@
   const sections: { id: string; label: string; icon: string; screen?: Component; action?: string }[] = [
     { id: 'general', label: 'General', icon: 'settings', screen: General },
     { id: 'statuses', label: 'Statuses', icon: 'circle', screen: Statuses },
+    { id: 'project-statuses', label: 'Project statuses', icon: 'project', screen: ProjectStatuses },
     { id: 'labels', label: 'Labels', icon: 'tag', screen: Labels },
     { id: 'projects', label: 'Projects', icon: 'project', screen: Projects },
     { id: 'cycles', label: 'Cycles', icon: 'cycle', screen: Cycles },
+    { id: 'fields', label: 'Fields', icon: 'list', screen: Fields },
     { id: 'properties', label: 'Properties', icon: 'layers', screen: Properties },
+    { id: 'relations', label: 'Relations', icon: 'link', screen: RelationKinds },
     { id: 'templates', label: 'Templates', icon: 'bookmark', screen: Templates },
     { id: 'import', label: 'Import', icon: 'arrow-down', screen: ImportPage },
     { id: 'reminders', label: 'Reminders', icon: 'bell', screen: Reminders },

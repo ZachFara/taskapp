@@ -4,7 +4,7 @@ use std::collections::{HashMap, VecDeque};
 
 use chrono::{Days, NaiveDate};
 
-use crate::{Bar, Due, Issue, IssueId, Relation, RelationKind, Reschedule};
+use crate::{Bar, Due, Issue, IssueId, Relation, Reschedule};
 
 const DAY_MINUTES: u32 = 480;
 
@@ -47,7 +47,7 @@ pub fn bar_for(issue: &Issue) -> Option<Bar> {
 
 fn blocked_by(blocks: &[Relation]) -> HashMap<IssueId, Vec<IssueId>> {
     let mut m: HashMap<IssueId, Vec<IssueId>> = HashMap::new();
-    for r in blocks.iter().filter(|r| r.kind == RelationKind::Blocks) {
+    for r in blocks.iter().filter(|r| r.kind.0 == "blocks") {
         m.entry(r.from).or_default().push(r.to);
     }
     m
@@ -169,7 +169,7 @@ mod tests {
     use serde_json::Map;
 
     use super::*;
-    use crate::StatusId;
+    use crate::{RelationKind, StatusId};
 
     fn d(s: &str) -> NaiveDate {
         s.parse().expect("date")
@@ -204,7 +204,7 @@ mod tests {
         Relation {
             from: IssueId(from),
             to: IssueId(to),
-            kind: RelationKind::Blocks,
+            kind: RelationKind::new("blocks"),
         }
     }
 

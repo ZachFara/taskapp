@@ -19,6 +19,7 @@
     Cycle: 'Cycles',
     Note: 'Notes',
     Url: 'Links',
+    Folder: 'Folders',
   };
   // Legend band tone follows how far along the kind is: issues read deepest, links shallowest.
   const category: Record<PinKind, 'Backlog' | 'Unstarted' | 'Started'> = {
@@ -28,8 +29,9 @@
     Cycle: 'Unstarted',
     Note: 'Backlog',
     Url: 'Backlog',
+    Folder: 'Unstarted',
   };
-  const glyph: Record<PinKind, string> = { Issue: 'circle', Project: 'project', View: 'list', Cycle: 'cycle', Note: 'edit', Url: 'link' };
+  const glyph: Record<PinKind, string> = { Issue: 'circle', Project: 'project', View: 'list', Cycle: 'cycle', Note: 'edit', Url: 'link', Folder: 'folder' };
 
   let pins = $state<ResolvedPin[]>([]);
   let loaded = $state(false);

@@ -219,6 +219,7 @@ async fn property_def_delete_restores_values() -> R {
         options: vec![],
         project_id: None,
         position: 0,
+        applies_to: taskapp_core::PropertyAppliesTo::Issues,
     };
     history::step("Create property", properties::create_def(&db, def, UI)).await?;
     undo::undo(&db).await?;
@@ -255,7 +256,7 @@ async fn relation_add_and_remove() -> R {
     let rel = Relation {
         from: a.id,
         to: b.id,
-        kind: RelationKind::Blocks,
+        kind: RelationKind::new("blocks"),
     };
     history::step("Relate", relations::add(&db, rel.clone(), UI)).await?;
     undo::undo(&db).await?;

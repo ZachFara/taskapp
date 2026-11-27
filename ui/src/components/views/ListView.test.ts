@@ -4,6 +4,7 @@ import { createMockApi, fixtures, type MockSeed } from '../../lib/api.mock';
 import { setApi } from '../../lib/api';
 import type { Issue, SavedView, ViewDef } from '../../lib/bindings';
 import { selection } from '../../lib/selection.svelte';
+import { selectedIssueId } from '../../lib/stores.svelte';
 import { listState } from '../../lib/listState.svelte';
 import { listCommands, type Ctx } from '../../lib/commands';
 import ListView from './ListView.svelte';
@@ -53,6 +54,19 @@ const bands = (t: HTMLElement) => [...t.querySelectorAll<HTMLElement>('.band')].
 const ctxFor = (id: number | null): Ctx => ({ route: '/', selection: [], focusedIssueId: id, openIssueId: null, api: {} as Ctx['api'], navigate: () => {} });
 
 describe('ListView', () => {
+  it('sorts_a_standalone_list_for_the_visit_and_restores_its_order', async () => {
+    const { target, mock } = await open({ issues: [issue(1, { title: 'Zebra' }), issue(2, { title: 'Alpha' })], views: viewSeed({ group_by: null }) });
+    const names = () => rows(target).map((r) => r.dataset.key);
+    const click = () => target.querySelector<HTMLButtonElement>('button[aria-label="Sort by Title"]')!.click();
+    click();
+    await vi.waitFor(() => expect(names()).toEqual(['ABC-2', 'ABC-1']));
+    click();
+    await vi.waitFor(() => expect(names()).toEqual(['ABC-1', 'ABC-2']));
+    click();
+    await vi.waitFor(() => expect(target.querySelector('button[aria-label="Sort by Title"]')?.textContent).not.toContain('↓'));
+    expect((await mock.views.list())[0].def.sorts).toEqual([]);
+  });
+
   it('groups_by_status_with_counts', async () => {
     const { target } = await open({ issues: [issue(1), issue(2), issue(3, { status_id: S2.id })] });
     expect(bands(target)).toEqual([{ name: S1.name, count: '2' }, { name: S2.name, count: '1' }]);
@@ -191,12 +205,53 @@ describe('ListView', () => {
     await vi.waitFor(() => expect(listState.editing).not.toBeNull());
   });
 
+  it('add_in_group_inherits_view_filter_defaults_and_opens_panel', async () => {
+    const proj = fixtures.projects[0];
+    const { mock, target } = await open({
+      issues: [issue(1, { project_id: proj.id })],
+      views: [{
+        id: 1,
+        name: 'Proj',
+        entity: 'issue',
+        position: 0,
+        icon: null,
+        color: null,
+        template_id: null,
+        folder_id: null,
+        def: {
+          filter: { Cond: { field: { Fixed: 'Project' }, op: 'In', value: [proj.id] } },
+          sorts: [],
+          group_by: { Fixed: 'Status' },
+          layout: 'List',
+          columns: [],
+          include_archived: false,
+        },
+      }],
+    });
+    const spy = vi.spyOn(mock.issues, 'create');
+    target.querySelector<HTMLElement>(`[aria-label="Add to ${S1.name}"]`)!.click();
+    await vi.waitFor(() =>
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ status_id: S1.id, project_id: proj.id })),
+    );
+    const created = await spy.mock.results[0].value;
+    await vi.waitFor(() => expect(selectedIssueId.value).toBe(created.id));
+  });
+
   it('right_click_opens_menu_of_commands_for_that_row', async () => {
     const { target } = await open({ issues: [issue(1)] });
     row(target, 1).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
     flushSync();
     await vi.waitFor(() => expect([...document.querySelectorAll('[role="menuitem"]')].some((e) => e.textContent?.includes('Rename issue'))).toBe(true));
     expect(selection.focused).toBe(1);
+  });
+
+  it('hovered_row_more_button_opens_the_issue_menu', async () => {
+    const { target } = await open({ issues: [issue(1)] });
+    row(target, 1).click(); // focusing a row shows its actions, as hovering does
+    flushSync();
+    row(target, 1).querySelector<HTMLButtonElement>('button[aria-label="More actions for ABC-1"]')!.click();
+    flushSync();
+    await vi.waitFor(() => expect([...document.querySelectorAll('[role="menuitem"]')].some((e) => e.textContent?.includes('Rename issue'))).toBe(true));
   });
 
   it('row_shows_labels_project_due_and_estimate', async () => {
