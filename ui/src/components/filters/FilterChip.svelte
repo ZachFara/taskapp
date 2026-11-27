@@ -8,7 +8,7 @@
   import Tooltip from '../../ui/Tooltip.svelte';
   import TextInput from '../../ui/TextInput.svelte';
   import type { Lookup } from './lookup';
-  import { multi, noValue, opsFor, type Chip } from './model';
+  import { multi, noValue, opsFor, relativeDays, relativeLabel, type Chip } from './model';
 
   let { chip, lookup, open = $bindable(false), onchange, onremove }: {
     chip: Chip; lookup: Lookup; open?: boolean; onchange: (c: Chip) => void; onremove: () => void;
@@ -23,11 +23,12 @@
   // A pick-list field always edits as "any of"; the single-value ops stay for dates, numbers and text.
   const ops = $derived(choices.length ? (['In', 'NotIn'] as Op[]) : opsFor(kind));
   const name = $derived(lookup.name(chip.field));
+  const relative = $derived(kind === 'Date' && relativeLabel(chip.value) !== undefined);
   const picked = $derived(([] as Value[]).concat(chip.value ?? []));
   const shown = $derived(
     noValue(chip.op) ? '' : choices.length
       ? picked.map((v) => choices.find((c) => c.value === v)?.label ?? String(v)).join(', ')
-      : kind === 'Checkbox' ? (chip.value === true ? 'yes' : 'no') : String(chip.value ?? ''),
+      : kind === 'Checkbox' ? (chip.value === true ? 'yes' : 'no') : (relativeLabel(chip.value) ?? String(chip.value ?? '')),
   );
   const set = (patch: Partial<Chip>) => onchange({ ...chip, ...patch });
   function setOp(op: string) {
@@ -57,15 +58,24 @@
       {:else if kind === 'Checkbox'}
         <Switch label={name} bind:checked={() => chip.value === true, (on) => set({ value: on })} />
       {:else}
-        <TextInput
-          label={`${name} value`}
-          type={kind === 'Date' ? 'date' : kind === 'Number' ? 'number' : 'text'}
-          value={String(chip.value ?? '')}
-          oninput={(e) => {
-            const v = (e.currentTarget as HTMLInputElement).value;
-            set({ value: kind === 'Number' ? (v === '' ? null : Number(v)) : v });
-          }}
-        />
+        {#if kind === 'Date'}
+          <Select
+            label={`${name} date`}
+            items={[{ value: 'exact', label: 'Exact date' }, ...relativeDays.map((r) => ({ value: r.value, label: r.label }))]}
+            bind:value={() => (relative ? chip.value : 'exact'), (v) => set({ value: v === 'exact' ? '' : v })}
+          />
+        {/if}
+        {#if !relative}
+          <TextInput
+            label={`${name} value`}
+            type={kind === 'Date' ? 'date' : kind === 'Number' ? 'number' : 'text'}
+            value={String(chip.value ?? '')}
+            oninput={(e) => {
+              const v = (e.currentTarget as HTMLInputElement).value;
+              set({ value: kind === 'Number' ? (v === '' ? null : Number(v)) : v });
+            }}
+          />
+        {/if}
       {/if}
     </div>
   </Popover>

@@ -221,3 +221,43 @@ async fn a_view_has_an_entity_that_defaults_to_issue_and_undoes() -> R {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn projects_sort_and_filter_by_created_and_updated_time() -> R {
+    let db = Db::open_in_memory().await?;
+    world(&db).await?;
+    let mut a = projects::list(&db).await?.remove(0);
+    a.priority = 1;
+    projects::update(&db, a, UI).await?;
+    let sorted = |field, descending| ViewDef {
+        sorts: vec![Sort {
+            field: FieldRef::Fixed(field),
+            descending,
+        }],
+        ..ViewDef::default()
+    };
+    // Alpha was made first but edited last (the archived Gamma is hidden).
+    assert_eq!(
+        names(&db, &sorted(FixedField::CreatedAt, true)).await?,
+        ["Beta", "Alpha"]
+    );
+    assert_eq!(
+        names(&db, &sorted(FixedField::UpdatedAt, true)).await?,
+        ["Alpha", "Beta"]
+    );
+    let after = |f| ViewDef {
+        filter: Some(cond(f, Op::Gt, json!("2000-01-01"))),
+        ..ViewDef::default()
+    };
+    assert_eq!(names(&db, &after(FixedField::UpdatedAt)).await?.len(), 2);
+    // Any write moves updated_at; an undo puts the old time back.
+    let mut p = projects::list(&db).await?.remove(1);
+    let (created, before) = (p.created_at, p.updated_at);
+    p.name = "Renamed".into();
+    taskapp_core::history::step("s", projects::update(&db, p, UI)).await?;
+    let now = projects::list(&db).await?.remove(1);
+    assert_eq!((now.created_at, now.updated_at > before), (created, true));
+    undo::undo(&db).await?;
+    assert_eq!(projects::list(&db).await?.remove(1).updated_at, before);
+    Ok(())
+}

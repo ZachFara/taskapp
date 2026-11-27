@@ -4,7 +4,7 @@
   import { api } from '../lib/api';
   import type { Issue, IssueTemplate, NewIssue, ParsedQuickAdd, Project, Status } from '../lib/bindings';
   import { navigate } from '../app/routes';
-  import { projects, refreshAll, statuses } from '../lib/stores.svelte';
+  import { defaultStatusId, projects, refreshAll, statuses } from '../lib/stores.svelte';
   import { viewContext } from '../lib/viewContext.svelte';
   import Button from '../ui/Button.svelte';
   import Contour from '../ui/Contour.svelte';
@@ -72,6 +72,11 @@
   const template = $derived(templates.find((t) => text.startsWith(`/${t.slug} `) || text === `/${t.slug}`));
 
   const defaultStatus = $derived(statusList.find((s) => s.id === activeDefaults.status_id) ?? null);
+  // The workspace's starting status is where the issue lands anyway, so it is not news: only a status the screen
+  // chose (a column, a view) is worth a chip.
+  const startingStatusId = $derived(
+    defaultStatusId.value ?? [...statusList].sort((a, b) => a.position - b.position)[0]?.id ?? null,
+  );
   const defaultProject = $derived(projectList.find((p) => p.id === activeDefaults.project_id) ?? null);
   const defaultLabels = $derived(
     (activeDefaults.label_ids ?? [])
@@ -99,7 +104,7 @@
   const chips = $derived(
     [
       template && { key: 'template', label: `/${template.slug}` },
-      defaultStatus && { key: 'status', label: defaultStatus.name },
+      defaultStatus && defaultStatus.id !== startingStatusId && { key: 'status', label: defaultStatus.name },
       effectiveDue && { key: 'due', label: `Due ${humanDate(effectiveDue.Date ?? effectiveDue.DateTime!.utc.slice(0, 10))}` },
       effectiveStart && { key: 'start', label: `Start ${humanDate(effectiveStart)}` },
       effectivePriority != null && { key: 'priority', label: PRIORITIES[effectivePriority] ?? `P${effectivePriority}` },
@@ -360,29 +365,29 @@
 </Dialog>
 
 <style>
-  .stage { position: absolute; right: calc(var(--s-7) * -1); top: calc(var(--s-7) * -1); color: var(--stone); opacity: 0.12; z-index: 0; pointer-events: none; }
+  .stage { position: absolute; right: calc(var(--s-7) * -1); top: calc(var(--s-7) * -1); color: var(--stone); opacity: 0.08; z-index: 0; pointer-events: none; }
   .field-wrap { position: relative; z-index: 1; }
   .title {
     width: 100%;
     height: calc(var(--ctl-h) + var(--s-6));
-    padding: 0 var(--s-5);
+    padding: 0 var(--s-2);
     border: 0;
-    border-bottom: 2px solid var(--control);
+    border-bottom: 1px solid var(--control);
     background: transparent;
     color: var(--ink);
-    font-size: var(--fs-title);
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    font-size: var(--fs-lg);
+    font-weight: 600;
+    letter-spacing: -0.01em;
     transition: border-color var(--dur-1) var(--ease);
   }
   .title::placeholder { color: var(--muted); font-weight: 500; }
-  .title:focus-visible { outline-offset: 0; border-color: var(--focus); }
+  .title:focus-visible { outline: none; border-color: var(--focus); box-shadow: 0 1px 0 var(--focus); }
   .templates { position: absolute; z-index: var(--z-popover); top: 100%; left: 0; right: 0; margin: var(--s-2) 0 0; padding: var(--s-2); list-style: none; background: var(--sheet); border: 1px solid var(--control); border-radius: var(--r-pop); box-shadow: var(--shadow-float); }
   .option { display: flex; gap: var(--s-4); width: 100%; height: var(--ctl-h); align-items: center; padding: 0 var(--s-4); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--ink); text-align: left; }
   .option[data-active] { background: var(--active); }
   .slug { font-weight: 700; color: var(--accent); }
   .name { color: var(--muted); }
-  .chips { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: var(--s-3); }
+  .chips { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: var(--s-3); padding: var(--s-3) var(--s-2) 0; }
   .chip { display: inline-flex; align-items: center; gap: var(--s-3); height: var(--row-h-compact); padding: 0 var(--s-4); border: 1px solid var(--control); border-radius: var(--r-round); background: var(--raised); color: var(--ink); font-size: var(--fs-sm); font-weight: 600; transition: background var(--dur-1) var(--ease); }
   .chip:hover { background: var(--active); }
   .error { margin: 0; color: var(--signal); font-size: var(--fs-sm); font-weight: 500; }

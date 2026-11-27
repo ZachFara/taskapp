@@ -9,7 +9,7 @@ export type Choice = { value: Value; label: string };
 const categories: StatusCategory[] = ['Backlog', 'Unstarted', 'Started', 'Completed', 'Canceled'];
 const names: Record<string, string> = {
   StatusCategory: 'Status category', DueDate: 'Due', StartDate: 'Start', CreatedAt: 'Created', UpdatedAt: 'Updated',
-  CompletedAt: 'Completed', RelationKind: 'Relation kind', ProjectStatus: 'Project status', TargetDate: 'Target', IssueCount: 'Issues',
+  CompletedAt: 'Completed', RelationKind: 'Relation kind', ProjectStatus: 'Project status', TargetDate: 'Target', IssueCount: 'Issues', ProgressChart: 'Progress chart',
 };
 const projectCategories = ['Planned', 'Started', 'Paused', 'Completed', 'Cancelled'];
 

@@ -19,7 +19,7 @@
   import ImageViewer from '../components/ImageViewer.svelte';
   import UndoToast from '../components/UndoToast.svelte';
   import { fresh } from '../lib/motion.svelte';
-  import { dismiss, onWrote, undoToast } from '../components/undoState.svelte';
+  import { dismiss, onWrote, say } from '../components/undoState.svelte';
 
   let path = $state(location.pathname);
   const match = $derived(matchRoute(path));
@@ -112,7 +112,7 @@
           statuses, projects, propertyDefs, defaultStatusId: typeof defaultStatus === 'number' ? defaultStatus : null,
         });
       } catch {
-        undoToast.value = { label: 'Could not load view defaults', tone: 'error' };
+        say({ label: 'Could not load view defaults', tone: 'error' });
         return;
       }
     }
@@ -172,7 +172,7 @@
     refreshed++;
     navigate('/');
     await tick(); // moving pages clears the toast, so say it after
-    undoToast.value = { label: `Restored from ${folder}`, tone: 'success' };
+    say({ label: `Restored from ${folder}`, tone: 'success' });
   }
 
   async function created({ issue, mode }: { issue: { id?: number; key: string }; mode?: 'close' | 'open' | 'keep' }) {
@@ -194,7 +194,7 @@
     }
     // The write's own toast names the backend's step; wait for it, then say what was made.
     await onWrote();
-    if (key) undoToast.value = { label: `Created ${key}`, tone: 'success', action: { run: 'undo', text: 'Undo' } };
+    if (key) say({ label: `Created ${key}`, tone: 'success', action: { run: 'undo', text: 'Undo' } });
   }
 </script>
 

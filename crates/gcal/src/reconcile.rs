@@ -3,7 +3,8 @@ use std::collections::{HashMap, HashSet};
 use chrono::{Duration, Utc};
 use sqlx::Row;
 use taskapp_core::{
-    Db, Error, Layout, Result, SyncState, ViewDef, blocks, projects, settings, statuses, views,
+    Db, Error, Layout, Result, SyncState, ViewDef, blocks, events, projects, settings, statuses,
+    views,
 };
 
 use crate::{
@@ -213,12 +214,18 @@ async fn desired(db: &Db) -> Result<Vec<DesiredEvent>> {
     let prefix: String = settings::get(db, "issue_prefix")
         .await?
         .unwrap_or_else(|| "ABC".into());
-    Ok(planner::desired(
+    let mut out = planner::desired(
         &issues,
         &statuses::list(db).await?,
         &projects::list(db).await?,
         &blocks,
         &tz,
         &prefix,
-    ))
+    );
+    let (from, to) = (from.date_naive(), to.date_naive());
+    out.extend(planner::event_events(
+        &events::list(db, Some(from), Some(to)).await?,
+        &tz,
+    ));
+    Ok(out)
 }

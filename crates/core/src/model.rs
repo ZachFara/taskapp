@@ -259,6 +259,9 @@ pub struct Project {
     pub start_date: Option<NaiveDate>,
     pub target_date: Option<NaiveDate>,
     pub archived_at: Option<DateTime<Utc>>,
+    /// Set by the database; an update ignores what the caller sends.
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
     pub icon: Option<String>,
     pub color: Option<String>,
     pub status_id: ProjectStatusId,
@@ -471,6 +474,8 @@ pub enum FixedField {
     Progress,
     /// Project views only: the project's issues, archived ones left out.
     IssueCount,
+    /// Project views only: shows progress as a percent with a scope and completed sparkline; sorts and filters as `Progress`.
+    ProgressChart,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]

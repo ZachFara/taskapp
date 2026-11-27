@@ -1084,7 +1084,9 @@ export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "P
 /**  Project views only: the percent of the project's issues that are completed. */
 "Progress" | 
 /**  Project views only: the project's issues, archived ones left out. */
-"IssueCount";
+"IssueCount" | 
+/**  Project views only: shows progress as a percent with a scope and completed sparkline; sorts and filters as `Progress`. */
+"ProgressChart";
 
 /**  The sidebar section a folder belongs to; its items live in the table of the same name. */
 export type FolderSection = "pin" | "view" | "project" | "cycle";
@@ -1316,6 +1318,9 @@ export type Project = {
 	start_date: string | null,
 	target_date: string | null,
 	archived_at: string | null,
+	/**  Set by the database; an update ignores what the caller sends. */
+	created_at: string,
+	updated_at: string,
 	icon: string | null,
 	color: string | null,
 	status_id: ProjectStatusId,

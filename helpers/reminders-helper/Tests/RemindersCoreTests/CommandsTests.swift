@@ -5,6 +5,7 @@ import Testing
 final class FakeStore: ReminderStore {
     var items: [String: [RawReminder]] = ["L1": []]
     var handler: (() -> Void)?
+    var isAuthorized = true
     func requestAccess() async throws -> Bool { true }
     func lists() throws -> [ReminderList] { items.keys.sorted().map { ReminderList(id: $0, title: "T-\($0)") } }
     func reminders(inList id: String) async throws -> [RawReminder] {
@@ -28,6 +29,18 @@ func exec(_ args: [String], _ store: ReminderStore) async -> (Int32, [String]) {
 func parse(_ s: String) -> Any { try! JSONSerialization.jsonObject(with: Data(s.utf8), options: .fragmentsAllowed) }
 
 struct CommandsTests {
+    @Test func without_access_every_list_command_says_to_authorize() async {
+        let s = FakeStore()
+        s.isAuthorized = false
+        for args in [["lists"], ["fetch", "--list", "nope"], ["delete", "--list", "nope", "a"], ["watch", "--list", "nope"]] {
+            let (code, out) = await exec(args, s)
+            #expect(code == 1)
+            #expect(out == [#"{"error":"Reminders access is off: press Authorize in Settings > Reminders"}"#])
+        }
+        let (code, _) = await exec(["authorize"], s)
+        #expect(code == 0)
+    }
+
     @Test func fetch_maps_date_only_due() async {
         let s = FakeStore()
         s.items["L1"] = [RawReminder(externalId: "a", title: "x", due: DateComponents(year: 2026, month: 3, day: 9))]

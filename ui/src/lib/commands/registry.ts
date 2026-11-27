@@ -1,3 +1,4 @@
+import type { Status } from '../bindings';
 import type { Api } from '../api';
 
 /** What the open view shows; the view publishes it (`selection.layout`) so keys can be scoped to it. */
@@ -26,6 +27,10 @@ export type PageItem = {
   id: string;
   label: string;
   icon?: string;
+  /** Draws the row's own icon and colour, as the sidebar does (a project, label or cycle). */
+  entity?: { icon: string | null; color: string | null };
+  /** Draws the row as a status glyph in the status's own colour. */
+  status?: Status;
   keywords?: string[];
   checked?: boolean | (() => boolean);
   run: (count?: number) => void | Promise<void>;

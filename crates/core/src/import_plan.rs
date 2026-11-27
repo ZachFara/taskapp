@@ -330,13 +330,17 @@ async fn ensure_project(tx: &mut SqliteConnection, name: &str) -> Result<()> {
         n += 1;
         slug = format!("{base}-{n}");
     }
-    let id = sqlx::query("INSERT INTO projects (slug, name, created_at) VALUES (?, ?, ?)")
-        .bind(&slug)
-        .bind(name)
-        .bind(Utc::now())
-        .execute(&mut *tx)
-        .await?
-        .last_insert_rowid();
+    let now = Utc::now();
+    let id = sqlx::query(
+        "INSERT INTO projects (slug, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+    )
+    .bind(&slug)
+    .bind(name)
+    .bind(now)
+    .bind(now)
+    .execute(&mut *tx)
+    .await?
+    .last_insert_rowid();
     created(tx, "project", id, &slug).await
 }
 

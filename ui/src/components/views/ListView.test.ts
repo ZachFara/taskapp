@@ -112,6 +112,15 @@ describe('ListView', () => {
     expect(again.target.querySelector(`[aria-label="Expand ${S1.name}"]`)).not.toBeNull();
   });
 
+  it('collapse_keeps_the_rows_below_as_the_same_elements_so_they_ease_up', async () => {
+    const issues = [issue(1), issue(2, { status_id: S2.id })];
+    const { target } = await open({ issues });
+    const below = row(target, 2);
+    target.querySelector<HTMLElement>(`[aria-label="Collapse ${S1.name}"]`)!.click();
+    flushSync();
+    expect(row(target, 2)).toBe(below);
+  });
+
   it('click_focuses_cmd_click_toggles_shift_click_selects_range', async () => {
     const { target } = await open({ issues: [1, 2, 3, 4].map((n) => issue(n)) });
     row(target, 2).click();

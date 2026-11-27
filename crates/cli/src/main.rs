@@ -62,6 +62,8 @@ enum Cmd {
     #[command(subcommand)]
     Pin(PinCmd),
     #[command(subcommand)]
+    Attachment(AttachmentCmd),
+    #[command(subcommand)]
     Template(TemplateCmd),
     /// Progress and velocity over time, rebuilt from history.
     #[command(subcommand)]
@@ -74,6 +76,9 @@ enum Cmd {
     Redo,
     #[command(subcommand)]
     Backup(BackupCmd),
+    /// Run the syncs the app runs on its own.
+    #[command(subcommand)]
+    Sync(SyncCmd),
     /// Builds a new database from an export folder. Needs --db, which must not exist yet.
     Restore {
         #[arg(long, value_name = "DIR")]
@@ -123,6 +128,16 @@ enum ImportCmd {
     Linear {
         #[arg(long)]
         apply: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum SyncCmd {
+    /// Imports the Reminders list and updates Google Calendar once, against this database.
+    Now {
+        /// The Reminders helper. Defaults to the one inside the installed app.
+        #[arg(long, value_name = "PATH")]
+        helper: Option<PathBuf>,
     },
 }
 
@@ -558,6 +573,14 @@ enum RelationCmd {
 }
 
 #[derive(Subcommand)]
+enum AttachmentCmd {
+    /// Absolute path of an attachment's image file.
+    Path { id: i64 },
+    /// Attachments an issue's description points at with `(attachment:N)`.
+    List { key: String },
+}
+
+#[derive(Subcommand)]
 enum PinCmd {
     List,
     /// kind: issue, project, view, cycle, note, url.
@@ -758,6 +781,9 @@ fn cell(value: &Value) -> String {
     match value {
         Value::Null => String::new(),
         Value::String(s) => s.replace('\n', " "),
+        Value::Array(items) if items.iter().all(|v| !v.is_object() && !v.is_array()) => {
+            items.iter().map(cell).collect::<Vec<_>>().join(", ")
+        }
         other => other.to_string(),
     }
 }

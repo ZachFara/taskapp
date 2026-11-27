@@ -69,10 +69,11 @@
     const def = view ? $state.snapshot(view.def) : null;
     const currentMode = mode;
     const own = view?.entity === 'project';
-    const [issues, projects, statuses] = await Promise.all([
+    const [issues, projects, statuses, projectStatuses] = await Promise.all([
       own ? Promise.resolve([] as Issue[]) : api.views.query(currentMode === 'issues' && def ? def : ALL),
       own ? api.views.queryProjects(def!).then((r) => r.map((x) => x.project)) : api.projects.list(),
       api.statuses.list(),
+      api.project.statusesList(),
     ]);
     const live = currentMode === 'issues' && def !== null;
     const [bars, critical, rels] = live
@@ -93,7 +94,7 @@
     // Each relation comes back from both of its issues.
     relations = [...new Map(rels.filter((r) => r.kind === 'blocks').map((r) => [`${r.from}-${r.to}`, r])).values()];
     statusList = statuses;
-    rows = buildRows({ mode: currentMode, issues, bars, projects, milestones, critical, statuses });
+    rows = buildRows({ mode: currentMode, issues, bars, projects, milestones, critical, statuses, projectStatuses });
     lane = currentMode === 'issues' ? unscheduled(issues, rows) : [];
     if (!loaded) {
       loaded = true;

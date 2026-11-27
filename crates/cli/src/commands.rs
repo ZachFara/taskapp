@@ -7,17 +7,18 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use taskapp_core::{
-    ChangeSource, CycleId, Db, Due, Error, EventId, EventInput, IssueId, IssuePatch, Measure,
-    NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind, Relation,
-    RelationKind, Result, SelectOption, TemplateId, ViewDef, ViewId, ViewTemplateId, backup,
-    comments, cycles, events, history, import, insights, issues, labels, pins, project_statuses,
-    projects, properties, quickadd, relations, search, statuses, templates, undo, view_templates,
-    views,
+    AttachmentId, ChangeSource, CycleId, Db, Due, Error, EventId, EventInput, IssueId, IssuePatch,
+    Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind,
+    Relation, RelationKind, Result, SelectOption, TemplateId, ViewDef, ViewId, ViewTemplateId,
+    attachments, backup, comments, cycles, events, history, import, insights, issues, labels, pins,
+    project_statuses, projects, properties, quickadd, relations, search, statuses, templates, undo,
+    view_templates, views,
 };
 
 use crate::{
-    Cmd, CommentCmd, CycleCmd, EventCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd, PinCmd,
-    ProjectCmd, PropertyCmd, RelationCmd, ScopeArgs, StatusCmd, TemplateCmd, ViewCmd,
+    AttachmentCmd, Cmd, CommentCmd, CycleCmd, EventCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd,
+    PinCmd, ProjectCmd, PropertyCmd, RelationCmd, ScopeArgs, StatusCmd, SyncCmd, TemplateCmd,
+    ViewCmd,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
@@ -38,6 +39,8 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Insights(cmd) => insights(db, cmd).await,
         Cmd::Event(cmd) => event(db, cmd).await,
         Cmd::Status(cmd) => status(db, cmd).await,
+        Cmd::Attachment(cmd) => attachment(db, cmd).await,
+        Cmd::Sync(SyncCmd::Now { helper }) => sync_now(db, helper).await,
         cmd => run_group(db, dir, cmd).await,
     }
 }
@@ -64,7 +67,9 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Template(_)
         | Cmd::Insights(_)
         | Cmd::Status(_)
-        | Cmd::Event(_) => handled_in_run(),
+        | Cmd::Attachment(_)
+        | Cmd::Event(_)
+        | Cmd::Sync(_) => handled_in_run(),
         Cmd::History { key } => {
             let id = issue_id(db, &key).await?;
             val(history::list_for(db, "issue", &id.0.to_string()).await?)
@@ -580,6 +585,26 @@ async fn relation(db: &Db, cmd: RelationCmd) -> Result<Value> {
     }
 }
 
+async fn attachment(db: &Db, cmd: AttachmentCmd) -> Result<Value> {
+    match cmd {
+        AttachmentCmd::Path { id } => {
+            let (_, path) = attachments::locate(db, AttachmentId(id)).await?;
+            Ok(Value::String(path.display().to_string()))
+        }
+        AttachmentCmd::List { key } => {
+            let issue = issues::get_by_key(db, &key).await?;
+            let rows = attachments::in_text(db, &issue.description)
+                .await?
+                .into_iter()
+                .map(|(a, path)| {
+                    json!({"id": a.id.0, "path": path.display().to_string(), "mime": a.mime, "bytes": a.bytes})
+                })
+                .collect();
+            Ok(Value::Array(rows))
+        }
+    }
+}
+
 async fn pin(db: &Db, cmd: PinCmd) -> Result<Value> {
     match cmd {
         PinCmd::List => val(pins::list_resolved(db).await?),
@@ -722,4 +747,34 @@ async fn comment(db: &Db, cmd: CommentCmd) -> Result<Value> {
     let id = issue_id(db, &key).await?;
     let at = created_at.as_deref().map(timestamp).transpose()?;
     val(comments::add_comment(db, id, &body, at, source(migration)).await?)
+}
+
+const APP_HELPER: &str = "/Applications/taskapp.app/Contents/MacOS/reminders-helper";
+
+/// The app's own sync steps for Reminders and Google Calendar, once. The CLI cannot reach a running app,
+/// so it does the work itself; both steps do nothing when their setting is off.
+async fn sync_now(db: &Db, helper: Option<std::path::PathBuf>) -> Result<Value> {
+    let helper = helper.unwrap_or_else(|| APP_HELPER.into());
+    let tz: String = taskapp_core::settings::get(db, "timezone")
+        .await?
+        .unwrap_or_else(|| "UTC".into());
+    let zone: chrono_tz::Tz = tz
+        .parse()
+        .map_err(|_| Error::Invalid(format!("unknown time zone {tz}")))?;
+    let configured = taskapp_core::settings::get::<String>(db, "reminders_list_id")
+        .await?
+        .is_some_and(|l| !l.is_empty());
+    if configured && !helper.exists() {
+        return Err(Error::Invalid(format!(
+            "reminders helper not found at {}; pass --helper <path>",
+            helper.display()
+        )));
+    }
+    let today = Utc::now().with_timezone(&zone).date_naive();
+    let r = taskapp_reminders::import::import(db, &helper, today, &tz).await?;
+    let g = taskapp_gcal::reconcile::reconcile(db).await?;
+    Ok(json!({
+        "reminders": {"imported": r.imported, "skipped_duplicates": r.skipped_duplicates, "failed": r.failed},
+        "gcal": {"created": g.created, "updated": g.updated, "deleted": g.deleted},
+    }))
 }

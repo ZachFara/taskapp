@@ -131,6 +131,18 @@ describe('QuickAdd', () => {
     expect(input().value).toBe('#quickadd-proj ');
   });
 
+  it('quickadd_workspace_default_status_is_not_a_chip_but_another_status_is', async () => {
+    const [first, second] = [...(await api.statuses.list())].sort((a, b) => a.position - b.position);
+    await unmount(app!);
+    document.body.innerHTML = '';
+    await open({ status_id: first.id });
+    expect(chips()).toEqual([]);
+    await unmount(app!);
+    document.body.innerHTML = '';
+    await open({ status_id: second.id });
+    expect(chips()).toEqual([second.name]);
+  });
+
   it('quickadd_status_prefill_is_one_create_call_with_the_status_and_one_undo_step', async () => {
     const status = (await api.statuses.list())[1];
     await unmount(app!);

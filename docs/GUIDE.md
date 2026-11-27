@@ -167,7 +167,8 @@ is on. Restore with the archive button in the issue page header (or undo).
 ## Undo and redo
 
 Every change can be undone, whoever made it: `mod+z` or `u` undoes the newest step, `mod+shift+z` redoes. One CLI or
-MCP call is one step. After a change a toast offers Undo. The toast "Nothing to undo" shows when the stack is empty.
+MCP call is one step. After a change a toast offers Undo. Toasts stack (at most three) and each leaves six seconds after it appeared. The
+toast "Nothing to undo" shows when the stack is empty.
 Undo refuses when something changed since. Inside a text field `mod+z` is the field's own undo. CLI: `taskapp undo`,
 `taskapp redo`; MCP: `undo`, `redo`, `undo_status`. An import is one step ("Undo import" button after it).
 
@@ -200,6 +201,10 @@ saved automatically (after a short pause), except temporary sorting changes. Fil
   Status, StatusCategory, Priority, Project, Milestone, Cycle, Label, Parent, StartDate, DueDate, Estimate, Points,
   CreatedAt, UpdatedAt, CompletedAt, Archived, Key, SubIssueProgress, RelationCount, CommentCount, and any custom
   property.
+- **Relative dates.** On a date field (Start, Due, Created, Updated, Completed, a date property) the chip's first
+  line picks "Exact date" or a relative day: today, 7 or 14 or 30 days ago, in 7, 14 or 30 days. Relative days count
+  from today in the workspace time zone and move on their own. "Before today" lists overdue dates; "up to in 7 days"
+  includes overdue dates too. A view definition writes the same value as `today`, `today+7` or `today-14`.
 - **Quick filter.** The filter icon in the header (`shift+f`) opens a bar of temporary filters: a text box that matches
   titles, and chips for Status, Priority, Project, Label and Due. They narrow the view while the bar is open and are not
   saved with it; the bar says "Temporary". "Save to view" keeps them as part of the saved filter. Esc, the x, or
@@ -249,8 +254,9 @@ filter chips, Group, Sort and Display.
   filters, sort and grouping as a project view (a table). A project view shows in the sidebar among the other views
   (marked with a small project icon) and sits in the same folders; the Views page lists both, with a filter All views /
   Issue views / Project views. From outside: `taskapp view save NAME --def JSON --entity project`.
-- **Fields.** Name, Status, Status category, Priority, Labels, Start, Target, Progress (percent of issues done),
-  Issues (count) and custom properties that apply to projects. Issue views can also filter by "Project status".
+- **Fields.** Name, Status, Status category, Priority, Labels, Start, Target, Created, Updated (any project write moves it), Progress (percent of issues done),
+  Progress chart (off by default; Display > Hidden: the percent plus grey scope and coloured completed lines over time,
+  when Progress charts is on), Issues (count) and custom properties that apply to projects. Issue views can also filter by "Project status".
 - **Layouts.** List: status, priority, name, then the fields, in bands when grouped. Table: the columns chosen in
   Display. Board: a column per project status (or priority, or a select property, from Group); dragging a card to
   another column sets that field, one undo step. Timeline: a bar from start to target date per project, milestones as
@@ -292,6 +298,8 @@ belong to many events. Times are wall-clock times with no zone.
 
 - **Events page** (sidebar "Events", `g e`): upcoming events grouped by day, with past ones behind a "Past" toggle.
   "New event" (or the command) asks for title, date, optional end date, all day or a from and to time, place and notes.
+  Right-click an event for Open, Edit, Delete and Link an issue; the command menu runs the same actions on the event
+  you right-clicked last.
 - **An event** (click it, `/event/<id>`): details, Edit, Delete (undoable), and the linked issues with "Link an issue"
   (search by text) and a remove button on each.
 - **On an issue**: the Events section lists its events, with "Add to event" and a remove button on each.
@@ -300,7 +308,11 @@ belong to many events. Times are wall-clock times with no zone.
 - Undo covers create, edit, delete, link and unlink. The export writes one `events/<id>.yaml` per event and a rebuild
   restores it with its links.
 - CLI: `event list`, `event create`, `event link`. MCP: `list_events`, `create_event`, `link_event`.
-- Not built: writing events to Google Calendar, recurrence, reminders, and searching events.
+- Google Calendar: when Calendar sync is on, each event is also written to your Cairn calendar. A timed event keeps its
+  start and end (no end means one hour), an all-day event stays all-day (over several days if it has an end date).
+  Editing or deleting (or archiving) an event updates or removes it there. Cairn events have no reminder, so none is
+  written; the popup is only for tasks.
+- Not built: recurrence, reminders, and searching events.
 
 ## Points and insights
 
@@ -451,7 +463,12 @@ restoring the backup it wrote (`taskapp backup restore`).
 - **Google Calendar** (Settings > Calendar): "Connect Google Calendar", choose a calendar (use a dedicated one),
   turn on "Enable notifications". Sync is one way: the app writes events and overwrites manual edits to its own events.
   Needs your Google Cloud OAuth client and a Google login (setup steps in docs/gcal.md). Not verified against a real account.
-- The legend bar shows the sync state; a sync error appears there.
+- The legend bar shows the sync state; a sync error appears there. If Reminders access is off (a fresh build), it says
+  "Reminders access is off: press Authorize in Settings > Reminders".
+- **Sync now**: the command menu has "Sync now" (runs every sync step in the app). From the terminal,
+  `taskapp sync now [--helper PATH]` runs the Reminders import and the Google Calendar update once against the
+  database, because the CLI cannot reach the running app. The helper defaults to
+  `/Applications/taskapp.app/Contents/MacOS/reminders-helper`. Both steps do nothing when their setting is off.
 
 ## Settings
 
@@ -795,6 +812,8 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `comment add <key> <body>` | Comment on an issue. | `taskapp comment add ABC-1 "Looks good"` |
 | `relation add <from> <kind> <to>` / `relation remove ...` | Kind: an id or name (blocks, related, duplicate, follows, caused_by, part_of, or a custom one). | `taskapp relation add ABC-1 blocks ABC-2` |
 | `pin list` / `pin add <kind> <target> [--title]` / `pin remove <id>` | Kinds: issue, project, view, cycle, note, url. | `taskapp pin add issue ABC-1` |
+| `attachment path <id>` | Absolute path of a pasted image's file. | `taskapp attachment path 3` |
+| `attachment list <key>` | Images the issue's description points at with `(attachment:N)`: id, path, mime, bytes. | `taskapp attachment list ABC-1` |
 | `template list` / `create` / `update <id>` / `delete <id>` | Issue templates: `create <name> <slug> [--icon --color --body JSON]`. | `taskapp template create Bug bug --body '{"title_prefix":"[Bug] "}'` |
 | `template apply <id> [title]` | Create the issue and its sub-issues. | `taskapp template apply 1 "Login fails"` |
 | `insights progress (--project N \| --cycle N \| --view N) [--measure points\|count\|time --from --to]` | Per-day scope, started, completed. | `taskapp insights progress --project 1 --measure count` |

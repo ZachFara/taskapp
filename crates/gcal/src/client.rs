@@ -212,6 +212,10 @@ fn when(timing: &EventTiming) -> (Value, Value) {
             json!({ "date": d.to_string() }),
             json!({ "date": (*d + Duration::days(1)).to_string() }),
         ),
+        EventTiming::AllDaySpan(a, b) => (
+            json!({ "date": a.to_string() }),
+            json!({ "date": b.to_string() }),
+        ),
         EventTiming::Timed { start, end } => (stamp(start), stamp(end)),
     }
 }

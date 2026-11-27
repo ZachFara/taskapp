@@ -19,6 +19,7 @@ const importPlan = (external_id: string, title: string, status: string | null = 
 const ev = (title: string, starts_at: string, extra: Record<string, unknown> = {}) => ({ title, starts_at, ends_at: null, all_day: false, place: null, notes: '', icon: null, color: null, archived: false, ...extra });
 // The project fields every update sends back unchanged.
 const plain = { status_id: 1, priority: 0, label_ids: [], properties: {} };
+const T0 = '2026-01-01T00:00:00Z'; // the server ignores a project's own created_at and updated_at on update
 const tpl = (name: string, slug: string, body: Record<string, unknown>) => ({ name, slug, icon: null, color: null, body });
 
 const zoned = def({ filter: cond(prop('zone'), 'Eq', 'a'), sorts: [{ field: prop('zone'), descending: false }], group_by: prop('zone'), columns: [prop('zone'), fixed('Priority')], card_fields: [prop('zone')] });
@@ -44,6 +45,9 @@ export const cases: Case[] = [
   filter('filter: priority Gte with sort', cond(fixed('Priority'), 'Gte', 3), { sorts: [{ field: fixed('Priority'), descending: true }] }),
   filter('filter: start date Gt', cond(fixed('StartDate'), 'Gt', '2026-12-05')),
   filter('filter: due date Lte', cond(fixed('DueDate'), 'Lte', '2026-12-10')),
+  filter('filter: relative due date today', cond(fixed('DueDate'), 'Eq', 'today')),
+  filter('filter: relative due date up to 7 days ahead', cond(fixed('DueDate'), 'Lte', 'today+7')),
+  filter('filter: relative created date in the last 14 days', cond(fixed('CreatedAt'), 'Gte', 'today-14')),
   filter('filter: title Contains is case-insensitive', cond(fixed('Title'), 'Contains', 'HOMEPAGE')),
   filter('filter: custom select property', cond(prop('area'), 'Eq', 'work')),
   filter('filter: custom number property', cond(prop('effort'), 'Gt', 10)),
@@ -377,9 +381,9 @@ export const cases: Case[] = [
   call('labels: delete unknown is NotFound', 'labels_delete', { id: 99 }),
   call('labels: undo the delete', 'history_undo'),
   call('labels: the issue has its label back', 'issues_get', { id: 4 }),
-  call('projects: edit', 'projects_update', { project: { id: 3, slug: 'office', name: 'Office relocation', description: 'Move desks', doc_link: null, start_date: '2026-12-01', target_date: '2026-12-20', archived_at: null, icon: 'icon:home', color: 'orange', ...plain } }),
-  call('projects: a slug in use is refused', 'projects_update', { project: { id: 3, slug: 'mobile', name: 'Office relocation', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null, ...plain } }),
-  call('projects: update unknown is NotFound', 'projects_update', { project: { id: 99, slug: 'ghost', name: 'Ghost', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null, ...plain } }),
+  call('projects: edit', 'projects_update', { project: { id: 3, slug: 'office', name: 'Office relocation', description: 'Move desks', doc_link: null, start_date: '2026-12-01', target_date: '2026-12-20', archived_at: null, created_at: T0, updated_at: T0, icon: 'icon:home', color: 'orange', ...plain } }),
+  call('projects: a slug in use is refused', 'projects_update', { project: { id: 3, slug: 'mobile', name: 'Office relocation', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, created_at: T0, updated_at: T0, icon: null, color: null, ...plain } }),
+  call('projects: update unknown is NotFound', 'projects_update', { project: { id: 99, slug: 'ghost', name: 'Ghost', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, created_at: T0, updated_at: T0, icon: null, color: null, ...plain } }),
   // Project statuses, priority, labels and custom properties
   call('project statuses: seeded list', 'project_statuses_list'),
   call('project statuses: create', 'project_statuses_create', { name: 'Blocked', category: 'Paused', color: 'red', icon: null }),
@@ -393,12 +397,12 @@ export const cases: Case[] = [
   call('properties: create a projects-only def', 'properties_create_def', { def: { key: 'sponsor', name: 'Sponsor', kind: 'Text', options: [], project_id: null, position: 0, applies_to: 'Projects' } }),
   call('properties: projects-only def cannot be limited to one project', 'properties_create_def', { def: { key: 'lim', name: 'Lim', kind: 'Text', options: [], project_id: 1, position: 0, applies_to: 'Projects' } }),
   call('properties: an issue cannot hold a projects-only value', 'properties_set_value', { issue: 1, key: 'sponsor', value: 'sam' }),
-  call('projects: set status, priority, label and property', 'projects_update', { project: { id: 2, slug: 'mobile', name: 'Mobile app', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null, status_id: 2, priority: 3, label_ids: [3, 3, 2], properties: { sponsor: 'sam' } } }),
+  call('projects: set status, priority, label and property', 'projects_update', { project: { id: 2, slug: 'mobile', name: 'Mobile app', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, created_at: T0, updated_at: T0, icon: null, color: null, status_id: 2, priority: 3, label_ids: [3, 3, 2], properties: { sponsor: 'sam' } } }),
   call('projects: list after the fields are set', 'projects_list'),
-  call('projects: priority above 4 is Invalid', 'projects_update', { project: { id: 2, slug: 'mobile', name: 'Mobile app', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null, status_id: 2, priority: 9, label_ids: [], properties: {} } }),
-  call('projects: unknown status is NotFound', 'projects_update', { project: { id: 2, slug: 'mobile', name: 'Mobile app', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null, status_id: 99, priority: 0, label_ids: [], properties: {} } }),
-  call('projects: an issues-only property is Invalid', 'projects_update', { project: { id: 2, slug: 'mobile', name: 'Mobile app', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null, status_id: 2, priority: 0, label_ids: [], properties: { effort: 3 } } }),
-  call('projects: a wrong kind of value is Invalid', 'projects_update', { project: { id: 2, slug: 'mobile', name: 'Mobile app', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null, status_id: 2, priority: 0, label_ids: [], properties: { sponsor: 4 } } }),
+  call('projects: priority above 4 is Invalid', 'projects_update', { project: { id: 2, slug: 'mobile', name: 'Mobile app', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, created_at: T0, updated_at: T0, icon: null, color: null, status_id: 2, priority: 9, label_ids: [], properties: {} } }),
+  call('projects: unknown status is NotFound', 'projects_update', { project: { id: 2, slug: 'mobile', name: 'Mobile app', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, created_at: T0, updated_at: T0, icon: null, color: null, status_id: 99, priority: 0, label_ids: [], properties: {} } }),
+  call('projects: an issues-only property is Invalid', 'projects_update', { project: { id: 2, slug: 'mobile', name: 'Mobile app', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, created_at: T0, updated_at: T0, icon: null, color: null, status_id: 2, priority: 0, label_ids: [], properties: { effort: 3 } } }),
+  call('projects: a wrong kind of value is Invalid', 'projects_update', { project: { id: 2, slug: 'mobile', name: 'Mobile app', description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, created_at: T0, updated_at: T0, icon: null, color: null, status_id: 2, priority: 0, label_ids: [], properties: { sponsor: 4 } } }),
   call('properties: narrowing to issues with project values is Conflict', 'properties_set_applies_to', { key: 'sponsor', applies_to: 'Issues' }),
   call('properties: widen to both', 'properties_set_applies_to', { key: 'sponsor', applies_to: 'Both' }),
   call('project statuses: delete moves projects', 'project_statuses_delete', { id: 2, move_projects_to: 6 }),
@@ -592,6 +596,7 @@ export const cases: Case[] = [
   pquery('pviews: Title Contains', { filter: cond(fixed('Title'), 'Contains', 'app') }),
   pquery('pviews: TargetDate empty', { filter: cond(fixed('TargetDate'), 'IsEmpty') }),
   pquery('pviews: TargetDate Gte', { filter: cond(fixed('TargetDate'), 'Gte', '2000-01-01') }),
+  pquery('pviews: UpdatedAt Gte', { filter: cond(fixed('UpdatedAt'), 'Gte', '2000-01-01') }),
   pquery('pviews: StartDate not empty', { filter: cond(fixed('StartDate'), 'IsNotEmpty') }),
   pquery('pviews: IssueCount Gt', { filter: cond(fixed('IssueCount'), 'Gt', 0) }),
   pquery('pviews: Progress Gte', { filter: cond(fixed('Progress'), 'Gte', 1) }),

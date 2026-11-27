@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Bar, Issue, Project } from './bindings';
+import type { Bar, Issue, Milestone, Project } from './bindings';
 import { axis, buildRows, dragDates, localDay, rollup, saturdays, shiftLocalDays, unscheduled, zoomBy } from './gantt';
-import { fixtures } from './api.mock';
+import { fixtures, projectStatusSeed } from './api.mock';
 
 const issue = (id: number, o: Partial<Issue> = {}): Issue => ({ ...fixtures.issues[0], id, key: `ABC-${id}`, title: `t${id}`, parent_id: null, project_id: 1, start_date: null, due: null, estimate_minutes: null, ...o });
 const bar = (issue_id: number, start: string, end: string): Bar => ({ issue_id, start, end, from_estimate: false });
@@ -38,6 +38,20 @@ describe('gantt rows', () => {
   it('rows_carry_key_and_title_apart', () => {
     const rows = buildRows({ ...base, issues: [issue(1)], bars: [bar(1, '2026-12-01', '2026-12-02')] });
     expect(rows[0]).toMatchObject({ key: 'ABC-1', title: 't1' });
+  });
+});
+
+describe('gantt project rows', () => {
+  it('a_dateless_project_draws_no_milestone_row', () => {
+    const projects = [{ ...fixtures.projects[0], start_date: null, target_date: null }] as Project[];
+    const milestones: Milestone[] = [{ id: 9, project_id: projects[0].id, name: 'Launch', target_date: '2026-12-20' }];
+    expect(buildRows({ mode: 'projects', issues: [], bars: [], projects, milestones, critical: [] })).toEqual([]);
+  });
+
+  it('a_project_bar_takes_its_status_colour', () => {
+    const projects = [{ ...fixtures.projects[0], start_date: '2026-12-01', target_date: '2026-12-05', status_id: 2 }] as Project[];
+    const rows = buildRows({ mode: 'projects', issues: [], bars: [], projects, milestones: [], critical: [], projectStatuses: projectStatusSeed });
+    expect(rows[0]).toMatchObject({ kind: 'bar', color: 'amber' });
   });
 });
 

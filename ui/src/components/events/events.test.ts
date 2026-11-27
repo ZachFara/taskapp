@@ -117,6 +117,28 @@ describe('Event page', () => {
 });
 
 describe('Events section of an issue', () => {
+  it('right-click on an event offers open, edit, delete and link', async () => {
+    const e = await api.events.create(input('Launch', '2026-12-01T09:30:00'));
+    await show(EventsPage);
+    document.querySelector<HTMLElement>(`[data-event="${e.id}"]`)!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 4, clientY: 4 }));
+    await settle();
+    const menu = document.querySelector('[role="menu"]')?.textContent ?? '';
+    for (const label of ['Open event', 'Edit event', 'Delete event', 'Link an issue to this event']) expect(menu).toContain(label);
+  });
+
+  it('the event commands act on the event last right-clicked', async () => {
+    const e = await api.events.create(input('Launch', '2026-12-01T09:30:00'));
+    await show(EventsPage);
+    document.querySelector<HTMLElement>(`[data-event="${e.id}"]`)!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 4, clientY: 4 }));
+    await settle();
+    window.dispatchEvent(new CustomEvent('command:event.edit'));
+    await settle();
+    expect(field('Event title').value).toBe('Launch');
+    window.dispatchEvent(new CustomEvent('command:event.delete'));
+    await settle();
+    expect(await api.events.list(null, null)).toEqual([]);
+  });
+
   it('lists the linked events and removes one', async () => {
     const issue = await api.issues.create({ title: 'Plan trip' });
     const e = await api.events.create(input('Flight', '2026-12-05T08:00:00'));

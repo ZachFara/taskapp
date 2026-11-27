@@ -1,7 +1,13 @@
+use chrono::NaiveDate;
 use serde_json::{Value, json};
 use taskapp_core::{
     ChangeSource, Db, Error, FieldRef, Filter, FixedField, Issue, Layout, Op, PropertyDef,
     PropertyKind, SelectOption, Sort, ViewDef, search, views,
+};
+
+const DAY: NaiveDate = match NaiveDate::from_ymd_opt(2026, 11, 27) {
+    Some(d) => d,
+    None => panic!("date"),
 };
 
 type R = Result<(), Box<dyn std::error::Error>>;
@@ -133,7 +139,7 @@ async fn nested_and_or_not() -> R {
 #[tokio::test]
 async fn unknown_property_is_dropped_not_an_error() -> R {
     let f = cond(prop("nope"), Op::Eq, json!(1));
-    let (sql, binds) = views::compile(&def(Some(f)), &[])?;
+    let (sql, binds) = views::compile(&def(Some(f)), &[], DAY)?;
     assert!(!sql.contains("json_extract") && binds.is_empty(), "{sql}");
     Ok(())
 }
@@ -146,7 +152,7 @@ async fn property_key_never_inlined() -> R {
         field: prop("size"),
         descending: false,
     }];
-    let (sql, binds) = views::compile(&d, &defs)?;
+    let (sql, binds) = views::compile(&d, &defs, DAY)?;
     assert!(!sql.contains("size"), "{sql}");
     assert!(
         binds
@@ -165,7 +171,7 @@ async fn hostile_property_key_is_never_used() -> R {
         field: prop(key),
         descending: false,
     }];
-    let (sql, binds) = views::compile(&d, &defs)?;
+    let (sql, binds) = views::compile(&d, &defs, DAY)?;
     assert!(!sql.contains("OR 1=1") && binds.is_empty(), "{sql}");
     let bad = taskapp_core::properties::create_def(
         &Db::open_in_memory().await?,
@@ -375,5 +381,44 @@ async fn picking_a_layout_is_kept_but_is_not_an_undo_step() -> R {
         views::set_layout(&db, taskapp_core::ViewId(9999), Layout::List).await,
         Err(Error::NotFound(_))
     ));
+    Ok(())
+}
+
+#[test]
+fn relative_dates_bind_the_day_they_name() -> R {
+    let today = DAY;
+    let due = FieldRef::Fixed(FixedField::DueDate);
+    let cases = [
+        ("today", Op::Eq, "2026-11-27"),
+        ("today", Op::Lt, "2026-11-27"),
+        ("today+7", Op::Lte, "2026-12-04"),
+        ("today-14", Op::Gte, "2026-11-13"),
+        ("today+0", Op::Eq, "2026-11-27"),
+        ("2026-12-01", Op::Lte, "2026-12-01"),
+    ];
+    for (value, op, want) in cases {
+        let (_, binds) =
+            views::compile(&def(Some(cond(due.clone(), op, json!(value)))), &[], today)?;
+        assert_eq!(binds, [json!(want)], "{value} {op:?}");
+    }
+    let defs = [pdef("start", PropertyKind::Date)];
+    let (_, binds) = views::compile(
+        &def(Some(cond(prop("start"), Op::Eq, json!("today")))),
+        &defs,
+        today,
+    )?;
+    assert_eq!(binds.last(), Some(&json!("2026-11-27")));
+    // Outside a date field "today" is just text.
+    let defs = [pdef("note", PropertyKind::Text)];
+    let (_, binds) = views::compile(
+        &def(Some(cond(prop("note"), Op::Eq, json!("today")))),
+        &defs,
+        today,
+    )?;
+    assert_eq!(binds.last(), Some(&json!("today")));
+    for bad in ["today7", "today+", "todayx", "today+99999999999999"] {
+        let f = cond(due.clone(), Op::Eq, json!(bad));
+        assert!(views::compile(&def(Some(f)), &[], today).is_err(), "{bad}");
+    }
     Ok(())
 }

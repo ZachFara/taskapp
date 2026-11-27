@@ -4,7 +4,7 @@ import { api, setApi } from '../lib/api';
 import { createMockApi } from '../lib/api.mock';
 import { setTheme } from '../lib/theme.svelte';
 import { refreshAll, selectedIssueId, statuses as statusStore } from '../lib/stores.svelte';
-import { undoToast } from '../components/undoState.svelte';
+import { say } from '../components/undoState.svelte';
 import App from './App.svelte';
 import CtxProbe from './testing/CtxProbe.svelte';
 import { navigate, routes } from './routes';
@@ -156,7 +156,7 @@ describe('keys and overlays', () => {
 
   it('the_toast_clears_when_the_page_changes', async () => {
     await open('/my');
-    undoToast.value = { label: 'Updated issue', tone: 'success', action: { run: 'undo', text: 'Undo' } };
+    say({ label: 'Updated issue', tone: 'success', action: { run: 'undo', text: 'Undo' } });
     await settle();
     expect(q('.toast')).not.toBeNull();
     navigate('/cycles');

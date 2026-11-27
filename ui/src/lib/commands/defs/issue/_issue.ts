@@ -1,7 +1,7 @@
 import type { Api } from '../../../api';
 import type { BulkPatch, IssuePatch, Cycle, Issue, Label, Project, PropertyDef, RelationKindDef, Status } from '../../../bindings';
 import { formatDay, formatEstimate, parseDate, parseEstimate } from '../../../parse/when';
-import type { CommandPage, Ctx } from '../../registry';
+import type { CommandPage, Ctx, PageItem } from '../../registry';
 
 /** What the pages list; filled from the api each time a page opens, so a page never lists stale or empty choices. */
 export const choices = {
@@ -42,13 +42,14 @@ export async function apply(ctx: Ctx, p: BulkPatch) {
   refreshView();
 }
 
-type Row = [label: string, patch: BulkPatch, icon?: string];
+type Mark = Pick<PageItem, 'icon' | 'entity' | 'status'>;
+export type Row = [label: string, patch: BulkPatch, mark?: Mark];
 /**
  * A page whose items each apply one bulk patch. Rows given as a function are built after the choices have loaded and
  * the items come back as a Promise; fixed rows are listed at once.
  */
 export function pageOf(ctx: Ctx, title: string, rows: Row[] | (() => Row[]), extra: Pick<CommandPage, 'parse'> = {}): CommandPage {
-  const list = (r: Row[]) => r.map(([label, p, icon]) => ({ id: label, label, icon, run: () => apply(ctx, p) }));
+  const list = (r: Row[]) => r.map(([label, p, mark]) => ({ id: label, label, ...mark, run: () => apply(ctx, p) }));
   return { title, ...extra, items: typeof rows === 'function' ? loadChoices(ctx.api).then(() => list(rows())) : list(rows) };
 }
 

@@ -18,4 +18,11 @@ describe('FilterChip', () => {
     flushSync();
     expect(document.querySelector('.opts')?.textContent).toContain('Mentors');
   });
+
+  it('names a relative date by what it counts', async () => {
+    const lookup = makeLookup({ statuses: [], projects: [], defs: [], cycles: [], labels: [], relationKinds: [] });
+    live = mount(FilterChip, { target: document.body, props: { chip: { field: { Fixed: 'DueDate' }, op: 'Lte', value: 'today+7' }, lookup, onchange: () => {}, onremove: () => {} } });
+    flushSync();
+    expect(document.querySelector('.face')?.getAttribute('aria-label')).toMatch(/up to in 7 days$/);
+  });
 });

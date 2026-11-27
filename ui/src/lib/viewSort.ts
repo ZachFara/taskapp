@@ -10,6 +10,6 @@ export function nextSort(current: Sort[] | null, field: FieldRef): Sort[] | null
 
 export function sortable(field: FieldRef, entity: ViewEntity = 'issue') {
   if (field.Property !== undefined) return true;
-  if (entity === 'project') return ['Title', 'Status', 'StatusCategory', 'Priority', 'StartDate', 'TargetDate', 'Progress', 'IssueCount', 'Archived'].includes(field.Fixed);
-  return !['Label', 'RelationKind', 'TargetDate', 'Progress', 'IssueCount'].includes(field.Fixed);
+  if (entity === 'project') return ['Title', 'Status', 'StatusCategory', 'Priority', 'StartDate', 'TargetDate', 'CreatedAt', 'UpdatedAt', 'Progress', 'IssueCount', 'Archived'].includes(field.Fixed);
+  return !['Label', 'RelationKind', 'TargetDate', 'Progress', 'ProgressChart', 'IssueCount'].includes(field.Fixed);
 }

@@ -177,3 +177,17 @@ async fn placing_orders_siblings_and_every_write_undoes() -> R {
     assert_eq!(spot(&db, S::View, vx).await?.0, None);
     Ok(())
 }
+
+#[tokio::test]
+async fn deleting_a_pinned_folder_drops_its_pin_and_undo_restores_it() -> R {
+    let db = Db::open_in_memory().await?;
+    let f = folder(&db, S::View, None, "Work").await?;
+    let pin = pins::pin(&db, taskapp_core::PinKind::Folder, &f.0.to_string(), None).await?;
+    step("s", vf::delete(&db, f, UI)).await?;
+    assert_eq!(pins::list_resolved(&db).await?.len(), 0);
+    undo::undo(&db).await?;
+    let back = pins::list_resolved(&db).await?;
+    assert_eq!(back.len(), 1);
+    assert_eq!(back[0].pin.id, pin.id);
+    Ok(())
+}

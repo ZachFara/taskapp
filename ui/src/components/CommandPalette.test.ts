@@ -57,6 +57,12 @@ defineCommand({
   id: 'test.free', label: 'Zebra set due', icon: 'calendar', group: 'Test', noShortcutReason: 'test',
   page: () => ({ title: 'Due date', items: [], parse: (t: string) => (t === 'fri' ? { label: 'Due Friday', run: () => picked('fri') } : null) }),
 } as never);
+defineCommand({
+  id: 'test.marks', label: 'Zebra marked page', icon: 'tag', group: 'Test', noShortcutReason: 'test',
+  page: () => ({ title: 'Marked', items: [
+    { id: 'p', label: 'Marked project', entity: { icon: 'icon:folder', color: 'teal' }, run: () => {} },
+  ] }),
+});
 let release: (() => void) | undefined;
 defineCommand({
   id: 'test.slow', label: 'Zebra slow page', icon: 'tag', group: 'Test', noShortcutReason: 'test',
@@ -118,6 +124,13 @@ describe('CommandPalette', () => {
     expect(document.querySelector('.crumb')?.textContent).toContain('Set status');
     expect(input().value).toBe('');
     expect(rows()).toEqual([expect.stringContaining('Alpha'), expect.stringContaining('Beta')]);
+  });
+
+  it('a page row with an entity draws that icon in its colour', async () => {
+    unmount(app!);
+    app = mount(CommandPalette, { target: document.body, props: { onclose, oncreate, page: 'test.marks' } });
+    await settle();
+    expect(document.querySelector('[role=option] .entity')?.getAttribute('data-color')).toBe('teal');
   });
 
   it('nested_page_opens_and_backspace_on_empty_goes_back', async () => {

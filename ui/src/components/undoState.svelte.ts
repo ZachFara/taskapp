@@ -8,17 +8,20 @@ export type UndoMsg = {
   action?: { run: 'undo' | 'redo'; text: string };
 };
 
-// Shared by the toast host and the undo/redo commands, so both see one message at a time.
-export const undoToast = $state<{ value: UndoMsg | null }>({ value: null });
+// Shared by the toast host and the commands. Messages stack, newest last, at most three; each leaves on its own timer.
+export const undoToast = $state<{ items: (UndoMsg & { id: number })[] }>({ items: [] });
+let nextId = 0;
 
-let timer: ReturnType<typeof setTimeout> | undefined;
-function show(msg: UndoMsg | null) {
-  clearTimeout(timer);
-  undoToast.value = msg;
-  if (msg) timer = setTimeout(() => (undoToast.value = null), 6_000);
+export function say(msg: UndoMsg, ms = 6_000) {
+  const id = ++nextId;
+  undoToast.items = [...undoToast.items, { ...msg, id }].slice(-3);
+  setTimeout(() => dismiss(id), ms);
 }
 
-export const dismiss = () => show(null);
+/** One message by id, or all of them (a page change clears what the page left behind). */
+export function dismiss(id?: number) {
+  undoToast.items = id === undefined ? [] : undoToast.items.filter((m) => m.id !== id);
+}
 
 // The backend labels a step with the command that made it. Known commands get a sentence; a label that is
 // already prose ("Created ABC-25") passes through; any other command name is sentence-cased.
@@ -45,7 +48,7 @@ const QUIET = new Set(['views_save', 'views_save_project']);
 const quiet = (label: string) => QUIET.has(label) || label.startsWith('Changed display of ');
 
 /** An undoable change the app names itself. */
-export const announce = (label: string) => show({ label, tone: 'success', action: { run: 'undo', text: 'Undo' } });
+export const announce = (label: string) => say({ label, tone: 'success', action: { run: 'undo', text: 'Undo' } });
 
 // The step already on top when the page loaded. A write that leaves it unchanged (a page saving its own state on load)
 // added no step, so it is not announced; the first real change, or any undo/redo, ends the guard.
@@ -57,7 +60,7 @@ export async function onWrote() {
   const { undo } = await api.history.undoStatus();
   if (baseline !== undefined && undo === baseline) return;
   baseline = undefined;
-  if (undo && !quiet(undo)) show({ label: stepLabel(undo), tone: 'success', action: { run: 'undo', text: 'Undo' } });
+  if (undo && !quiet(undo)) say({ label: stepLabel(undo), tone: 'success', action: { run: 'undo', text: 'Undo' } });
 }
 
 const message = (e: unknown, fallback: string) => (e as Partial<ErrorPayload>)?.message ?? fallback;
@@ -67,9 +70,9 @@ export async function runUndo(a: Api) {
     await a.history.undo();
     baseline = undefined;
     await refreshAll();
-    show({ label: 'Undone', tone: 'success', action: { run: 'redo', text: 'Redo' } });
+    say({ label: 'Undone', tone: 'success', action: { run: 'redo', text: 'Redo' } });
   } catch (e) {
-    show({ label: message(e, 'Undo failed'), tone: 'error' });
+    say({ label: message(e, 'Undo failed'), tone: 'error' });
   }
 }
 
@@ -78,8 +81,8 @@ export async function runRedo(a: Api) {
     await a.history.redo();
     baseline = undefined;
     await refreshAll();
-    show({ label: 'Redone', tone: 'success', action: { run: 'undo', text: 'Undo' } });
+    say({ label: 'Redone', tone: 'success', action: { run: 'undo', text: 'Undo' } });
   } catch (e) {
-    show({ label: message(e, 'Redo failed'), tone: 'error' });
+    say({ label: message(e, 'Redo failed'), tone: 'error' });
   }
 }

@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Collapse from '../ui/Collapse.svelte';
+  import { cubicOut } from 'svelte/easing';
+  import { slide } from 'svelte/transition';
+  import { ms } from '../lib/motion.svelte';
   import { navigate } from '../app/routes';
   import { api } from '../lib/api';
   import { openExternal } from '../lib/openExternal';
@@ -164,7 +167,7 @@
 
 {#snippet folderRow(r: FolderRow, section: FolderSection)}
   {@const f = r.folder}
-  <li class="row" {...attrs(section, 'folder', f.id, f.name, r, !r.shut)}>
+  <li class="row" transition:slide={{ duration: ms('--dur-3'), easing: cubicOut }} {...attrs(section, 'folder', f.id, f.name, r, !r.shut)}>
     <RowActions button={false} label={f.name} actions={rowActs({ kind: 'folder', id: f.id, name: f.name }, isPinned('Folder', String(f.id)))}>
       <button class="item folder" type="button" aria-expanded={!r.shut} onclick={() => setShut(f.id, !r.shut)}><span class="chev" data-collapsed={r.shut}><Icon name="chevron-down" size={12} /></span><span class="t">{f.name}</span><em>{r.count}</em></button>
     </RowActions>
@@ -212,7 +215,7 @@
 {#snippet pinLeaf(p: { r: ResolvedPin }, row: TreeRow<unknown>)}
   {@const r = p.r}
   {#if r.pin.kind === 'Folder'}{@render pinnedFolder(r, row)}{:else}
-  <li class="row" class:archived={r.archived} {...attrs('pin', 'item', r.pin.id, r.label, row)}>
+  <li class="row" class:archived={r.archived} transition:slide={{ duration: ms('--dur-3'), easing: cubicOut }} {...attrs('pin', 'item', r.pin.id, r.label, row)}>
     <RowActions button={false} label={`${r.label} (pinned)`} actions={rowActs({ kind: 'pin', id: r.pin.id, name: r.label })}>
       <a class="item" class:on={route === r.route} aria-current={route === r.route ? 'page' : undefined} href={r.route} onclick={(e) => (e.preventDefault(), open(r.route))}><Icon name="pin" /><span class="t">{r.label}</span></a>
     </RowActions>
@@ -222,7 +225,7 @@
 
 {#snippet viewLeaf(v: SavedView, row: TreeRow<unknown>)}
   {@const href = `/view/${v.id}`}
-  <li class="row" {...attrs('view', 'item', v.id, v.name, row)}>
+  <li class="row" transition:slide={{ duration: ms('--dur-3'), easing: cubicOut }} {...attrs('view', 'item', v.id, v.name, row)}>
     <RowActions button={false} label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, isPinned('View', String(v.id)))}>
       <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`, color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
       <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{v.name}</span>{#if v.entity === 'project'}<span class="st" role="img" aria-label="Project view"><Icon name="project" size={12} /></span>{/if}</a>
@@ -233,7 +236,7 @@
 {#snippet projectLeaf(p: Project, row: TreeRow<unknown>)}
   {@const href = `/project/${p.slug}`}
   {@const st = projectStatuses.find((x) => x.id === p.status_id)}
-  <li class="row" {...attrs('project', 'item', p.id, p.name, row)}>
+  <li class="row" transition:slide={{ duration: ms('--dur-3'), easing: cubicOut }} {...attrs('project', 'item', p.id, p.name, row)}>
     <RowActions button={false} label={p.name} actions={rowActs({ kind: 'project', id: p.id, name: p.name }, isPinned('Project', p.slug))}>
       <IconColorPicker label={`Icon and colour of ${p.name}`} value={{ icon: p.icon ?? 'icon:project', color: p.color }} onchange={(c) => patch({ kind: 'project', id: p.id, name: p.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `project:${p.id}`, (o) => (rowUi.picking = o ? `project:${p.id}` : null)} />
       <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{p.name}</span>{#if st}<span class="st"><StatusGlyph category={glyphCategory[st.category]} size={12} label={st.name} /></span>{/if}{#if sparklines}<ProjectSpark projectId={p.id} name={p.name} />{/if}</a>
@@ -242,7 +245,7 @@
 {/snippet}
 
 {#snippet cycleLeaf(c: Cycle, row: TreeRow<unknown>)}
-  <li class="row" {...attrs('cycle', 'item', c.id, label(c), row)}>
+  <li class="row" transition:slide={{ duration: ms('--dur-3'), easing: cubicOut }} {...attrs('cycle', 'item', c.id, label(c), row)}>
     <RowActions button={false} label={label(c)} actions={rowActs({ kind: 'cycle', id: c.id, name: label(c) }, isPinned('Cycle', String(c.id)))}>
       <IconColorPicker label={`Icon and colour of ${label(c)}`} value={{ icon: c.icon ?? 'icon:cycle', color: c.color }} onchange={(x) => patch({ kind: 'cycle', id: c.id, name: label(c) }, { icon: x.icon, color: x.color })} bind:open={() => rowUi.picking === `cycle:${c.id}`, (o) => (rowUi.picking = o ? `cycle:${c.id}` : null)} />
       <a class="item" href="/cycles" onclick={(e) => (e.preventDefault(), navigate('/cycles'))}><span class="t">{label(c)}</span></a>

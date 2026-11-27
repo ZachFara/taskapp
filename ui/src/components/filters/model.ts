@@ -13,11 +13,19 @@ const operators: Record<PropertyKind, Op[]> = {
 };
 export const opsFor = (kind: PropertyKind) => operators[kind];
 
+/** The relative dates a date filter can pick (core: `today`, `today+N`, `today-N`, counted in the workspace zone). */
+export const relativeDays: { value: string; label: string }[] = [
+  { value: 'today', label: 'today' }, { value: 'today-7', label: '7 days ago' }, { value: 'today-14', label: '14 days ago' },
+  { value: 'today-30', label: '30 days ago' }, { value: 'today+7', label: 'in 7 days' }, { value: 'today+14', label: 'in 14 days' },
+  { value: 'today+30', label: 'in 30 days' },
+];
+export const relativeLabel = (v: Value) => relativeDays.find((r) => r.value === v)?.label;
+
 const fixedKinds: Record<FixedField, PropertyKind> = {
   Title: 'Text', Status: 'Select', StatusCategory: 'Select', Priority: 'Number', Project: 'Select',
   Milestone: 'Number', Cycle: 'Select', Label: 'MultiSelect', Parent: 'Number', StartDate: 'Date',
   DueDate: 'Date', Estimate: 'Number', Points: 'Number', CreatedAt: 'Date', UpdatedAt: 'Date', CompletedAt: 'Date', Archived: 'Checkbox', RelationKind: 'Select',
-  ProjectStatus: 'Select', TargetDate: 'Date', Progress: 'Number', IssueCount: 'Number',
+  ProjectStatus: 'Select', TargetDate: 'Date', Progress: 'Number', ProgressChart: 'Number', IssueCount: 'Number',
 };
 export const fixedKind = (f: FixedField) => fixedKinds[f];
 

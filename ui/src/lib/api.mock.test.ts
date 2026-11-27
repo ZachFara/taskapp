@@ -21,6 +21,23 @@ describe('mock api', () => {
     expect(rows.some((i) => i.due?.Date && i.due.Date < new Date().toISOString().slice(0, 10))).toBe(true);
   });
 
+  it('a relative date counts from today in the workspace zone', async () => {
+    const mock = createMockApi();
+    const tz = (await mock.workspace.status()).timezone;
+    const plus = (n: number) => {
+      const d = new Date(`${new Date().toLocaleDateString('sv', { timeZone: tz })}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + n);
+      return d.toISOString().slice(0, 10);
+    };
+    const ids = async (op: 'Eq' | 'Lt' | 'Lte' | 'Gte', value: string) =>
+      (await createMockApi().views.query(def({ Cond: { field: { Fixed: 'DueDate' }, op, value } }))).map((i) => i.id);
+    expect(await ids('Eq', 'today')).toEqual(await ids('Eq', plus(0)));
+    expect(await ids('Lt', 'today')).toEqual(await ids('Lt', plus(0)));
+    expect(await ids('Lte', 'today+7')).toEqual(await ids('Lte', plus(7)));
+    expect(await ids('Gte', 'today-14')).toEqual(await ids('Gte', plus(-14)));
+    expect(await ids('Lt', 'today')).not.toEqual(await ids('Lte', 'today+7'));
+  });
+
   it('create assigns sequential keys', async () => {
     const mock = createMockApi();
     expect((await mock.issues.create({ title: 'a' })).key).toBe('ABC-25');

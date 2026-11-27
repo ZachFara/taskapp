@@ -19,6 +19,8 @@ serde.workspace = true
 serde_json.workspace = true
 taskapp-core.workspace = true
 taskapp-export.workspace = true
+taskapp-gcal.workspace = true
+taskapp-reminders.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]

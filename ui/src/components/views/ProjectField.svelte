@@ -5,6 +5,7 @@
   import { percent, type PCtx } from '../../lib/projectViews';
   import Pill from '../../ui/Pill.svelte';
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
+  import ProjectProgressSpark from '../insights/ProjectProgressSpark.svelte';
   import ProjectStatusPicker from '../project/ProjectStatusPicker.svelte';
   import { dayText } from './dates';
 
@@ -27,12 +28,18 @@
   <span class="t">{#each ctx.labels.filter((l) => p.label_ids.includes(l.id)) as l (l.id)}<Pill color={l.color}>{l.name}</Pill>{/each}</span>
 {:else if field.Fixed === 'Progress'}
   <span class="t"><span class="meter" role="img" aria-label={`${row.issue_done} of ${row.issue_total} done`}><span class="fill" style:width={`${percent(row)}%`}></span></span><span class="m">{row.issue_done} of {row.issue_total}</span></span>
+{:else if field.Fixed === 'ProgressChart'}
+  <ProjectProgressSpark projectId={p.id} name={p.name} pct={percent(row)} />
 {:else if field.Fixed === 'IssueCount'}
   <span class="t n">{row.issue_total}</span>
 {:else if field.Fixed === 'StartDate'}
   <span class="t m">{p.start_date ? dayText(p.start_date) : 'No start'}</span>
 {:else if field.Fixed === 'TargetDate'}
   <span class="t m">{p.target_date ? dayText(p.target_date) : 'No target'}</span>
+{:else if field.Fixed === 'CreatedAt'}
+  <span class="t m">{dayText(p.created_at.slice(0, 10))}</span>
+{:else if field.Fixed === 'UpdatedAt'}
+  <span class="t m">{dayText(p.updated_at.slice(0, 10))}</span>
 {:else if field.Fixed === 'Archived'}
   <span class="t m">{p.archived_at ? 'Archived' : ''}</span>
 {:else if field.Fixed === 'Title'}

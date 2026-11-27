@@ -62,13 +62,13 @@ fn totals(tls: &[Timeline], day: NaiveDate) -> (f64, f64, f64) {
     })
 }
 
-async fn zone(db: &Db) -> Result<Tz> {
+pub(crate) async fn zone(db: &Db) -> Result<Tz> {
     let name = workspace::status(db).await?.timezone;
     name.parse()
         .map_err(|_| Error::Invalid(format!("unknown time zone {name}")))
 }
 
-fn local(at: DateTime<Utc>, tz: Tz) -> NaiveDate {
+pub(crate) fn local(at: DateTime<Utc>, tz: Tz) -> NaiveDate {
     at.with_timezone(&tz).date_naive()
 }
 

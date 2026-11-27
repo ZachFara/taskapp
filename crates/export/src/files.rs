@@ -172,6 +172,9 @@ pub struct ProjectFile {
     pub target_date: Option<NaiveDate>,
     pub archived_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+    /// An older export has none; a restore then uses `created_at`.
+    #[serde(default)]
+    pub updated_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
