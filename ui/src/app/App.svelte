@@ -72,7 +72,7 @@
     if (f !== null && untrack(() => selectedIssueId.value) !== null) selectedIssueId.value = f;
   });
 
-  const LABELS: Record<string, string> = { my: 'My issues', inbox: 'Inbox', pinned: 'Pinned', cycles: 'Cycles', events: 'Events', event: 'Events', projects: 'Projects', views: 'Views', settings: 'Settings', design: 'Design' };
+  const LABELS: Record<string, string> = { my: 'My issues', inbox: 'Inbox', pinned: 'Pinned', cycles: 'Cycles', decisions: 'Decisions', events: 'Events', event: 'Events', projects: 'Projects', views: 'Views', settings: 'Settings', design: 'Design' };
   // A parent part that has a page of its own links to it (Projects, Views, Events, Cycles, Settings).
   const PAGES: Record<string, string> = { view: '/views', views: '/views', project: '/projects', projects: '/projects', event: '/events', events: '/events', cycles: '/cycles', settings: '/settings' };
   const crumb = $derived.by(() => {

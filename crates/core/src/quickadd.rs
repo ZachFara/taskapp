@@ -109,7 +109,7 @@ pub async fn new_issue(db: &Db, input: &str, today: NaiveDate, tz: &str) -> Resu
                 .into_iter()
                 .find(|p| p.slug == slug);
             if found.is_none() {
-                title.push_str(" #");
+                title.push_str(" +");
                 title.push_str(&slug);
             }
             found.map(|p| p.id)
@@ -125,7 +125,7 @@ pub async fn new_issue(db: &Db, input: &str, today: NaiveDate, tz: &str) -> Resu
         {
             label_ids.push(l.id);
         } else {
-            title.push_str(" @");
+            title.push_str(" #");
             title.push_str(&name);
         }
     }
@@ -174,14 +174,14 @@ fn take<'a>(tokens: &[&'a str], i: usize, today: NaiveDate, p: &mut Parts<'a>) -
         return 1;
     }
     if let Some(slug) = w
-        .strip_prefix('#')
+        .strip_prefix('+')
         .filter(|s| !s.is_empty() && on("project"))
     {
         p.slug = Some(slug.to_string());
         return 1;
     }
     if let Some(label) = raw
-        .strip_prefix('@')
+        .strip_prefix(['#', '@'])
         .filter(|s| !s.is_empty() && on("labels"))
     {
         p.labels.push(label.to_string());
@@ -403,7 +403,7 @@ mod tests {
 
     #[test]
     fn full_example() {
-        let q = parse_today("renew lease by fri p1 #office-move");
+        let q = parse_today("renew lease by fri p1 +office-move");
         assert_eq!(q.title, "renew lease");
         assert_eq!(q.due, Some(Due::Date(date(2026, 11, 27))));
         assert_eq!(q.priority, Some(1));
@@ -458,6 +458,22 @@ mod tests {
     }
 
     #[test]
+    fn hash_is_a_label_and_plus_a_project() {
+        let q = parse_today("tidy desk +home #chores @errands");
+        assert_eq!(q.title, "tidy desk");
+        assert_eq!(q.project_slug.as_deref(), Some("home"));
+        assert_eq!(q.label_names, vec!["chores", "errands"]);
+    }
+
+    #[test]
+    fn bare_plus_and_hash_stay_in_title() {
+        let q = parse_today("fix sink + # 4");
+        assert_eq!(q.title, "fix sink + # 4");
+        assert_eq!(q.project_slug, None);
+        assert_eq!(q.label_names, Vec::<String>::new());
+    }
+
+    #[test]
     fn labels_and_start() {
         let q = parse_today("write doc @work @home start tomorrow");
         assert_eq!(q.title, "write doc");
@@ -489,6 +505,7 @@ mod tests {
         let q = parse_today("issue # 4");
         assert_eq!(q.title, "issue # 4");
         assert_eq!(q.project_slug, None);
+        assert_eq!(q.label_names, Vec::<String>::new());
     }
 
     #[test]
@@ -510,6 +527,22 @@ mod tests {
         let db = Db::open_in_memory().await.expect("in-memory db");
         let issue = create_from(
             &db,
+            "fix sink +nope",
+            date(2026, 11, 20),
+            TZ,
+            ChangeSource::Ui,
+        )
+        .await
+        .expect("create_from");
+        assert!(issue.title.contains("+nope"));
+        assert_eq!(issue.project_id, None);
+    }
+
+    #[tokio::test]
+    async fn unknown_hash_label_kept_in_title() {
+        let db = Db::open_in_memory().await.expect("in-memory db");
+        let issue = create_from(
+            &db,
             "fix sink #nope",
             date(2026, 11, 20),
             TZ,
@@ -517,7 +550,7 @@ mod tests {
         )
         .await
         .expect("create_from");
-        assert!(issue.title.contains("#nope"));
-        assert_eq!(issue.project_id, None);
+        assert_eq!(issue.title, "fix sink #nope");
+        assert_eq!(issue.label_ids, Vec::new());
     }
 }

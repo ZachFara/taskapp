@@ -76,6 +76,8 @@
   const compact = $derived(density(view.def) === 'compact');
   // shortcut: compact height follows the --row-h-compact token value (28), upgrade if the token changes
   const ROW = $derived(compact ? 28 : 32);
+  // Wrapped rows differ in height, so the list drops its fixed-height windowing and lets the rows flow.
+  const wrap = $derived(view.def.wrap === 'on');
   // Key, priority and status have their own leading columns, so they are not repeated.
   const allFields = $derived(shown(view.def, LIST_DEFAULT).filter((f) => !LEADING.includes(f.Fixed!) && (ctx.points || f.Fixed !== 'Points')));
   let closedParents = $state<number[]>([]);
@@ -232,7 +234,7 @@
   });
 
   const viewport = $derived(height || FALLBACK_VIEWPORT);
-  const windowed = $derived(items.length > WINDOW_ABOVE);
+  const windowed = $derived(!wrap && items.length > WINDOW_ABOVE);
   const slice = $derived.by(() => {
     if (!windowed) return items.map((item, k) => ({ item, top: tops[k] }));
     const from = Math.max(0, tops.findIndex((t) => t + ROW > scrollTop) - OVERSCAN);
@@ -248,6 +250,10 @@
   $effect(() => {
     const at = items.findIndex((it) => 'row' in it && it.row.id === selection.focused);
     if (at < 0 || !scroller) return;
+    if (wrap) {
+      scroller.querySelector(`li[data-id="${selection.focused}"]`)?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
     if (tops[at] < scroller.scrollTop) scroller.scrollTop = tops[at];
     else if (tops[at] + ROW > scroller.scrollTop + viewport) scroller.scrollTop = tops[at] + ROW - viewport;
   });
@@ -348,11 +354,11 @@
     {#each fields as f (f.Property ?? f.Fixed)}<span data-right={rightAligned(f) ? '' : undefined}>{#if sortable(f)}<SortHeading field={f} label={fieldName(f, ctx.defs)} sort={activeSort} onclick={sortHeading} />{:else}{fieldName(f, ctx.defs)}{/if}</span>{/each}
   </div>
   <div class="scroller" role="presentation" bind:this={scroller} onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}>
-    <ul class="list" role="grid" aria-multiselectable="true" data-density={compact ? 'compact' : undefined} aria-label={view.name} style:height="{total}px">
+    <ul class="list" role="grid" aria-multiselectable="true" data-density={compact ? 'compact' : undefined} data-wrap={wrap ? '' : undefined} aria-label={view.name} style:height={wrap ? undefined : `${total}px`}>
       <!-- Keyed by the item, not its position: a row that moves when a group folds keeps its element, so its top eases. -->
       {#each slice as { item, top } ('head' in item ? `h:${item.head.key}` : `r:${item.row.id}`)}
         {#if 'head' in item}
-          <li class="head" role="presentation" style:top="{top}px">
+          <li class="head" role="presentation" style:top={wrap ? undefined : `${top}px`}>
             <GroupHeader
               name={item.head.name}
               count={item.head.rows.length}
@@ -382,9 +388,9 @@
             data-depth={item.depth ? item.depth : undefined}
             data-selected={chosen ? '' : undefined}
             aria-current={selection.focused === i.id ? 'true' : undefined}
-            style:top="{top}px"
+            style:top={wrap ? undefined : `${top}px`}
             style:grid-template-columns={columns}
-            style:height={compact ? 'var(--row-h-compact)' : undefined}
+            style:height={compact && !wrap ? 'var(--row-h-compact)' : undefined}
             onclick={(e) => pick(e, i.id)}
             ondblclick={() => navigate(`/issue/${i.key}`)}
             onmouseenter={() => (hovered = i.id)}
@@ -434,7 +440,7 @@
             </span>
             {#each cells as { f, key, right } (key)}
               <span class="cell" data-field={key} data-right={right ? '' : undefined} data-overdue={f.Fixed === 'DueDate' && overdue(i) ? '' : undefined}>
-                <FieldValue field={f} issue={i} {ctx} />
+                <FieldValue field={f} issue={i} {ctx} all={wrap} />
               </span>
             {/each}
             <!-- shortcut: only the hovered or focused row renders its actions (a tooltip per row costs the 1000-row budget) -->
@@ -505,4 +511,10 @@
   .cell[data-right] { justify-content: flex-end; }
   .cell[data-overdue] { color: var(--signal); font-weight: 700; }
   .anchor { position: fixed; width: 0; height: 0; }
+  /* Wrapped lists: rows take the height their labels and titles need, never less than a normal row. */
+  .list[data-wrap] .head, .list[data-wrap] .row { position: relative; height: auto; min-height: var(--row-h); padding-block: var(--s-2); }
+  .list[data-wrap][data-density] .row { min-height: var(--row-h-compact); }
+  .list[data-wrap] .text { white-space: normal; overflow-wrap: anywhere; }
+  .list[data-wrap] .cell { overflow: visible; }
+  .list[data-wrap] :global(.chips) { flex-wrap: wrap; overflow: visible; }
 </style>

@@ -545,11 +545,12 @@ async fn dump(
         "import_log",
         "relation_kinds",
         "events",
+        "decisions",
         "work_blocks",
     ] {
         let cols: Vec<String> = sqlx::query_scalar(
             "SELECT name FROM pragma_table_info(?1) WHERE (name != 'id' OR ?1 IN ('view_templates', 'view_folders'))
-               AND (name NOT LIKE '%!_id' ESCAPE '!' OR name IN ('template_id', 'folder_id')) ORDER BY cid",
+               AND (name NOT LIKE '%!_id' ESCAPE '!' OR name IN ('template_id', 'folder_id', 'external_id')) ORDER BY cid",
         )
         .bind(t)
         .fetch_all(&db.pool)
@@ -604,6 +605,9 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
         "INSERT INTO events (id, title, starts_at, ends_at, all_day, place, notes, icon, color)
            VALUES (4, 'Offsite', '2026-12-10 09:00:00', '2026-12-11 17:00:00', 0, 'Lisbon', 'Bring slides', 'icon:flag', 'teal')",
         "INSERT INTO event_issues (event_id, issue_id) VALUES (4, (SELECT id FROM issues WHERE number = 1))",
+        "INSERT INTO decisions (id, question, context, options, recommendation, mode, status, answer, note, source, external_id, answered_at)
+           VALUES (6, 'Which?', '# ctx', '[{\"key\":\"a\",\"label\":\"A\",\"tradeoff\":\"x: y\"}]', 'a', 'blocking', 'answered', 'a', 'fine', 'curia', 'D-9', '2026-01-02 03:04:05')",
+        "INSERT INTO decision_issues (decision_id, issue_id) VALUES (6, (SELECT id FROM issues WHERE number = 1))",
         "UPDATE import_log SET source_deleted = 1",
         "INSERT INTO work_blocks (issue_id, start_utc, end_utc)
            VALUES ((SELECT id FROM issues WHERE number = 2), '2026-01-05T09:00:00+00:00', '2026-01-05T10:30:00+00:00')",
@@ -623,6 +627,12 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
     .fetch_all(&rebuilt.pool)
     .await?;
     assert_eq!(linked, vec![1]);
+    let dlinked = sqlx::query_scalar::<_, i64>(
+        "SELECT i.number FROM decision_issues e JOIN issues i ON i.id = e.issue_id WHERE e.decision_id = 6",
+    )
+    .fetch_all(&rebuilt.pool)
+    .await?;
+    assert_eq!(dlinked, vec![1]);
     Ok(())
 }
 

@@ -2,6 +2,7 @@
 
 mod api;
 mod commands;
+mod decision;
 mod list;
 mod references;
 
@@ -32,7 +33,7 @@ enum Cmd {
     Api(ApiCmd),
     /// Show a practical guide to the CLI.
     Guide,
-    /// Create an issue from quick-add text, such as "Pay rent friday p1".
+    /// Create an issue from quick-add text, such as "Pay rent friday p1 +home #bills".
     Add {
         text: String,
         /// IANA time zone for relative dates. Defaults to $TZ, then UTC.
@@ -79,6 +80,9 @@ enum Cmd {
     /// Run the syncs the app runs on its own.
     #[command(subcommand)]
     Sync(SyncCmd),
+    /// Questions for the owner: raise one with options, read it, answer it.
+    #[command(subcommand)]
+    Decision(decision::DecisionCmd),
     /// Builds a new database from an export folder. Needs --db, which must not exist yet.
     Restore {
         #[arg(long, value_name = "DIR")]

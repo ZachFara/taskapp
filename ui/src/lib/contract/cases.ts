@@ -17,6 +17,8 @@ const importPlan = (external_id: string, title: string, status: string | null = 
   source: 'csv', issues: [{ external_id, title, description: '', status, priority: 0, project: null, labels: [], start_date: null, due_date: null, estimate_minutes: null, properties: {}, parent: null, cycle: null }],
 });
 const ev = (title: string, starts_at: string, extra: Record<string, unknown> = {}) => ({ title, starts_at, ends_at: null, all_day: false, place: null, notes: '', icon: null, color: null, archived: false, ...extra });
+const opt = (key: string) => ({ key, label: `Option ${key}`, tradeoff: 'cheap' });
+const dec = (question: string, extra: Record<string, unknown> = {}) => ({ question, context: '', options: [opt('a'), opt('b')], recommendation: null, mode: 'assume', source: null, external_id: null, issue_ids: [], ...extra });
 // The project fields every update sends back unchanged.
 const plain = { status_id: 1, priority: 0, label_ids: [], properties: {} };
 const T0 = '2026-01-01T00:00:00Z'; // the server ignores a project's own created_at and updated_at on update
@@ -79,7 +81,7 @@ export const cases: Case[] = [
   call('views: seeded view templates', 'view_templates_list'),
   call('views: display settings and custom property columns round trip', 'views_save', {
     id: null, name: 'Shown', icon: null, color: null,
-    def: def({ layout: 'Board', columns: [prop('area'), fixed('CommentCount')], density: 'compact', show_empty_groups: true, show_sub_issues: 'flat', card_fields: [prop('effort')], show_weekends: false }),
+    def: def({ layout: 'Board', columns: [prop('area'), fixed('CommentCount')], density: 'compact', show_empty_groups: true, show_sub_issues: 'flat', card_fields: [prop('effort')], show_weekends: false, wrap: 'on' }),
   }),
   call('views: stats count sub-issues, relations and comments', 'views_stats', { def: def() }),
   query('sort: by comment count', { sorts: [{ field: fixed('CommentCount'), descending: true }] }),
@@ -107,13 +109,13 @@ export const cases: Case[] = [
 
   // Quick add
   call('quickadd: relative date', 'issues_parse_quickadd', { input: 'buy milk tomorrow' }),
-  call('quickadd: priority project label estimate', 'issues_parse_quickadd', { input: 'call dentist p1 #website @Bug ~2h by fri' }),
+  call('quickadd: priority project label estimate', 'issues_parse_quickadd', { input: 'call dentist p1 +website #Bug ~2h by fri' }),
   call('quickadd: time of day', 'issues_parse_quickadd', { input: 'standup at 9:15am' }),
   call('quickadd: month and day, start', 'issues_parse_quickadd', { input: 'plan trip start dec 3 due 25 dec' }),
   call('quickadd: in N weeks', 'issues_parse_quickadd', { input: 'review in 2 weeks' }),
   call('quickadd: tokens only keeps the text', 'issues_parse_quickadd', { input: 'p2 ~1d' }),
-  call('quickadd: unknown project and label stay in the title', 'issues_create_from_quickadd', { input: 'fix thing #nope @Nolabel p3' }),
-  call('quickadd: known project and label', 'issues_create_from_quickadd', { input: 'write copy #mobile @design p2 ~30m' }),
+  call('quickadd: unknown project and label stay in the title', 'issues_create_from_quickadd', { input: 'fix thing +nope #Nolabel p3' }),
+  call('quickadd: known project and label', 'issues_create_from_quickadd', { input: 'write copy +mobile #design @Bug p2 ~30m' }),
   call('quickadd: unknown template is Invalid', 'issues_create_from_quickadd', { input: '/nosuch hello' }),
   call('templates: create', 'templates_create', {
     input: tpl('Incident', 'incident', { title_prefix: 'Bug: ', fields: { priority: 2, label_ids: [1], project_id: 1, status_id: 2, estimate_minutes: null, description: 'Steps:', properties: {} }, sub_issues: [{ title: 'Reproduce', fields: { priority: 1 } }] }),
@@ -581,6 +583,35 @@ export const cases: Case[] = [
   call('events: delete is one undo step', 'history_undo_status'),
   call('events: undo the delete', 'history_undo'),
   call('events: the links came back', 'events_get', { id: 1 }),
+
+  // Decisions
+  call('decisions: create with a recommendation and a link', 'decisions_create', { input: dec('Which database?', { recommendation: 'b', mode: 'blocking', issue_ids: [1] }) }),
+  call('decisions: create from an integration', 'decisions_create', { input: dec('From curia', { source: 'curia', external_id: 'D-1' }) }),
+  call('decisions: the same external id twice is Invalid', 'decisions_create', { input: dec('Again', { source: 'curia', external_id: 'D-1' }) }),
+  call('decisions: the same external id from another source is fine', 'decisions_create', { input: dec('Other', { source: 'other', external_id: 'D-1' }) }),
+  call('decisions: empty question is Invalid', 'decisions_create', { input: dec(' ') }),
+  call('decisions: a recommendation that is no option is Invalid', 'decisions_create', { input: dec('Bad', { recommendation: 'zz' }) }),
+  call('decisions: repeated option keys are Invalid', 'decisions_create', { input: dec('Bad', { options: [opt('a'), opt('a')] }) }),
+  call('decisions: an unknown issue is NotFound', 'decisions_create', { input: dec('Bad', { issue_ids: [999] }) }),
+  call('decisions: list open puts blocking first', 'decisions_list', { status: 'open' }),
+  call('decisions: get carries its issue ids', 'decisions_get', { id: 1 }),
+  call('decisions: get an unknown one is NotFound', 'decisions_get', { id: 99 }),
+  call('decisions: answering needs exactly one of option and text', 'decisions_answer', { id: 1, option: 'a', text: 'x', note: '' }),
+  call('decisions: answering needs something', 'decisions_answer', { id: 1, option: null, text: null, note: '' }),
+  call('decisions: an unknown option is Invalid', 'decisions_answer', { id: 1, option: 'zz', text: null, note: '' }),
+  call('decisions: answer by option with a note', 'decisions_answer', { id: 1, option: 'b', text: null, note: 'because' }),
+  call('decisions: answering twice is Invalid', 'decisions_answer', { id: 1, option: 'a', text: null, note: '' }),
+  call('decisions: answer by free text', 'decisions_answer', { id: 2, option: null, text: 'something else', note: '' }),
+  call('decisions: withdraw', 'decisions_withdraw', { id: 3 }),
+  call('decisions: withdrawing an answered one is Invalid', 'decisions_withdraw', { id: 1 }),
+  call('decisions: unlink and relink an issue', 'decisions_unlink', { decision: 1, issue: 1 }),
+  call('decisions: link twice is fine', 'decisions_link', { decision: 1, issue: 2 }),
+  call('decisions: link twice again', 'decisions_link', { decision: 1, issue: 2 }),
+  call('decisions: link an unknown issue is NotFound', 'decisions_link', { decision: 1, issue: 999 }),
+  call('decisions: list all', 'decisions_list', { status: null }),
+  call('decisions: list open is now short', 'decisions_list', { status: 'open' }),
+  call('decisions: undo the link', 'history_undo'),
+  call('decisions: the link is gone again', 'decisions_get', { id: 1 }),
 
   // Project views: the same definition, project fields
   call('pviews: seeded project views have their entity', 'views_list'),

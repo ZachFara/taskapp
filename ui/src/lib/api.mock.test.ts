@@ -155,6 +155,13 @@ describe('mock workspace and quick add', () => {
     expect(parsed.due).toMatchObject({ DateTime: { tz: 'Asia/Tokyo' } });
     expect(new Date(parsed.due!.DateTime!.utc).getUTCHours()).toBe(0);
   });
+
+  it('quick_add_plus_is_project_hash_and_at_are_labels', async () => {
+    const parsed = await createMockApi(fixtures, 'UTC').issues.parseQuickadd('tidy desk +home #chores @errands');
+    expect(parsed.title).toBe('tidy desk');
+    expect(parsed.project_slug).toBe('home');
+    expect(parsed.label_names).toEqual(['chores', 'errands']);
+  });
 });
 
 describe('mock view templates', () => {

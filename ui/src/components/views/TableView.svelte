@@ -432,7 +432,7 @@
     </div>
   {:else}
     <IssueMenu>
-    <table role="grid" class:grouped>
+    <table role="grid" class:grouped data-wrap={view.def.wrap === 'on' ? '' : undefined}>
       <colgroup>
         <col class="key-col" />
         {#each cols as col (col.id)}
@@ -507,7 +507,7 @@
                       <Checkbox label={`${col.label} for ${issue.key}`} bind:checked={() => raw(issue, col.ref) === true, (v) => void save(issue, col, v)} />
                     {:else}
                       <span class="due" data-overdue={col.ref.Fixed === 'DueDate' && isOverdue(issue, statuses.find((s) => s.id === issue.status_id)?.category, tz) ? '' : undefined}>
-                        <FieldValue field={col.ref} {issue} {ctx} />
+                        <FieldValue field={col.ref} {issue} {ctx} all={view.def.wrap === 'on'} />
                       </span>
                     {/if}
                   </td>
@@ -605,6 +605,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  /* Wrapped tables: cells keep their row height as a minimum and grow for several labels or a long title. */
+  table[data-wrap] td { white-space: normal; overflow: visible; padding-block: var(--s-2); }
+  table[data-wrap] td :global(.chips) { flex-wrap: wrap; overflow: visible; }
+  table[data-wrap] td :global(.text) { white-space: normal; overflow-wrap: anywhere; }
   td.num {
     text-align: end;
     font-variant-numeric: tabular-nums;

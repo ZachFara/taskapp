@@ -55,6 +55,11 @@ describe('custom properties in layouts', () => {
     const t = await render(ListView, { view: viewOf(def({ density: 'compact' })) }, 'li[data-key]');
     expect(t.querySelector('[data-density="compact"]')).not.toBeNull();
   });
+  it('wrap_marks_the_list_so_rows_grow', async () => {
+    const t = await render(ListView, { view: viewOf(def({ wrap: 'on' })) }, 'li[data-key]');
+    expect(t.querySelector('ul[data-wrap]')).not.toBeNull();
+    expect((t.querySelector('li[data-key]') as HTMLElement).style.top).toBe('');
+  });
   it('board_card_shows_a_custom_property', async () => {
     const t = await render(BoardView, { view: viewOf(def({}, 'Board')) }, '[data-issue]');
     expect(t.querySelector('[data-issue="ABC-1"]')!.textContent).toContain('Home');
@@ -99,6 +104,12 @@ describe('DisplayPanel', () => {
     const t = await panel(def(), patches);
     click(sw(t, 'Compact rows'));
     expect(patches).toEqual([{ density: 'compact' }]);
+  });
+  it('wrap_switch_sets_wrap', async () => {
+    const patches: unknown[] = [];
+    const t = await panel(def(), patches);
+    click(sw(t, 'Wrap'));
+    expect(patches).toEqual([{ wrap: 'on' }]);
   });
   it('weekends_option_only_on_dated_layouts', async () => {
     expect(sw(await panel(def(), []), 'Show weekends')).toBeNull();

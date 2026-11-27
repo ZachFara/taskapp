@@ -2,6 +2,7 @@ import { commands } from './bindings';
 // The generated file's own text gives each command's wire name and argument names for the http transport.
 import bindingsSource from './bindings.ts?raw';
 import { createMockApi, fixtures } from './api.mock';
+import { demoDecisions } from './api.mock.decisions';
 
 type Cmds = typeof commands;
 // `issuesGetByKey` -> ["issues", "getByKey"]
@@ -77,7 +78,7 @@ function watchWrites(a: Api): Api {
 const mode = import.meta.env.VITE_API_MODE;
 
 export let api: Api = watchWrites(
-  mode === 'mock' ? createMockApi(location.search.includes('fresh') ? { ...fixtures, workspace: { setup_done: false, name: null, key: 'ABC', timezone: 'UTC' } } : undefined) : mode === 'http' ? httpApi() : build((key, args) => (commands as any)[key](...args)),
+  mode === 'mock' ? createMockApi(location.search.includes('fresh') ? { ...fixtures, workspace: { setup_done: false, name: null, key: 'ABC', timezone: 'UTC' } } : { ...fixtures, decisions: structuredClone(demoDecisions) }) : mode === 'http' ? httpApi() : build((key, args) => (commands as any)[key](...args)),
 );
 
 /** Swaps the implementation; tests use it to install the mock. */

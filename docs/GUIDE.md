@@ -7,7 +7,7 @@ registry (`ui/src/lib/commands/defs/**`); `ui/src/lib/commands/guide.test.ts` ke
 
 Contents: [What it is](#what-cairn-is) - [First run](#first-run) - [The screen](#the-screen) - [Issues](#issues) -
 [Selection and bulk edit](#selection-and-bulk-edit) - [Undo and redo](#undo-and-redo) - [Views](#views) -
-[Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) - [Events](#events) -
+[Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) - [Events](#events) - [Decisions](#decisions) -
 [Points and insights](#points-and-insights) - [Custom properties](#custom-properties) -
 [Statuses, labels, icons, colours](#statuses-labels-icons-and-colours) - [Templates](#issue-templates) - [Images](#images) -
 [Import, export, backups](#import-export-and-backups) - [Restore](#restore) - [Reminders and Google Calendar](#reminders-and-google-calendar) -
@@ -89,8 +89,8 @@ case). Dates are relative to today in the workspace time zone.
 | Token | Meaning | Examples |
 |---|---|---|
 | `p0` to `p4` | Priority (0 none, 1 urgent, 2 high, 3 medium, 4 low). `p5` or a bare `p` stay in the title. | `p1` |
-| `#slug` | Project by slug. An unknown slug goes back into the title; nothing is created. | `#website` |
-| `@name` | Label by name. An unknown label goes back into the title. Repeat for several. | `@bug @urgent` |
+| `+slug` | Project by slug. An unknown slug goes back into the title; nothing is created. | `+website` |
+| `#name` | Label by name. An unknown label goes back into the title. Repeat for several. `@name` also works as a label. | `#bug #urgent` |
 | `~30m`, `~2h`, `~1d` | Estimate (1d = 480 minutes). Zero stays in the title. | `~90m` |
 | `3pt`, `3pts`, `.5pt`, `pt3`, `3 pt` | Points, one decimal at most. Only when estimation is Points or Both (Settings). | `5pt` |
 | `today`, `tomorrow` | Due date. | `tomorrow` |
@@ -104,7 +104,7 @@ case). Dates are relative to today in the workspace time zone.
 | `at 3pm`, `at 9:15am`, `at 15:30` | Time of day on the due date (today if no date). A bare hour needs am or pm. | `fri at 3pm` |
 | `/slug` first | Create from an issue template; the rest of the line fills in or overrides fields. Typing `/` opens the template list. | `/bug login fails p2` |
 
-Quick-add has no token for status, parent, cycle or milestone. Example: `Pay rent friday p1 #home @bills ~30m 3pt`.
+Quick-add has no token for status, parent, cycle or milestone. Example: `Pay rent friday p1 +home #bills ~30m 3pt`.
 
 ### Edit
 
@@ -220,6 +220,8 @@ saved automatically (after a short pause), except temporary sorting changes. Fil
   custom properties (listed first under "Custom properties"). "Reset to default" restores the layout's default fields.
   Options: Compact rows (list, table, board), Show empty groups (list, table), Show archived, Sub-issues Nested, Flat or
   Hidden (list), Show weekends (timeline, calendar). On a board the field list means the card fields.
+  Wrap (list, table; off by default) lets long titles, several labels and long values run onto more lines instead of
+  being cut off; a wrapped list shows every row, without the windowing that keeps long plain lists fast.
 - **Pin, rename, delete.** Header buttons and menu; or commands.
 - **View templates.** A template is a view definition new views start from. "Save as template" in the view menu
   makes one; the Views page lists templates, deletes them and "Set as default" makes the New view dialog preselect one.
@@ -314,6 +316,30 @@ belong to many events. Times are wall-clock times with no zone.
   written; the popup is only for tasks.
 - Not built: recurrence, reminders, and searching events.
 
+## Decisions
+
+A decision is a question with options that someone is waiting on you to answer: an agent raises one instead of
+guessing, or you note one for yourself. It has a question, markdown context, options (each with a trade-off), an
+optional recommendation, and a mode: **blocking** (whoever raised it waits for your answer) or **assume** (it carries on
+with its recommendation until you answer). Decisions are Cairn's own; nothing outside Cairn is called.
+
+- **Decisions page** (sidebar "Decisions", `g q`): one card per open decision, blocking ones first with a red edge. Click
+  an option to answer; the optional note box is sent with the answer. "Or answer in your own words" sends free text when no
+  option fits. "Withdraw" closes a question that no longer applies. The sidebar shows how many are open (red when one is
+  blocking). The page refreshes when the window gains focus and every minute. The "Answered" tab keeps the closed ones.
+- The command menu has "Answer decision with the recommendation" and "Withdraw decision" for the card you last
+  clicked (the first open one before any click).
+- **On an issue**: open decisions that name the issue are listed in a Decisions section.
+- Undo covers create, answer, withdraw, link and unlink. The export writes `decisions.yaml` and a rebuild restores it.
+- CLI (add `--json` for scripts):
+  `taskapp decision create "Which database?" --option a="Postgres: heavier" --option b="SQLite: simpler" --recommend b --mode blocking --issue ABC-1`,
+  `decision list [--status open|answered|withdrawn|all]`, `decision get <id>`,
+  `decision answer <id> (--option KEY | --text TEXT) [--note ...]`, `decision withdraw <id>`. Agents can also call the
+  `decisions_*` operations through `taskapp api call`.
+- Reserved for integrations: `source` names who raised a decision (`cli`, `ui`, `agent`, or any name you pass with
+  `--source`, such as `agent:builder` or later `curia`), and `external_id` is the raiser's own id, unique per source, so a
+  later integration can mirror a decision and not raise it twice. Nothing reads them yet.
+
 ## Points and insights
 
 - **Estimation setting** (Settings > General): None, Points, Time or Both. Points show only for Points or Both; time
@@ -356,7 +382,7 @@ templates and imports. Unset, or if that status is deleted, new issues start in 
   without one it shows the default circle for its category: backlog dashed, unstarted empty, started half-filled, completed
   filled with a check, canceled with a cross.
 - **Priority** shows as three bars of rising height: none faint, low one bar, medium two, high three, urgent three in red.
-- **Labels** (Settings > Labels): name, icon, colour. Add to issues with `l`, the panel, or `@name` in quick-add.
+- **Labels** (Settings > Labels): name, icon, colour. Add to issues with `l`, the panel, or `#name` in quick-add.
 - **Colours** are a fixed palette of 12 keys: gray, red, orange, amber, yellow, green, teal, cyan, blue, indigo, purple,
   pink. A `#rrggbb` value sent by CLI or MCP maps to the nearest key.
 - **Icons**: `icon:<id>` from the built-in set or `emoji:<emoji>` (any 1 to 8 non-ASCII characters). Today the
@@ -569,6 +595,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.projects` | Go to Projects | `g p` | Go to the project list. |
 | `nav.cycles` | Go to Cycles | `g c` | Go to Cycles. |
 | `nav.events` | Go to Events | `g e` | Go to Events. |
+| `nav.decisions` | Go to Decisions | `g q` | Go to Decisions. |
 | `nav.views` | Go to Views | `g v` | Go to Views. |
 | `nav.timeline` | Go to Timeline | `g t` | Go to the all-projects timeline. |
 | `nav.settings` | Go to Settings | `g s` | Go to Settings. |
@@ -793,6 +820,9 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `event list [--from --to]` | Events overlapping a date range. | `taskapp event list --from 2026-12-01` |
 | `event create <title> --start T [--end T --all-day --place --notes]` | Create an event (`T` is `YYYY-MM-DDTHH:MM` or a date). | `taskapp event create Demo --start 2026-12-10T09:30` |
 | `event link <id> <key>` | Link an event to an issue. | `taskapp event link 1 ABC-1` |
+| `decision create <question> [--option KEY="label: trade-off" --recommend KEY --mode blocking\|assume --context --source --external-id --issue KEY]` | Raise a decision for the owner. | `taskapp decision create "Ship now?" --option y="Yes: fast" --option n="No: safe" --recommend n` |
+| `decision list [--status open]` / `decision get <id>` | Read decisions (`open`, `answered`, `withdrawn`, `all`). | `taskapp --json decision list` |
+| `decision answer <id> (--option KEY \| --text TEXT) [--note]` / `decision withdraw <id>` | Answer or close an open decision. | `taskapp decision answer 1 --option n` |
 | `issue search <text> [--limit 20]` | Full-text search (archived issues are left out). | `taskapp issue search rent` |
 | `view query [--def JSON \| --id N]` | Run an ad hoc view definition or a saved view. | `taskapp view query --id 1` |
 | `view templates` | List view templates. | `taskapp view templates` |

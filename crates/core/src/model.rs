@@ -26,6 +26,7 @@ ids!(
     PinId,
     TemplateId,
     EventId,
+    DecisionId,
     AttachmentId
 );
 
@@ -539,6 +540,14 @@ pub enum Density {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
+pub enum Wrap {
+    #[default]
+    Off,
+    On,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
 pub enum SubIssues {
     #[default]
     Nest,
@@ -571,6 +580,9 @@ pub struct ViewDef {
     pub card_fields: Vec<FieldRef>,
     #[serde(default = "yes")]
     pub show_weekends: bool,
+    /// Long titles, labels and values wrap onto more lines instead of being cut off.
+    #[serde(default)]
+    pub wrap: Wrap,
 }
 
 impl Default for ViewDef {
@@ -587,6 +599,7 @@ impl Default for ViewDef {
             show_sub_issues: SubIssues::default(),
             card_fields: vec![],
             show_weekends: true,
+            wrap: Wrap::default(),
         }
     }
 }
@@ -786,4 +799,65 @@ pub struct VelocityPeriod {
     pub end: NaiveDate,
     pub label: String,
     pub completed: f64,
+}
+
+/// One choice of a [`Decision`]; `key` is what an answer and the recommendation name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct DecisionOption {
+    pub key: String,
+    pub label: String,
+    #[serde(default)]
+    pub tradeoff: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum DecisionMode {
+    /// Whoever raised it waits for the answer.
+    Blocking,
+    /// Whoever raised it carries on with its recommendation.
+    Assume,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum DecisionStatus {
+    Open,
+    Answered,
+    Withdrawn,
+}
+
+/// A question for the owner. `answer` is an option key, or free text when the options did not fit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct Decision {
+    pub id: DecisionId,
+    pub question: String,
+    pub context: String,
+    pub options: Vec<DecisionOption>,
+    pub recommendation: Option<String>,
+    pub mode: DecisionMode,
+    pub status: DecisionStatus,
+    pub answer: Option<String>,
+    pub note: String,
+    pub source: String,
+    pub external_id: Option<String>,
+    pub created_at: String,
+    pub answered_at: Option<String>,
+    pub issue_ids: Vec<IssueId>,
+}
+
+/// What create takes. `source` defaults to the caller's own (`cli`, `ui`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct DecisionInput {
+    pub question: String,
+    #[serde(default)]
+    pub context: String,
+    #[serde(default)]
+    pub options: Vec<DecisionOption>,
+    pub recommendation: Option<String>,
+    pub mode: DecisionMode,
+    pub source: Option<String>,
+    pub external_id: Option<String>,
+    #[serde(default)]
+    pub issue_ids: Vec<IssueId>,
 }

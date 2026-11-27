@@ -2,7 +2,7 @@ use chrono::NaiveDate;
 use serde_json::{Value, json};
 use taskapp_core::{
     ChangeSource, Db, Error, FieldRef, Filter, FixedField, Issue, Layout, Op, PropertyDef,
-    PropertyKind, SelectOption, Sort, ViewDef, search, views,
+    PropertyKind, SelectOption, Sort, ViewDef, Wrap, search, views,
 };
 
 const DAY: NaiveDate = match NaiveDate::from_ymd_opt(2026, 11, 27) {
@@ -420,5 +420,19 @@ fn relative_dates_bind_the_day_they_name() -> R {
         let f = cond(due.clone(), Op::Eq, json!(bad));
         assert!(views::compile(&def(Some(f)), &[], today).is_err(), "{bad}");
     }
+    Ok(())
+}
+
+#[test]
+fn wrap_defaults_off_for_views_stored_before_it_existed() -> R {
+    let old: ViewDef = serde_json::from_value(json!({
+        "filter": null, "sorts": [], "group_by": null, "layout": "List", "columns": [], "include_archived": false
+    }))?;
+    assert_eq!(old.wrap, Wrap::Off);
+    let on: ViewDef = serde_json::from_value(serde_json::to_value(ViewDef {
+        wrap: Wrap::On,
+        ..ViewDef::default()
+    })?)?;
+    assert_eq!(on.wrap, Wrap::On);
     Ok(())
 }

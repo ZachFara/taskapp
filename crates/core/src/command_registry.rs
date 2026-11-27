@@ -128,6 +128,24 @@ macro_rules! with_commands {
                 events::unlink(&s.db, event, issue, $source).await
             }
 
+            decisions_list(s, status: Option<DecisionStatus>) -> Vec<Decision> {
+                decisions::list(&s.db, status).await
+            }
+            decisions_get(s, id: DecisionId) -> Decision { decisions::get(&s.db, id).await }
+            decisions_create(s, input: DecisionInput) -> Decision {
+                decisions::create(&s.db, input, $source).await
+            }
+            decisions_answer(s, id: DecisionId, option: Option<String>, text: Option<String>, note: String) -> Decision {
+                decisions::answer(&s.db, id, option, text, note, $source).await
+            }
+            decisions_withdraw(s, id: DecisionId) -> Decision { decisions::withdraw(&s.db, id, $source).await }
+            decisions_link(s, decision: DecisionId, issue: IssueId) -> () {
+                decisions::link(&s.db, decision, issue, $source).await
+            }
+            decisions_unlink(s, decision: DecisionId, issue: IssueId) -> () {
+                decisions::unlink(&s.db, decision, issue, $source).await
+            }
+
             labels_list(s) -> Vec<Label> { labels::list(&s.db).await }
             labels_create(s, name: String, color: String, icon: Option<String>) -> Label {
                 labels::create(&s.db, &name, &color, icon, $source).await

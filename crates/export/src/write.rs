@@ -7,10 +7,10 @@ use sqlx::FromRow;
 use taskapp_core::{Db, Result, attachments, settings};
 
 use crate::files::{
-    AttachmentFile, CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile,
-    LabelRow, MilestoneRow, PinRow, ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow,
-    StatusRow, ViewFile, ViewFolderFile, ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir,
-    read_plain, render_issue, safe_name,
+    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, ImportLogRow, IssueFront,
+    IssueTemplateFile, LabelRow, MilestoneRow, PinRow, ProjectFile, ProjectStatusRow, PropertyFile,
+    RelationKindRow, StatusRow, ViewFile, ViewFolderFile, ViewTemplateFile, WorkBlockRow, invalid,
+    key, plain_dir, read_plain, render_issue, safe_name,
 };
 
 pub struct ExportStats {
@@ -288,7 +288,70 @@ async fn cycles(db: &Db) -> Result<Vec<CycleRow>> {
     Ok(rows)
 }
 
+async fn decisions(db: &Db, prefix: &str) -> Result<Vec<DecisionFile>> {
+    type Row = (
+        i64,
+        String,
+        String,
+        String,
+        Option<String>,
+        String,
+        String,
+        Option<String>,
+        String,
+        String,
+        Option<String>,
+        String,
+        Option<String>,
+    );
+    let rows = sqlx::query_as::<_, Row>(
+        "SELECT id, question, context, options, recommendation, mode, status, answer, note, source,
+                external_id, created_at, answered_at FROM decisions ORDER BY id",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    let mut links = group(
+        sqlx::query_as::<_, (i64, i64)>(
+            "SELECT d.decision_id, i.number FROM decision_issues d JOIN issues i ON i.id = d.issue_id
+             ORDER BY i.number",
+        )
+        .fetch_all(&db.pool)
+        .await?
+        .into_iter()
+        .map(|(decision, number)| (decision, key(prefix, number)))
+        .collect(),
+    );
+    rows.into_iter()
+        .map(|r| {
+            Ok(DecisionFile {
+                issues: links.remove(&r.0).unwrap_or_default(),
+                id: r.0,
+                question: r.1,
+                context: r.2,
+                options: serde_json::from_str(&r.3).map_err(invalid)?,
+                recommendation: r.4,
+                mode: r.5,
+                status: r.6,
+                answer: r.7,
+                note: r.8,
+                source: r.9,
+                external_id: r.10,
+                created_at: r.11,
+                answered_at: r.12,
+            })
+        })
+        .collect()
+}
+
 async fn event_files(db: &Db, prefix: &str, files: &mut BTreeMap<String, String>) -> Result<()> {
+    files.insert(
+        "decisions.yaml".to_string(),
+        yaml(&decisions(db, prefix).await?)?,
+    );
+    files.insert(
+        "decisions.yaml".to_string(),
+        yaml(&decisions(db, prefix).await?)?,
+    );
     for event in events(db, prefix).await? {
         files.insert(format!("events/{}.yaml", event.id), yaml(&event)?);
     }

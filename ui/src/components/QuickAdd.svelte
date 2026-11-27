@@ -38,7 +38,7 @@
 
   let open = $state(true);
   // The prefill is the starting text only; the dialog owns the field after it opens.
-  const prefill = untrack(() => (project_slug ? `#${project_slug} ` : ''));
+  const prefill = untrack(() => (project_slug ? `+${project_slug} ` : ''));
   const initialDefaults = (): IssueDefaults =>
     mergeIssueDefaults(defaults, status_id !== null ? { status_id } : null);
   let activeDefaults = $state<IssueDefaults>(untrack(initialDefaults));
@@ -100,7 +100,7 @@
   // Each chip is a Menu trigger: Tab reaches it in order, Enter or Space opens its menu, and the menu rewrites
   // that token (or the inherited view default), so the user always sees what will be set.
   // Only the tokens of fields that are switched on.
-  const hint = $derived([['priority', 'p2'], ['project', '#project'], ['labels', '@label'], ['estimate', '~30m'], ['due', 'tomorrow']].flatMap(([f, t]) => (fieldOn(f as 'due') ? [t] : [])).map((t) => ` ${t}`).join(''));
+  const hint = $derived([['priority', 'p2'], ['project', '+project'], ['labels', '#label'], ['estimate', '~30m'], ['due', 'tomorrow']].flatMap(([f, t]) => (fieldOn(f as 'due') ? [t] : [])).map((t) => ` ${t}`).join(''));
   const chips = $derived(
     [
       template && { key: 'template', label: `/${template.slug}` },
@@ -108,8 +108,8 @@
       effectiveDue && { key: 'due', label: `Due ${humanDate(effectiveDue.Date ?? effectiveDue.DateTime!.utc.slice(0, 10))}` },
       effectiveStart && { key: 'start', label: `Start ${humanDate(effectiveStart)}` },
       effectivePriority != null && { key: 'priority', label: PRIORITIES[effectivePriority] ?? `P${effectivePriority}` },
-      effectiveProjectSlug && { key: 'project', label: `#${effectiveProjectSlug}` },
-      ...effectiveLabelNames.map((l) => ({ key: 'labels', label: `@${l}` })),
+      effectiveProjectSlug && { key: 'project', label: `+${effectiveProjectSlug}` },
+      ...effectiveLabelNames.map((l) => ({ key: 'labels', label: `#${l}` })),
       effectiveEstimate != null && { key: 'estimate', label: `${effectiveEstimate}m` },
       effectivePoints != null && pointsOn(estimation) && { key: 'points', label: `${effectivePoints} pts` },
       ...propEntries.map(([k, v]) => ({ key: `prop:${k}`, label: `${k}: ${Array.isArray(v) ? v.join(', ') : String(v)}` })),
@@ -162,12 +162,12 @@
         const found = await api.labels.list();
         let title = p.title;
         const parsedProject = p.project_slug === null ? undefined : projectList.find((x) => x.slug === p.project_slug);
-        if (p.project_slug !== null && !parsedProject) title += ` #${p.project_slug}`;
+        if (p.project_slug !== null && !parsedProject) title += ` +${p.project_slug}`;
         const parsedLabelIds: number[] = [];
         for (const name of p.label_names) {
           const hit = found.find((l) => l.name.toLowerCase() === name.toLowerCase());
           if (hit) parsedLabelIds.push(hit.id);
-          else title += ` @${name}`;
+          else title += ` #${name}`;
         }
         const label_ids = [...new Set([...(activeDefaults.label_ids ?? []), ...parsedLabelIds])];
         const pts = pointsIn(p) ?? activeDefaults.points;
@@ -303,9 +303,9 @@
             {/each}
           {:else if c.key === 'project'}
             {#each projectList as p (p.slug)}
-              <MenuItem label={p.name} icon="project" onSelect={() => setToken(/(^|\s)#[\w-]+/, `#${p.slug}`, 'project_id')} />
+              <MenuItem label={p.name} icon="project" onSelect={() => setToken(/(^|\s)\+[\w-]+/, `+${p.slug}`, 'project_id')} />
             {/each}
-            <MenuItem label="No project" onSelect={() => setToken(/(^|\s)#[\w-]+/, '', 'project_id')} />
+            <MenuItem label="No project" onSelect={() => setToken(/(^|\s)\+[\w-]+/, '', 'project_id')} />
           {:else if c.key === 'due'}
             <MenuItem label="Today" icon="calendar" onSelect={() => setToken(new RegExp(`(^|\\s)(by |due )?${DUE_WORDS}(?=\\s|$)`, 'i'), 'today', 'due')} />
             <MenuItem label="Tomorrow" icon="calendar" onSelect={() => setToken(new RegExp(`(^|\\s)(by |due )?${DUE_WORDS}(?=\\s|$)`, 'i'), 'tomorrow', 'due')} />
@@ -317,12 +317,12 @@
           {:else if c.key === 'labels'}
             {#each labels as l (l.name)}
               <MenuItem label={l.name} icon="tag" onSelect={() => {
-                const inText = text.toLowerCase().includes(`@${l.name.toLowerCase()}`);
+                const inText = text.toLowerCase().includes(`#${l.name.toLowerCase()}`);
                 const inDefaults = (activeDefaults.label_ids ?? []).includes(l.id);
                 if (inDefaults) {
                   activeDefaults = { ...activeDefaults, label_ids: (activeDefaults.label_ids ?? []).filter((id) => id !== l.id) };
                 } else {
-                  setToken(new RegExp(`(^|\\s)@${l.name}(?=\\s|$)`, 'i'), inText ? '' : `@${l.name}`);
+                  setToken(new RegExp(`(^|\\s)[#@]${l.name}(?=\\s|$)`, 'i'), inText ? '' : `#${l.name}`);
                 }
               }} />
             {/each}
