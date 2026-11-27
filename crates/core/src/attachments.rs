@@ -1,6 +1,7 @@
 //! Pasted images: content-addressed files next to the database, one row each.
 
 use std::fs;
+use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
@@ -140,4 +141,44 @@ pub async fn referenced(db: &Db) -> Result<Vec<Attachment>> {
     .fetch_all(&db.pool)
     .await?;
     rows.iter().map(row).collect()
+}
+
+/// One attachment's row and the path of its file. The file is not opened.
+///
+/// # Errors
+/// `NotFound` for an unknown id.
+pub async fn locate(db: &Db, id: AttachmentId) -> Result<(Attachment, PathBuf)> {
+    let r = sqlx::query("SELECT * FROM attachments WHERE id = ?")
+        .bind(id.0)
+        .fetch_optional(&db.pool)
+        .await?
+        .ok_or_else(|| Error::NotFound(format!("attachment {}", id.0)))?;
+    let file: String = r.try_get("file")?;
+    Ok((row(&r)?, db.files.join(file)))
+}
+
+/// The attachments `text` points at with `(attachment:<id>)`, in the order first mentioned. Ids with no row are skipped.
+///
+/// # Errors
+/// Fails on a database error.
+pub async fn in_text(db: &Db, text: &str) -> Result<Vec<(Attachment, PathBuf)>> {
+    let mut ids: Vec<i64> = Vec::new();
+    for part in text.split("(attachment:").skip(1) {
+        let digits: String = part.chars().take_while(char::is_ascii_digit).collect();
+        let Ok(id) = digits.parse::<i64>() else {
+            continue;
+        };
+        if part[digits.len()..].starts_with(')') && !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    let mut found = Vec::new();
+    for id in ids {
+        match locate(db, AttachmentId(id)).await {
+            Ok(hit) => found.push(hit),
+            Err(Error::NotFound(_)) => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(found)
 }

@@ -769,3 +769,73 @@ fn issue_get_prints_names_and_keeps_ids() {
         "stdout was: {stdout}"
     );
 }
+
+#[test]
+fn table_prints_list_values_as_plain_text() {
+    let (_d, db) = fresh();
+    run_json(&db, &["project", "create", "cairn", "Cairn"]);
+    run_json(&db, &["label", "create", "By AI", "blue"]);
+    run_json(&db, &["label", "create", "For AI", "green"]);
+    run_json(
+        &db,
+        &[
+            "issue", "create", "Tagged", "--label", "By AI", "--label", "For AI",
+        ],
+    );
+
+    let table = run(&db, &["issue", "list"]);
+    let stdout = String::from_utf8_lossy(&table.stdout);
+    assert!(stdout.contains("By AI, For AI"), "stdout was: {stdout}");
+    assert!(!stdout.contains("[\""), "stdout was: {stdout}");
+
+    let json = run_json(&db, &["issue", "list"]);
+    assert_eq!(json[0]["labels"][1], "For AI", "--json keeps the array");
+}
+
+/// A PNG signature is enough for the attachment check; the bytes are stored as given.
+fn add_attachment(db: &Path) {
+    let png = "[137,80,78,71,13,10,26,10]";
+    let args = format!(r#"{{"bytes":{png},"mime":"image/png"}}"#);
+    run_json(db, &["api", "call", "attachments_add", "--args", &args]);
+}
+
+#[test]
+fn attachment_path_and_list_for_an_issue() {
+    let (_d, db) = fresh();
+    add_attachment(&db);
+    run_json(
+        &db,
+        &[
+            "issue",
+            "create",
+            "Shot",
+            "--description",
+            "See (attachment:1) here",
+        ],
+    );
+    run_json(&db, &["issue", "create", "No picture"]);
+
+    let path = run_json(&db, &["attachment", "path", "1"]);
+    let path = PathBuf::from(path.as_str().expect("path"));
+    assert!(path.is_absolute(), "path was {path:?}");
+    assert_eq!(path.extension().and_then(|e| e.to_str()), Some("png"));
+    assert!(path.exists(), "file is at {path:?}");
+    assert_eq!(
+        path.parent().expect("parent").file_name().expect("name"),
+        "attachments"
+    );
+
+    let rows = run_json(&db, &["attachment", "list", "ABC-1"]);
+    let rows = rows.as_array().expect("array");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["id"], 1);
+    assert_eq!(rows[0]["mime"], "image/png");
+    assert_eq!(rows[0]["bytes"], 8);
+    assert_eq!(rows[0]["path"], path.display().to_string());
+
+    let none = run_json(&db, &["attachment", "list", "ABC-2"]);
+    assert_eq!(none.as_array().expect("array").len(), 0);
+
+    let missing = run(&db, &["attachment", "path", "99"]);
+    assert!(!missing.status.success());
+}

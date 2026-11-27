@@ -795,6 +795,8 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `comment add <key> <body>` | Comment on an issue. | `taskapp comment add ABC-1 "Looks good"` |
 | `relation add <from> <kind> <to>` / `relation remove ...` | Kind: an id or name (blocks, related, duplicate, follows, caused_by, part_of, or a custom one). | `taskapp relation add ABC-1 blocks ABC-2` |
 | `pin list` / `pin add <kind> <target> [--title]` / `pin remove <id>` | Kinds: issue, project, view, cycle, note, url. | `taskapp pin add issue ABC-1` |
+| `attachment path <id>` | Absolute path of a pasted image's file. | `taskapp attachment path 3` |
+| `attachment list <key>` | Images the issue's description points at with `(attachment:N)`: id, path, mime, bytes. | `taskapp attachment list ABC-1` |
 | `template list` / `create` / `update <id>` / `delete <id>` | Issue templates: `create <name> <slug> [--icon --color --body JSON]`. | `taskapp template create Bug bug --body '{"title_prefix":"[Bug] "}'` |
 | `template apply <id> [title]` | Create the issue and its sub-issues. | `taskapp template apply 1 "Login fails"` |
 | `insights progress (--project N \| --cycle N \| --view N) [--measure points\|count\|time --from --to]` | Per-day scope, started, completed. | `taskapp insights progress --project 1 --measure count` |

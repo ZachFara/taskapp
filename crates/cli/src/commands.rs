@@ -7,17 +7,17 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use taskapp_core::{
-    ChangeSource, CycleId, Db, Due, Error, EventId, EventInput, IssueId, IssuePatch, Measure,
-    NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind, Relation,
-    RelationKind, Result, SelectOption, TemplateId, ViewDef, ViewId, ViewTemplateId, backup,
-    comments, cycles, events, history, import, insights, issues, labels, pins, project_statuses,
-    projects, properties, quickadd, relations, search, statuses, templates, undo, view_templates,
-    views,
+    AttachmentId, ChangeSource, CycleId, Db, Due, Error, EventId, EventInput, IssueId, IssuePatch,
+    Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef, PropertyKind,
+    Relation, RelationKind, Result, SelectOption, TemplateId, ViewDef, ViewId, ViewTemplateId,
+    attachments, backup, comments, cycles, events, history, import, insights, issues, labels, pins,
+    project_statuses, projects, properties, quickadd, relations, search, statuses, templates, undo,
+    view_templates, views,
 };
 
 use crate::{
-    Cmd, CommentCmd, CycleCmd, EventCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd, PinCmd,
-    ProjectCmd, PropertyCmd, RelationCmd, ScopeArgs, StatusCmd, TemplateCmd, ViewCmd,
+    AttachmentCmd, Cmd, CommentCmd, CycleCmd, EventCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd,
+    PinCmd, ProjectCmd, PropertyCmd, RelationCmd, ScopeArgs, StatusCmd, TemplateCmd, ViewCmd,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
@@ -38,6 +38,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Insights(cmd) => insights(db, cmd).await,
         Cmd::Event(cmd) => event(db, cmd).await,
         Cmd::Status(cmd) => status(db, cmd).await,
+        Cmd::Attachment(cmd) => attachment(db, cmd).await,
         cmd => run_group(db, dir, cmd).await,
     }
 }
@@ -64,6 +65,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Template(_)
         | Cmd::Insights(_)
         | Cmd::Status(_)
+        | Cmd::Attachment(_)
         | Cmd::Event(_) => handled_in_run(),
         Cmd::History { key } => {
             let id = issue_id(db, &key).await?;
@@ -577,6 +579,26 @@ async fn relation(db: &Db, cmd: RelationCmd) -> Result<Value> {
     } else {
         relations::remove(db, rel, SRC).await?;
         Ok(json!({"removed": {"from": from, "kind": kind, "to": to}}))
+    }
+}
+
+async fn attachment(db: &Db, cmd: AttachmentCmd) -> Result<Value> {
+    match cmd {
+        AttachmentCmd::Path { id } => {
+            let (_, path) = attachments::locate(db, AttachmentId(id)).await?;
+            Ok(Value::String(path.display().to_string()))
+        }
+        AttachmentCmd::List { key } => {
+            let issue = issues::get_by_key(db, &key).await?;
+            let rows = attachments::in_text(db, &issue.description)
+                .await?
+                .into_iter()
+                .map(|(a, path)| {
+                    json!({"id": a.id.0, "path": path.display().to_string(), "mime": a.mime, "bytes": a.bytes})
+                })
+                .collect();
+            Ok(Value::Array(rows))
+        }
     }
 }
 

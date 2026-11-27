@@ -62,6 +62,8 @@ enum Cmd {
     #[command(subcommand)]
     Pin(PinCmd),
     #[command(subcommand)]
+    Attachment(AttachmentCmd),
+    #[command(subcommand)]
     Template(TemplateCmd),
     /// Progress and velocity over time, rebuilt from history.
     #[command(subcommand)]
@@ -558,6 +560,14 @@ enum RelationCmd {
 }
 
 #[derive(Subcommand)]
+enum AttachmentCmd {
+    /// Absolute path of an attachment's image file.
+    Path { id: i64 },
+    /// Attachments an issue's description points at with `(attachment:N)`.
+    List { key: String },
+}
+
+#[derive(Subcommand)]
 enum PinCmd {
     List,
     /// kind: issue, project, view, cycle, note, url.
@@ -758,6 +768,9 @@ fn cell(value: &Value) -> String {
     match value {
         Value::Null => String::new(),
         Value::String(s) => s.replace('\n', " "),
+        Value::Array(items) if items.iter().all(|v| !v.is_object() && !v.is_array()) => {
+            items.iter().map(cell).collect::<Vec<_>>().join(", ")
+        }
         other => other.to_string(),
     }
 }
