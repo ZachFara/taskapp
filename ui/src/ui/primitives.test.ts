@@ -144,6 +144,18 @@ describe('layout pieces', () => {
     expect(tabs.map((t) => t.textContent?.trim())).toEqual(['A', 'B']);
     expect(tabs[1].getAttribute('data-state')).toBe('active');
   });
+  it('Tabs show a tooltip only when it adds a shortcut, not to repeat the visible name', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+    render(Tabs, { value: 'a', tabs: [{ id: 'a', label: 'Plain', icon: 'list' }, { id: 'b', label: 'Keyed', shortcut: 'B' }] });
+    const [plain, keyed] = [...document.querySelectorAll<HTMLElement>('.cx-tabwrap')];
+    plain.focus();
+    plain.dispatchEvent(new FocusEvent('focus'));
+    await settle();
+    expect(document.querySelector('.cx-tip')).toBeNull();
+    keyed.dispatchEvent(new FocusEvent('focus'));
+    await settle();
+    expect(document.querySelector('.cx-tip')?.textContent).toContain('Keyed');
+  });
   it('GroupHeader deepens the band with the status category and toggles', () => {
     const steps: Record<string, string | undefined> = {};
     let toggled = 0;

@@ -12,6 +12,9 @@
     segmented = false,
   }: { segmented?: boolean; value?: string; tabs: { id: string; label: string; icon?: string; shortcut?: string }[]; label?: string } = $props();
 
+  // A tab's tooltip only repeats its visible name unless it has a shortcut or the text is hidden (1200px, below).
+  let width = $state(Infinity);
+
   // The underline is one bar that slides to the active tab; it is measured after each change, and placed without
   // sliding the first time. Segmented controls fill the chosen segment instead.
   let list = $state<HTMLElement | null>(null);
@@ -28,10 +31,12 @@
   });
 </script>
 
+<svelte:window bind:innerWidth={width} />
+
 <Tabs.Root bind:value>
   <Tabs.List bind:ref={list} class={segmented ? 'cx-tabs cx-seg' : 'cx-tabs'} aria-label={label}>
     {#each tabs as t (t.id)}
-      <Tooltip label={t.label} shortcut={t.shortcut}>
+      <Tooltip label={t.label} shortcut={t.shortcut} disabled={!t.shortcut && (segmented || !t.icon || width > 1200)}>
         {#snippet children(tp)}
           <!-- The wrapper takes the tooltip's attributes: spread on the tab they would overwrite its data-state. -->
           <span {...tp} class="cx-tabwrap">

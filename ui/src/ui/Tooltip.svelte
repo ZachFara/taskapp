@@ -7,10 +7,12 @@
   let {
     label,
     shortcut,
+    disabled = false,
     children,
   }: {
     label: string;
     shortcut?: string | string[];
+    disabled?: boolean;
     children: Snippet<[Record<string, unknown>]>;
   } = $props();
   // The token is read once per tooltip; 500 only covers a page where tokens.css is absent.
@@ -18,7 +20,7 @@
 </script>
 
 <Tooltip.Provider delayDuration={delay} skipDelayDuration={0}>
-  <Tooltip.Root>
+  <Tooltip.Root {disabled}>
     <Tooltip.Trigger>
       {#snippet child({ props })}{@render children(props)}{/snippet}
     </Tooltip.Trigger>

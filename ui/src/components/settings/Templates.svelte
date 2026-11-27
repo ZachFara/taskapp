@@ -169,7 +169,7 @@
 
 <SectionHead lede="A template prefills an issue and can add sub-issues.">
   {#snippet actions()}
-    <Button variant="primary" icon="plus" tooltip={{ label: 'New template' }} onclick={startNew}>New template</Button>
+    <Button variant="primary" icon="plus" onclick={startNew}>New template</Button>
   {/snippet}
 </SectionHead>
 
