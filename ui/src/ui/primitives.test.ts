@@ -17,6 +17,7 @@ import TextInput from './TextInput.svelte';
 import Toast from './Toast.svelte';
 import { ICON_IDS } from './icons';
 import { createRawSnippet } from 'svelte';
+import { setTooltips } from '../lib/tooltips.svelte';
 
 // Glyph assertions below are the Mac ones whatever machine runs them.
 beforeEach(() => void vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel'));
@@ -56,7 +57,15 @@ describe('Button', () => {
 });
 
 describe('Tooltip', () => {
+  afterEach(() => setTooltips(false));
+  it('stays closed on focus while Show tooltips is off, the default', async () => {
+    render(IconButton, { icon: 'search', label: 'Search' });
+    document.querySelector('button')!.focus();
+    await settle();
+    expect(document.querySelector('.cx-tip')).toBeNull();
+  });
   it('shows the action name and its shortcut when the trigger is focused', async () => {
+    setTooltips(true);
     render(IconButton, { icon: 'search', label: 'Search', shortcut: ['⌘', 'K'] });
     document.querySelector('button')!.focus();
     await settle();
@@ -145,6 +154,7 @@ describe('layout pieces', () => {
     expect(tabs[1].getAttribute('data-state')).toBe('active');
   });
   it('Tabs show a tooltip only when it adds a shortcut, not to repeat the visible name', async () => {
+    setTooltips(true);
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
     render(Tabs, { value: 'a', tabs: [{ id: 'a', label: 'Plain', icon: 'list' }, { id: 'b', label: 'Keyed', shortcut: 'B' }] });
     const [plain, keyed] = [...document.querySelectorAll<HTMLElement>('.cx-tabwrap')];

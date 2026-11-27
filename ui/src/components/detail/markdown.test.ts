@@ -15,11 +15,11 @@ const dom = (html: string) => {
 };
 
 describe('bare URLs as link chips', () => {
-  it('shows a bare https URL as a chip with host and short path, full URL in the title', () => {
+  it('shows a bare https URL as a chip with host and short path, with no hover title', () => {
     const d = dom(renderMarkdown('see https://example.com/docs/guide/intro for more'));
     const a = d.querySelector('a.chip')!;
     expect(a.getAttribute('href')).toBe('https://example.com/docs/guide/intro');
-    expect(a.getAttribute('title')).toBe('https://example.com/docs/guide/intro');
+    expect(a.hasAttribute('title')).toBe(false);
     expect(a.textContent).toBe('example.com/docs/guide/intro');
     expect(a.querySelector('svg')).not.toBeNull();
   });

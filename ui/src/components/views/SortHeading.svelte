@@ -6,7 +6,7 @@
   const active = $derived(sort && sameField(sort.field, field));
 </script>
 
-<button type="button" aria-label={`Sort by ${label}`} title={`Sort by ${label}`} onclick={() => onclick(field)}>
+<button type="button" aria-label={`Sort by ${label}`} onclick={() => onclick(field)}>
   <span>{display}</span>{#if active}<span aria-hidden="true">{sort?.descending ? '↓' : '↑'}</span>{/if}
 </button>
 

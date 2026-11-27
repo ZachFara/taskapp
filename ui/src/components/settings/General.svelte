@@ -8,6 +8,7 @@
   import { SKINS, setSkin, setTheme, theme } from '../../lib/theme.svelte';
   import { interfaceSize, setInterfaceSize, SIZES } from '../../lib/interfaceSize.svelte';
   import { motion, setSpeed, type Speed } from '../../lib/motion.svelte';
+  import { setTooltips, tooltips } from '../../lib/tooltips.svelte';
   import Switch from '../../ui/Switch.svelte';
   import { estimationItems, scaleItems } from '../insights/estimation';
 
@@ -144,6 +145,11 @@
       <span>Animation speed</span>
       <Select label="Animation speed" items={speedItems} bind:value={() => motion.speed, (v) => setSpeed(v as Speed)} />
       <span class="st-hint">How long dialogs, menus and the issue panel take to arrive. Off is the default when the system asks for reduced motion. Applies at once.</span>
+    </div>
+    <div class="st-field">
+      <span>Show tooltips</span>
+      <Switch label="Show tooltips" bind:checked={() => tooltips.show, setTooltips} />
+      <span class="st-hint">Name and shortcut on hover. Off by default; every shortcut is still listed in the command menu. Applies at once.</span>
     </div>
     <div class="st-field">
       <span>Estimation</span>

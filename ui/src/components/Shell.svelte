@@ -150,7 +150,7 @@
         {/each}
         <span class="sync">
           {#if syncError !== undefined}
-            <span class="dot error" role="status" title={syncError}></span> {syncError}
+            <span class="dot error" role="status" aria-label={syncError}></span> {syncError}
           {:else}
             <span class="dot"></span> Sync ok
           {/if}

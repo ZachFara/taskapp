@@ -10,6 +10,7 @@ import Kbd from './Kbd.svelte';
 import ListRow from './ListRow.svelte';
 import PageHeader from './PageHeader.svelte';
 import TextInput from './TextInput.svelte';
+import { setTooltips } from '../lib/tooltips.svelte';
 
 let app: ReturnType<typeof mount> | undefined;
 afterEach(() => {
@@ -55,6 +56,7 @@ describe('Dialog', () => {
 
 describe('Tooltip delay token', () => {
   it('reads --delay-tooltip from the root', async () => {
+    setTooltips(true);
     document.documentElement.style.setProperty('--delay-tooltip', '10ms');
     render(IconButton, { icon: 'search', label: 'Search' });
     const b = document.querySelector('button')!;

@@ -225,7 +225,7 @@
   <li class="row" {...attrs('view', 'item', v.id, v.name, row)}>
     <RowActions button={false} label={v.name} actions={rowActs({ kind: 'view', id: v.id, name: v.name }, isPinned('View', String(v.id)))}>
       <IconColorPicker label={`Icon and colour of ${v.name}`} value={{ icon: v.icon ?? `icon:${LAYOUT_ICON[v.def.layout] ?? 'list'}`, color: v.color }} onchange={(c) => patch({ kind: 'view', id: v.id, name: v.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `view:${v.id}`, (o) => (rowUi.picking = o ? `view:${v.id}` : null)} />
-      <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{v.name}</span>{#if v.entity === 'project'}<span class="st" title="Project view"><Icon name="project" size={12} /></span>{/if}</a>
+      <a class="item" class:on={route.startsWith(href)} aria-current={route.startsWith(href) ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{v.name}</span>{#if v.entity === 'project'}<span class="st" role="img" aria-label="Project view"><Icon name="project" size={12} /></span>{/if}</a>
     </RowActions>
   </li>
 {/snippet}
@@ -236,7 +236,7 @@
   <li class="row" {...attrs('project', 'item', p.id, p.name, row)}>
     <RowActions button={false} label={p.name} actions={rowActs({ kind: 'project', id: p.id, name: p.name }, isPinned('Project', p.slug))}>
       <IconColorPicker label={`Icon and colour of ${p.name}`} value={{ icon: p.icon ?? 'icon:project', color: p.color }} onchange={(c) => patch({ kind: 'project', id: p.id, name: p.name }, { icon: c.icon, color: c.color })} bind:open={() => rowUi.picking === `project:${p.id}`, (o) => (rowUi.picking = o ? `project:${p.id}` : null)} />
-      <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{p.name}</span>{#if st}<span class="st" title={st.name}><StatusGlyph category={glyphCategory[st.category]} size={12} label={st.name} /></span>{/if}{#if sparklines}<ProjectSpark projectId={p.id} name={p.name} />{/if}</a>
+      <a class="item" class:on={route === href} aria-current={route === href ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><span class="t">{p.name}</span>{#if st}<span class="st"><StatusGlyph category={glyphCategory[st.category]} size={12} label={st.name} /></span>{/if}{#if sparklines}<ProjectSpark projectId={p.id} name={p.name} />{/if}</a>
     </RowActions>
   </li>
 {/snippet}

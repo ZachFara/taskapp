@@ -471,6 +471,7 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 | Sidebar sparklines | on or off | A small progress line per project. |
 | Interface size | 100%, 110%, 115%, 125% | Scales the whole app on this device (not saved in the workspace). Default 110%. Applies at once. |
 | Animation speed | Off, Fast, Normal, Slow | Per device, like interface size. Default Normal; Off by default when the system asks for reduced motion. Applies at once. |
+| Show tooltips | On, Off | Per device. Off by default: no name or shortcut boxes appear on hover. Shortcuts stay listed in the command menu and the shortcut sheet. Applies at once. |
 
 Sidebar and issue panel widths are remembered per device. Drag an edge to resize; double-click it to reset.
 
@@ -669,6 +670,7 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `pane.panel.reset` | Reset issue panel width | (none) | Back to the default issue panel width. |
 | `motion.faster` | Faster animations | (none) | One animation speed step faster (Normal, then Fast, then Off). |
 | `motion.slower` | Slower animations | (none) | One animation speed step slower (Normal, then Slow). |
+| `tooltips.toggle` | Show or hide tooltips | (none) | Switch the Show tooltips setting. |
 | `cycle.move_unfinished` | Move unfinished issues to the next cycle | (none) | Move unfinished issues of the cycle to the next cycle (Cycles page). |
 | `cycle.new` | New cycle | (none) | New cycle. |
 | `group.add` | Add issue to this group | (none) | Add an issue to this group. |

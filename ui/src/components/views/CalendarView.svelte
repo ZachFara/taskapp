@@ -349,7 +349,7 @@
       <Calendar bind:this={calendar} plugins={[TimeGrid, DayGrid, Interaction]} {options}>
         {#snippet eventContent(info: any)}
           {@const x = info.event.extendedProps}
-          <span class="chip" data-key={x.key} title={x.key}>
+          <span class="chip" data-key={x.key}>
             {#if x.isEvent}<Icon name="calendar" size={12} />{:else if x.category}<StatusGlyph category={x.category} icon={x.icon} color={x.color} size={12} />{/if}
             <span class="text">{info.event.title}</span>
             {#if x.issue}{#each chipFields as f (f.Property ?? f.Fixed)}<span class="fv"><FieldValue field={f} issue={x.issue} {ctx} /></span>{/each}{/if}

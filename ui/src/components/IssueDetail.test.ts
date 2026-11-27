@@ -6,6 +6,7 @@ import type { Issue } from '../lib/bindings';
 import { attachKeys } from '../lib/commands';
 import IssueDetail from './IssueDetail.svelte';
 
+
 let app: object | undefined;
 let api: Api;
 
@@ -255,12 +256,12 @@ describe('IssueDetail', () => {
     expect(q('.hero').textContent!.split('Only once please').length - 1).toBe(1);
   });
 
-  it('panel_header_shows_only_the_key_with_the_project_as_a_tooltip', async () => {
+  it('panel_header_shows_only_the_key', async () => {
     const i = await open({ title: 'Narrow', project_id: 1 }, { mode: 'panel', onclose: () => {} });
     const crumb = q('header h1');
     expect(crumb.textContent).toContain(i.key);
     expect(crumb.textContent).not.toContain('/');
-    expect(crumb.querySelector('[title]')?.getAttribute('title')).toBeTruthy();
+    expect(crumb.querySelector('[title]')).toBeNull();
   });
 
   it('empty_sections_are_one_line_without_an_illustration', async () => {

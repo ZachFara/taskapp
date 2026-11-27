@@ -4,6 +4,7 @@ import Labels from './Labels.svelte';
 import RowDialogHost from '../RowDialogHost.svelte';
 import '../../lib/commands';
 import { clickLabel, field, mountSettings, press, setField } from './testing';
+import { setTooltips } from '../../lib/tooltips.svelte';
 
 async function add(target: Element, name: string) {
   await setField(target, 'Label name', name);
@@ -54,6 +55,7 @@ describe('Labels', () => {
   });
 
   it('row actions name themselves in a tooltip on hover', async () => {
+    setTooltips(true);
     const { target } = await mountSettings(Labels);
     const more = target.querySelector<HTMLButtonElement>('button[aria-label^="More actions for "]')!;
     more.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse' }));

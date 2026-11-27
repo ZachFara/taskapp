@@ -103,7 +103,7 @@
               ondrop={() => dropOn(fieldKey(r.field))}
             >
               {#if s.on}<span class="grip" aria-hidden="true"><Icon name="more" size={14} /></span>{/if}
-              {#if r.kind}<span class="type" title={r.kind}><Icon name={KIND_ICON[r.kind]} size={14} /></span>{/if}
+              {#if r.kind}<span class="type" role="img" aria-label={r.kind}><Icon name={KIND_ICON[r.kind]} size={14} /></span>{/if}
               <span class="name">{r.name}</span>
               {#if s.on}
                 <IconButton icon="arrow-up" label={`Move ${r.name} up`} onclick={() => move(fieldKey(r.field), -1)} />

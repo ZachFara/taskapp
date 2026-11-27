@@ -2,8 +2,9 @@
   import { Tooltip } from 'bits-ui';
   import type { Snippet } from 'svelte';
   import Kbd from './Kbd.svelte';
+  import { tooltips } from '../lib/tooltips.svelte';
 
-  // Action name plus its shortcut. Opens after --delay-tooltip of hover, and at once on keyboard focus.
+  // Action name plus its shortcut. Never opens unless Settings > Show tooltips is on. Opens after --delay-tooltip of hover, and at once on keyboard focus.
   let {
     label,
     shortcut,
@@ -20,7 +21,7 @@
 </script>
 
 <Tooltip.Provider delayDuration={delay} skipDelayDuration={0}>
-  <Tooltip.Root {disabled}>
+  <Tooltip.Root disabled={disabled || !tooltips.show}>
     <Tooltip.Trigger>
       {#snippet child({ props })}{@render children(props)}{/snippet}
     </Tooltip.Trigger>

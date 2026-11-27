@@ -48,6 +48,7 @@ async function open(path = '/view/1', viewport = { width: 1440, height: 900 }) {
   await page?.close();
   page = await browser.newPage({ viewport });
   page.setDefaultTimeout(Number(process.env.WALK_TIMEOUT ?? 5_000)); // WALK_TIMEOUT: more time on a loaded machine
+  await page.addInitScript(() => localStorage.setItem('cairn.showTooltips', '1')); // R3-4 tests tooltips, which are off by default
   await page.goto(base + path);
   await page.locator('[data-key], aside.sidebar').first().waitFor();
   if (path.startsWith('/view/')) await page.locator('li[data-key], li[data-issue], tr[data-key]').first().waitFor();

@@ -5,6 +5,7 @@ import { setApi } from '../lib/api';
 import { createMockApi } from '../lib/api.mock';
 import Shell from './Shell.svelte';
 import { readFileSync } from 'node:fs';
+import { setTooltips } from '../lib/tooltips.svelte';
 
 // Glyph assertions below are the Mac ones whatever machine runs them.
 beforeEach(() => void vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel'));
@@ -100,6 +101,7 @@ describe('Shell', () => {
   });
 
   it('the_search_button_has_a_tooltip_naming_its_key', async () => {
+    setTooltips(true);
     await open();
     document.querySelector<HTMLButtonElement>('[aria-label="Search or run a command"]')!.focus();
     await settle();
