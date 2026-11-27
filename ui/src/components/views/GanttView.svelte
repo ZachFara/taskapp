@@ -406,7 +406,8 @@
   .bar:hover { filter: brightness(1.15); }
   .bar.dragging { cursor: grabbing; outline: 2px solid var(--focus); }
   .bar .name { padding: 0 var(--s-4); font-size: var(--fs-xs); font-weight: 500; white-space: nowrap; overflow: hidden; pointer-events: none; }
-  .bar .name.out { position: absolute; left: 100%; margin-left: var(--s-7); padding: 0; overflow: visible; color: var(--muted); text-shadow: 0 0 var(--s-1) var(--row-bg), 0 0 var(--s-1) var(--row-bg), 0 0 var(--s-2) var(--row-bg), 0 0 var(--s-2) var(--row-bg), 0 0 var(--s-2) var(--row-bg), 0 0 var(--s-2) var(--row-bg), 0 0 var(--s-3) var(--row-bg), 0 0 var(--s-3) var(--row-bg); }
+  /* A solid strip of the row's own colour, not a text-shadow halo: connectors passing behind must not show between letters. */
+  .bar .name.out { position: absolute; left: 100%; margin-left: calc(var(--s-7) - var(--s-2)); padding: 0 var(--s-2); overflow: visible; color: var(--muted); background: var(--row-bg); border-radius: var(--r-sm); }
   .bar[data-category='Completed'], .bar[data-category='Canceled'] { opacity: 0.55; }
   .bar[data-category='Canceled'] .name { text-decoration: line-through; }
   /* Estimated (no due date): a real bar, its last third fading out and ending in a dotted edge. */
