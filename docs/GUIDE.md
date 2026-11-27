@@ -269,7 +269,9 @@ filter chips, Group, Sort and Display.
 - **Layouts.** List: status, priority, name, then the fields, in bands when grouped. Table: the columns chosen in
   Display. Board: a column per project status (or priority, or a select property, from Group); dragging a card to
   another column sets that field, one undo step. Timeline: a bar from start to target date per project, milestones as
-  diamonds and a today line; drag a bar or its ends to change the dates. Calendar: a month grid with a chip on each
+  diamonds and a today line; drag a bar or its ends to change the dates. Every project has a row: a project with only a
+  start date runs from it to today (or its latest dated issue) with a faded end, one with only a target date gets a week
+  before it, and a project with no dates shows "Set dates", which opens its project page. Calendar: a month grid with a chip on each
   project's start and target day. Clicking a row, card, bar label or chip opens the project.
 - **Display.** Which fields show, compact rows, empty groups and "Show archived" (archived projects are hidden by default).
 - **Not available.** Templates and Insights are for issue views; a project's created and updated times are not fields yet.

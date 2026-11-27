@@ -52,7 +52,8 @@
   const span = $derived(range(rows, today));
   const days = $derived(dayDiff(span.start, span.end) + 1);
   const xOf = (date: string) => dayDiff(span.start, date) * dw;
-  const hasBars = $derived(rows.some((r) => r.start));
+  // A milestone alone is not a schedule: the empty state still shows when no project or issue has a bar.
+  const hasBars = $derived(rows.some((r) => r.start && r.kind !== 'milestone'));
   const scale = $derived(axis(span.start, days, zoom));
   const weekends = $derived(zoom === 'Day' || zoom === 'Week' ? saturdays(span.start, days) : []);
   const statusOf = (i: Issue) => statusList.find((s) => s.id === i.status_id);
@@ -94,7 +95,7 @@
     // Each relation comes back from both of its issues.
     relations = [...new Map(rels.filter((r) => r.kind === 'blocks').map((r) => [`${r.from}-${r.to}`, r])).values()];
     statusList = statuses;
-    rows = buildRows({ mode: currentMode, issues, bars, projects, milestones, critical, statuses, projectStatuses });
+    rows = buildRows({ mode: currentMode, today, issues, bars, projects, milestones, critical, statuses, projectStatuses });
     lane = currentMode === 'issues' ? unscheduled(issues, rows) : [];
     if (!loaded) {
       loaded = true;
@@ -144,7 +145,9 @@
   }
 
   function down(e: MouseEvent, r: Row, mode: 'move' | 'start' | 'end' = 'move') {
-    if (r.kind === 'group' || r.kind === 'milestone' || r.kind === 'rollup') return;
+    if (r.kind === 'group' || r.kind === 'milestone' || r.kind === 'rollup' || r.undated) return;
+    // A project bar with a guessed end has no real dates to move; its project page sets them.
+    if (r.projectId !== undefined && r.estimated) return;
     e.stopPropagation();
     drag = { id: r.id, mode, x0: e.clientX, dx: 0 };
   }
@@ -282,7 +285,9 @@
                 {/if}
               </div>
               <div class="cell">
-                {#if r.start}
+                {#if r.undated}
+                  <button class="slot" type="button" onclick={() => projectOf(r.projectId) && navigate(`/project/${projectOf(r.projectId)!.slug}`)}>Set dates</button>
+                {:else if r.start}
                   <!-- svelte-ignore a11y_no_static_element_interactions -->
                   <div
                     class="bar {r.kind}"
@@ -324,7 +329,7 @@
       </div>
     </div>
     {#if loaded && !hasBars}
-      <div class="empty-layer">{#if mode === 'projects'}<EmptyState title="Nothing scheduled" hint="Give projects a start date and a target date." />{:else}<EmptyState title="Nothing scheduled" hint="Give issues a start date and a due date, or drag one from the Unscheduled band onto a day." />{/if}</div>
+      <div class="empty-layer">{#if mode === 'projects'}<EmptyState title="Nothing scheduled" hint="{rows.filter((r) => r.undated).length} of {projectList.length} projects have no dates. Open one and set its start or target date." />{:else}<EmptyState title="Nothing scheduled" hint="Give issues a start date and a due date, or drag one from the Unscheduled band onto a day." />{/if}</div>
     {/if}
   </div>
 
@@ -389,7 +394,8 @@
   .count { color: var(--band-count); }
   .stone { width: var(--s-5); height: var(--s-5); background: var(--stone); transform: rotate(45deg); flex: none; }
   .cell { position: relative; }
-  .slot { position: absolute; left: var(--s-6); top: var(--s-2); bottom: var(--s-2); display: flex; align-items: center; padding: 0 var(--s-5); border: 1.5px dashed var(--control); border-radius: var(--r-sm); color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+  .slot { position: absolute; left: var(--s-6); top: var(--s-2); bottom: var(--s-2); display: flex; align-items: center; padding: 0 var(--s-5); border: 1.5px dashed var(--control); border-radius: var(--r-sm); background: none; color: var(--muted); font: inherit; font-size: var(--fs-xs); white-space: nowrap; cursor: pointer; pointer-events: auto; }
+  .cell .slot:hover { color: var(--ink); }
 
   .canvas { position: absolute; top: 0; bottom: 0; left: var(--left); right: 0; pointer-events: none; }
   .stripe { position: absolute; left: 0; right: 0; height: var(--row-h-compact); background: var(--tint); }

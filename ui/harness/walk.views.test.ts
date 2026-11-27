@@ -363,6 +363,14 @@ describe('walk project', { timeout: 25_000 }, () => {
     await pw(page.locator('[data-row^="project-"]').first()).toBeVisible();
   });
 
+  it('TIMELINE a project with only a start date draws an open bar on the projects timeline', async () => {
+    await open('/projects/timeline');
+    const row = page.locator('[data-row="project-1"]');
+    await pw(row).toBeVisible();
+    await pw(row).toHaveClass(/estimated/);
+    await pw(page.getByText('Nothing scheduled')).toHaveCount(0);
+  });
+
   it('MIT-79 a Select opens from its centre as well as its arrow', async () => {
     await open();
     await page.goto(base + '/settings/calendar');

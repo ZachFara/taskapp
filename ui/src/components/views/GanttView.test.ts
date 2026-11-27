@@ -117,6 +117,20 @@ describe('GanttView', () => {
     expect(bar('project-1').style.getPropertyValue('--bc')).toContain('--c-amber');
   });
 
+  it('a_start_only_project_draws_an_open_bar', async () => {
+    const projects = fixtures.projects.map((p) => (p.id === 1 ? { ...p, start_date: '2026-12-01', target_date: null } : p));
+    await show([], { mode: 'projects' }, { projects });
+    expect(bar('project-1').classList.contains('estimated')).toBe(true);
+    expect(bar('project-1').style.width).not.toBe('');
+  });
+
+  it('undated_projects_get_a_set_dates_slot_and_the_empty_state_counts_them', async () => {
+    const projects = fixtures.projects.map((p) => ({ ...p, start_date: null, target_date: null }));
+    await show([], { mode: 'projects' }, { projects });
+    expect([...document.querySelectorAll('.slot')].map((b) => b.textContent)).toEqual(projects.map(() => 'Set dates'));
+    expect(document.querySelector('.empty')?.textContent).toContain(`${projects.length} of ${projects.length} projects have no dates`);
+  });
+
   it('projects_mode_drag_updates_target_date', async () => {
     const projects = fixtures.projects.map((p) => (p.id === 1 ? { ...p, start_date: '2026-12-01', target_date: '2026-12-31' } : p));
     await show([], { mode: 'projects' }, { projects });

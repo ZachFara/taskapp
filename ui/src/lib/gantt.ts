@@ -38,10 +38,13 @@ export type Row = {
   icon?: string | null;
   color?: string | null;
   estimated?: boolean;
+  /** A project with no dates: no bar, a slot that opens its dates. */
+  undated?: boolean;
 };
 
 type Input = {
   mode: 'issues' | 'projects';
+  today: string;
   issues: Issue[];
   bars: Bar[];
   projects: Project[];
@@ -56,17 +59,30 @@ const milestoneRows = (ms: Milestone[], indent: number): Row[] =>
     id: `milestone-${m.id}`, kind: 'milestone', label: m.name, indent, start: m.target_date!, end: m.target_date!,
   }));
 
+/** The bar a project draws from its own dates and its issues; `estimated` when one of its ends is a guess. */
+function projectSpan(p: Project, issues: Issue[], today: string): Span & { estimated: boolean } | null {
+  if (p.start_date && p.target_date) return { start: p.start_date, end: p.target_date, estimated: false };
+  // shortcut: a target-only project gets a fixed week before its target, upgrade when a real start can be guessed.
+  if (p.target_date) return { start: addDays(p.target_date, -7), end: p.target_date, estimated: true };
+  if (!p.start_date) return null;
+  const dates = issues.filter((i) => i.project_id === p.id).flatMap((i) => [i.start_date, i.due && ('Date' in i.due ? i.due.Date : i.due.DateTime.utc.slice(0, 10))]);
+  const latest = dates.reduce<string>((m, d) => (d && d > m ? d : m), today);
+  return { start: p.start_date, end: latest < p.start_date ? p.start_date : latest, estimated: true };
+}
+
 /** Rows top to bottom. Issues mode groups by project when the view spans several; parents with dated children get a roll-up bar. */
-export function buildRows({ mode, issues, bars, projects, milestones, critical, statuses = [], projectStatuses = [] }: Input): Row[] {
+export function buildRows({ mode, today, issues, bars, projects, milestones, critical, statuses = [], projectStatuses = [] }: Input): Row[] {
   if (mode === 'projects') {
-    // A dateless project has no row, so its milestones would hang without one: they are left out with it.
-    return projects.filter((p) => p.start_date && p.target_date).flatMap((p): Row[] => [
-      {
-        id: `project-${p.id}`, kind: 'bar', label: p.name, indent: 0, start: p.start_date!, end: p.target_date!, projectId: p.id,
-        color: projectStatuses.find((s) => s.id === p.status_id)?.color ?? null,
-      },
-      ...milestoneRows(milestones.filter((m) => m.project_id === p.id), 1),
-    ]);
+    return projects.flatMap((p): Row[] => {
+      const span = projectSpan(p, issues, today);
+      const color = projectStatuses.find((s) => s.id === p.status_id)?.color ?? null;
+      return [
+        span
+          ? { id: `project-${p.id}`, kind: 'bar', label: p.name, indent: 0, projectId: p.id, color, start: span.start, end: span.end, estimated: span.estimated }
+          : { id: `project-${p.id}`, kind: 'bar', label: p.name, indent: 0, projectId: p.id, color, undated: true },
+        ...milestoneRows(milestones.filter((m) => m.project_id === p.id), 1),
+      ];
+    });
   }
   const barOf = new Map(bars.map((b) => [b.issue_id, b]));
   const inView = new Set(issues.map((i) => i.id));

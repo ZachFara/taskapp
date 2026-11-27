@@ -1319,9 +1319,9 @@ export const projectStatusSeed: ProjectStatus[] = (
 const project = (id: number, slug: string, name: string): Project =>
   ({ id, slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), icon: null, color: null, status_id: 1, priority: 0, label_ids: [], properties: {} });
 const day = (n: number) => addDays(new Date().toISOString().slice(0, 10), n);
-// The last two are under way with dates (the devserver seed does the same); the first has none.
+// The last two are under way with dates; the first has a start only (the devserver seed does the same).
 const projects: Project[] = [
-  project(1, 'website', 'Website relaunch'),
+  { ...project(1, 'website', 'Website relaunch'), start_date: day(-5) },
   { ...project(2, 'mobile', 'Mobile app'), status_id: 2, priority: 3, start_date: day(-3), target_date: day(45) },
   { ...project(3, 'office', 'Office move'), status_id: 2, priority: 2, start_date: day(-14), target_date: day(30) },
 ];
