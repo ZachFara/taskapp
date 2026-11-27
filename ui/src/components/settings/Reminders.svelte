@@ -30,6 +30,7 @@
     error = '';
     try {
       lists = await api.reminders.listLists();
+      if (!lists.length) error = 'Access is on, but Reminders has no lists. Make one in Reminders, then press Authorize again.';
     } catch (e) {
       error = (e as { message?: string }).message ?? String(e);
     }
