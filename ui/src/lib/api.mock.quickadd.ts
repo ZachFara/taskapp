@@ -117,8 +117,8 @@ export function parseQuickadd(input: string, today: string, tz: string, off: str
       if (r) { set(r[0]); used = extra + r[1]; }
     };
     if (on('priority') && priority(w) !== null) { out.priority = priority(w); used = 1; }
-    else if (on('project') && w.length > 1 && w.startsWith('#')) { out.slug = w.slice(1); used = 1; }
-    else if (on('labels') && raw.length > 1 && raw.startsWith('@')) { out.labels.push(raw.slice(1)); used = 1; }
+    else if (on('project') && w.length > 1 && w.startsWith('+')) { out.slug = w.slice(1); used = 1; }
+    else if (on('labels') && raw.length > 1 && (raw.startsWith('#') || raw.startsWith('@'))) { out.labels.push(raw.slice(1)); used = 1; }
     else if (on('estimate') && estimate(w) !== null) { out.estimate = estimate(w); used = 1; }
     else if (on('points') && points(w) !== null) { out.points = points(w); used = 1; }
     else if (on('points') && pointsNumber(w) !== null && /^pts?$/i.test(tokens[i + 1] ?? '')) { out.points = pointsNumber(w); used = 2; }

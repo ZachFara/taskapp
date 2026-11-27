@@ -107,13 +107,13 @@ export const cases: Case[] = [
 
   // Quick add
   call('quickadd: relative date', 'issues_parse_quickadd', { input: 'buy milk tomorrow' }),
-  call('quickadd: priority project label estimate', 'issues_parse_quickadd', { input: 'call dentist p1 #website @Bug ~2h by fri' }),
+  call('quickadd: priority project label estimate', 'issues_parse_quickadd', { input: 'call dentist p1 +website #Bug ~2h by fri' }),
   call('quickadd: time of day', 'issues_parse_quickadd', { input: 'standup at 9:15am' }),
   call('quickadd: month and day, start', 'issues_parse_quickadd', { input: 'plan trip start dec 3 due 25 dec' }),
   call('quickadd: in N weeks', 'issues_parse_quickadd', { input: 'review in 2 weeks' }),
   call('quickadd: tokens only keeps the text', 'issues_parse_quickadd', { input: 'p2 ~1d' }),
-  call('quickadd: unknown project and label stay in the title', 'issues_create_from_quickadd', { input: 'fix thing #nope @Nolabel p3' }),
-  call('quickadd: known project and label', 'issues_create_from_quickadd', { input: 'write copy #mobile @design p2 ~30m' }),
+  call('quickadd: unknown project and label stay in the title', 'issues_create_from_quickadd', { input: 'fix thing +nope #Nolabel p3' }),
+  call('quickadd: known project and label', 'issues_create_from_quickadd', { input: 'write copy +mobile #design @Bug p2 ~30m' }),
   call('quickadd: unknown template is Invalid', 'issues_create_from_quickadd', { input: '/nosuch hello' }),
   call('templates: create', 'templates_create', {
     input: tpl('Incident', 'incident', { title_prefix: 'Bug: ', fields: { priority: 2, label_ids: [1], project_id: 1, status_id: 2, estimate_minutes: null, description: 'Steps:', properties: {} }, sub_issues: [{ title: 'Reproduce', fields: { priority: 1 } }] }),

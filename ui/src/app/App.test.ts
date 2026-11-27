@@ -377,7 +377,7 @@ describe('views inside the frame', () => {
     press('c');
     await settle();
     const field = q<HTMLInputElement>('input[data-quickadd]')!;
-    field.value = 'Outside view #beta';
+    field.value = 'Outside view +beta';
     field.dispatchEvent(new Event('input', { bubbles: true }));
     await settle();
     field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));

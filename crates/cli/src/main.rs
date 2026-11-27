@@ -32,7 +32,7 @@ enum Cmd {
     Api(ApiCmd),
     /// Show a practical guide to the CLI.
     Guide,
-    /// Create an issue from quick-add text, such as "Pay rent friday p1".
+    /// Create an issue from quick-add text, such as "Pay rent friday p1 +home #bills".
     Add {
         text: String,
         /// IANA time zone for relative dates. Defaults to $TZ, then UTC.

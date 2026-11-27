@@ -89,8 +89,8 @@ case). Dates are relative to today in the workspace time zone.
 | Token | Meaning | Examples |
 |---|---|---|
 | `p0` to `p4` | Priority (0 none, 1 urgent, 2 high, 3 medium, 4 low). `p5` or a bare `p` stay in the title. | `p1` |
-| `#slug` | Project by slug. An unknown slug goes back into the title; nothing is created. | `#website` |
-| `@name` | Label by name. An unknown label goes back into the title. Repeat for several. | `@bug @urgent` |
+| `+slug` | Project by slug. An unknown slug goes back into the title; nothing is created. | `+website` |
+| `#name` | Label by name. An unknown label goes back into the title. Repeat for several. `@name` also works as a label. | `#bug #urgent` |
 | `~30m`, `~2h`, `~1d` | Estimate (1d = 480 minutes). Zero stays in the title. | `~90m` |
 | `3pt`, `3pts`, `.5pt`, `pt3`, `3 pt` | Points, one decimal at most. Only when estimation is Points or Both (Settings). | `5pt` |
 | `today`, `tomorrow` | Due date. | `tomorrow` |
@@ -104,7 +104,7 @@ case). Dates are relative to today in the workspace time zone.
 | `at 3pm`, `at 9:15am`, `at 15:30` | Time of day on the due date (today if no date). A bare hour needs am or pm. | `fri at 3pm` |
 | `/slug` first | Create from an issue template; the rest of the line fills in or overrides fields. Typing `/` opens the template list. | `/bug login fails p2` |
 
-Quick-add has no token for status, parent, cycle or milestone. Example: `Pay rent friday p1 #home @bills ~30m 3pt`.
+Quick-add has no token for status, parent, cycle or milestone. Example: `Pay rent friday p1 +home #bills ~30m 3pt`.
 
 ### Edit
 
@@ -356,7 +356,7 @@ templates and imports. Unset, or if that status is deleted, new issues start in 
   without one it shows the default circle for its category: backlog dashed, unstarted empty, started half-filled, completed
   filled with a check, canceled with a cross.
 - **Priority** shows as three bars of rising height: none faint, low one bar, medium two, high three, urgent three in red.
-- **Labels** (Settings > Labels): name, icon, colour. Add to issues with `l`, the panel, or `@name` in quick-add.
+- **Labels** (Settings > Labels): name, icon, colour. Add to issues with `l`, the panel, or `#name` in quick-add.
 - **Colours** are a fixed palette of 12 keys: gray, red, orange, amber, yellow, green, teal, cyan, blue, indigo, purple,
   pink. A `#rrggbb` value sent by CLI or MCP maps to the nearest key.
 - **Icons**: `icon:<id>` from the built-in set or `emoji:<emoji>` (any 1 to 8 non-ASCII characters). Today the

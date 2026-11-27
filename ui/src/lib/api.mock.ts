@@ -620,11 +620,11 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         const project = p.project_slug === null ? undefined : s.projects.find((x) => x.slug === p.project_slug);
         const ids: number[] = [];
         let title = p.title;
-        if (p.project_slug !== null && !project) title += ` #${p.project_slug}`;
+        if (p.project_slug !== null && !project) title += ` +${p.project_slug}`;
         for (const name of p.label_names) {
           const l = labels.find((x) => x.name.toLowerCase() === name.toLowerCase());
           if (l) ids.push(l.id);
-          else title += ` @${name}`;
+          else title += ` #${name}`;
         }
         const overrides: NewIssue = {
           title, priority: p.priority, project_id: project?.id, label_ids: ids.length ? ids : undefined,

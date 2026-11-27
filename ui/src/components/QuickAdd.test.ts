@@ -64,9 +64,9 @@ describe('QuickAdd', () => {
       label_names: ['errands'],
       estimate_minutes: 30,
     });
-    await type('Buy milk p2 #home @errands ~30m');
-    expect(parse).toHaveBeenLastCalledWith('Buy milk p2 #home @errands ~30m');
-    expect(chips()).toEqual(['High', '#home', '@errands', '30m']);
+    await type('Buy milk p2 +home #errands ~30m');
+    expect(parse).toHaveBeenLastCalledWith('Buy milk p2 +home #errands ~30m');
+    expect(chips()).toEqual(['High', '+home', '#errands', '30m']);
   });
 
   it('quickadd_slash_lists_templates_and_inserts_slug', async () => {
@@ -128,7 +128,7 @@ describe('QuickAdd', () => {
     await api.projects.create('quickadd-proj', 'Quickadd project', null, null);
     await refreshAll();
     await open({ project_slug: 'quickadd-proj' });
-    expect(input().value).toBe('#quickadd-proj ');
+    expect(input().value).toBe('+quickadd-proj ');
   });
 
   it('quickadd_workspace_default_status_is_not_a_chip_but_another_status_is', async () => {
@@ -196,9 +196,9 @@ describe('QuickAdd', () => {
       },
     });
     expect(input().value).toBe('');
-    expect(chips()).toEqual([status.name, 'High', '#alpha', '@triage']);
+    expect(chips()).toEqual([status.name, 'High', '+alpha', '#triage']);
     const create = vi.spyOn(api.issues, 'create');
-    await type('From view #beta p1');
+    await type('From view +beta p1');
     await enter();
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
       title: 'From view',
