@@ -1,3 +1,4 @@
+use chrono::{Days, NaiveDate, Utc};
 use serde_json::{Value, json};
 use sqlx::{Row, SqliteConnection, query::Query, sqlite::SqliteArguments, sqlite::SqliteRow};
 
@@ -6,7 +7,7 @@ use crate::{
     ProjectId, ProjectRow, PropertyAppliesTo, PropertyDef, PropertyKind, Result, SavedView, Sort,
     ViewDef, ViewEntity, ViewFolderId, ViewId, ViewTemplateId,
     history::{self, Edit},
-    issues,
+    insights, issues,
     palette::{self, Look},
     projects, rows,
 };
@@ -20,6 +21,7 @@ struct Col {
     bind: Option<Value>,
     text: bool,
     multi: bool,
+    date: bool,
 }
 
 impl Col {
@@ -29,6 +31,7 @@ impl Col {
             bind: None,
             text,
             multi: false,
+            date: false,
         }
     }
 }
@@ -37,6 +40,7 @@ struct Ctx<'a> {
     defs: &'a [PropertyDef],
     binds: Vec<Value>,
     entity: ViewEntity,
+    today: NaiveDate,
 }
 
 impl ViewEntity {
@@ -77,7 +81,17 @@ impl Ctx<'_> {
             let FieldRef::Fixed(x) = f else {
                 unreachable!()
             };
-            return fixed_col(self.entity, *x);
+            let mut c = fixed_col(self.entity, *x)?;
+            c.date = matches!(
+                x,
+                FixedField::StartDate
+                    | FixedField::DueDate
+                    | FixedField::TargetDate
+                    | FixedField::CreatedAt
+                    | FixedField::UpdatedAt
+                    | FixedField::CompletedAt
+            );
+            return Ok(c);
         };
         let def = self
             .defs
@@ -89,6 +103,7 @@ impl Ctx<'_> {
             bind: Some(Value::String(format!("$.\"{key}\""))),
             text: !matches!(def.kind, PropertyKind::Number | PropertyKind::Checkbox),
             multi: def.kind == PropertyKind::MultiSelect,
+            date: def.kind == PropertyKind::Date,
         })
     }
 
@@ -196,8 +211,13 @@ impl Ctx<'_> {
             Op::Gt => ">",
             _ => ">=",
         };
+        let value = if c.date {
+            relative_day(value, self.today)?
+        } else {
+            value.clone()
+        };
         let e = self.expr(c);
-        self.binds.push(scalar(value)?);
+        self.binds.push(scalar(&value)?);
         Ok(format!("{e} {sym} ?"))
     }
 
@@ -266,6 +286,26 @@ impl Ctx<'_> {
         parts.push(format!("{}.id", self.entity.table()));
         Ok(parts.join(", "))
     }
+}
+
+/// `today`, `today+7` or `today-14` names a day counted from `today`; any other value is kept as it is.
+fn relative_day(value: &Value, today: NaiveDate) -> Result<Value> {
+    let Some(s) = value.as_str().filter(|s| s.starts_with("today")) else {
+        return Ok(value.clone());
+    };
+    let bad = || Error::Invalid(format!("bad relative date {s}"));
+    let rest = &s["today".len()..];
+    let days: i64 = match rest.chars().next() {
+        None => 0,
+        Some('+' | '-') => rest.parse().map_err(|_| bad())?,
+        Some(_) => return Err(bad()),
+    };
+    let day = if days < 0 {
+        today.checked_sub_days(Days::new(days.unsigned_abs()))
+    } else {
+        today.checked_add_days(Days::new(days.unsigned_abs()))
+    };
+    day.map(|d| json!(d.to_string())).ok_or_else(bad)
 }
 
 fn fixed_col(entity: ViewEntity, x: FixedField) -> Result<Col> {
@@ -405,8 +445,12 @@ pub(crate) fn scrub(def: &mut ViewDef, gone: &dyn Fn(&str) -> bool) {
 /// # Errors
 ///
 /// Fails with `Invalid` on a bad operator or value, or a filter nested too deeply.
-pub fn compile(def: &ViewDef, defs: &[PropertyDef]) -> Result<(String, Vec<Value>)> {
-    compile_for(ViewEntity::Issue, def, defs)
+pub fn compile(
+    def: &ViewDef,
+    defs: &[PropertyDef],
+    today: NaiveDate,
+) -> Result<(String, Vec<Value>)> {
+    compile_for(ViewEntity::Issue, def, defs, today)
 }
 
 /// As [`compile`] for either entity; a project view selects only the project ids.
@@ -414,6 +458,7 @@ fn compile_for(
     entity: ViewEntity,
     def: &ViewDef,
     defs: &[PropertyDef],
+    today: NaiveDate,
 ) -> Result<(String, Vec<Value>)> {
     // A reference to a property that no longer exists is dropped, not an error: the view would stay broken.
     let mut def = def.clone();
@@ -422,6 +467,7 @@ fn compile_for(
         defs,
         binds: vec![],
         entity,
+        today,
     };
     let table = entity.table();
     let mut wheres = vec![];
@@ -499,7 +545,11 @@ async fn property_defs(db: &Db, entity: ViewEntity) -> Result<Vec<PropertyDef>> 
 ///
 /// Fails on a database error or an invalid view definition.
 pub async fn query(db: &Db, def: &ViewDef) -> Result<Vec<Issue>> {
-    let (sql, binds) = compile(def, &property_defs(db, ViewEntity::Issue).await?)?;
+    let (sql, binds) = compile(
+        def,
+        &property_defs(db, ViewEntity::Issue).await?,
+        today(db).await?,
+    )?;
     let mut q = sqlx::query(&sql);
     for b in &binds {
         q = bind_value(q, b);
@@ -518,6 +568,7 @@ pub async fn projects_query(db: &Db, def: &ViewDef) -> Result<Vec<ProjectRow>> {
         ViewEntity::Project,
         def,
         &property_defs(db, ViewEntity::Project).await?,
+        today(db).await?,
     )?;
     let mut q = sqlx::query(&sql);
     for b in &binds {
@@ -543,7 +594,11 @@ pub async fn projects_query(db: &Db, def: &ViewDef) -> Result<Vec<ProjectRow>> {
 ///
 /// As [`query`].
 pub async fn stats(db: &Db, def: &ViewDef) -> Result<Vec<IssueStats>> {
-    let (sql, binds) = compile(def, &property_defs(db, ViewEntity::Issue).await?)?;
+    let (sql, binds) = compile(
+        def,
+        &property_defs(db, ViewEntity::Issue).await?,
+        today(db).await?,
+    )?;
     let sql = sql.replacen(
         &format!("SELECT {} FROM", issues::ISSUE_COLS),
         "SELECT issues.id,
@@ -572,6 +627,11 @@ pub async fn stats(db: &Db, def: &ViewDef) -> Result<Vec<IssueStats>> {
             })
         })
         .collect()
+}
+
+/// Today in the workspace time zone: what a relative date filter counts from.
+async fn today(db: &Db) -> Result<NaiveDate> {
+    Ok(insights::local(Utc::now(), insights::zone(db).await?))
 }
 
 fn view_from_row(r: &SqliteRow) -> Result<SavedView> {

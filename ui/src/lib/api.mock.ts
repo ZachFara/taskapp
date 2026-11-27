@@ -269,11 +269,30 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       case 'IsNotEmpty': return !isEmpty(have);
     }
   };
+  // `today`, `today+7` or `today-14` on a date field names a day counted from today (core: views::relative_day).
+  const relativeDay = (v: Value, today: string): Value => {
+    if (typeof v !== 'string' || !v.startsWith('today')) return v;
+    const m = /^today(?:([+-])(\d+))?$/.exec(v);
+    if (!m) fail('Invalid', `bad relative date ${v}`);
+    const d = new Date(`${today}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + (m![1] ? Number(`${m![1]}${m![2]}`) : 0));
+    return d.toISOString().slice(0, 10);
+  };
+  const dateFixed = ['StartDate', 'DueDate', 'TargetDate', 'CreatedAt', 'UpdatedAt', 'CompletedAt'];
+  const withRelativeDays = (f: Filter, defs: PropertyDef[], today: string): Filter => {
+    if (f.And) return { And: f.And.map((x) => withRelativeDays(x, defs, today)) };
+    if (f.Or) return { Or: f.Or.map((x) => withRelativeDays(x, defs, today)) };
+    if (f.Not) return { Not: withRelativeDays(f.Not, defs, today) };
+    const { field, op, value } = f.Cond!;
+    const isDate = field.Fixed !== undefined ? dateFixed.includes(field.Fixed) : defs.some((d) => d.key === field.Property && d.kind === 'Date');
+    return { Cond: { field, op, value: isDate ? relativeDay(value, today) : value } };
+  };
   // Filter, then sort (nulls last in either direction), like core's compiled query; `get` reads a field of a row.
   function arrange<T extends { id: number; archived_at: string | null }>(all: T[], stored: ViewDef, defs: PropertyDef[], get: (r: T, f: FieldRef) => Value) {
     // A reference to a property that no longer exists is dropped, like core does.
     const def = scrubDef(stored, (k) => !defs.some((d) => d.key === k));
-    const rows = all.filter((i) => (def.include_archived || !i.archived_at) && (!def.filter || holds(i, def.filter, get)));
+    const filter = def.filter && withRelativeDays(def.filter, defs, zoneToday());
+    const rows = all.filter((i) => (def.include_archived || !i.archived_at) && (!filter || holds(i, filter, get)));
     for (const { field, descending } of [...def.sorts].reverse()) {
       rows.sort((a, b) => {
         const [x, y] = [get(a, field), get(b, field)];

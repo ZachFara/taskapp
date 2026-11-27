@@ -200,6 +200,10 @@ saved automatically (after a short pause), except temporary sorting changes. Fil
   Status, StatusCategory, Priority, Project, Milestone, Cycle, Label, Parent, StartDate, DueDate, Estimate, Points,
   CreatedAt, UpdatedAt, CompletedAt, Archived, Key, SubIssueProgress, RelationCount, CommentCount, and any custom
   property.
+- **Relative dates.** On a date field (Start, Due, Created, Updated, Completed, a date property) the chip's first
+  line picks "Exact date" or a relative day: today, 7 or 14 or 30 days ago, in 7, 14 or 30 days. Relative days count
+  from today in the workspace time zone and move on their own. "Before today" lists overdue dates; "up to in 7 days"
+  includes overdue dates too. A view definition writes the same value as `today`, `today+7` or `today-14`.
 - **Quick filter.** The filter icon in the header (`shift+f`) opens a bar of temporary filters: a text box that matches
   titles, and chips for Status, Priority, Project, Label and Due. They narrow the view while the bar is open and are not
   saved with it; the bar says "Temporary". "Save to view" keeps them as part of the saved filter. Esc, the x, or
