@@ -164,13 +164,14 @@ describe('walk', { timeout: 20_000 }, () => {
     await press('c');
     await page.keyboard.type('Walk issue');
     await press('Enter');
-    const undo = page.getByRole('status').getByRole('button', { name: /Undo/ });
+    // Toasts stack, so the one just made is the newest (the last).
+    const undo = page.getByRole('status').getByRole('button', { name: /Undo/ }).last();
     await pw(undo).toBeVisible();
     const [fg, bg] = await undo.evaluate((b) => [getComputedStyle(b).color, getComputedStyle(b.closest('[role=status]')!).backgroundColor]);
     expect(fg).not.toBe(bg);
     await open();
     await press('u');
-    const toast = page.getByRole('status');
+    const toast = page.getByRole('status').last();
     await pw(toast).toContainText('Nothing to undo');
     await pw(toast).not.toContainText('invalid');
   });

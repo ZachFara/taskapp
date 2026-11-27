@@ -349,7 +349,8 @@
   </div>
   <div class="scroller" role="presentation" bind:this={scroller} onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}>
     <ul class="list" role="grid" aria-multiselectable="true" data-density={compact ? 'compact' : undefined} aria-label={view.name} style:height="{total}px">
-      {#each slice as { item, top } (top)}
+      <!-- Keyed by the item, not its position: a row that moves when a group folds keeps its element, so its top eases. -->
+      {#each slice as { item, top } ('head' in item ? `h:${item.head.key}` : `r:${item.row.id}`)}
         {#if 'head' in item}
           <li class="head" role="presentation" style:top="{top}px">
             <GroupHeader
@@ -475,6 +476,7 @@
   .scroller { overflow-y: auto; flex: 1; min-height: 0; position: relative; font-size: var(--fs-md); font-variant-numeric: tabular-nums; }
   .list { list-style: none; margin: 0; padding: 0; position: relative; }
   .head, .row { position: absolute; left: 0; right: 0; }
+  .head { transition: top var(--dur-3) var(--ease); }
   .row {
     height: var(--row-h);
     display: grid;
@@ -483,7 +485,7 @@
     padding: 0 var(--s-7) 0 var(--s-4);
     border-bottom: 1px solid var(--border);
     box-shadow: inset 3px 0 0 transparent;
-    transition: background var(--dur-1) var(--ease);
+    transition: background var(--dur-1) var(--ease), top var(--dur-3) var(--ease);
   }
   .row:hover { background: var(--raised); }
   /* Overlays the row's right end, so nothing shifts when it appears. */

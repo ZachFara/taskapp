@@ -17,7 +17,8 @@ const settle = async () => {
 };
 const press = (target: Element, key: string, init: KeyboardEventInit = {}) =>
   target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }));
-const toast = () => document.querySelector<HTMLElement>('.toast');
+// The newest message: messages stack, oldest first.
+const toast = () => [...document.querySelectorAll<HTMLElement>('.toast')].at(-1) ?? null;
 const toastButton = (name: string) =>
   [...document.querySelectorAll<HTMLElement>('.toast button')].find((b) => b.textContent?.trim().startsWith(name));
 
@@ -144,6 +145,30 @@ describe('UndoToast', () => {
     vi.advanceTimersByTime(1);
     await settle();
     expect(toast()).toBeNull();
+  });
+
+  it('a second message stacks under the first instead of replacing it', async () => {
+    vi.spyOn(api.history, 'undoStatus').mockResolvedValueOnce({ undo: 'issues_update', redo: null }).mockResolvedValueOnce({ undo: 'issues_delete', redo: null });
+    window.dispatchEvent(new Event('history:wrote'));
+    await settle();
+    window.dispatchEvent(new Event('history:wrote'));
+    await settle();
+    expect(document.querySelectorAll('.toast').length).toBe(2);
+    expect(document.querySelectorAll('.toast')[0].textContent).toContain('Updated issue');
+  });
+
+  it('each message leaves six seconds after its own arrival', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(api.history, 'undoStatus').mockResolvedValueOnce({ undo: 'issues_update', redo: null }).mockResolvedValueOnce({ undo: 'issues_delete', redo: null });
+    window.dispatchEvent(new Event('history:wrote'));
+    await settle();
+    vi.advanceTimersByTime(4_000);
+    window.dispatchEvent(new Event('history:wrote'));
+    await settle();
+    vi.advanceTimersByTime(2_500);
+    await settle();
+    expect(document.querySelectorAll('.toast').length).toBe(1);
+    expect(toast()?.textContent).toContain('Deleted issue');
   });
 
   it('clicking Undo runs undo and then offers Redo', async () => {

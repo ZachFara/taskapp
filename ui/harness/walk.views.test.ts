@@ -234,7 +234,7 @@ describe('walk project', { timeout: 25_000 }, () => {
     await press('c');
     await page.getByLabel('Title, with quick-add tokens').fill('Walk urgent p1');
     await press('Enter');
-    await pw(page.getByRole('status').getByRole('button', { name: /Undo/ })).toBeVisible();
+    await pw(page.getByRole('status').getByRole('button', { name: /Undo/ }).last()).toBeVisible();
     // A new issue starts in the first status, which the Active view hides; move it into view.
     await page.getByRole('button', { name: /^Remove filter/ }).first().click();
     await page.locator('li[data-key]').filter({ hasText: 'Walk urgent' }).first().click();
@@ -339,12 +339,13 @@ describe('walk project', { timeout: 25_000 }, () => {
     await page.waitForTimeout(900);
     expect(await page.locator('.toast').allInnerTexts()).toEqual([]);
     await page.getByRole('button', { name: /^Remove filter/ }).first().click();
-    await pw(page.locator('.toast')).toContainText('Changed filter of');
-    await pw(page.locator('.toast').getByRole('button', { name: /Undo/ })).toBeVisible();
+    // Toasts stack: the newest is the last one.
+    await pw(page.locator('.toast').last()).toContainText('Changed filter of');
+    await pw(page.locator('.toast').last().getByRole('button', { name: /Undo/ })).toBeVisible();
     await page.getByRole('button', { name: 'Rename view' }).click();
     await page.getByLabel('View name').fill('Renamed once');
     await page.getByRole('button', { name: 'Rename', exact: true }).click();
-    await pw(page.locator('.toast')).toContainText('Renamed view to Renamed once');
+    await pw(page.locator('.toast').last()).toContainText('Renamed view to Renamed once');
   });
 
   it('PV-1 a project view as a board: drag a project to another status, then the timeline', async () => {

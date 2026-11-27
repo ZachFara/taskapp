@@ -15,21 +15,20 @@
   });
 </script>
 
-{#if undoToast.value}
-  {@const m = undoToast.value}
+{#each undoToast.items as m (m.id)}
   {@const created = /^Created (\S+)$/.exec(m.label)?.[1]}
-  <Toast tone={m.tone} ondismiss={dismiss}>
+  <Toast tone={m.tone} ondismiss={() => dismiss(m.id)}>
     {m.label}
     {#snippet action()}
       {#if m.action}
         <span class="on-dark">
           <Button variant="quiet" kbd={shortcutFor(m.action.run === 'undo' ? 'history.undo' : 'history.redo')} onclick={() => (m.action?.run === 'undo' ? runUndo(api) : runRedo(api))}>{m.action.text}</Button>
-          {#if created}<Button variant="quiet" onclick={() => (dismiss(), navigate(`/issue/${created}`))}>Open</Button>{/if}
+          {#if created}<Button variant="quiet" onclick={() => (dismiss(m.id), navigate(`/issue/${created}`))}>Open</Button>{/if}
         </span>
       {/if}
     {/snippet}
   </Toast>
-{/if}
+{/each}
 
 <style>
   /* The toast is a dark surface in both themes; the buttons borrow its ink so they stay readable. */
