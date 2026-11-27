@@ -86,6 +86,16 @@ describe('ProjectPage', () => {
     expect(target.textContent).not.toContain('Add description');
   });
 
+  it('description_click_opens_editor_but_a_link_does_not', async () => {
+    const target = await open('/project/website', seed([{ description: 'Ship the [rewrite](https://example.com) soon' }]));
+    const desc = target.querySelector<HTMLElement>('[data-testid="description"]')!;
+    desc.querySelector('a')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await tick();
+    expect(target.querySelector('textarea')).toBeNull();
+    desc.click();
+    await vi.waitFor(() => expect(target.querySelector('textarea')?.value).toContain('Ship the [rewrite]'));
+  });
+
   it('project_issues_filtered_to_project', async () => {
     const target = await open('/project/website');
     const mock = createMockApi(seed());

@@ -76,7 +76,11 @@
         <Button variant="primary" type="submit">Save</Button>
       </form>
     {:else if project.description}
-      <div class="desc md" data-testid="description" use:openLinks use:images={project.description}>{@html renderMarkdown(project.description)}</div>
+      <!-- Clicking the text edits it (links still open); the keyboard path is the "Edit project description" command. -->
+      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+      <div class="desc md" data-testid="description" use:openLinks use:images={project.description}
+        onclick={(e) => { if (!(e.target as Element).closest('a')) dispatchEvent(new Event('command:project.description.edit')); }}
+      >{@html renderMarkdown(project.description)}</div>
     {:else}
       <div><Button icon="plus" onclick={() => { desc = ''; editingDesc = true; }}>Add description</Button></div>
     {/if}
@@ -115,7 +119,7 @@
   .main { position: relative; display: grid; gap: var(--s-6); max-width: 64ch; flex: 1; }
   .title { display: flex; align-items: center; gap: var(--s-5); }
   h2 { font-size: var(--fs-display); font-weight: 800; letter-spacing: -0.03em; line-height: var(--lh-tight); }
-  .desc { font-size: var(--fs-lg); line-height: var(--lh-body); }
+  .desc { font-size: var(--fs-lg); line-height: var(--lh-body); cursor: text; }
   form { display: flex; gap: var(--s-4); align-items: center; }
   .descform { align-items: flex-start; flex-direction: column; }
   .facts { position: relative; --chart-bg: var(--band-1); display: grid; gap: var(--s-5); min-width: 280px; margin: 0; }
