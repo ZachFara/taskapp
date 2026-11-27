@@ -202,7 +202,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     const rows = s.issues.filter((i) => i.project_id === id && !i.archived_at);
     return [rows.filter((i) => category(i) === 'Completed').length, rows.length];
   };
-  // What a project view can filter and sort by (core: views::project_col); creation and update times have no column yet.
+  // What a project view can filter and sort by (core: views::project_col).
   function projectValue(p: Project, f: FieldRef): Value {
     if (f.Property !== undefined) {
       if (!s.propertyDefs.some((d) => d.key === f.Property && d.applies_to !== 'Issues')) fail('Invalid', 'unknown property');
@@ -211,7 +211,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     const [done, total] = progressOf(p.id);
     const by: Partial<Record<FixedField, Value>> = {
       Title: p.name, Status: p.status_id, StatusCategory: projectStatusOf(p)?.category.toLowerCase() ?? null, Priority: p.priority,
-      Label: p.label_ids, StartDate: p.start_date, TargetDate: p.target_date, Archived: p.archived_at !== null,
+      Label: p.label_ids, StartDate: p.start_date, TargetDate: p.target_date, Archived: p.archived_at !== null, CreatedAt: p.created_at, UpdatedAt: p.updated_at,
       IssueCount: total, Progress: total ? (100 * done) / total : 0, ProgressChart: total ? (100 * done) / total : 0,
     };
     if (!(f.Fixed! in by)) fail('Invalid', 'not a project field');
@@ -790,7 +790,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       create: async (slug, name, icon, color) => {
         if (s.projects.some((p) => p.slug === slug)) fail('Db', 'error returned from database: (code: 2067) UNIQUE constraint failed: projects.slug');
         checkIcon(icon);
-        const p = { id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: icon ?? null, color: colorKey(color), ...projectDefaults() };
+        const p = { id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, created_at: now(), updated_at: now(), icon: icon ?? null, color: colorKey(color), ...projectDefaults() };
         s.projects.push(p);
         return p;
       },
@@ -806,7 +806,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           if (!validValue(d, v)) fail('Invalid', `${JSON.stringify(v)} is not a valid ${d.kind} for ${k}`);
         }
         for (const l of p.label_ids) find(labels, l, 'label');
-        return upsert(s.projects, { ...p, color: colorKey(p.color), label_ids: [...new Set(p.label_ids)].sort((a, b) => a - b) }, 'project');
+        return upsert(s.projects, { ...p, created_at: find(s.projects, p.id, 'project').created_at, updated_at: now(), color: colorKey(p.color), label_ids: [...new Set(p.label_ids)].sort((a, b) => a - b) }, 'project');
       },
       delete: async (id) => {
         remove(s.projects, id, 'project');
@@ -1208,7 +1208,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           const base = projectSlug(name);
           let slug = base;
           for (let n = 2; s.projects.some((p) => p.slug === slug); n++) slug = `${base}-${n}`;
-          s.projects.push({ id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null, ...projectDefaults() });
+          s.projects.push({ id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, created_at: now(), updated_at: now(), icon: null, color: null, ...projectDefaults() });
         }
         for (const c of plan.cycles ?? []) {
           if (!cycles.some((x) => x.start_date === c.start_date)) cycles.push({ id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name: c.name, start_date: c.start_date, end_date: c.end_date, icon: null, color: null });
@@ -1297,7 +1297,7 @@ export const projectStatusSeed: ProjectStatus[] = (
 ).map(([name, category, color], position) => ({ id: position + 1, name, category, position, color, color_hex: hexOf(color)!, icon: null }));
 
 const project = (id: number, slug: string, name: string): Project =>
-  ({ id, slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, icon: null, color: null, status_id: 1, priority: 0, label_ids: [], properties: {} });
+  ({ id, slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), icon: null, color: null, status_id: 1, priority: 0, label_ids: [], properties: {} });
 const day = (n: number) => addDays(new Date().toISOString().slice(0, 10), n);
 // The last two are under way with dates (the devserver seed does the same); the first has none.
 const projects: Project[] = [

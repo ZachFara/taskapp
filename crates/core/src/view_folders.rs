@@ -244,6 +244,36 @@ pub async fn rename(
     Ok(f)
 }
 
+/// Moves what the folder holds (items and sub-folders) to `up`.
+async fn lift(
+    tx: &mut SqliteConnection,
+    table: &str,
+    id: ViewFolderId,
+    up: Option<i64>,
+) -> Result<()> {
+    for sql in [
+        format!("UPDATE {table} SET folder_id = ? WHERE folder_id = ?"),
+        "UPDATE view_folders SET parent_id = ? WHERE parent_id = ?".to_string(),
+    ] {
+        sqlx::query(&sql)
+            .bind(up)
+            .bind(id.0)
+            .execute(&mut *tx)
+            .await?;
+    }
+    Ok(())
+}
+
+/// Removes the folder's pin, returning its snapshot so the caller can log it for undo.
+async fn drop_pin(tx: &mut SqliteConnection, id: ViewFolderId) -> Result<rows::Snap> {
+    let pin = rows::snap(tx, "pins", "kind = 'folder' AND target = ?", id.0).await?;
+    sqlx::query("DELETE FROM pins WHERE kind = 'folder' AND target = ?")
+        .bind(id.0.to_string())
+        .execute(tx)
+        .await?;
+    Ok(pin)
+}
+
 /// Deletes the folder; the items and folders in it move up to its parent (the top level for a top-level folder).
 ///
 /// # Errors
@@ -257,16 +287,8 @@ pub async fn delete(db: &Db, id: ViewFolderId, src: ChangeSource) -> Result<()> 
     let folder = rows::by_key(&mut tx, "view_folders", id.0).await?;
     let kids = rows::snap(&mut tx, "view_folders", "parent_id = ?", id.0).await?;
     let inside = rows::snap(&mut tx, table, "folder_id = ?", id.0).await?;
-    for sql in [
-        format!("UPDATE {table} SET folder_id = ? WHERE folder_id = ?"),
-        "UPDATE view_folders SET parent_id = ? WHERE parent_id = ?".to_string(),
-    ] {
-        sqlx::query(&sql)
-            .bind(up)
-            .bind(id.0)
-            .execute(&mut *tx)
-            .await?;
-    }
+    let pin = drop_pin(&mut tx, id).await?;
+    lift(&mut tx, table, id, up).await?;
     sqlx::query("DELETE FROM view_folders WHERE id = ?")
         .bind(id.0)
         .execute(&mut *tx)
@@ -276,6 +298,7 @@ pub async fn delete(db: &Db, id: ViewFolderId, src: ChangeSource) -> Result<()> 
     rows::changed(&mut tx, src, inside).await?;
     rows::changed(&mut tx, src, kids).await?;
     rows::changed(&mut tx, src, folder).await?;
+    rows::changed(&mut tx, src, pin).await?;
     tx.commit().await?;
     Ok(())
 }

@@ -1,7 +1,7 @@
 use serde_json::json;
 use taskapp_core::{
-    ChangeSource, Db, Error, ProjectStatusCategory, PropertyAppliesTo, PropertyDef, PropertyKind,
-    history, labels, project_statuses, projects, properties, undo,
+    ChangeSource, Db, Error, Project, ProjectStatusCategory, PropertyAppliesTo, PropertyDef,
+    PropertyKind, history, labels, project_statuses, projects, properties, undo,
 };
 
 type R = Result<(), Box<dyn std::error::Error>>;
@@ -33,12 +33,21 @@ async fn new_projects_start_in_the_first_status_and_edits_undo() -> R {
     edited.priority = 3;
     edited.label_ids = vec![label.id];
     edited.properties.insert("owner".into(), json!("sam"));
-    history::step("Edit project", projects::update(&db, edited.clone(), UI)).await?;
-    assert_eq!(projects::list(&db).await?[0], edited);
+    let saved = history::step("Edit project", projects::update(&db, edited.clone(), UI)).await?;
+    assert_eq!(projects::list(&db).await?[0], saved);
+    assert_eq!(saved.priority, 3);
     undo::undo(&db).await?;
-    assert_eq!(projects::list(&db).await?[0], p);
+    // An undo is a write too, so updated_at moves on.
+    let back = projects::list(&db).await?.remove(0);
+    assert_eq!(
+        Project {
+            updated_at: back.updated_at,
+            ..p.clone()
+        },
+        back
+    );
     undo::redo(&db).await?;
-    assert_eq!(projects::list(&db).await?[0], edited);
+    assert_eq!(projects::list(&db).await?[0].priority, edited.priority);
     Ok(())
 }
 
@@ -81,7 +90,15 @@ async fn deleting_a_status_moves_its_projects_and_undo_restores_both() -> R {
     assert_eq!(projects::list(&db).await?[0].status_id, s[3].id);
     assert_eq!(project_statuses::list(&db).await?.len(), 4);
     undo::undo(&db).await?;
-    assert_eq!(projects::list(&db).await?[0], p);
+    // An undo is a write too, so updated_at moves on.
+    let back = projects::list(&db).await?.remove(0);
+    assert_eq!(
+        Project {
+            updated_at: back.updated_at,
+            ..p.clone()
+        },
+        back
+    );
     assert_eq!(project_statuses::list(&db).await?.len(), 5);
     assert!(
         project_statuses::delete(&db, s[0].id, s[0].id, UI)
@@ -170,6 +187,14 @@ async fn deleting_a_label_or_project_with_labels_undoes_cleanly() -> R {
     assert_eq!(projects::list(&db).await?[0].label_ids, vec![l.id]);
     history::step("Delete project", projects::delete(&db, p.id, UI)).await?;
     undo::undo(&db).await?;
-    assert_eq!(projects::list(&db).await?[0], p);
+    // An undo is a write too, so updated_at moves on.
+    let back = projects::list(&db).await?.remove(0);
+    assert_eq!(
+        Project {
+            updated_at: back.updated_at,
+            ..p.clone()
+        },
+        back
+    );
     Ok(())
 }

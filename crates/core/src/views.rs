@@ -375,6 +375,8 @@ fn project_col(x: FixedField) -> Result<Col> {
         FixedField::StartDate => ("projects.start_date", false),
         FixedField::TargetDate => ("projects.target_date", false),
         FixedField::Archived => ("projects.archived_at", false),
+        FixedField::CreatedAt => ("projects.created_at", false),
+        FixedField::UpdatedAt => ("projects.updated_at", false),
         FixedField::IssueCount => (
             "(SELECT COUNT(*) FROM issues i WHERE i.project_id = projects.id AND i.archived_at IS NULL)",
             false,

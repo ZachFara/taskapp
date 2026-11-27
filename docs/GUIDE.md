@@ -254,7 +254,7 @@ filter chips, Group, Sort and Display.
   filters, sort and grouping as a project view (a table). A project view shows in the sidebar among the other views
   (marked with a small project icon) and sits in the same folders; the Views page lists both, with a filter All views /
   Issue views / Project views. From outside: `taskapp view save NAME --def JSON --entity project`.
-- **Fields.** Name, Status, Status category, Priority, Labels, Start, Target, Progress (percent of issues done),
+- **Fields.** Name, Status, Status category, Priority, Labels, Start, Target, Created, Updated (any project write moves it), Progress (percent of issues done),
   Progress chart (off by default; Display > Hidden: the percent plus grey scope and coloured completed lines over time,
   when Progress charts is on), Issues (count) and custom properties that apply to projects. Issue views can also filter by "Project status".
 - **Layouts.** List: status, priority, name, then the fields, in bands when grouped. Table: the columns chosen in

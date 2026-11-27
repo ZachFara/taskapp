@@ -339,6 +339,8 @@ mod tests {
             start_date: None,
             target_date: None,
             archived_at: None,
+            created_at: chrono::DateTime::UNIX_EPOCH,
+            updated_at: chrono::DateTime::UNIX_EPOCH,
             icon: None,
             color: None,
             status_id: taskapp_core::ProjectStatusId(1),

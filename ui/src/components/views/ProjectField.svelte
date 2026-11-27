@@ -36,6 +36,10 @@
   <span class="t m">{p.start_date ? dayText(p.start_date) : 'No start'}</span>
 {:else if field.Fixed === 'TargetDate'}
   <span class="t m">{p.target_date ? dayText(p.target_date) : 'No target'}</span>
+{:else if field.Fixed === 'CreatedAt'}
+  <span class="t m">{dayText(p.created_at.slice(0, 10))}</span>
+{:else if field.Fixed === 'UpdatedAt'}
+  <span class="t m">{dayText(p.updated_at.slice(0, 10))}</span>
 {:else if field.Fixed === 'Archived'}
   <span class="t m">{p.archived_at ? 'Archived' : ''}</span>
 {:else if field.Fixed === 'Title'}

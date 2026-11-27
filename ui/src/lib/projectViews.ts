@@ -9,10 +9,10 @@ export const emptyPCtx: PCtx = { statuses: [], labels: [], defs: [] };
 /** Names of the fixed fields a project view can filter, group, sort and show. */
 export const PROJECT_FIELD_NAMES: Partial<Record<FixedField, string>> = {
   Title: 'Name', Status: 'Status', StatusCategory: 'Status category', Priority: 'Priority', Label: 'Labels', StartDate: 'Start',
-  TargetDate: 'Target', Progress: 'Progress', ProgressChart: 'Progress chart', IssueCount: 'Issues', Archived: 'Archived',
+  TargetDate: 'Target', Progress: 'Progress', ProgressChart: 'Progress chart', IssueCount: 'Issues', Archived: 'Archived', CreatedAt: 'Created', UpdatedAt: 'Updated',
 };
 /** The fields the Display panel lists, in order. */
-export const PROJECT_BUILT_IN: { field: FieldRef; name: string }[] = (['Status', 'Priority', 'Label', 'Progress', 'ProgressChart', 'IssueCount', 'StartDate', 'TargetDate'] as FixedField[])
+export const PROJECT_BUILT_IN: { field: FieldRef; name: string }[] = (['Status', 'Priority', 'Label', 'Progress', 'ProgressChart', 'IssueCount', 'StartDate', 'TargetDate', 'CreatedAt', 'UpdatedAt'] as FixedField[])
   .map((f) => ({ field: { Fixed: f }, name: PROJECT_FIELD_NAMES[f]! }));
 
 const fixed = (...f: FixedField[]): FieldRef[] => f.map((x) => ({ Fixed: x }));

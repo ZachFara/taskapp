@@ -336,8 +336,8 @@ async fn restore_projects(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         let p: ProjectFile = read_yaml(&path)?;
         let id = sqlx::query(
             "INSERT INTO projects (slug, name, description, doc_link, start_date, target_date,
-               archived_at, created_at, icon, color, status_id, priority, properties, folder_id, position)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               archived_at, created_at, updated_at, icon, color, status_id, priority, properties, folder_id, position)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                COALESCE((SELECT id FROM project_statuses WHERE name = ?),
                         (SELECT id FROM project_statuses ORDER BY position, id LIMIT 1)), ?, ?, ?, ?)",
         )
@@ -349,6 +349,7 @@ async fn restore_projects(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         .bind(p.target_date)
         .bind(p.archived_at)
         .bind(p.created_at)
+        .bind(p.updated_at.unwrap_or(p.created_at))
         .bind(p.icon)
         .bind(p.color)
         .bind(p.status)

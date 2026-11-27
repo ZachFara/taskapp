@@ -1318,6 +1318,9 @@ export type Project = {
 	start_date: string | null,
 	target_date: string | null,
 	archived_at: string | null,
+	/**  Set by the database; an update ignores what the caller sends. */
+	created_at: string,
+	updated_at: string,
 	icon: string | null,
 	color: string | null,
 	status_id: ProjectStatusId,

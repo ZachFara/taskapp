@@ -63,7 +63,7 @@
   const commit = () => onchange({ filter: buildFilter($state.snapshot(advanced), $state.snapshot(chips)) });
   // A project view's own field lists: the fields of a project, not of an issue.
   const quick: FixedField[] = project
-    ? ['Status', 'StatusCategory', 'Priority', 'Label', 'StartDate', 'TargetDate', 'Progress', 'IssueCount']
+    ? ['Status', 'StatusCategory', 'Priority', 'Label', 'StartDate', 'TargetDate', 'CreatedAt', 'UpdatedAt', 'Progress', 'IssueCount']
     : ['Status', 'StatusCategory', 'Project', 'ProjectStatus', 'Label', 'Priority', 'DueDate', 'RelationKind'];
   const addable = $derived<{ field: FieldRef; name: string }[]>([
     ...quick.filter(on).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
@@ -86,7 +86,7 @@
     commit();
   };
 
-  const plain: FixedField[] = project ? ['Title', 'Status', 'StatusCategory', 'Priority', 'StartDate', 'TargetDate', 'Progress', 'IssueCount'] : ['Status', 'StatusCategory', 'Priority', 'Project', 'Cycle', 'DueDate', 'Points', 'Title'];
+  const plain: FixedField[] = project ? ['Title', 'Status', 'StatusCategory', 'Priority', 'StartDate', 'TargetDate', 'CreatedAt', 'UpdatedAt', 'Progress', 'IssueCount'] : ['Status', 'StatusCategory', 'Priority', 'Project', 'Cycle', 'DueDate', 'Points', 'Title'];
   const allFields = $derived([
     ...plain.filter(on).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
     ...data.defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name })),

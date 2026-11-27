@@ -76,7 +76,7 @@ async fn edit(
 }
 
 const COLS: &str =
-    "id, slug, name, description, doc_link, start_date, target_date, archived_at, icon, color,
+    "id, slug, name, description, doc_link, start_date, target_date, archived_at, created_at, updated_at, icon, color,
     status_id, priority, properties";
 
 fn project_from_row(r: &SqliteRow, label_ids: Vec<LabelId>) -> Result<Project> {
@@ -90,6 +90,8 @@ fn project_from_row(r: &SqliteRow, label_ids: Vec<LabelId>) -> Result<Project> {
         start_date: r.get("start_date"),
         target_date: r.get("target_date"),
         archived_at: r.get("archived_at"),
+        created_at: r.get("created_at"),
+        updated_at: r.get("updated_at"),
         icon: r.get("icon"),
         color: r.get("color"),
         status_id: ProjectStatusId(r.get("status_id")),
@@ -150,14 +152,15 @@ pub async fn create(
     let color = check_look(icon.as_deref(), color.as_deref())?;
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let now = Utc::now();
-    let id = sqlx::query!(
-        "INSERT INTO projects (slug, name, created_at, icon, color) VALUES (?, ?, ?, ?, ?)",
-        slug,
-        name,
-        now,
-        icon,
-        color
+    let id = sqlx::query(
+        "INSERT INTO projects (slug, name, created_at, updated_at, icon, color) VALUES (?, ?, ?, ?, ?, ?)",
     )
+    .bind(slug)
+    .bind(name)
+    .bind(now)
+    .bind(now)
+    .bind(&icon)
+    .bind(&color)
     .execute(&mut *tx)
     .await?
     .last_insert_rowid();
@@ -183,6 +186,8 @@ pub async fn create(
         start_date: None,
         target_date: None,
         archived_at: None,
+        created_at: now,
+        updated_at: now,
         icon,
         color,
         status_id: ProjectStatusId(status_id),
@@ -328,8 +333,9 @@ pub async fn update(db: &Db, mut project: Project, src: ChangeSource) -> Result<
         .await?;
     rows::changed(&mut tx, src, pins).await?;
     rows::changed(&mut tx, src, before).await?;
+    let saved = find(&mut tx, project.id).await?;
     tx.commit().await?;
-    Ok(project)
+    Ok(saved)
 }
 
 /// Clears the project and any of its milestones from every issue that has them, recording each.
