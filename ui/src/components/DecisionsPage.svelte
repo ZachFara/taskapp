@@ -10,7 +10,7 @@
   import Pill from '../ui/Pill.svelte';
   import Tabs from '../ui/Tabs.svelte';
   import TextInput from '../ui/TextInput.svelte';
-  import { renderMarkdown } from './detail/markdown';
+  import { images, openLinks, renderMarkdown } from './detail/markdown';
 
   let tab = $state('open');
   let notes = $state<Record<number, string>>({});
@@ -88,7 +88,7 @@
         {/each}
       </div>
       <h2>{d.question}</h2>
-      {#if d.context}<div class="md">{@html renderMarkdown(d.context)}</div>{/if}
+      {#if d.context}<div class="md" use:openLinks use:images={d.context}>{@html renderMarkdown(d.context)}</div>{/if}
 
       {#if d.status === 'open'}
         <ul class="options">

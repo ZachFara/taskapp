@@ -36,6 +36,16 @@ const card = (id: number) => document.querySelector<HTMLElement>(`[data-decision
 const text = (el: Element) => el.textContent?.replace(/\s+/g, ' ');
 
 describe('DecisionsPage', () => {
+  it('a link in a decision context never navigates the app window', async () => {
+    const seed = structuredClone(demoDecisions);
+    seed[0].context = 'See [this page](https://example.com/evil)';
+    await open(createMockApi({ ...fixtures, decisions: seed }));
+    const link = card(seed[0].id).querySelector('a')!;
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+  });
+
   it('shows open decisions as cards, blocking first, with trade-offs and the recommendation marked', async () => {
     await open(mockApi());
     const cards = [...document.querySelectorAll<HTMLElement>('[data-decision]')];
