@@ -2,6 +2,7 @@
 
 mod api;
 mod commands;
+mod list;
 mod references;
 
 use std::path::{Path, PathBuf};
@@ -219,6 +220,8 @@ enum IssueCmd {
         #[arg(long)]
         project: Option<String>,
     },
+    /// Issues filtered by project, status, priority and label names, most urgent first.
+    List(list::ListArgs),
     Get {
         key: String,
     },

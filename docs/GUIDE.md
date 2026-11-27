@@ -768,6 +768,7 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `add <text> [--tz]` | Create an issue from quick-add text. | `taskapp add "Pay rent friday p1"` |
 | `issue create <title> [...]` | Create with flags: `--description --priority --status --project --due --estimate --points --created-at --completed-at --property k=v --parent --cycle --label --migration`. | `taskapp issue create "Fix login" --priority 2 --due 2026-12-01` |
 | `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points`. | `taskapp issue update ABC-1 --status 3` |
+| `issue list [...]` | Issues by name filters, most urgent first, with status, priority, project and label names: `--project --status --not-status --priority --label` (repeat or comma-separate). | `taskapp issue list --project Cairn --not-status Done,Canceled,Someday` |
 | `issue get <key>` | Show one issue. | `taskapp issue get ABC-1` |
 | `issue archive <key>` | Archive an issue. | `taskapp issue archive ABC-1` |
 | `event list [--from --to]` | Events overlapping a date range. | `taskapp event list --from 2026-12-01` |
