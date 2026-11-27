@@ -214,7 +214,7 @@
     let rows: Row[];
     if (top) {
       rows = top.page.items.map((it) => ({
-        id: `page:${it.id}`, label: it.label, keywords: it.keywords, group: top.title, icon: it.icon,
+        id: `page:${it.id}`, label: it.label, keywords: it.keywords, group: top.title, icon: it.icon, status: it.status, entity: it.entity,
         checked: typeof it.checked === 'function' ? it.checked() : it.checked,
         run: async () => {
           await it.run();

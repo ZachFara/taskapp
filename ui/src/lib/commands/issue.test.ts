@@ -223,3 +223,25 @@ describe('issue commands', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('entity pages draw each row with its own mark', () => {
+  it('project, status, label and cycle rows carry their icon and colour', async () => {
+    const { loadChoices } = await import('./defs/issue/_issue');
+    await loadChoices(api as unknown as Parameters<typeof loadChoices>[0]);
+    const byLabel = async (id: string, label: string) => (await itemsOf(cmd(id), ctx([1]))).find((i) => i.label === label);
+
+    const [project] = await api.projects.list();
+    expect((await byLabel('issue.project', project.name))?.entity).toEqual({ icon: project.icon, color: project.color });
+
+    const [status] = await api.statuses.list();
+    expect((await byLabel('issue.status', status.name))?.status).toEqual(status);
+
+    await api.labels.create('Marked', 'red', 'icon:star');
+    expect((await byLabel('issue.labels', 'Add Marked'))?.entity).toEqual({ icon: 'icon:star', color: 'red' });
+    expect((await byLabel('issue.labels', 'Remove Marked'))?.entity).toEqual({ icon: 'icon:star', color: 'red' });
+
+    const [cycle] = await api.cycles.list();
+    const cycleRow = (await itemsOf(cmd('issue.cycle'), ctx([1]))).find((i) => i.label === (cycle.name ?? `Cycle ${cycle.number}`));
+    expect(cycleRow?.entity).toEqual({ icon: cycle.icon, color: cycle.color });
+  });
+});
