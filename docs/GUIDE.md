@@ -355,7 +355,10 @@ The Dashboard (sidebar, or `g b`) shows how work is going over a range. Pick the
 This cycle, any other cycle, Month, Quarter, Year, or Custom with two dates. The chart steps by day up to 31 days, by
 week up to about six months, and by month beyond. Limit it to a project or a label, and switch Count or Points.
 Cards: Summary (completed, created, in progress now, lead time and cycle time as median and 85th percentile;
-a note appears when fewer than 5 issues finished), Burn-up (scope against done), Cycle time (one dot per finished issue,
+a note appears when fewer than 5 issues finished), Burn-up (scope against done), Throughput (completed per day, week
+or month; points when Points is on), Created vs completed (issues, always counts), Velocity (the last five cycles, with
+their average as a dashed line), AI vs me (created and completed split into you in the app, AI and tools, imported,
+and other), By label (the top five labels by completed, the rest as Other), Cycle time (one dot per finished issue,
 by the day it finished against its days; the lines mark the median and the 85th percentile, and "85% finish within N
 days"; click a dot to open the issue), Lead time (created to finished), and Work in progress (now, and per period with
 Little's Law: average cycle time = WIP / throughput). The Cards button shows, hides and
