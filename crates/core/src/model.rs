@@ -471,6 +471,8 @@ pub enum FixedField {
     Progress,
     /// Project views only: the project's issues, archived ones left out.
     IssueCount,
+    /// Project views only: shows progress as a percent with a scope and completed sparkline; sorts and filters as `Progress`.
+    ProgressChart,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]

@@ -4,6 +4,7 @@ import { api, setApi } from '../../lib/api';
 import { createMockApi, fixtures } from '../../lib/api.mock';
 import type { Layout, SavedView, ViewDef } from '../../lib/bindings';
 import GanttView from './GanttView.svelte';
+import { insightsApi } from '../insights/insightsApi';
 import ProjectBoardView from './ProjectBoardView.svelte';
 import ProjectCalendarView from './ProjectCalendarView.svelte';
 import ProjectListView from './ProjectListView.svelte';
@@ -59,6 +60,22 @@ describe('project list', () => {
   it('says so when the view has no projects', async () => {
     await show(ProjectListView, 'List', { filter: { Cond: { field: { Fixed: 'Title' }, op: 'Contains', value: 'zzz' } } }, '[role="img"], h2, p');
     expect(document.body.textContent).toContain('No projects in this view');
+  });
+});
+
+describe('progress chart field', () => {
+  const days = [0, 1, 2].map((i) => ({ date: `2026-12-0${i + 1}`, scope: 4, started: 0, completed: i }));
+  afterEach(() => insightsApi.setSource(null));
+  it('is off by default and draws percent plus scope and completed lines when shown', async () => {
+    insightsApi.setSource({ progress: async () => ({ days, measure: 'count', from: '', to: '' }), velocity: async () => [] });
+    await show(ProjectListView, 'List');
+    expect(document.querySelector('.pspark')).toBeNull();
+    unmount(live!);
+    document.body.innerHTML = '';
+    await show(ProjectListView, 'List', { columns: [{ Fixed: 'ProgressChart' }] });
+    await vi.waitFor(() => expect(document.querySelector('.pspark path.completed')).not.toBeNull());
+    expect(document.querySelector('.pspark path.scope')).not.toBeNull();
+    expect(document.querySelector('.pspark .pct')!.textContent).toMatch(/^\d+%$/);
   });
 });
 

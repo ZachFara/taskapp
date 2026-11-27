@@ -212,7 +212,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     const by: Partial<Record<FixedField, Value>> = {
       Title: p.name, Status: p.status_id, StatusCategory: projectStatusOf(p)?.category.toLowerCase() ?? null, Priority: p.priority,
       Label: p.label_ids, StartDate: p.start_date, TargetDate: p.target_date, Archived: p.archived_at !== null,
-      IssueCount: total, Progress: total ? (100 * done) / total : 0,
+      IssueCount: total, Progress: total ? (100 * done) / total : 0, ProgressChart: total ? (100 * done) / total : 0,
     };
     if (!(f.Fixed! in by)) fail('Invalid', 'not a project field');
     return by[f.Fixed!]!;
@@ -224,8 +224,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       if (!s.propertyDefs.some((d) => d.key === prop)) fail('Invalid', 'unknown property');
       return i.properties[prop] ?? null;
     }
-    if (f.Fixed === 'TargetDate' || f.Fixed === 'Progress' || f.Fixed === 'IssueCount') fail('Invalid', 'a project field, not an issue field');
-    const by: Record<Exclude<FixedField, 'TargetDate' | 'Progress' | 'IssueCount'>, Value> = {
+    if (f.Fixed === 'TargetDate' || f.Fixed === 'Progress' || f.Fixed === 'ProgressChart' || f.Fixed === 'IssueCount') fail('Invalid', 'a project field, not an issue field');
+    const by: Record<Exclude<FixedField, 'TargetDate' | 'Progress' | 'ProgressChart' | 'IssueCount'>, Value> = {
       ProjectStatus: s.projects.find((x) => x.id === i.project_id)?.status_id ?? null,
       Title: i.title, Status: i.status_id, StatusCategory: category(i)?.toLowerCase() ?? null, Priority: i.priority,
       Project: i.project_id, Milestone: i.milestone_id, Cycle: i.cycle_id, Label: i.label_ids,

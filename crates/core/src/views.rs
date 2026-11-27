@@ -313,7 +313,10 @@ fn fixed_col(entity: ViewEntity, x: FixedField) -> Result<Col> {
         FixedField::RelationKind => {
             return Err(Error::Invalid("cannot sort by relation kind".into()));
         }
-        FixedField::TargetDate | FixedField::Progress | FixedField::IssueCount => {
+        FixedField::TargetDate
+        | FixedField::Progress
+        | FixedField::ProgressChart
+        | FixedField::IssueCount => {
             return Err(Error::Invalid("a project field, not an issue field".into()));
         }
     };
@@ -337,7 +340,7 @@ fn project_col(x: FixedField) -> Result<Col> {
             false,
         ),
         // The sum is NULL for a project without issues; zero is what its bar shows.
-        FixedField::Progress => (
+        FixedField::Progress | FixedField::ProgressChart => (
             "(SELECT COALESCE(100.0 * SUM(s.category = 'completed') / NULLIF(COUNT(*), 0), 0) FROM issues i JOIN statuses s ON s.id = i.status_id WHERE i.project_id = projects.id AND i.archived_at IS NULL)",
             false,
         ),
