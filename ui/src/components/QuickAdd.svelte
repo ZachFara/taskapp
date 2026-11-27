@@ -247,7 +247,7 @@
       data-quickadd
       class="title"
       aria-label="Title, with quick-add tokens"
-      placeholder={`Describe the issue.${hint}`}
+      placeholder={`Title${hint}`}
       bind:value={text}
       oninput={oninput}
       onkeydown={onkeydown}

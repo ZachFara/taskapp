@@ -29,6 +29,7 @@
   {#if iconOnly}
     <IconButton icon={cmd.icon} label={cmd.label} shortcut={cmd.shortcut} onclick={run} />
   {:else}
-    <Button {variant} icon={cmd.icon} tooltip={{ label: cmd.label, shortcut: cmd.shortcut }} onclick={run}>{cmd.label}</Button>
+    <!-- The name may hide in a page header short of room (PageHeader); aria-label keeps it for screen readers. -->
+    <Button {variant} icon={cmd.icon} tooltip={{ label: cmd.label, shortcut: cmd.shortcut }} onclick={run} aria-label={cmd.label}><span class="cmd-label">{cmd.label}</span></Button>
   {/if}
 {/if}

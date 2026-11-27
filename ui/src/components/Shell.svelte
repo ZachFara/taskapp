@@ -189,6 +189,7 @@
   .wordmark { font-size: var(--fs-wordmark); font-weight: 700; letter-spacing: -0.02em; font-variation-settings: 'wdth' 90; }
   .topbar { grid-area: top; display: grid; grid-template-columns: 1fr minmax(240px, 420px) 1fr; align-items: center; gap: var(--s-4); padding: 0 var(--s-4) 0 var(--s-2); color: var(--frame-muted); }
   .crumb { display: flex; align-items: center; gap: var(--s-3); white-space: nowrap; font-weight: 500; min-width: 0; }
+  .crumb > :not(:global(svg)) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .crumb b { color: var(--frame-ink); font-weight: 600; }
   .crumb a { color: inherit; text-decoration: none; }
   .crumb a:hover { color: var(--frame-ink); text-decoration: underline; }
