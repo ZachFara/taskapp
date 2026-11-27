@@ -62,6 +62,17 @@ pub async fn list_reminder_lists(helper: &Path) -> Result<Vec<(String, String)>>
         id: String,
         title: String,
     }
+    #[derive(Deserialize)]
+    struct Access {
+        granted: bool,
+    }
+    // Without a granted request macOS answers with no lists at all, so ask first (it prompts once).
+    let access: Access = run(helper, &["authorize"]).await?;
+    if !access.granted {
+        return Err(Error::Invalid(
+            "Reminders access is off: allow Cairn (taskapp) in System Settings > Privacy & Security > Reminders, then press Authorize again".into(),
+        ));
+    }
     let lists: Vec<L> = run(helper, &["lists"]).await?;
     Ok(lists.into_iter().map(|l| (l.id, l.title)).collect())
 }

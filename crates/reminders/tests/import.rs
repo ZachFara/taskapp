@@ -316,3 +316,27 @@ async fn notes_and_due_land_with_the_issue() -> R {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn listing_lists_asks_for_access_first() -> R {
+    let fake = Fake::new();
+    fake.say("authorize", r#"{"granted":true}"#, 0);
+    fake.say("lists", r#"[{"id":"L1","title":"Inbox"}]"#, 0);
+    let lists = taskapp_reminders::helper::list_reminder_lists(&fake.path()).await?;
+    assert_eq!(lists, vec![("L1".to_string(), "Inbox".to_string())]);
+    assert_eq!(fake.calls(), ["authorize", "lists"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn denied_access_says_where_to_allow_it() -> R {
+    let fake = Fake::new();
+    fake.say("authorize", r#"{"granted":false}"#, 0);
+    fake.say("lists", "[]", 0);
+    let err = taskapp_reminders::helper::list_reminder_lists(&fake.path())
+        .await
+        .expect_err("denied access is an error, not an empty list");
+    assert!(err.to_string().contains("Privacy & Security"), "{err}");
+    assert_eq!(fake.calls(), ["authorize"]);
+    Ok(())
+}
