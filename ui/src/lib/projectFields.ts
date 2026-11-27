@@ -56,6 +56,6 @@ export function viewDefOf(sort: Sort, group: Group, filters: Filters): ViewDef {
     sorts: [{ field: { Fixed: SORT_FIELD[sort] }, descending: false }],
     group_by: group === 'none' ? null : { Fixed: group === 'status' ? 'Status' : 'Priority' },
     layout: 'Table', columns: [], include_archived: false,
-    density: 'comfortable', show_empty_groups: false, show_sub_issues: 'nest', card_fields: [], show_weekends: true,
+    density: 'comfortable', show_empty_groups: false, show_sub_issues: 'nest', card_fields: [], show_weekends: true, wrap: 'off',
   };
 }

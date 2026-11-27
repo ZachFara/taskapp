@@ -79,7 +79,7 @@ export const cases: Case[] = [
   call('views: seeded view templates', 'view_templates_list'),
   call('views: display settings and custom property columns round trip', 'views_save', {
     id: null, name: 'Shown', icon: null, color: null,
-    def: def({ layout: 'Board', columns: [prop('area'), fixed('CommentCount')], density: 'compact', show_empty_groups: true, show_sub_issues: 'flat', card_fields: [prop('effort')], show_weekends: false }),
+    def: def({ layout: 'Board', columns: [prop('area'), fixed('CommentCount')], density: 'compact', show_empty_groups: true, show_sub_issues: 'flat', card_fields: [prop('effort')], show_weekends: false, wrap: 'on' }),
   }),
   call('views: stats count sub-issues, relations and comments', 'views_stats', { def: def() }),
   query('sort: by comment count', { sorts: [{ field: fixed('CommentCount'), descending: true }] }),

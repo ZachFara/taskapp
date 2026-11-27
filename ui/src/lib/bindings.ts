@@ -1536,6 +1536,8 @@ export type ViewDef = {
 	/**  The board's card fields; empty means `columns`. */
 	card_fields?: FieldRef[],
 	show_weekends?: boolean,
+	/**  Long titles, labels and values wrap onto more lines instead of being cut off. */
+	wrap?: Wrap,
 };
 
 /**  What a saved view lists. A project view's fields are project fields. */
@@ -1581,3 +1583,5 @@ export type WorkspaceStatus = {
 	key: string,
 	timezone: string,
 };
+
+export type Wrap = "off" | "on";

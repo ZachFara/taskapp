@@ -539,6 +539,14 @@ pub enum Density {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
+pub enum Wrap {
+    #[default]
+    Off,
+    On,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
 pub enum SubIssues {
     #[default]
     Nest,
@@ -571,6 +579,9 @@ pub struct ViewDef {
     pub card_fields: Vec<FieldRef>,
     #[serde(default = "yes")]
     pub show_weekends: bool,
+    /// Long titles, labels and values wrap onto more lines instead of being cut off.
+    #[serde(default)]
+    pub wrap: Wrap,
 }
 
 impl Default for ViewDef {
@@ -587,6 +598,7 @@ impl Default for ViewDef {
             show_sub_issues: SubIssues::default(),
             card_fields: vec![],
             show_weekends: true,
+            wrap: Wrap::default(),
         }
     }
 }

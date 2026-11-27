@@ -1,8 +1,8 @@
 use serde_json::json;
 use taskapp_core::{
     ChangeSource, Db, Density, FieldRef, FixedField, Layout, NewIssue, PropertyDef, PropertyKind,
-    SubIssues, ViewDef, history, issues, palette::Look, properties, settings, undo, view_templates,
-    views, workspace,
+    SubIssues, ViewDef, Wrap, history, issues, palette::Look, properties, settings, undo,
+    view_templates, views, workspace,
 };
 
 type R = Result<(), Box<dyn std::error::Error>>;
@@ -21,6 +21,7 @@ fn rich() -> ViewDef {
         show_sub_issues: SubIssues::Flat,
         card_fields: vec![FieldRef::Property("area".into())],
         show_weekends: false,
+        wrap: Wrap::Off,
         ..ViewDef::default()
     }
 }

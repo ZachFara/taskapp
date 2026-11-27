@@ -122,6 +122,7 @@
   <div class="opts">
     {#if L !== 'Gantt' && L !== 'Calendar'}
       <div class="opt"><span>Compact rows</span><Switch label="Compact rows" bind:checked={() => density(def) === 'compact', (v) => onchange({ density: v ? 'compact' : 'comfortable' })} /></div>
+      <div class="opt"><span>Wrap</span><Switch label="Wrap" bind:checked={() => def.wrap === 'on', (v) => onchange({ wrap: v ? 'on' : 'off' })} /></div>
     {/if}
     {#if grouped}
       <div class="opt"><span>Show empty groups</span><Switch label="Show empty groups" bind:checked={() => showEmptyGroups(def), (v) => onchange({ show_empty_groups: v })} /></div>
