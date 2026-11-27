@@ -39,6 +39,10 @@ const marked = new Marked({
     },
   ],
   renderer: {
+    // Numbered in document order: a tick finds its line by this index (checklist.ts counts the same lines).
+    checkbox({ checked }) {
+      return `<input type="checkbox"${checked ? ' checked' : ''} data-check="${box++}">`;
+    },
     // Only `attachment:<number>` is an image; its bytes load through the API (see `images`). Any other image source
     // would make the reader's machine fetch it, so it shows as its alt text.
     image({ href, text }) {
@@ -65,9 +69,12 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   if (!/^\d+$/.test(node.getAttribute('data-attachment') ?? '')) node.remove();
 });
 
+let box = 0;
 /** Markdown to HTML, sanitized: raw HTML such as a script tag never survives. */
-export const renderMarkdown = (src: string): string =>
-  DOMPurify.sanitize(marked.parse(src, { async: false }), { ALLOWED_URI_REGEXP: URI });
+export const renderMarkdown = (src: string): string => {
+  box = 0;
+  return DOMPurify.sanitize(marked.parse(src, { async: false }), { ALLOWED_URI_REGEXP: URI });
+};
 
 /** Svelte action for a `.md` block: a link opens through openExternal, never in the webview. Capture phase, so a
  * link click does not also reach the block's own handler (the description opens its editor on click). */

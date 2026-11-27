@@ -308,7 +308,7 @@ describe('TableView', () => {
     seeded(viewOf({ columns: [] }));
     await open(viewOf({ columns: [] }));
     const heads = [...target.querySelectorAll('thead th:not(.add-col)')].map((th) => th.textContent?.trim().split(/\s+/)[0]);
-    expect(heads).toEqual(['Key', 'Priority', 'Title', 'Status', 'Project', 'Labels', 'Due', 'Estimate']);
+    expect(heads).toEqual(['Key', 'Priority', 'Title', 'Status', 'Project', 'Labels', 'Due', 'Estimate', 'Checklist']);
   });
 
   it('custom_property_column_renders_by_type', async () => {

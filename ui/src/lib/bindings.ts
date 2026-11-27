@@ -1171,6 +1171,8 @@ export type Filter = ({ And: Filter[] }) & { Cond?: never; Not?: never; Or?: nev
 } }) & { And?: never; Not?: never; Or?: never };
 
 export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "Points" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount" | 
+/**  Shows `done/total` of the description's task lines; not sortable or filterable. */
+"Checklist" | 
 /**  Filter only: the issue has a relation of the given kind id(s), on either end. */
 "RelationKind" | 
 /**  An issue's project status; on a project view, use `Status`. */

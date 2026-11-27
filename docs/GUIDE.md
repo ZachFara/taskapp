@@ -122,6 +122,13 @@ Quick-add has no token for status, parent, cycle or milestone. Example: `Pay ren
   previous or next issue.
 - Copy: `mod+c` copies the key, `mod+shift+c` the link. Pin: `.`. Duplicate: `mod+d`.
 
+### Checklists in descriptions
+
+A line `- [ ] item` in a description is a checklist item; `- [x] item` is ticked. Click the box in the description to tick it
+or untick it; the tick rewrites that one line and is one undo step. In the editor's Preview you tick the draft, and Save keeps
+it. Nested items count, and lines inside a code block do not. A list row, table row or board card shows `done/total` when the
+issue has items (the Checklist field, on by default). `taskapp issue get` reports `checklist: {done, total}`.
+
 ### Links in descriptions and comments
 
 - A bare web link, or an `obsidian://open` link with only `vault` and `file`, in a description, comment or project description shows as a chip: an icon, the host
@@ -199,8 +206,8 @@ saved automatically (after a short pause), except temporary sorting changes. Fil
   uses OR or NOT (made by CLI or MCP) shows as one "Advanced filter" chip you can only remove. Filters are saved
   with the view (see [Limits](#limits-and-not-built-yet)). The full field list a view definition accepts: Title,
   Status, StatusCategory, Priority, Project, Milestone, Cycle, Label, Parent, StartDate, DueDate, Estimate, Points,
-  CreatedAt, UpdatedAt, CompletedAt, Archived, Key, SubIssueProgress, RelationCount, CommentCount, and any custom
-  property.
+  CreatedAt, UpdatedAt, CompletedAt, Archived, Key, SubIssueProgress, Checklist, RelationCount, CommentCount, and any
+  custom property.
 - **Relative dates.** On a date field (Start, Due, Created, Updated, Completed, a date property) the chip's first
   line picks "Exact date" or a relative day: today, 7 or 14 or 30 days ago, in 7, 14 or 30 days. Relative days count
   from today in the workspace time zone and move on their own. "Before today" lists overdue dates; "up to in 7 days"

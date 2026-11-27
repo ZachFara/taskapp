@@ -183,6 +183,8 @@ pub async fn get(db: &Db, key: &str) -> Result<Value> {
     out["project"] = json!(names.project(&issue));
     out["labels"] = json!(names.labels(&issue));
     out["priority_name"] = json!(priority_name(issue.priority));
+    let (done, total) = taskapp_core::checklist::counts(&issue.description);
+    out["checklist"] = json!({ "done": done, "total": total });
     Ok(out)
 }
 

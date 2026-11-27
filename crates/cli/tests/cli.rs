@@ -81,6 +81,30 @@ fn undo_and_redo_revert_a_cli_edit() {
 }
 
 #[test]
+fn issue_get_reports_checklist_progress() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Trip"]);
+    let out = run(
+        &db,
+        &[
+            "issue",
+            "update",
+            "ABC-1",
+            "--description",
+            "Packing\n- [x] pack\n- [ ] book",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let issue = run_json(&db, &["issue", "get", "ABC-1"]);
+    assert_eq!(issue["checklist"]["done"], 1);
+    assert_eq!(issue["checklist"]["total"], 2);
+}
+
+#[test]
 fn unknown_key_exits_nonzero_with_message() {
     let (_d, db) = fresh();
     let out = run(&db, &["issue", "get", "ABC-999"]);

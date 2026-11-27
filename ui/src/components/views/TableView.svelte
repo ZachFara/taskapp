@@ -44,11 +44,11 @@
     Label: { label: 'Labels', kind: 'Labels' },
     // Shown through FieldValue and not editable here.
     Key: { label: 'Key', kind: 'Read' }, Milestone: { label: 'Milestone', kind: 'Read' }, Cycle: { label: 'Cycle', kind: 'Read' },
-    Parent: { label: 'Parent', kind: 'Read' }, SubIssueProgress: { label: 'Sub-issues', kind: 'Read' }, RelationCount: { label: 'Relations', kind: 'Read' },
+    Parent: { label: 'Parent', kind: 'Read' }, SubIssueProgress: { label: 'Sub-issues', kind: 'Read' }, Checklist: { label: 'Checklist', kind: 'Read' }, RelationCount: { label: 'Relations', kind: 'Read' },
     CommentCount: { label: 'Comments', kind: 'Read' }, CreatedAt: { label: 'Created', kind: 'Read' }, UpdatedAt: { label: 'Updated', kind: 'Read' },
   };
   // A view with no columns of its own shows these.
-  const DEFAULT: FieldRef[] = ['Priority', 'Title', 'Status', 'Project', 'Label', 'DueDate', 'Estimate'].map((f) => ({ Fixed: f as FixedField }));
+  const DEFAULT: FieldRef[] = ['Priority', 'Title', 'Status', 'Project', 'Label', 'DueDate', 'Estimate', 'Checklist'].map((f) => ({ Fixed: f as FixedField }));
   const PATCH: Partial<Record<FixedField, (v: Value) => IssuePatch>> = {
     Title: (v) => ({ title: v as string }),
     Status: (v) => ({ status_id: v as number }),

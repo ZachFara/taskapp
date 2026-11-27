@@ -10,6 +10,7 @@ pub mod attachments;
 pub mod backup;
 pub mod blocks;
 pub mod bulk;
+pub mod checklist;
 pub mod comments;
 pub mod cycles;
 pub mod decisions;

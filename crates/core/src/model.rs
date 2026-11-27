@@ -465,6 +465,8 @@ pub enum FixedField {
     SubIssueProgress,
     RelationCount,
     CommentCount,
+    /// Shows `done/total` of the description's task lines; not sortable or filterable.
+    Checklist,
     /// Filter only: the issue has a relation of the given kind id(s), on either end.
     RelationKind,
     /// An issue's project status; on a project view, use `Status`.
