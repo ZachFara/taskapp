@@ -220,6 +220,8 @@ saved automatically (after a short pause), except temporary sorting changes. Fil
   custom properties (listed first under "Custom properties"). "Reset to default" restores the layout's default fields.
   Options: Compact rows (list, table, board), Show empty groups (list, table), Show archived, Sub-issues Nested, Flat or
   Hidden (list), Show weekends (timeline, calendar). On a board the field list means the card fields.
+  Wrap (list, table; off by default) lets long titles, several labels and long values run onto more lines instead of
+  being cut off; a wrapped list shows every row, without the windowing that keeps long plain lists fast.
 - **Pin, rename, delete.** Header buttons and menu; or commands.
 - **View templates.** A template is a view definition new views start from. "Save as template" in the view menu
   makes one; the Views page lists templates, deletes them and "Set as default" makes the New view dialog preselect one.
