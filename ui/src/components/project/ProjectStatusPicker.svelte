@@ -35,7 +35,7 @@
 <span class="control" role="presentation" onclick={(e) => e.stopPropagation()}>
   <Popover bind:open>
     {#snippet trigger(props)}
-      <button {...props} type="button" class="trigger" disabled={saving} aria-label={`Change status of ${project.name}`} title={status?.name ?? 'Change status'}>
+      <button {...props} type="button" class="trigger" disabled={saving} aria-label={`Change status of ${project.name}`}>
         {#if status}<StatusGlyph category={glyphCategory[status.category]} icon={status.icon} color={status.color} size={14} />{/if}
         {#if !iconOnly}{status?.name ?? 'Set status'}{/if}
       </button>

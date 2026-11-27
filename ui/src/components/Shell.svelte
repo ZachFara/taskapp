@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
   import { cubicOut } from 'svelte/easing';
   import { fly } from 'svelte/transition';
+  import { navigate } from '../app/routes';
   import { api } from '../lib/api';
   import type { SyncStatus } from '../lib/bindings';
   import { shortcutFor } from '../lib/commands';
@@ -27,7 +28,7 @@
     panelOpen = false,
     onsearch,
     route = '',
-  }: { sidebar?: Snippet; panel?: Snippet; children: Snippet; crumb?: string[]; panelOpen?: boolean; onsearch?: () => void; route?: string } = $props();
+  }: { sidebar?: Snippet; panel?: Snippet; children: Snippet; crumb?: { label: string; href?: string }[]; panelOpen?: boolean; onsearch?: () => void; route?: string } = $props();
 
   let sync = $state<SyncStatus | null>(null);
   const syncError = $derived(
@@ -116,7 +117,9 @@
     <nav class="crumb" aria-label="Breadcrumb">
       {#each crumb as part, i (i)}
         {#if i}<Icon name="chevron-right" size={12} />{/if}
-        {#if i === crumb.length - 1}<b aria-current="page">{part}</b>{:else}<span>{part}</span>{/if}
+        {#if i === crumb.length - 1}<b aria-current="page">{part.label}</b>
+        {:else if part.href}<a href={part.href} onclick={(e) => { e.preventDefault(); navigate(part.href!); }}>{part.label}</a>
+        {:else}<span>{part.label}</span>{/if}
       {/each}
     </nav>
     <Tooltip label="Search or run a command" shortcut={shortcutFor('palette.open')}>
@@ -147,7 +150,7 @@
         {/each}
         <span class="sync">
           {#if syncError !== undefined}
-            <span class="dot error" role="status" title={syncError}></span> {syncError}
+            <span class="dot error" role="status" aria-label={syncError}></span> {syncError}
           {:else}
             <span class="dot"></span> Sync ok
           {/if}
@@ -186,7 +189,10 @@
   .wordmark { font-size: var(--fs-wordmark); font-weight: 700; letter-spacing: -0.02em; font-variation-settings: 'wdth' 90; }
   .topbar { grid-area: top; display: grid; grid-template-columns: 1fr minmax(240px, 420px) 1fr; align-items: center; gap: var(--s-4); padding: 0 var(--s-4) 0 var(--s-2); color: var(--frame-muted); }
   .crumb { display: flex; align-items: center; gap: var(--s-3); white-space: nowrap; font-weight: 500; min-width: 0; }
+  .crumb > :not(:global(svg)) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .crumb b { color: var(--frame-ink); font-weight: 600; }
+  .crumb a { color: inherit; text-decoration: none; }
+  .crumb a:hover { color: var(--frame-ink); text-decoration: underline; }
   .search { display: flex; align-items: center; gap: var(--s-4); height: var(--ctl-h); padding: 0 var(--s-3) 0 var(--s-5); border: 0; border-radius: var(--r-ctl); background: var(--frame-inset); color: var(--frame-muted); font: inherit; text-align: left; }
   .search:hover { color: var(--frame-ink); }
   .search span:first-of-type { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

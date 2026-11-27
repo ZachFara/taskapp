@@ -222,9 +222,9 @@
           onchange={(v) => { draft.icon = v.icon ?? ''; draft.color = v.color ?? ''; }}
         />
         <TextInput label="Title prefix" bind:value={draft.title_prefix} placeholder="[Bug] " />
-        <Select label="Default status" bind:value={draft.status_id} items={statuses.map((s) => ({ value: String(s.id), label: s.name }))} placeholder="Not set" />
+        <Select label="Default status" bind:value={draft.status_id} items={statuses.map((s) => ({ value: String(s.id), label: s.name, glyph: { category: s.category, icon: s.icon, color: s.color } }))} placeholder="Not set" />
         <Select label="Default priority" bind:value={draft.priority} items={PRIORITIES} placeholder="Not set" />
-        <Select label="Default project" bind:value={draft.project_id} items={projects.map((p) => ({ value: String(p.id), label: p.name }))} placeholder="Not set" />
+        <Select label="Default project" bind:value={draft.project_id} items={projects.map((p) => ({ value: String(p.id), label: p.name, glyph: { icon: p.icon, color: p.color } }))} placeholder="Not set" />
         <TextInput label="Default estimate (minutes)" bind:value={draft.estimate} type="number" invalid={attempted && !!estimateError} />
       </div>
       {#if attempted && slugError}<p class="err" role="alert">{slugError}</p>{/if}

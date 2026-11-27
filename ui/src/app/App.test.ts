@@ -111,6 +111,13 @@ describe('sidebar and frame', () => {
     expect(q('header.topbar nav[aria-label=Breadcrumb]')!.textContent).toContain('Cycles');
   });
 
+  it('breadcrumb_on_a_view_links_back_to_all_views', async () => {
+    await open('/view/1');
+    const link = q('header.topbar nav[aria-label=Breadcrumb] a') as HTMLAnchorElement;
+    expect(link.textContent).toBe('Views');
+    expect(link.getAttribute('href')).toBe('/views');
+  });
+
   it('theme_button_switches_data_theme', async () => {
     setTheme('light');
     await open('/my');

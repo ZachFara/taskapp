@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { tooltips } from '../../lib/tooltips.svelte';
 import General from './General.svelte';
-import { field, mountSettings, pick, press, setField, statusText } from './testing';
+import { field, mountSettings, pick, press, setField, statusText, toggle } from './testing';
 
 describe('General', () => {
   it('shows the stored workspace key', async () => {
@@ -73,6 +74,17 @@ describe('General', () => {
     await pick(target, 'Animation speed', 'Off');
     expect(document.documentElement.style.getPropertyValue('--motion-scale')).toBe('0');
     localStorage.removeItem('cairn.animationSpeed');
+  });
+
+  it('Show tooltips is off by default; switching it on applies at once and is remembered on this device', async () => {
+    const { target } = await mountSettings(General);
+    expect(tooltips.show).toBe(false);
+    await toggle(target, 'Show tooltips');
+    expect(tooltips.show).toBe(true);
+    expect(localStorage.getItem('cairn.showTooltips')).toBe('1');
+    await toggle(target, 'Show tooltips');
+    expect(tooltips.show).toBe(false);
+    expect(localStorage.getItem('cairn.showTooltips')).toBe('0');
   });
 
   it('picking a look applies it at once', async () => {

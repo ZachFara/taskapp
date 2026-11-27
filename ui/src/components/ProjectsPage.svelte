@@ -110,9 +110,9 @@
     <div class="bar" role="group" aria-label="Arrange projects">
       <Select label="Group by" bind:value={group as string} items={[{ value: 'none', label: 'No grouping' }, { value: 'status', label: 'Group by status' }, { value: 'priority', label: 'Group by priority' }]} />
       <Select label="Sort by" bind:value={sort as string} items={[{ value: 'name', label: 'Sort by name' }, { value: 'status', label: 'Sort by status' }, { value: 'priority', label: 'Sort by priority' }, { value: 'target', label: 'Sort by target date' }]} />
-      <Select label="Filter by status" bind:value={fStatus} items={[any('Any status'), ...statuses.map((s) => ({ value: String(s.id), label: s.name }))]} />
+      <Select label="Filter by status" bind:value={fStatus} items={[any('Any status'), ...statuses.map((s) => ({ value: String(s.id), label: s.name, glyph: { icon: s.icon, color: s.color } }))]} />
       <Select label="Filter by priority" bind:value={fPriority} items={[any('Any priority'), ...PRIORITIES.map((label, i) => ({ value: String(i), label }))]} />
-      <Select label="Filter by label" bind:value={fLabel} items={[any('Any label'), ...labels.map((l) => ({ value: String(l.id), label: l.name }))]} />
+      <Select label="Filter by label" bind:value={fLabel} items={[any('Any label'), ...labels.map((l) => ({ value: String(l.id), label: l.name, glyph: { icon: l.icon, color: l.color } }))]} />
     </div>
     <table class="table">
       <thead>

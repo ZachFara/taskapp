@@ -5,6 +5,7 @@ import { setApi } from '../lib/api';
 import { createMockApi } from '../lib/api.mock';
 import Shell from './Shell.svelte';
 import { readFileSync } from 'node:fs';
+import { setTooltips } from '../lib/tooltips.svelte';
 
 // Glyph assertions below are the Mac ones whatever machine runs them.
 beforeEach(() => void vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel'));
@@ -100,6 +101,7 @@ describe('Shell', () => {
   });
 
   it('the_search_button_has_a_tooltip_naming_its_key', async () => {
+    setTooltips(true);
     await open();
     document.querySelector<HTMLButtonElement>('[aria-label="Search or run a command"]')!.focus();
     await settle();
@@ -109,9 +111,18 @@ describe('Shell', () => {
   });
 
   it('breadcrumb_marks_the_last_part_as_current', async () => {
-    app = mount(Shell, { target: document.body, props: { children: body, crumb: ['Projects', 'Home'] } });
+    app = mount(Shell, { target: document.body, props: { children: body, crumb: [{ label: 'Projects', href: '/projects' }, { label: 'Home' }] } });
     await settle();
     expect(document.querySelector('[aria-current=page]')!.textContent).toBe('Home');
+  });
+
+  it('breadcrumb_parent_with_a_page_is_a_link_to_it', async () => {
+    app = mount(Shell, { target: document.body, props: { children: body, crumb: [{ label: 'Projects', href: '/projects' }, { label: 'Home' }] } });
+    await settle();
+    const link = document.querySelector<HTMLAnchorElement>('nav[aria-label=Breadcrumb] a')!;
+    expect(link.textContent).toBe('Projects');
+    link.click();
+    expect(location.pathname).toBe('/projects');
   });
 
   it('panel_renders_only_when_open_and_after_the_main_view', async () => {

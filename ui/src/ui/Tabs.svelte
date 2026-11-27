@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Tabs } from 'bits-ui';
-  import { tick } from 'svelte';
+  import { getContext, tick } from 'svelte';
   import Icon from './Icon.svelte';
   import Tooltip from './Tooltip.svelte';
 
@@ -12,31 +12,37 @@
     segmented = false,
   }: { segmented?: boolean; value?: string; tabs: { id: string; label: string; icon?: string; shortcut?: string }[]; label?: string } = $props();
 
-  // A tab's tooltip only repeats its visible name unless it has a shortcut or the text is hidden (1200px, below).
-  let width = $state(Infinity);
+  // In a page header short of room the tabs show icons only (PageHeader decides); then the tooltip is their name.
+  const compact = getContext<(() => boolean) | undefined>('pageHeaderCompact') ?? (() => false);
 
   // The underline is one bar that slides to the active tab; it is measured after each change, and placed without
   // sliding the first time. Segmented controls fill the chosen segment instead.
   let list = $state<HTMLElement | null>(null);
   let ink = $state<{ x: number; w: number } | null>(null);
   let ready = $state(false);
+  function place() {
+    const a = list?.querySelector<HTMLElement>('[data-state="active"]');
+    if (!a) return;
+    ink = { x: a.offsetLeft, w: a.offsetWidth };
+    requestAnimationFrame(() => (ready = true));
+  }
   $effect(() => {
     void value;
-    void tick().then(() => {
-      const a = list?.querySelector<HTMLElement>('[data-state="active"]');
-      if (!a) return;
-      ink = { x: a.offsetLeft, w: a.offsetWidth };
-      requestAnimationFrame(() => (ready = true));
-    });
+    void tick().then(place);
+  });
+  // Tabs change width when their names hide or show; the underline follows.
+  $effect(() => {
+    if (!list || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(place);
+    ro.observe(list);
+    return () => ro.disconnect();
   });
 </script>
-
-<svelte:window bind:innerWidth={width} />
 
 <Tabs.Root bind:value>
   <Tabs.List bind:ref={list} class={segmented ? 'cx-tabs cx-seg' : 'cx-tabs'} aria-label={label}>
     {#each tabs as t (t.id)}
-      <Tooltip label={t.label} shortcut={t.shortcut} disabled={!t.shortcut && (segmented || !t.icon || width > 1200)}>
+      <Tooltip label={t.label} shortcut={t.shortcut} disabled={!t.shortcut && (segmented || !t.icon || !compact())}>
         {#snippet children(tp)}
           <!-- The wrapper takes the tooltip's attributes: spread on the tab they would overwrite its data-state. -->
           <span {...tp} class="cx-tabwrap">
@@ -76,8 +82,4 @@
   :global(.cx-tab[data-state='active']) { color: var(--ink); font-weight: 600; }
   :global(.cx-ink) { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--ink); pointer-events: none; }
   :global(.cx-ink.ready) { transition: transform var(--dur-3) var(--ease), width var(--dur-3) var(--ease); }
-  /* Tabs with an icon drop their text on narrow windows; the title and aria-label keep the name. */
-  @media (max-width: 1200px) {
-    :global(.cx-tab-label:not(:only-child)) { display: none; }
-  }
 </style>

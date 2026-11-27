@@ -2,6 +2,7 @@ import { mount, tick, unmount } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineCommand } from '../lib/commands/registry';
 import CommandButton from './CommandButton.svelte';
+import { setTooltips } from '../lib/tooltips.svelte';
 
 // Glyph assertions below are the Mac ones whatever machine runs them.
 beforeEach(() => void vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel'));
@@ -41,6 +42,7 @@ afterEach(() => {
 
 describe('CommandButton', () => {
   it('shows_the_command_label_and_its_tooltip_with_the_shortcut_on_focus', async () => {
+    setTooltips(true);
     app = mount(CommandButton, { target: document.body, props: { command: 'test.button.ping' } });
     await settle();
     button('Ping test')!.focus();

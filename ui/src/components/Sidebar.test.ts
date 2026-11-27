@@ -7,6 +7,7 @@ import { refreshAll } from '../lib/stores.svelte';
 import { rowUi } from '../lib/rowUi.svelte';
 import { sidebarPrefs } from '../lib/sidebarPrefs.svelte';
 import Sidebar from './Sidebar.svelte';
+import { setTooltips } from '../lib/tooltips.svelte';
 
 const def = { filter: null, sorts: [], group_by: null, layout: 'List' as const, columns: [], include_archived: false };
 const seed = { ...fixtures, views: ['Alpha', 'Beta', 'Gamma'].map((name, i) => ({ id: i + 1, name, def, position: i })) };
@@ -333,6 +334,8 @@ describe('Sidebar without an inbox', () => {
 });
 
 describe('Sidebar tooltips', () => {
+  beforeEach(() => setTooltips(true));
+  afterEach(() => setTooltips(false));
   const tip = async (el: Element | null) => {
     (el as HTMLElement).focus();
     await settle();
@@ -361,8 +364,8 @@ describe('Sidebar project views, pinned folders and the projects switch', () => 
     await open(withViews());
     expect(names('[aria-label=Views]')).toEqual(['Alpha', 'Beta', 'Gamma', 'Roadmap']);
     expect(document.querySelector('[aria-label=Projects] [data-project-view]')).toBeNull();
-    expect(row('Roadmap').querySelector('[title="Project view"]')).not.toBeNull();
-    expect(row('Alpha').querySelector('[title="Project view"]')).toBeNull();
+    expect(row('Roadmap').querySelector('[aria-label="Project view"]')).not.toBeNull();
+    expect(row('Alpha').querySelector('[aria-label="Project view"]')).toBeNull();
   });
 
   it('a project view moves into a view folder by drag', async () => {

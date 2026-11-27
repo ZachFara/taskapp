@@ -142,7 +142,7 @@
   };
   const optionsOf = (kind: EditKind, ref: FieldRef) =>
     kind === 'Status'
-      ? statuses.map((s) => ({ value: String(s.id), label: s.name }))
+      ? statuses.map((s) => ({ value: String(s.id), label: s.name, glyph: { category: s.category, icon: s.icon, color: s.color } }))
       : ref.Property !== undefined
         ? (propertyDefs.find((d) => d.key === ref.Property)?.options ?? []).map((o) => ({ value: o.value, label: o.value }))
         : [];

@@ -73,14 +73,18 @@
   });
 
   const LABELS: Record<string, string> = { my: 'My issues', inbox: 'Inbox', pinned: 'Pinned', cycles: 'Cycles', events: 'Events', event: 'Events', projects: 'Projects', views: 'Views', settings: 'Settings', design: 'Design' };
+  // A parent part that has a page of its own links to it (Projects, Views, Events, Cycles, Settings).
+  const PAGES: Record<string, string> = { view: '/views', views: '/views', project: '/projects', projects: '/projects', event: '/events', events: '/events', cycles: '/cycles', settings: '/settings' };
   const crumb = $derived.by(() => {
     const [a, b] = path.split('/').slice(1);
-    if (!a) return ['Pinned'];
-    if (a === 'view') return ['Views', views.find((v) => String(v.id) === b)?.name ?? b];
-    if (a === 'project') return ['Projects', projects.find((p) => p.slug === b)?.name ?? b];
-    if (a === 'issue') return ['Issues', b];
-    if (a === 'event') return ['Events']; // the page heading names it
-    return [LABELS[a] ?? a, ...(b ? [b[0].toUpperCase() + b.slice(1).replace(/-/g, ' ')] : [])];
+    const parent = (label: string) => ({ label, href: PAGES[a] });
+    if (!a) return [{ label: 'Pinned' }];
+    if (a === 'view') return [parent('Views'), { label: views.find((v) => String(v.id) === b)?.name ?? b }];
+    if (a === 'project') return [parent('Projects'), { label: projects.find((p) => p.slug === b)?.name ?? b }];
+    if (a === 'issue') return [{ label: 'Issues' }, { label: b }];
+    if (a === 'event') return [parent('Events')]; // the page heading names it
+    const top = LABELS[a] ?? a;
+    return b ? [parent(top), { label: b[0].toUpperCase() + b.slice(1).replace(/-/g, ' ') }] : [{ label: top }];
   });
 
   onMount(() => {

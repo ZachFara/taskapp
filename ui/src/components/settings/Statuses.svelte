@@ -89,7 +89,7 @@
   <SectionHead lede="The stages work moves through. Each status belongs to a category, and the category decides how it counts." />
   <label class="start">
     <span>New issues start in</span>
-    <Select label="New issues start in" items={statuses.map((s) => ({ value: String(s.id), label: s.name }))} bind:value={() => start, setStart} />
+    <Select label="New issues start in" items={statuses.map((s) => ({ value: String(s.id), label: s.name, glyph: { category: s.category, icon: s.icon, color: s.color } }))} bind:value={() => start, setStart} />
   </label>
 
   {#each categories as c (c)}

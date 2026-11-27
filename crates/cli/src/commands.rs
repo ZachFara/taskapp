@@ -139,7 +139,7 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
         }
         update @ IssueCmd::Update { .. } => issue_update(db, update).await,
         IssueCmd::List(args) => crate::list::run(db, &args).await,
-        IssueCmd::Get { key } => val(issues::get_by_key(db, &key).await?),
+        IssueCmd::Get { key } => crate::list::get(db, &key).await,
         IssueCmd::Archive { key } => {
             let id = issue_id(db, &key).await?;
             issues::archive(db, id, SRC).await?;

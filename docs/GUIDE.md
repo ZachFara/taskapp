@@ -471,6 +471,7 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 | Sidebar sparklines | on or off | A small progress line per project. |
 | Interface size | 100%, 110%, 115%, 125% | Scales the whole app on this device (not saved in the workspace). Default 110%. Applies at once. |
 | Animation speed | Off, Fast, Normal, Slow | Per device, like interface size. Default Normal; Off by default when the system asks for reduced motion. Applies at once. |
+| Show tooltips | On, Off | Per device. Off by default: no name or shortcut boxes appear on hover. Shortcuts stay listed in the command menu and the shortcut sheet. Applies at once. |
 
 Sidebar and issue panel widths are remembered per device. Drag an edge to resize; double-click it to reset.
 
@@ -669,6 +670,7 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `pane.panel.reset` | Reset issue panel width | (none) | Back to the default issue panel width. |
 | `motion.faster` | Faster animations | (none) | One animation speed step faster (Normal, then Fast, then Off). |
 | `motion.slower` | Slower animations | (none) | One animation speed step slower (Normal, then Slow). |
+| `tooltips.toggle` | Show or hide tooltips | (none) | Switch the Show tooltips setting. |
 | `cycle.move_unfinished` | Move unfinished issues to the next cycle | (none) | Move unfinished issues of the cycle to the next cycle (Cycles page). |
 | `cycle.new` | New cycle | (none) | New cycle. |
 | `group.add` | Add issue to this group | (none) | Add an issue to this group. |
@@ -769,7 +771,7 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `issue create <title> [...]` | Create with flags: `--description --priority --status --project --due --estimate --points --created-at --completed-at --property k=v --parent --cycle --label --migration`. | `taskapp issue create "Fix login" --priority 2 --due 2026-12-01` |
 | `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points`. | `taskapp issue update ABC-1 --status 3` |
 | `issue list [...]` | Issues by name filters, most urgent first, with status, priority, project and label names: `--project --status --not-status --priority --label` (repeat or comma-separate). | `taskapp issue list --project Cairn --not-status Done,Canceled,Someday` |
-| `issue get <key>` | Show one issue. | `taskapp issue get ABC-1` |
+| `issue get <key>` | Show one issue, with `status`, `project`, `labels` and `priority_name` as names next to the ids. | `taskapp issue get ABC-1` |
 | `issue archive <key>` | Archive an issue. | `taskapp issue archive ABC-1` |
 | `event list [--from --to]` | Events overlapping a date range. | `taskapp event list --from 2026-12-01` |
 | `event create <title> --start T [--end T --all-day --place --notes]` | Create an event (`T` is `YYYY-MM-DDTHH:MM` or a date). | `taskapp event create Demo --start 2026-12-10T09:30` |
