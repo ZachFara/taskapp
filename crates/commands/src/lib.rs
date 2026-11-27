@@ -12,18 +12,19 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::Value;
 use taskapp_core::{
     Applied, AppliedTemplate, Attachment, AttachmentData, AttachmentId, Bar, BulkPatch, Change,
-    ChangeSource, Comment, CommentId, Cycle, CycleId, Db, Error, Event, EventId, EventInput,
-    FolderSection, ImportPlan, Issue, IssueId, IssuePatch, IssueStats, IssueTemplate, Label,
-    LabelId, Measure, Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin, PinId, PinKind,
-    Placement, ProgressScope, ProgressSeries, Project, ProjectId, ProjectRow, ProjectStatus,
-    ProjectStatusCategory, ProjectStatusId, PropertyAppliesTo, PropertyDef, PropertyKind, Relation,
-    RelationKind, RelationKindDef, Reschedule, ResolvedPin, Result, SavedView, SelectOption,
-    Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus,
-    VelocityPeriod, ViewDef, ViewEntity, ViewFolder, ViewFolderId, ViewId, ViewTemplate,
-    ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, attachments, backup, blocks, bulk,
-    comments, cycles, events, history, import, insights, issues, labels, pins, project_statuses,
-    projects, properties, quickadd, relation_kinds, relations, schedule, search, settings,
-    statuses, templates, undo, view_folders, view_templates, views, workspace,
+    ChangeSource, Comment, CommentId, Cycle, CycleId, Db, Decision, DecisionId, DecisionInput,
+    DecisionStatus, Error, Event, EventId, EventInput, FolderSection, ImportPlan, Issue, IssueId,
+    IssuePatch, IssueStats, IssueTemplate, Label, LabelId, Measure, Milestone, MilestoneId,
+    NewIssue, ParsedQuickAdd, Pin, PinId, PinKind, Placement, ProgressScope, ProgressSeries,
+    Project, ProjectId, ProjectRow, ProjectStatus, ProjectStatusCategory, ProjectStatusId,
+    PropertyAppliesTo, PropertyDef, PropertyKind, Relation, RelationKind, RelationKindDef,
+    Reschedule, ResolvedPin, Result, SavedView, SelectOption, Status, StatusCategory, StatusId,
+    SyncState, SyncStatus, TemplateId, TemplateInput, UndoStatus, VelocityPeriod, ViewDef,
+    ViewEntity, ViewFolder, ViewFolderId, ViewId, ViewTemplate, ViewTemplateId, WorkBlock,
+    WorkBlockId, WorkspaceStatus, attachments, backup, blocks, bulk, comments, cycles, decisions,
+    events, history, import, insights, issues, labels, pins, project_statuses, projects,
+    properties, quickadd, relation_kinds, relations, schedule, search, settings, statuses,
+    templates, undo, view_folders, view_templates, views, workspace,
 };
 
 pub struct AppState {

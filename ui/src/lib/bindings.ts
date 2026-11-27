@@ -375,6 +375,55 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	decisionsList: (status: DecisionStatus | null, options?: InvokeOptions) => __TAURI_INVOKE<Decision[]>("decisions_list", { status }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	decisionsGet: (id: DecisionId, options?: InvokeOptions) => __TAURI_INVOKE<Decision>("decisions_get", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	decisionsCreate: (input: DecisionInput, options?: InvokeOptions) => __TAURI_INVOKE<Decision>("decisions_create", { input }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	decisionsAnswer: (id: DecisionId, option: string | null, text: string | null, note: string, options?: InvokeOptions) => __TAURI_INVOKE<Decision>("decisions_answer", { id, option, text, note }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	decisionsWithdraw: (id: DecisionId, options?: InvokeOptions) => __TAURI_INVOKE<Decision>("decisions_withdraw", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	decisionsLink: (decision: DecisionId, issue: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<null>("decisions_link", { decision, issue }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	decisionsUnlink: (decision: DecisionId, issue: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<null>("decisions_unlink", { decision, issue }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	labelsList: (options?: InvokeOptions) => __TAURI_INVOKE<Label[]>("labels_list", undefined, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1020,6 +1069,53 @@ export type Cycle = {
 };
 
 export type CycleId = number;
+
+/**  A question for the owner. `answer` is an option key, or free text when the options did not fit. */
+export type Decision = {
+	id: DecisionId,
+	question: string,
+	context: string,
+	options: DecisionOption[],
+	recommendation: string | null,
+	mode: DecisionMode,
+	status: DecisionStatus,
+	answer: string | null,
+	note: string,
+	source: string,
+	external_id: string | null,
+	created_at: string,
+	answered_at: string | null,
+	issue_ids: IssueId[],
+};
+
+export type DecisionId = number;
+
+/**  What create takes. `source` defaults to the caller's own (`cli`, `ui`). */
+export type DecisionInput = {
+	question: string,
+	context?: string,
+	options?: DecisionOption[],
+	recommendation: string | null,
+	mode: DecisionMode,
+	source: string | null,
+	external_id: string | null,
+	issue_ids?: IssueId[],
+};
+
+export type DecisionMode = 
+/**  Whoever raised it waits for the answer. */
+"blocking" | 
+/**  Whoever raised it carries on with its recommendation. */
+"assume";
+
+/**  One choice of a [`Decision`]; `key` is what an answer and the recommendation name. */
+export type DecisionOption = {
+	key: string,
+	label: string,
+	tradeoff?: string,
+};
+
+export type DecisionStatus = "open" | "answered" | "withdrawn";
 
 export type Density = "comfortable" | "compact";
 

@@ -25,6 +25,7 @@
   import MenuItem from '../ui/MenuItem.svelte';
   import { runRow } from '../lib/rowUi.svelte';
   import { sidebarPrefs } from '../lib/sidebarPrefs.svelte';
+  import { decisions, openDecisions, watchDecisions } from '../lib/decisions.svelte';
   import { labelFor } from '../lib/commands';
   import { shortcutFor } from '../lib/commands';
   import ProjectSpark from './insights/ProjectSpark.svelte';
@@ -39,6 +40,10 @@
   let error = $state('');
   let sparklines = $state(false);
   let picking = $state<string | null>(null);
+
+  onMount(watchDecisions);
+  const waiting = $derived(openDecisions());
+  const blocking = $derived(waiting.filter((d) => d.mode === 'blocking').length);
 
   onMount(async () => {
     const [, p, c, sp] = await Promise.all([refreshAll(), api.pins.listResolved(), api.cycles.list(), api.settings.get('sidebar_sparklines').catch(() => null)]);
@@ -157,10 +162,10 @@
   {:else}{@render bar()}{/if}
 {/snippet}
 
-{#snippet navLink(href: string, icon: string, text: string, id: string, on: boolean)}
+{#snippet navLink(href: string, icon: string, text: string, id: string, on: boolean, count?: { n: number; urgent: number })}
   <Tooltip label={text} shortcut={shortcutFor(id)}>
     {#snippet children(props)}
-      <a {...props} class="item" class:on aria-current={on ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><Icon name={icon} /><span class="t">{text}</span></a>
+      <a {...props} class="item" class:on aria-current={on ? 'page' : undefined} {href} onclick={(e) => (e.preventDefault(), navigate(href))}><Icon name={icon} /><span class="t">{text}</span>{#if count}<em class="n" data-urgent={count.urgent > 0 || undefined} aria-label={`${count.n} open${count.urgent ? `, ${count.urgent} blocking` : ''}`}>{count.n}</em>{/if}</a>
     {/snippet}
   </Tooltip>
 {/snippet}
@@ -288,6 +293,7 @@
 
   <ul class="top">
     <li>{@render navLink('/events', 'calendar', 'Events', 'nav.events', route === '/events' || route.startsWith('/event/'))}</li>
+    <li>{@render navLink('/decisions', 'help', 'Decisions', 'nav.decisions', route === '/decisions', waiting.length > 0 && !decisions.error ? { n: waiting.length, urgent: blocking } : undefined)}</li>
   </ul>
 
   <ul class="bottom">
@@ -307,6 +313,8 @@
   .item.on { background: var(--frame-raised); font-weight: 600; }
   .item.on :global(svg) { color: var(--frame-ink); }
   .st { margin-left: auto; display: inline-flex; }
+  .n { margin-left: auto; font-style: normal; font-size: var(--fs-xs); font-weight: 600; padding: 0 var(--s-3); border-radius: var(--r-round); background: var(--frame-inset); color: var(--frame-muted); }
+  .n[data-urgent] { background: var(--c-red); color: var(--accent-ink); }
   .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   :global(.dnd-ghost) { position: fixed; left: 0; top: 0; z-index: var(--z-tooltip); pointer-events: none; padding: var(--s-2) var(--s-5); border-radius: var(--r-ctl); background: var(--frame-raised); color: var(--frame-ink); font-size: var(--fs-md); font-weight: 500; box-shadow: var(--shadow-float); }
   :global(body.dnd-active) { user-select: none; cursor: grabbing; }

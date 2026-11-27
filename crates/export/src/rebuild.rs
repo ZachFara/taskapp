@@ -10,9 +10,10 @@ use sqlx::{Sqlite, Transaction};
 use taskapp_core::{Db, Error, IssueId, Result, ViewDef, attachments, search};
 
 use crate::files::{
-    AttachmentFile, CommentText, CycleRow, EventFile, ImportLogRow, IssueFront, IssueTemplateFile,
-    LabelRow, PinRow, ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow,
-    ViewFile, ViewFolderFile, ViewTemplateFile, invalid, parse_issue, plain_dir, read_plain,
+    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, ImportLogRow, IssueFront,
+    IssueTemplateFile, LabelRow, PinRow, ProjectFile, ProjectStatusRow, PropertyFile,
+    RelationKindRow, StatusRow, ViewFile, ViewFolderFile, ViewTemplateFile, invalid, parse_issue,
+    plain_dir, read_plain,
 };
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -79,6 +80,8 @@ async fn wipe(tx: &mut Tx<'_>) -> Result<()> {
     for sql in [
         "DELETE FROM changes",
         "DELETE FROM attachments",
+        "DELETE FROM decision_issues",
+        "DELETE FROM decisions",
         "DELETE FROM event_issues",
         "DELETE FROM events",
         "DELETE FROM relations",
@@ -138,7 +141,48 @@ async fn restore_issues(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         link_issue(tx, &prefix, *number, front, comments).await?;
     }
     restore_events(tx, dir, &prefix).await?;
+    restore_decisions(tx, dir, &prefix).await?;
     restore_import_log(tx, dir).await
+}
+
+/// After the issues, so the links can name them. An older export has no `decisions.yaml`.
+async fn restore_decisions(tx: &mut Tx<'_>, dir: &Path, prefix: &str) -> Result<()> {
+    if fs::symlink_metadata(dir.join("decisions.yaml")).is_err() {
+        return Ok(());
+    }
+    let all: Vec<DecisionFile> = read_yaml(&dir.join("decisions.yaml"))?;
+    for d in all {
+        sqlx::query(
+            "INSERT INTO decisions (id, question, context, options, recommendation, mode, status, answer,
+               note, source, external_id, created_at, answered_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(d.id)
+        .bind(d.question)
+        .bind(d.context)
+        .bind(serde_json::to_string(&d.options).map_err(invalid)?)
+        .bind(d.recommendation)
+        .bind(d.mode)
+        .bind(d.status)
+        .bind(d.answer)
+        .bind(d.note)
+        .bind(d.source)
+        .bind(d.external_id)
+        .bind(d.created_at)
+        .bind(d.answered_at)
+        .execute(&mut **tx)
+        .await?;
+        for key in &d.issues {
+            sqlx::query(
+                "INSERT INTO decision_issues (decision_id, issue_id)
+                 VALUES (?, (SELECT id FROM issues WHERE number = ?))",
+            )
+            .bind(d.id)
+            .bind(number_of(prefix, key)?)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+    Ok(())
 }
 
 /// After the issues, so the links can name them.

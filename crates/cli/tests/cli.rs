@@ -877,3 +877,101 @@ fn sync_now_with_nothing_configured_does_nothing() {
     assert_eq!(v["reminders"]["imported"], 0);
     assert_eq!(v["gcal"]["created"], 0);
 }
+
+fn raise(db: &Path) -> Value {
+    run(db, &["add", "Pick a database"]);
+    let args = [
+        "decision",
+        "create",
+        "Which database?",
+        "--option",
+        "a=Postgres: heavier",
+        "--option",
+        "b=SQLite: simpler",
+        "--recommend",
+        "b",
+        "--mode",
+        "blocking",
+        "--issue",
+        "ABC-1",
+        "--source",
+        "agent:test",
+        "--external-id",
+        "x1",
+    ];
+    run_json(db, &args)
+}
+
+#[test]
+fn decision_create_keeps_every_field() {
+    let (_d, db) = fresh();
+    let made = raise(&db);
+    assert_eq!(made["id"], 1);
+    assert_eq!(made["options"][1]["tradeoff"], "simpler");
+    assert_eq!(made["mode"], "blocking");
+    assert_eq!(made["source"], "agent:test");
+    let dup = [
+        "decision",
+        "create",
+        "Again",
+        "--source",
+        "agent:test",
+        "--external-id",
+        "x1",
+    ];
+    assert!(!run(&db, &dup).status.success());
+}
+
+#[test]
+fn decision_answer_moves_it_out_of_the_open_list() {
+    let (_d, db) = fresh();
+    raise(&db);
+    assert!(
+        !run(&db, &["decision", "answer", "1", "--option", "zzz"])
+            .status
+            .success()
+    );
+    let done = run_json(
+        &db,
+        &["decision", "answer", "1", "--option", "b", "--note", "ok"],
+    );
+    assert_eq!(
+        (
+            done["status"].as_str(),
+            done["answer"].as_str(),
+            done["note"].as_str()
+        ),
+        (Some("answered"), Some("b"), Some("ok"))
+    );
+    assert_eq!(
+        run_json(&db, &["decision", "list"])
+            .as_array()
+            .expect("array")
+            .len(),
+        0
+    );
+    assert_eq!(
+        run_json(&db, &["decision", "list", "--status", "all"])
+            .as_array()
+            .expect("array")
+            .len(),
+        1
+    );
+    assert_eq!(
+        run_json(&db, &["decision", "get", "1"])["issue_ids"]
+            .as_array()
+            .expect("array")
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn decision_withdraw() {
+    let (_d, db) = fresh();
+    run_json(&db, &["decision", "create", "Skip it?"]);
+    assert_eq!(
+        run_json(&db, &["decision", "withdraw", "1"])["withdrawn"],
+        1
+    );
+}

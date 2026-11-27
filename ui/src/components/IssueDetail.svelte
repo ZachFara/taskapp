@@ -18,6 +18,7 @@
   import Properties from './detail/Properties.svelte';
   import Relations from './detail/Relations.svelte';
   import SubIssues from './detail/SubIssues.svelte';
+  import IssueDecisions from './detail/IssueDecisions.svelte';
   import IssueEvents from './events/IssueEvents.svelte';
 
   // One component for the full page (/issue/:key) and the side panel (mode 'panel', closed through `onclose`).
@@ -195,6 +196,7 @@
           <SubIssues {issue} {act} {rev} {open} />
           <Relations {issue} {act} {rev} {open} />
           <IssueEvents {issue} {act} {rev} />
+          <IssueDecisions {issue} {rev} />
           <Comments {issue} {act} {rev} />
           <History {issue} {rev} />
         </main>

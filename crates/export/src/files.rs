@@ -145,6 +145,26 @@ pub struct EventFile {
     pub issues: Vec<String>,
 }
 
+/// One entry of `decisions.yaml`; `issues` are keys.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct DecisionFile {
+    pub id: i64,
+    pub question: String,
+    pub context: String,
+    pub options: Vec<taskapp_core::DecisionOption>,
+    pub recommendation: Option<String>,
+    pub mode: String,
+    pub status: String,
+    pub answer: Option<String>,
+    pub note: String,
+    pub source: String,
+    pub external_id: Option<String>,
+    pub created_at: String,
+    pub answered_at: Option<String>,
+    #[serde(default)]
+    pub issues: Vec<String>,
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
 pub struct PinRow {
     pub kind: String,

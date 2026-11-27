@@ -41,6 +41,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Status(cmd) => status(db, cmd).await,
         Cmd::Attachment(cmd) => attachment(db, cmd).await,
         Cmd::Sync(SyncCmd::Now { helper }) => sync_now(db, helper).await,
+        Cmd::Decision(cmd) => crate::decision::run(db, cmd).await,
         cmd => run_group(db, dir, cmd).await,
     }
 }
@@ -69,6 +70,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Status(_)
         | Cmd::Attachment(_)
         | Cmd::Event(_)
+        | Cmd::Decision(_)
         | Cmd::Sync(_) => handled_in_run(),
         Cmd::History { key } => {
             let id = issue_id(db, &key).await?;

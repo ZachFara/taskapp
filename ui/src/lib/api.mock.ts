@@ -6,11 +6,12 @@ import { parseQuickadd } from './api.mock.quickadd';
 import * as insights from './api.mock.insights';
 import { stepLabel } from './api.mock.stepLabel';
 import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
+import { decisionsApi } from './api.mock.decisions';
 import { attachmentsApi } from './api.mock.attachments';
 import { foldersApi } from './api.mock.folders';
 import { scrubDef, seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
-  AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, Event, EventInput, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
+  AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, Decision, Event, EventInput, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Milestone,
   NewIssue, Pin, Placement, Project, ProjectRow, ProjectStatus, ProjectStatusCategory, PropertyAppliesTo, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
   TemplateInput, Value, ViewDef, ViewEntity, ViewFolder, ViewTemplate, WorkBlock,
 } from './bindings';
@@ -23,6 +24,7 @@ export type MockSeed = {
   issues: Issue[];
   labels?: Label[];
   cycles?: Cycle[];
+  decisions?: Decision[];
   views?: SavedView[];
   pins?: Pin[];
   milestones?: Milestone[];
@@ -97,6 +99,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const projectStatuses = (s.projectStatuses ??= structuredClone(projectStatusSeed));
   const cycles = s.cycles ?? [];
   const events: Event[] = [];
+  const decisions: Decision[] = s.decisions ?? [];
   const views = s.views ?? [];
   const viewTemplates: ViewTemplate[] = s.viewTemplates ?? [];
   const folders: ViewFolder[] = s.viewFolders ?? [];
@@ -114,7 +117,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog] as unknown[][];
+  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, decisions, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -872,6 +875,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return null;
       },
     },
+    decisions: decisionsApi(decisions, (id) => void getIssue(id), fail),
     templates: {
       list: async () => [...templates],
       create: async (input) => {
@@ -1267,7 +1271,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     'issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
     'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
     'projects.create projects.update projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
-    'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink templates.create templates.update templates.delete templates.apply ' +
+    'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink decisions.create decisions.answer decisions.withdraw decisions.link decisions.unlink templates.create templates.update templates.delete templates.apply ' +
     'labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
     'relations.add relations.remove relation.kindsCreate relation.kindsUpdate relation.kindsDelete views.save views.saveProject views.delete views.reorder folders.create folders.rename folders.delete folders.place folders.placeItem views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
     'view.templatesCreate view.templatesUpdate view.templatesDelete pins.pin pins.unpin pins.reorder pins.set import.apply'
