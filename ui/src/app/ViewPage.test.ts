@@ -71,6 +71,31 @@ describe('ViewPage', () => {
     expect((await saved()).def.sorts).toEqual([]);
   });
 
+  it('save_to_view_keeps_a_temporary_heading_sort', async () => {
+    const user = userEvent.setup();
+    await open();
+    await screen.findByText('Alpha task');
+    expect(screen.queryByRole('button', { name: 'Save to view' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Sort by Title' }));
+    await user.click(await screen.findByRole('button', { name: 'Save to view' }));
+    await waitFor(async () => expect((await saved()).def.sorts).toEqual([{ field: { Fixed: 'Title' }, descending: false }]));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Save to view' })).toBeNull());
+  });
+
+  it('reset_drops_temporary_sort_and_quick_filter', async () => {
+    const user = userEvent.setup();
+    await open();
+    await screen.findByText('Alpha task');
+    await user.click(screen.getByRole('button', { name: 'Sort by Title' }));
+    await user.click(screen.getByRole('button', { name: 'Quick filter' }));
+    await user.type(await screen.findByLabelText('Quick filter text'), 'Alpha');
+    await user.click(await screen.findByRole('button', { name: 'Reset to saved' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Save to view' })).toBeNull());
+    expect(screen.queryByLabelText('Quick filter text')).toBeNull();
+    await screen.findByText('Beta task');
+    expect((await saved()).def).toEqual(def());
+  });
+
   it('carries_a_table_heading_sort_into_the_list', async () => {
     const user = userEvent.setup();
     const { container } = await open({ layout: 'Table' });

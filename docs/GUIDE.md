@@ -221,6 +221,9 @@ saved automatically (after a short pause), except temporary sorting changes. Fil
 - **Sort.** Choose a field and direction with Sort, or click a sortable list or table heading for ascending, descending,
   then the saved order. Sorting lasts until you leave the view; it survives layout changes and live updates but does not
   change the saved definition. Grouped rows stay within their groups and nested issues stay with their parents.
+- **Save to view.** When the sort or the quick filter differs from the saved view, the header shows "Save to view" and
+  "Reset to saved". "Save to view" writes both into the saved view in one step (undo reverts it); "Reset to saved" drops
+  them. Groups and the filter chips were always saved as you change them and are unaffected.
 - **Display** (button, or the command "Display options..."). Switch fields on or off and drag (or use the arrow
   buttons, or `alt+arrowup` / `alt+arrowdown` on a focused row) to reorder: Key, Priority, Status, Labels, Project,
   Milestone, Cycle, Parent, Start, Due, Estimate, Points, Sub-issues, Relations, Comments, Created, Updated, and your
@@ -723,6 +726,8 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | Command id | Name | Keys | What it does |
 |---|---|---|---|
 | `view.quickFilter` | Show or hide quick filter | `shift+f` | Temporary filters that are not saved with the view. |
+| `view.saveToView` | Save to view | none | Saves the temporary sort and quick filter into the view. |
+| `view.resetToSaved` | Reset to saved | none | Drops the temporary sort and quick filter. |
 | `view.layout.list` | List layout | `v l` | Switch the view to List. |
 | `view.layout.board` | Board layout | `v b` | Switch the view to Board. |
 | `view.layout.table` | Table layout | `v t` | Switch the view to Table. |
