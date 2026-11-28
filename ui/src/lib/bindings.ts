@@ -130,6 +130,27 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	shutdownState: (options?: InvokeOptions) => __TAURI_INVOKE<ShutdownState>("shutdown_state", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	shutdownSetTomorrow: (ids: IssueId[], options?: InvokeOptions) => __TAURI_INVOKE<ShutdownState>("shutdown_set_tomorrow", { ids }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	shutdownComplete: (options?: InvokeOptions) => __TAURI_INVOKE<ShutdownState>("shutdown_complete", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	workspaceStatus: (options?: InvokeOptions) => __TAURI_INVOKE<WorkspaceStatus>("workspace_status", undefined, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1907,6 +1928,18 @@ export type SavedView = {
 export type SelectOption = {
 	value: string,
 	color: string,
+};
+
+/**  Where the ritual stands today, with the lists it shows. */
+export type ShutdownState = {
+	inbox_count: number,
+	/**  Open issues marked deep, to choose tomorrow's from. */
+	deep: Issue[],
+	/**  Chosen today for tomorrow. */
+	tomorrow: Issue[],
+	done_today: boolean,
+	/**  Days in a row finished, ending today (or yesterday, until today is finished). */
+	streak: number,
 };
 
 /**  A source row that will not be imported. `row` counts from 1 (CSV: the header is row 1). */

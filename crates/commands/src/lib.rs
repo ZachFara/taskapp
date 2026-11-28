@@ -20,13 +20,13 @@ use taskapp_core::{
     ProgressScope, ProgressSeries, Project, ProjectId, ProjectRow, ProjectStatus,
     ProjectStatusCategory, ProjectStatusId, PropertyAppliesTo, PropertyDef, PropertyKind, Relation,
     RelationKind, RelationKindDef, Reschedule, ResolvedPin, Result, SavedView, SelectOption,
-    StaleIssue, Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId, TemplateInput,
-    UndoStatus, VelocityPeriod, ViewDef, ViewEntity, ViewFolder, ViewFolderId, ViewId,
-    ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, attachments, backup,
-    blocks, bulk, comments, cycles, decisions, delete, events, focus, forecast, history, import,
-    inbox, insights, issues, labels, links, metrics, next_actions, pins, project_statuses,
-    projects, properties, quickadd, relation_kinds, relations, schedule, search, settings, stale,
-    statuses, templates, undo, view_folders, view_templates, views, workspace,
+    ShutdownState, StaleIssue, Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId,
+    TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewEntity, ViewFolder, ViewFolderId,
+    ViewId, ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, attachments,
+    backup, blocks, bulk, comments, cycles, decisions, delete, events, focus, forecast, history,
+    import, inbox, insights, issues, labels, links, metrics, next_actions, pins, project_statuses,
+    projects, properties, quickadd, relation_kinds, relations, schedule, search, settings,
+    shutdown, stale, statuses, templates, undo, view_folders, view_templates, views, workspace,
 };
 
 pub struct AppState {

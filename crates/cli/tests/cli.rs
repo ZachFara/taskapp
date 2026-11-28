@@ -1613,3 +1613,13 @@ fn plan_add_makes_a_linked_block_and_plan_counts_done() {
         .success()
     );
 }
+
+#[test]
+fn shutdown_prints_the_checklist_as_json() {
+    let (_dir, db) = fresh();
+    let v = run_json(&db, &["shutdown"]);
+    assert_eq!(v["done_today"], false);
+    assert_eq!(v["streak"], 0);
+    assert!(v["tomorrow"].as_array().is_some_and(Vec::is_empty));
+    assert!(v["deep"].as_array().is_some_and(Vec::is_empty));
+}

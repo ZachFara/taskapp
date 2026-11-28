@@ -517,6 +517,16 @@ them to the calendar. Under each column: minutes planned, and minutes in blocks 
 CLI: `taskapp plan [--date D]` lists the day's blocks with planned and done minutes; `taskapp plan add ABC-1 --at 14:00
 --for 90m [--date D]` makes a block. Turning the feature off hides the page and commands; the events stay.
 
+## Shutdown ritual
+
+The end-of-day checklist is off until Settings > Features switches "Shutdown ritual" on. Then the Shutdown command (in the
+command menu, and a button on My issues) opens it. It has three parts. The Inbox line says how many issues are left in the
+Inbox. Tomorrow's deep work lists the open issues marked deep (set the depth in an issue's details); tick up to three and
+save them, and they show again on the checklist until the next day. Loose ends takes a quick-add line, the same grammar as
+the Add box. Finish shutdown records today; the panel then says "Shutdown complete" and shows the streak of days finished
+in a row. The checklist keeps its data in settings, so undo takes back a finish or a saved plan. The CLI prints the same
+state as JSON with `taskapp shutdown`.
+
 ## Points and insights
 
 - **Estimation setting** (Settings > General): None, Points, Time or Both. Points show only for Points or Both; time
@@ -723,9 +733,9 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 
 ### Features
 
-Settings > Features lists every optional feature with a switch, all on by default: Dashboard, Decisions, Cycles,
+Settings > Features lists every optional feature with a switch, all on by default except the Shutdown ritual: Dashboard, Decisions, Cycles,
 Events, Progress charts (burn-ups and sparklines on projects and cycles), Stale nudges, Reminders capture, Google
-Calendar, Next actions, Process Inbox, Weekly review, Focus mode and Recurring issues. Switching one off hides its sidebar entries, its
+Calendar, Next actions, Process Inbox, Weekly review, Focus mode, Recurring issues and the Shutdown ritual. Switching one off hides its sidebar entries, its
 page (the address shows "is switched off"), its commands in the command menu, its Settings page where it has one
 (Cycles, Reminders, Calendar) and its dashboard card. Switching Cycles off also hides the cycle row in issue details and
 the cycle field in views. Switching Reminders capture or Google Calendar off stops their background sync too; Sync now
@@ -1072,6 +1082,7 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --solution <url> --hide-until DATE\|clear`. | `taskapp issue update ABC-1 --status 3` |
 | `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --depth deep\|shallow\|none`. | `taskapp issue update ABC-1 --status 3` |
 | `issue repeat <key> [rule]` | Set a repeat rule ("every monday"), or `--clear` it, or `--skip` to the next occurrence. | `taskapp issue repeat ABC-1 "every 2 weeks"` |
+| `shutdown` checklist | The end-of-day checklist as it stands today: Inbox count, deep issues, tomorrow's picks, whether today is finished and the streak. | `taskapp shutdown` |
 | `focus start <key> [--deep]`, `focus stop`, `focus log [--key] [--range]` | Focus sessions: start one (ends a running one), end the running one, list sessions with their total minutes. | `taskapp focus start ABC-1 --deep` |
 | `issue list [...]` | Issues by name filters, most urgent first, with status, priority, project and label names: `--project --status --not-status --priority --label` (repeat or comma-separate). | `taskapp issue list --project Cairn --not-status Done,Canceled,Someday` |
 | `issue get <key>` | Show one issue, with `status`, `project`, `labels` and `priority_name` as names next to the ids. | `taskapp issue get ABC-1` |

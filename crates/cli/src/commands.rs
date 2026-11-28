@@ -43,6 +43,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Sync(SyncCmd::Now { helper }) => sync_now(db, helper).await,
         cmd @ (Cmd::Stale
         | Cmd::Next
+        | Cmd::Shutdown
         | Cmd::Inbox(_)
         | Cmd::Plan(_)
         | Cmd::Decision(_)
@@ -57,6 +58,9 @@ async fn queues_and_lists(db: &Db, cmd: Cmd) -> Result<Value> {
     match cmd {
         Cmd::Stale => val(taskapp_core::stale::list(db).await?),
         Cmd::Next => val(taskapp_core::next_actions::list(db).await?),
+        Cmd::Shutdown => {
+            val(taskapp_core::shutdown::state(db, taskapp_core::metrics::today(db).await?).await?)
+        }
         Cmd::Inbox(args) => crate::inbox::run(db, args).await,
         Cmd::Plan(args) => crate::plan::run(db, args).await,
         Cmd::Decision(cmd) => crate::decision::run(db, cmd).await,
@@ -93,6 +97,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Forecast(_)
         | Cmd::Stale
         | Cmd::Next
+        | Cmd::Shutdown
         | Cmd::Inbox(_)
         | Cmd::Plan(_)
         | Cmd::Status(_)

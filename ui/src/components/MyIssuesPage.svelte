@@ -3,6 +3,7 @@
   import PageHeader from '../ui/PageHeader.svelte';
   import ListView from './views/ListView.svelte';
   import { clearViewContext, setViewContext } from '../lib/viewContext.svelte';
+  import CommandButton from './CommandButton.svelte';
 
   // Single-user app: "my" is every issue that is not archived and not finished, grouped by status.
   const open: Filter = { Cond: { field: { Fixed: 'StatusCategory' }, op: 'NotIn', value: ['completed', 'canceled'] } };
@@ -20,5 +21,7 @@
   });
 </script>
 
-<PageHeader title="My issues" icon="icon:user" />
+<PageHeader title="My issues" icon="icon:user">
+  {#snippet actions()}<CommandButton command="shutdown.open" />{/snippet}
+</PageHeader>
 <ListView {view} />

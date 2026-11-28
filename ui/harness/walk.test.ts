@@ -490,3 +490,16 @@ describe('walk', { timeout: 20_000 }, () => {
     await pw(page.getByRole('button', { name: 'Repeat', exact: true })).toHaveCount(0);
   });
 });
+
+describe('Shutdown ritual', () => {
+  it('turns on from the command menu, then finishes the day from the checklist', async () => {
+    await open('/my');
+    await press('Meta+k');
+    await page.keyboard.type('Shutdown ritual');
+    await press('Enter');
+    await page.getByRole('button', { name: 'Shutdown', exact: true }).click();
+    await pw(page.getByRole('dialog')).toContainText('Inbox reviewed');
+    await page.getByRole('button', { name: /Finish shutdown/ }).click();
+    await pw(page.getByRole('dialog')).toContainText('Shutdown complete');
+  });
+});

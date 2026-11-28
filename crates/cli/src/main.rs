@@ -90,6 +90,8 @@ enum Cmd {
     Stale,
     /// Every project's next action, and which active projects are stuck without one.
     Next,
+    /// The end-of-day shutdown as it stands today: Inbox left, deep issues for tomorrow, streak.
+    Shutdown,
     /// The next Inbox items, oldest first; `inbox process KEY --do|--delegate NOTE|--defer DATE|--next PROJECT|--someday|--trash` clears one.
     Inbox(inbox::InboxArgs),
     /// The day's time blocks and planned vs done (--date D); `plan add KEY --at 14:00 --for 90m` blocks time for an issue.

@@ -103,7 +103,11 @@ pub const FEATURES: &[(&str, &str)] = &[
     ("focus", "feature_focus"),
     ("recurring", "feature_recurring"),
     ("time_blocking", "feature_time_blocking"),
+    ("shutdown", "feature_shutdown"),
 ];
+
+/// Switches that start off; a never-written one is off.
+const OFF_BY_DEFAULT: &[&str] = &["feature_shutdown"];
 
 /// Every feature with whether it is on (a never-written switch is on).
 ///
@@ -117,12 +121,14 @@ pub async fn features(db: &Db) -> Result<Vec<(&'static str, bool)>> {
     Ok(out)
 }
 
-/// Whether one feature switch (its setting key) is on; a never-written switch is on.
+/// Whether one feature switch (its setting key) is on; a never-written switch is on unless it starts off.
 ///
 /// # Errors
 /// Fails when the stored value is not true or false.
 pub async fn feature_on(db: &Db, key: &str) -> Result<bool> {
-    Ok(get::<bool>(db, key).await?.unwrap_or(true))
+    Ok(get::<bool>(db, key)
+        .await?
+        .unwrap_or(!OFF_BY_DEFAULT.contains(&key)))
 }
 
 /// # Errors

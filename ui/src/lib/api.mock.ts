@@ -1217,7 +1217,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       velocity: async (scope, measure, periods) => {
         const { tls } = scoped(scope, measure);
         const now = zoneToday();
-        const started = [...cycles].sort((a, b) => a.number - b.number).filter((c) => c.start_date <= now);
+        const started = [...cycles].sort((a, b) => Number(a.key.slice(a.key.lastIndexOf("-") + 1)) - Number(b.key.slice(b.key.lastIndexOf("-") + 1))).filter((c) => c.start_date <= now);
         const spans = cycles.length
           ? started.slice(Math.max(0, started.length - periods)).map((c) => ({ start: c.start_date, end: c.end_date, label: c.name ?? `Cycle ${c.number}` }))
           : insights.weekSpans(now, periods);
@@ -1231,6 +1231,41 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       for: async (q) => {
         const m = metrics(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, relations, everyone: query(withDisplay({ filter: null, layout: 'List' })), tz: workspace.timezone, today: zoneToday() }, fail);
         return { ...m, deep: deepHours(focusSessions, m.from, m.to, q.bucket, workspace.timezone, zoneToday()) };
+      },
+    },
+    shutdown: {
+      // Port of shutdown.rs: the Inbox left, open deep issues by number, tomorrow's plan (valid on the day it was made) and the days finished.
+      state: async () => {
+        const today = zoneToday();
+        const done = (settings.get('shutdown_days') as string[] | undefined) ?? [];
+        const back = (d: string) => new Date(Date.parse(`${d}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
+        let day = done.includes(today) ? today : back(today);
+        let streak = 0;
+        for (; done.includes(day); day = back(day)) streak++;
+        const plan = settings.get('shutdown_tomorrow') as { set_on: string; ids: number[] } | undefined;
+        const open = (i: Issue) => !i.archived_at && !['Completed', 'Canceled'].includes(s.statuses.find((x) => x.id === i.status_id)?.category ?? '');
+        return {
+          inbox_count: (await api.inbox.list()).length,
+          deep: s.issues.filter((i) => i.depth === 'deep' && open(i)).sort((a, b) => Number(a.key.slice(a.key.lastIndexOf("-") + 1)) - Number(b.key.slice(b.key.lastIndexOf("-") + 1))).map((i) => ({ ...i })),
+          tomorrow: plan?.set_on === today ? plan.ids.map(getIssue).map((i) => ({ ...i })) : [],
+          done_today: done.includes(today),
+          streak,
+        };
+      },
+      setTomorrow: async (ids: number[]) => {
+        if (ids.length > 3) fail('Invalid', 'choose up to 3 issues for tomorrow');
+        for (const id of ids) {
+          const i = getIssue(id);
+          if (i.depth !== 'deep' || i.archived_at) fail('Invalid', `${i.key} is not an open deep issue`);
+        }
+        settings.set('shutdown_tomorrow', { set_on: zoneToday(), ids } as unknown as Value);
+        return api.shutdown.state();
+      },
+      complete: async () => {
+        const done = (settings.get('shutdown_days') as string[] | undefined) ?? [];
+        const today = zoneToday();
+        if (!done.includes(today)) settings.set('shutdown_days', [...done, today].sort() as unknown as Value);
+        return api.shutdown.state();
       },
     },
     focus: {
@@ -1486,7 +1521,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink decisions.create decisions.answer decisions.withdraw decisions.link decisions.unlink links.add links.remove templates.create templates.update templates.delete templates.apply ' +
     'labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
     'relations.add relations.remove relation.kindsCreate relation.kindsUpdate relation.kindsDelete views.save views.saveProject views.delete views.reorder folders.create folders.rename folders.delete folders.place folders.placeItem views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
-    'view.templatesCreate view.templatesUpdate view.templatesDelete pins.pin pins.unpin pins.reorder pins.set import.apply focus.start focus.stop'
+    'view.templatesCreate view.templatesUpdate view.templatesDelete pins.pin pins.unpin pins.reorder pins.set import.apply focus.start focus.stop shutdown.setTomorrow shutdown.complete'
   ).split(' ');
   for (const name of mutating) {
     const [mod, fn] = name.split('.');

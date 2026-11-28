@@ -16,16 +16,20 @@ export const FEATURES = [
   { name: 'focus', key: 'feature_focus', label: 'Focus mode', blurb: 'One issue at a time on a timer, with a focus log per issue and the Deep hours card.' },
   { name: 'recurring', key: 'feature_recurring', label: 'Recurring issues', blurb: 'A Repeat rule on an issue: finishing it creates the next one. The Repeat row and its commands.' },
   { name: 'time_blocking', key: 'feature_time_blocking', label: 'Time blocking', blurb: 'Plan the day: drag issues onto time blocks for today and tomorrow, which become calendar events. The Today plan page and its commands.' },
+  { name: 'shutdown', key: 'feature_shutdown', label: 'Shutdown ritual', blurb: 'An end-of-day checklist from the Shutdown command: Inbox left, up to three deep issues for tomorrow, loose ends, and a streak. Off until switched on.' },
 ] as const;
 export type Feature = (typeof FEATURES)[number]['name'];
 
-export const features = $state<Record<Feature, boolean>>(Object.fromEntries(FEATURES.map((f) => [f.name, true])) as Record<Feature, boolean>);
+/** Switches that start off until someone turns them on. */
+const OFF_BY_DEFAULT: string[] = ['shutdown'];
+
+export const features = $state<Record<Feature, boolean>>(Object.fromEntries(FEATURES.map((f) => [f.name, !OFF_BY_DEFAULT.includes(f.name)])) as Record<Feature, boolean>);
 
 /** Other code asks this before showing a feature's entry, page, command or card. */
 export const isOn = (name: Feature) => features[name];
 
 export const loadFeatures = () =>
-  Promise.all(FEATURES.map((f) => api.settings.get(f.key).then((v) => (features[f.name] = v !== false), () => {})));
+  Promise.all(FEATURES.map((f) => api.settings.get(f.key).then((v) => (features[f.name] = typeof v === 'boolean' ? v : !OFF_BY_DEFAULT.includes(f.name)), () => {})));
 
 export async function setFeature(name: Feature, on: boolean) {
   features[name] = on;
@@ -52,6 +56,7 @@ const COMMANDS: [RegExp, Feature][] = [
   [/^(issue\.focus$|focus\.)/, 'focus'],
   [/^issue\.repeat/, 'recurring'],
   [/^(nav\.plan|plan\.)/, 'time_blocking'],
+  [/^shutdown\./, 'shutdown'],
 ];
 export const featureOfCommand = (id: string) => COMMANDS.find(([re]) => re.test(id))?.[1];
 

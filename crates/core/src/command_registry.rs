@@ -38,6 +38,11 @@ macro_rules! with_commands {
             inbox_process(s, id: IssueId, choice: InboxChoice) -> Issue {
                 inbox::process(&s.db, id, choice, today(s)?, $source).await
             }
+            shutdown_state(s) -> ShutdownState { shutdown::state(&s.db, today(s)?).await }
+            shutdown_set_tomorrow(s, ids: Vec<IssueId>) -> ShutdownState {
+                shutdown::set_tomorrow(&s.db, today(s)?, &ids).await
+            }
+            shutdown_complete(s) -> ShutdownState { shutdown::complete(&s.db, today(s)?).await }
 
             workspace_status(s) -> WorkspaceStatus { workspace::status(&s.db).await }
             workspace_setup(s, name: String, key: String, timezone: Option<String>) -> WorkspaceStatus {
