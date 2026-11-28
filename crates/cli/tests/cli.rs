@@ -1251,6 +1251,22 @@ fn stale_prints_an_empty_list_until_a_nudged_issue_waits() {
 }
 
 #[test]
+fn project_next_flags_an_issue_and_next_lists_it() {
+    let (_d, db) = fresh();
+    run(&db, &["project", "create", "alpha", "Alpha"]);
+    run(&db, &["add", "Call the bank +alpha"]);
+    run(&db, &["project", "set", "alpha", "--status", "In progress"]);
+    let stuck = run_json(&db, &["next"]);
+    assert_eq!(stuck[0]["stuck"], true);
+    run(&db, &["project", "next", "alpha", "ABC-1"]);
+    let flagged = run_json(&db, &["next"]);
+    assert_eq!(flagged[0]["issue"]["key"], "ABC-1");
+    assert_eq!(flagged[0]["stuck"], false);
+    run(&db, &["project", "next", "alpha", "clear"]);
+    assert_eq!(run_json(&db, &["next"])[0]["stuck"], true);
+}
+
+#[test]
 fn cycle_set_writes_the_retrospective() {
     let (_d, db) = fresh();
     run_json(
@@ -1302,4 +1318,161 @@ fn cycle_set_writes_the_retrospective() {
             .status
             .success()
     );
+}
+
+#[test]
+fn features_default_on_and_switch() {
+    let (_d, db) = fresh();
+    let all = run_json(&db, &["features"]);
+    assert!(
+        all.as_array()
+            .expect("list")
+            .iter()
+            .all(|f| f["on"] == true)
+    );
+    let after = run_json(&db, &["features", "set", "cycles", "off"]);
+    let on = |name: &str| {
+        after
+            .as_array()
+            .expect("list")
+            .iter()
+            .find(|f| f["name"] == name)
+            .expect(name)["on"]
+            .clone()
+    };
+    assert_eq!(on("cycles"), false);
+    assert_eq!(on("dashboard"), true);
+    let got = run_json(
+        &db,
+        &[
+            "api",
+            "call",
+            "settings_get",
+            "--args",
+            r#"{"key":"feature_cycles"}"#,
+        ],
+    );
+    assert_eq!(got, false);
+    let bad = run(&db, &["features", "set", "nope", "off"]);
+    assert_ne!(bad.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("unknown feature"));
+}
+
+#[test]
+fn issue_similar_finds_open_look_alikes() {
+    let (_d, db) = fresh();
+    run_json(&db, &["issue", "create", "Login crash on Safari"]);
+    run_json(&db, &["issue", "create", "Update billing template"]);
+    let got = run_json(&db, &["issue", "similar", "Fix login crash"]);
+    let titles: Vec<_> = got
+        .as_array()
+        .expect("array")
+        .iter()
+        .map(|i| i["title"].as_str().expect("title"))
+        .collect();
+    assert_eq!(titles, ["Login crash on Safari"]);
+}
+
+#[test]
+fn issue_link_and_solution_are_recorded() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Fix it"]);
+    let pr = "https://example.com/pr/7";
+    let l = run_json(
+        &db,
+        &[
+            "issue", "link", "ABC-1", pr, "--title", "PR", "--kind", "pr",
+        ],
+    );
+    assert_eq!(
+        (l["kind"].as_str(), l["title"].as_str()),
+        (Some("pr"), Some("PR"))
+    );
+    assert!(
+        !run(&db, &["issue", "link", "ABC-1", "javascript:x"])
+            .status
+            .success()
+    );
+    assert!(
+        !run(&db, &["issue", "link", "ABC-1", pr, "--kind", "nope"])
+            .status
+            .success()
+    );
+
+    let sol = "https://example.com/commit/abc";
+    run_json(&db, &["issue", "update", "ABC-1", "--solution", sol]);
+    let all = run_json(&db, &["issue", "links", "ABC-1"]);
+    let all = all.as_array().expect("array");
+    assert_eq!(all.len(), 2);
+    assert_eq!(
+        (all[1]["url"].as_str(), all[1]["kind"].as_str()),
+        (Some(sol), Some("solution"))
+    );
+
+    // A refused URL leaves the rest of the update undone.
+    let out = run(
+        &db,
+        &[
+            "issue",
+            "update",
+            "ABC-1",
+            "--priority",
+            "2",
+            "--solution",
+            "file:///x",
+        ],
+    );
+    assert!(!out.status.success());
+    assert_eq!(run_json(&db, &["issue", "get", "ABC-1"])["priority"], 0);
+}
+
+#[test]
+fn inbox_lists_and_processes_and_hide_until_hides() {
+    let (_d, db) = fresh();
+    run_json(&db, &["add", "First"]);
+    run_json(&db, &["add", "Second"]);
+    let list = run_json(&db, &["inbox"]);
+    assert_eq!(list["total"], 2);
+    assert_eq!(list["items"][0]["key"], "ABC-1");
+    run_json(&db, &["inbox", "process", "ABC-1", "--defer", "2999-01-01"]);
+    assert_eq!(run_json(&db, &["inbox"])["total"], 1);
+    let first = run_json(&db, &["issue", "get", "ABC-1"]);
+    assert_eq!(first["hidden_until"], "2999-01-01");
+    run_json(&db, &["issue", "update", "ABC-1", "--hide-until", "clear"]);
+    assert_eq!(run_json(&db, &["inbox"])["total"], 2);
+    run_json(&db, &["inbox", "process", "ABC-2", "--do"]);
+    assert_eq!(run_json(&db, &["inbox"])["total"], 1);
+    // Exactly one choice, and a past date is refused.
+    assert!(!run(&db, &["inbox", "process", "ABC-1"]).status.success());
+    assert!(
+        !run(&db, &["inbox", "process", "ABC-1", "--defer", "2000-01-01"])
+            .status
+            .success()
+    );
+}
+
+#[test]
+fn focus_start_stop_and_log_write_sessions() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Draft the spec"]);
+    run(&db, &["issue", "update", "ABC-1", "--depth", "deep"]);
+    let started = run_json(&db, &["focus", "start", "ABC-1"]);
+    assert_eq!(
+        (started["deep"].as_bool(), started["ended_at"].is_null()),
+        (Some(true), true)
+    );
+    let stopped = run_json(&db, &["focus", "stop"]);
+    assert!(stopped["ended_at"].is_string(), "{stopped}");
+    let log = run_json(&db, &["focus", "log", "--key", "ABC-1", "--range", "week"]);
+    assert_eq!(log["sessions"].as_array().map(Vec::len), Some(1));
+    assert!(run_json(&db, &["focus", "stop"]).is_null());
+}
+
+#[test]
+fn issue_depth_rejects_unknown_words() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Read"]);
+    let out = run(&db, &["issue", "update", "ABC-1", "--depth", "medium"]);
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("deep, shallow or none"));
 }

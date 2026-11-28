@@ -12,8 +12,8 @@
   import { fieldKey, makeLookup, type Data } from './lookup';
   import { newChip, type Chip } from './model';
 
-  let { text = $bindable(''), chips = $bindable([]), saveable, onsave, onclose, entity = 'issue' }: {
-    text?: string; chips?: Chip[]; saveable: boolean; onsave: () => void; onclose: () => void; entity?: ViewEntity;
+  let { text = $bindable(''), chips = $bindable([]), onclose, entity = 'issue' }: {
+    text?: string; chips?: Chip[]; onclose: () => void; entity?: ViewEntity;
   } = $props();
 
   const project = entity === 'project';
@@ -59,7 +59,6 @@
     </Menu>
   </div>
   <div class="tools">
-    {#if saveable}<Button onclick={onsave}>Save to view</Button>{/if}
     <IconButton icon="close" label="Clear and hide quick filter" shortcut="escape" onclick={onclose} />
   </div>
 </div>

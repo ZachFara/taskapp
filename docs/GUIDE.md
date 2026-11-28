@@ -7,7 +7,7 @@ registry (`ui/src/lib/commands/defs/**`); `ui/src/lib/commands/guide.test.ts` ke
 
 Contents: [What it is](#what-cairn-is) - [First run](#first-run) - [The screen](#the-screen) - [Issues](#issues) -
 [Selection and bulk edit](#selection-and-bulk-edit) - [Undo and redo](#undo-and-redo) - [Views](#views) -
-[Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) - [Events](#events) - [Decisions](#decisions) -
+[Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) - [Events](#events) - [Decisions](#decisions) - [Process Inbox](#process-the-inbox) -
 [Points and insights](#points-and-insights) - [Custom properties](#custom-properties) -
 [Statuses, labels, icons, colours](#statuses-labels-icons-and-colours) - [Templates](#issue-templates) - [Images](#images) -
 [Import, export, backups](#import-export-and-backups) - [Restore](#restore) - [Reminders and Google Calendar](#reminders-and-google-calendar) -
@@ -44,7 +44,7 @@ The same screen has a second choice, "Restore from an export": see [Restore](#re
 ## The screen
 
 - **Sidebar (left).** Top: My issues. Then four collapsible sections with counts: Pinned, Views, Projects (with "All
-  projects"), Cycles (with "All cycles"). Then Events, Decisions and Dashboard (Settings > General can hide it). Bottom: Settings. Drag a pin or a view to reorder it. Right-click a view, folder,
+  projects"), Cycles (with "All cycles"). Then Events, Decisions and Dashboard (Settings > Features can hide each of these). Bottom: Settings. Drag a pin or a view to reorder it. Right-click a view, folder,
   project or cycle and choose Pin or Unpin. The Projects section shows only "All projects" until you right-click its
   heading and choose "Show projects in the sidebar" (kept on this device); pinned projects always show under Pinned. With "Sidebar sparklines" on (Settings > General) each project
   shows a small progress line. The sidebar has no Inbox link; `/inbox` exists but only shows "Inbox arrives in a later
@@ -106,6 +106,10 @@ case). Dates are relative to today in the workspace time zone.
 
 Quick-add has no token for status, parent, cycle or milestone. Example: `Pay rent friday p1 +home #bills ~30m 3pt`.
 
+**Possible duplicates.** While you type a title, quick-add quietly lists up to three open issues whose words overlap it
+("Possible duplicates", under the chips). Click one to open it instead; ignore the list and `enter` still creates. The same
+check is `taskapp issue similar "text"` for agents to run before filing.
+
 ### Edit
 
 - Rename in place in a list: `f2`. Everything else: focus the issue and press the key (see the keyboard tables):
@@ -139,6 +143,26 @@ issue has items (the Checklist field, on by default). `taskapp issue get` report
 - Edit the description to see the raw URL again. Preview in the editor shows the chip.
 - Link previews (page title, summary, image) are not built: they need a network fetch from the app, and the setting
   to switch them on is left out until that fetch is decided. Links stay chips with no fetch.
+
+### Links on issues, and links to items
+
+- **Copy link.** Every item has a link: `taskapp://issue/ABC-1`, `taskapp://project/<slug>`, `taskapp://view/<id>`,
+  `taskapp://cycle/<number>`, `taskapp://milestone/<id>`, `taskapp://event/<id>`, `taskapp://decision/<id>`. "Copy link"
+  is in the command menu and the right-click menu (issues also `mod+shift+c`). Opening one
+  from outside the app (the Mac hands it to Cairn) or from an issue's Links section shows that item; a link to
+  something that no longer exists opens nothing.
+- **Links section.** The issue panel's Links section lists links with a title and a kind (Solution, Reference, PR,
+  Commit, Doc, Other). Add one with a URL (http, https, mailto, obsidian or a `taskapp://` link), an optional title and a
+  kind; remove one with its x. Clicking a web link opens it outside the app through the same guard as links in
+  descriptions; a `taskapp://` link opens inside the app. Adding a URL the issue already has changes nothing. Add and
+  remove are undoable. Links are in the export (`links.yaml`) and come back on restore.
+- **Link the solution.** Moving one issue to a Completed status offers a small panel: paste a PR, commit or doc URL
+  (kept as a Solution link) or find another issue. Skip, or Escape, closes it; nothing waits for it. It does not ask
+  when the issue already has a Solution link. "Don't ask again" or Settings > General > Ask for the solution link turns
+  it off (per device). Moving several issues at once never asks.
+- **CLI.** `taskapp issue link ABC-1 <url> [--title T] [--kind solution|reference|pr|commit|doc|other]`,
+  `taskapp issue links ABC-1`, and `taskapp issue update ABC-1 --status Done --solution <url>` (the URL is checked first,
+  so a refused URL changes nothing). MCP does not have these yet.
 
 ### Sub-issues, relations, comments, history
 
@@ -221,6 +245,9 @@ saved automatically (after a short pause), except temporary sorting changes. Fil
 - **Sort.** Choose a field and direction with Sort, or click a sortable list or table heading for ascending, descending,
   then the saved order. Sorting lasts until you leave the view; it survives layout changes and live updates but does not
   change the saved definition. Grouped rows stay within their groups and nested issues stay with their parents.
+- **Save to view.** When the sort or the quick filter differs from the saved view, the header shows "Save to view" and
+  "Reset to saved". "Save to view" writes both into the saved view in one step (undo reverts it); "Reset to saved" drops
+  them. Groups and the filter chips were always saved as you change them and are unaffected.
 - **Display** (button, or the command "Display options..."). Switch fields on or off and drag (or use the arrow
   buttons, or `alt+arrowup` / `alt+arrowdown` on a focused row) to reorder: Key, Priority, Status, Labels, Project,
   Milestone, Cycle, Parent, Start, Due, Estimate, Points, Sub-issues, Relations, Comments, Created, Updated, and your
@@ -247,8 +274,9 @@ saved automatically (after a short pause), except temporary sorting changes. Fil
 - **Timeline (Gantt).** Bars from start to due date; an issue with only an estimate shows an estimated bar. Zoom: Day,
   Week, Month, Quarter (tabs, or `=` and `-`); `t` or the Today button scrolls to today. Drag a bar to move it, drag
   its handles to change start or end; if blocked issues must move too, a toast "Also moves ..." with Apply and Cancel
-  appears. Drag an issue from the Unscheduled band onto a day. Milestones show as markers. There is also an
-  all-projects timeline (`g t`).
+  appears. Drag an issue from the Unscheduled band onto a day. Milestones show as a diamond with its name on the
+  project's row, at its target date; undated milestones are not drawn. Click a diamond to open the project at its
+  Milestones. There is also an all-projects timeline (`g t`).
 - **Calendar.** Week or Month (tabs, or `w` and `m`), previous and next (`[` and `]`), today (`t`). Issues appear on
   their due date. Drag an issue from the "Issues to schedule" side list onto a day to set its due date, or onto a time
   slot to create a one-hour work block. Drag items to move or resize them.
@@ -306,6 +334,16 @@ filter chips, Group, Sort and Display.
   met...", "Rate the cycle..." (they act on the open cycle, else the running one) and "Open cycle retrospective...". On the
   Dashboard, a cycle chosen in Range shows a Retrospective button. For AI: `taskapp cycle set NAME --goal ... --goal-met
   yes|no --rating N --notes ...`, and `taskapp metrics --cycle NAME` for the numbers.
+- **Next actions and stuck projects.** Each project has one flagged next action, an open issue of that project. Set it
+  from an issue (right-click > "Make next action", or the command), from the "Next action" row on the project page, or
+  with "Set next action" in the command menu on a project page. The Next actions page (sidebar, `g n`) lists every
+  project's next action. A project is stuck when its status is a Started one, it has neither the Area nor the Collection
+  label, and it has no open next action: it shows a "Stuck" tag on the Projects list, the project page and the Next
+  actions page, and the Stuck projects card on the Dashboard lists them. Finishing or cancelling an issue, moving it
+  to another project or archiving it ends its time as the next action, and a prompt then offers the project's open
+  issues to pick the following one (Skip leaves the project stuck); undo brings the flag back. Switch the whole feature
+  off in Settings > Features (data stays). CLI: `taskapp project next SLUG KEY` flags an issue, `taskapp project next
+  SLUG clear` removes the flag, `taskapp next` lists every project with its next action and `stuck`.
 - **Pins.** Pin issues, projects, views and cycles (CLI also notes and URLs). The Pinned page lists them; `g h`.
 
 ## Events
@@ -355,6 +393,33 @@ with its recommendation until you answer). Decisions are Cairn's own; nothing ou
   `--source`, such as `agent:builder` or later `curia`), and `external_id` is the raiser's own id, unique per source, so a
   later integration can mirror a decision and not raise it twice. Nothing reads them yet.
 
+## Process the Inbox
+
+Process Inbox (sidebar, `g o`, or the button on a view named Inbox) shows one Inbox issue at a time, oldest first, full
+width, with "12 of 74" at the top. The Inbox is the status named Inbox (or, in a workspace without one, the Backlog
+category). The title and description are editable in place. Choose with a button or its key (keys never fire while you
+type in a field):
+
+- **Do it now** (`o`): status Done (the two-minute rule).
+- **Delegate** (`y`): asks "waiting on whom?", sets Delegated and adds the comment "Waiting on: <name>".
+- **Defer** (`z`): asks for a day (Tomorrow, Next week, Next month, or a date) and hides the issue until then.
+- **Next** (`n`): pick a project (or none) and set status Next.
+- **Someday** (`b`): status Someday. Needs a status called Someday (Settings > Statuses), else it says so.
+- **Trash** (`q`): archives it.
+- **Skip** (`shift+arrowright`) and **Back** (`shift+arrowleft`) walk the list without changing anything. At the end,
+  skipped issues are offered again; with none left the page says "Inbox zero".
+
+Done, Delegated and Next use the status of that name, else the first status of the Completed, Started or Unstarted
+category. Every choice is one undo step and a command ("Process: do it now" and so on, in the command menu).
+
+Defer sets the issue's **hidden until** day. Views do not list an issue whose day is still ahead, and it returns on that
+day. A view's Display panel has "Show deferred" to list them anyway, and "Hidden until" is a filter field. Set or clear
+it from the terminal with `taskapp issue update ABC-1 --hide-until 2026-12-24` (or `clear`). Settings > Features can
+switch Process Inbox off; its page, sidebar entry and commands go, the data stays.
+
+For agents: `taskapp inbox [--limit N]` lists the next Inbox items and the total; `taskapp inbox process ABC-1 --do`,
+`--delegate "Sam"`, `--defer 2026-12-24`, `--next <project>`, `--someday` or `--trash` clears one (exactly one flag).
+
 ## Dashboard
 
 The Dashboard (sidebar, or `g b`) shows how work is going over a range. Pick the range at the top: Today, This week,
@@ -371,7 +436,7 @@ Little's Law: average cycle time = WIP / throughput), Cycle commitment (pick a c
 Blocked work (issues waiting on an unfinished blocker, approximate blocked time) and Flow efficiency (active time over
 cycle time, and which Waiting statuses held work longest). The Cards button shows, hides and
 reorders cards, kept on this device. Every choice is also in the command menu ("Dashboard range", "Dashboard: show or
-hide cards"). Settings > General > Dashboard turns the whole page off; it is on by default.
+hide cards"). Settings > Features > Dashboard turns the whole page off; it is on by default.
 
 ### Stale issues
 
@@ -381,6 +446,19 @@ update. A status with no nudge, or 0 days, never makes issues stale, so nothing 
 imported Linear issues stay quiet unless their status has one. Stale rows in the table carry a quiet "stale" tag. The
 Stale card on the Dashboard counts them by status and lists the oldest first; click a key to open the issue. The CLI
 prints the same list: `taskapp stale`.
+
+### Focus and deep work
+
+Depth is a field on each issue: Deep work, Shallow work or none, set in the issue's Details (Depth) or with "Set depth"
+in the command menu. Focus mode (Settings > Features, on by default) works one issue at a time: "Focus on this issue"
+in the command menu, the target button in an issue's header, or `taskapp focus start KEY` (`--deep` marks the session
+deep whatever the issue's depth; otherwise the depth decides). The page shows the issue, its description and checklist, and
+a timer with Start or Resume, Pause, and Stop focus (Stop goes back to the issue). The sidebar and toasts are hidden there.
+Only one session runs: starting another ends the running one. A running session survives a reload and is the one
+the page resumes. Each session is written when it ends, and the issue's Focus log lists them with their total. The
+Dashboard's Deep hours card sums deep sessions per day or week for the range, with the total and the streak of days
+ending today with deep time. CLI: `taskapp focus stop`, `taskapp focus log [--key ABC-1] [--range day|week|month|all]`.
+Turning Focus mode off hides its commands, page and card; the sessions stay in the database.
 
 ## Points and insights
 
@@ -393,7 +471,7 @@ prints the same list: `taskapp stale`.
   area, Bars per week), Range (This cycle or Project dates or 30 days, 30, 90, All). Drag its left edge to resize it.
   Charts are rebuilt from the change history, per local day: scope (every issue that existed and is not canceled),
   started, completed. With a chart focused, left and right arrows step through days.
-- **Progress charts** switch (Settings > General): burn-ups on project and cycle pages, sparklines on past cycles.
+- **Progress charts** switch (Settings > Features): burn-ups on project and cycle pages, sparklines on past cycles.
 - CLI: `insights progress` and `insights velocity`; MCP: `insights_progress`, `insights_velocity`.
 
 ### Metrics
@@ -569,7 +647,7 @@ restoring the backup it wrote (`taskapp backup restore`).
 
 ## Settings
 
-Settings is a list of sections: General, Statuses, Project statuses, Labels, Projects, Cycles, Fields, Properties, Relations, Templates, Import, Reminders,
+Settings is a list of sections: General, Features, Statuses, Project statuses, Labels, Projects, Cycles, Fields, Properties, Relations, Templates, Import, Reminders,
 Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` saves the open page.
 
 | General setting | Values | Notes |
@@ -581,11 +659,24 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 | Theme | System, Light, Dark | Also the top-bar button. |
 | Estimation | None, Points, Time, Both | |
 | Point scale | Fibonacci, Linear, Powers, T-shirt | Disabled when points are off. |
-| Progress charts | on or off | Burn-ups and sparklines on projects and cycles. |
 | Sidebar sparklines | on or off | A small progress line per project. |
 | Interface size | 100%, 110%, 115%, 125% | Scales the whole app on this device (not saved in the workspace). Default 110%. Applies at once. |
 | Animation speed | Off, Fast, Normal, Slow | Per device, like interface size. Default Normal; Off by default when the system asks for reduced motion. Applies at once. |
 | Show tooltips | On, Off | Per device. Off by default: no name or shortcut boxes appear on hover. Shortcuts stay listed in the command menu and the shortcut sheet. Applies at once. |
+
+### Features
+
+Settings > Features lists every optional feature with a switch, all on by default: Dashboard, Decisions, Cycles,
+Events, Progress charts (burn-ups and sparklines on projects and cycles), Stale nudges, Reminders capture, Google
+Calendar, Next actions, Process Inbox, and the coming Focus mode. Switching one off hides its sidebar entries, its
+page (the address shows "is switched off"), its commands in the command menu, its Settings page where it has one
+(Cycles, Reminders, Calendar) and its dashboard card. Your data stays and comes back when you switch it on. Each switch
+applies at once, has its own command ("Turn Cycles on or off"), and is stored as a setting (`dashboard`,
+`insights_charts`, `feature_<name>`; `taskapp api call settings_get`). Show tooltips stays in General: it is per
+device and off by default, so it is a preference, not a workspace feature.
+
+From the terminal: `taskapp features` lists them; `taskapp features set cycles off` (names: dashboard, decisions,
+cycles, events, charts, stale, reminders, gcal, process_inbox, next_actions, focus).
 
 Sidebar and issue panel widths are remembered per device. Drag an edge to resize; double-click it to reset.
 
@@ -666,12 +757,27 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.projects` | Go to Projects | `g p` | Go to the project list. |
 | `nav.cycles` | Go to Cycles | `g c` | Go to Cycles. |
 | `nav.events` | Go to Events | `g e` | Go to Events. |
+| `nav.next` | Go to Next actions | `g n` | Go to the next action of each project (when it is switched on in Settings). |
 | `nav.dashboard` | Go to Dashboard | `g b` | Go to the Dashboard (when it is switched on in Settings). |
+| `nav.process` | Process Inbox | `g o` | Go to Process Inbox (when it is switched on in Settings). |
 | `nav.decisions` | Go to Decisions | `g q` | Go to Decisions. |
 | `nav.views` | Go to Views | `g v` | Go to Views. |
 | `nav.timeline` | Go to Timeline | `g t` | Go to the all-projects timeline. |
 | `nav.settings` | Go to Settings | `g s` | Go to Settings. |
 | `nav.design` | Go to Design gallery | `g d` | Go to the design gallery (a developer page). |
+
+### Process Inbox page
+
+| Command id | Name | Keys | What it does |
+|---|---|---|---|
+| `process.do` | Process: do it now (Done) | `o` | Set the issue to Done and show the next one. |
+| `process.delegate` | Process: delegate (waiting on) | `y` | Ask who you are waiting on, then set Delegated with a comment. |
+| `process.defer` | Process: defer (hide until a day) | `z` | Ask for a day and hide the issue until then. |
+| `process.next` | Process: next action (pick a project) | `n` | Pick a project and set status Next. |
+| `process.someday` | Process: someday | `b` | Set status Someday. |
+| `process.trash` | Process: trash (archive) | `q` | Archive the issue. |
+| `process.skip` | Process: skip to the next issue | `shift+arrowright` | Show the next issue without changing this one. |
+| `process.back` | Process: back to the previous issue | `shift+arrowleft` | Show the previous issue you have not processed. |
 
 ### List, board and table: moving and selecting
 
@@ -722,6 +828,8 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | Command id | Name | Keys | What it does |
 |---|---|---|---|
 | `view.quickFilter` | Show or hide quick filter | `shift+f` | Temporary filters that are not saved with the view. |
+| `view.saveToView` | Save to view | none | Saves the temporary sort and quick filter into the view. |
+| `view.resetToSaved` | Reset to saved | none | Drops the temporary sort and quick filter. |
 | `view.layout.list` | List layout | `v l` | Switch the view to List. |
 | `view.layout.board` | Board layout | `v b` | Switch the view to Board. |
 | `view.layout.table` | Table layout | `v t` | Switch the view to Table. |
@@ -780,6 +888,8 @@ These appear in the command menu (when they apply) and have no shortcut.
 
 | Command id | Name | Keys | What it does |
 |---|---|---|---|
+| `issue.next` | Make next action | (none) | Flag the issue as its project's next action. |
+| `project.next` | Set next action | (none) | On a project page: pick the project's next action from its open issues, or clear it. |
 | `image.attach` | Attach image | (none) | Choose an image file for the description or comment box you used last. |
 | `app.reload` | Reload | (none) | Reload the window. |
 | `pane.sidebar.reset` | Reset sidebar width | (none) | Back to the default sidebar width. |
@@ -787,6 +897,11 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `motion.faster` | Faster animations | (none) | One animation speed step faster (Normal, then Fast, then Off). |
 | `motion.slower` | Slower animations | (none) | One animation speed step slower (Normal, then Slow). |
 | `tooltips.toggle` | Show or hide tooltips | (none) | Switch the Show tooltips setting. |
+| `feature.<name>.toggle` | Turn Cycles on or off (one per feature) | (none) | Switch that feature on Settings > Features. |
+| `cycle.copyLink` | Copy link to cycle | (none) | On the Cycles page: copy `taskapp://cycle/<number>` of the open or current cycle. Also in a cycle's right-click menu. |
+| `event.copyLink` | Copy link to event | (none) | On an event page, or the event right-clicked on the Events list: copy `taskapp://event/<id>`. |
+| `decision.copyLink` | Copy link to decision | (none) | On the Decisions page: copy `taskapp://decision/<id>` of the decision last clicked. |
+| `issue.link.add` | Add a link to this issue | (none) | Focus the URL field of the Links section of the open issue. |
 | `cycle.move_unfinished` | Move unfinished issues to the next cycle | (none) | Move unfinished issues of the cycle to the next cycle (Cycles page). |
 | `cycle.new` | New cycle | (none) | New cycle. |
 | `group.add` | Add issue to this group | (none) | Add an issue to this group. |
@@ -805,6 +920,8 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `project.description.edit` | Edit project description | (none) | Edit the project description. |
 | `project.new` | New project | (none) | New project. |
 | `project.pin` | Pin or unpin project | (none) | Pin or unpin the project. |
+| `project.copyLink` | Copy link to project | (none) | Copy `taskapp://project/<slug>`. Also in the project's right-click menu. |
+| `milestone.copyLink` | Copy link to milestone | (none) | On a project page: pick a milestone and copy `taskapp://milestone/<id>`. |
 | `project.rename` | Rename project | (none) | Rename the project. |
 | `settings.backups` | Backups | (none) | Open Settings, Backups. |
 | `settings.calendar` | Calendar | (none) | Open Settings, Calendar. |
@@ -824,6 +941,7 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `status.new` | New status | (none) | New status. |
 | `template.new` | New template | (none) | New issue template. |
 | `theme.cycle` | Switch theme (light, dark, system) | (none) | Switch theme (light, dark, system). |
+| `view.copyLink` | Copy link to view | (none) | Copy `taskapp://view/<id>`. Also in the view's right-click menu. |
 | `view.delete` | Delete view | (none) | Delete the view. |
 | `view.display.open` | Display options… | (none) | Open Display options. |
 | `view.duplicate` | Save as new view | (none) | Save as new view. |
@@ -885,9 +1003,15 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 |---|---|---|
 | `add <text> [--tz]` | Create an issue from quick-add text. | `taskapp add "Pay rent friday p1"` |
 | `issue create <title> [...]` | Create with flags: `--description --priority --status --project --due --estimate --points --created-at --completed-at --property k=v --parent --cycle --label --migration`. | `taskapp issue create "Fix login" --priority 2 --due 2026-12-01` |
-| `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points`. | `taskapp issue update ABC-1 --status 3` |
+| `issue link <key> <url>` | Add a link (`--title`, `--kind solution\|reference\|pr\|commit\|doc\|other`); the same URL twice is one link. | `taskapp issue link ABC-1 https://example.com/pr/7 --kind pr` |
+| `issue links <key>` | List an issue's links. | `taskapp issue links ABC-1` |
+| `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --solution <url> --hide-until DATE\|clear`. | `taskapp issue update ABC-1 --status 3` |
+| `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --depth deep\|shallow\|none`. | `taskapp issue update ABC-1 --status 3` |
+| `focus start <key> [--deep]`, `focus stop`, `focus log [--key] [--range]` | Focus sessions: start one (ends a running one), end the running one, list sessions with their total minutes. | `taskapp focus start ABC-1 --deep` |
 | `issue list [...]` | Issues by name filters, most urgent first, with status, priority, project and label names: `--project --status --not-status --priority --label` (repeat or comma-separate). | `taskapp issue list --project Cairn --not-status Done,Canceled,Someday` |
 | `issue get <key>` | Show one issue, with `status`, `project`, `labels` and `priority_name` as names next to the ids. | `taskapp issue get ABC-1` |
+| `inbox [--limit N]` | The next Inbox items, oldest first, and how many there are (deferred ones left out). | `taskapp inbox --limit 3` |
+| `inbox process <key> (--do \| --delegate NOTE \| --defer DATE \| --next PROJECT \| --someday \| --trash)` | Clear one Inbox issue, as the Process Inbox page does; one undo step. | `taskapp inbox process ABC-1 --defer 2026-12-24` |
 | `issue archive <key>` | Archive an issue. | `taskapp issue archive ABC-1` |
 | `event list [--from --to]` | Events overlapping a date range. | `taskapp event list --from 2026-12-01` |
 | `event create <title> --start T [--end T --all-day --place --notes]` | Create an event (`T` is `YYYY-MM-DDTHH:MM` or a date). | `taskapp event create Demo --start 2026-12-10T09:30` |
@@ -896,6 +1020,7 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `decision list [--status open]` / `decision get <id>` | Read decisions (`open`, `answered`, `withdrawn`, `all`). The table shows options as `a) Label; b) Label`; `get` and `--json` give the trade-offs. | `taskapp decision list --status all` |
 | `decision answer <id> (--option KEY \| --text TEXT) [--note]` / `decision withdraw <id>` | Answer or close an open decision. | `taskapp decision answer 1 --option n` |
 | `issue search <text> [--limit 20]` | Full-text search (archived issues are left out). | `taskapp issue search rent` |
+| `issue similar <text> [--project NAME] [--limit 5]` | Open issues whose words overlap the text (likely duplicates), best first. Agents run this before `issue create`. | `taskapp issue similar "Fix login crash" --project Cairn` |
 | `view query [--def JSON \| --id N]` | Run an ad hoc view definition or a saved view. | `taskapp view query --id 1` |
 | `view templates` | List view templates. | `taskapp view templates` |
 | `view save-as-template <view_id> [--name]` | Make a template from a view. | `taskapp view save-as-template 1 --name Sprint` |
@@ -910,6 +1035,8 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `property set <issue> <key> <value>` | Set a value (JSON; `null` clears). | `taskapp property set ABC-1 area '"web"'` |
 | `project list` / `project create <slug> <name> [--icon --color]` | List or create projects. | `taskapp project create web Website` |
 | `project set <slug> [--name --description --icon --color --start --target --status --priority --label --property]` | Change a project's name, look (`--icon` from `icons`, `--color` from `colors`), dates (`YYYY-MM-DD`) or other fields. | `taskapp project set web --icon folder --color teal --start 2026-12-01` |
+| `next` (no arguments) | Every project with its open next action and whether it is stuck (active, no next action). | `taskapp next` |
+| `project next <slug> <KEY or clear>` | Flag an issue of the project as its next action, or clear the flag. | `taskapp project next web ABC-12` |
 | `icons` / `colors` | List the icon names and palette colors `project set` accepts. | `taskapp colors` |
 | `cycle list` / `cycle create --start --end [--name --color --icon]` | List or create cycles. | `taskapp cycle create --start 2026-12-01 --end 2026-12-14` |
 | `label list` / `label create <name> <color> [--icon]` | List or create labels. | `taskapp label create bug red` |
@@ -1033,7 +1160,7 @@ Server `taskapp-mcp` over stdio (`taskapp-mcp [--db <path>]`). Writes use source
 
 From PROGRESS.md "After this plan" and from reading the code:
 
-- Not built: themes (only light, dark, system); agents as assignees; decision tickets; cost per issue; multi-device
+- Not built: focus tools in the MCP server (the CLI has them); themes (only light, dark, system); agents as assignees; decision tickets; cost per issue; multi-device
   sync; a phone app; recurring tasks; remind dates and snooze; an inbox view (the page is a stub); a weekly review
   screen; relative dates in filters ("due within 7 days" is a fixed date); changing the time zone without a restart;
   keyboard resize of panels.

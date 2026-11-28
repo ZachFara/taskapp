@@ -225,6 +225,7 @@ async fn desired(db: &Db) -> Result<Vec<DesiredEvent>> {
     let (from, to) = (from.date_naive(), to.date_naive());
     out.extend(planner::event_events(
         &events::list(db, Some(from), Some(to)).await?,
+        &issues,
         &tz,
     ));
     Ok(out)

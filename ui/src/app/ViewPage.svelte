@@ -119,18 +119,29 @@
     return clearViewContext;
   });
   const filtered = $derived(shown?.def.filter != null);
+  // Temporary changes: a heading or menu sort, or a quick filter. Only "Save to view" writes them.
+  const sortChanged = $derived(temporarySort !== null && JSON.stringify(temporarySort) !== JSON.stringify(def?.sorts ?? []));
+  const dirty = $derived(sortChanged || quickFilter !== null);
   function closeQuick() {
     quickOpen = false;
     quickText = '';
     quickChips = [];
   }
-  // Keeps the quick filter as part of the saved view, through the same save as a chip edit.
   let editorKey = $state(0); // the editor reads the saved filter once, so it is remounted to show the kept chips
-  function saveQuick() {
-    if (!def || quickFilter === null) return;
-    change({ filter: combineFilters(def.filter, quickFilter) });
+  // Keeps the temporary heading sort and quick filter in the saved view, in one save (one undo step).
+  async function saveToView() {
+    if (!view || !def) return;
+    clearTimeout(timer);
+    const next = { ...def, sorts: temporarySort ?? def.sorts, filter: combineFilters(def.filter, quickFilter) };
+    def = next;
+    temporarySort = null;
     closeQuick();
     editorKey++;
+    view = await api.views.save(view.id, name, next, view.icon, view.color);
+  }
+  function resetToSaved() {
+    temporarySort = null;
+    closeQuick();
   }
 
   // Debounced: a burst of chip edits is one save.
@@ -240,6 +251,8 @@
       on('command:view.resetToTemplate', resetToTemplate),
       on('command:insights.toggle', () => (insights = !insights)),
       on('command:view.quickFilter', () => (quickOpen ? closeQuick() : (quickOpen = true))),
+      on('command:view.saveToView', saveToView),
+      on('command:view.resetToSaved', resetToSaved),
       on('command:icon.change', () => (iconOpen = true)),
       on('history:wrote', () => {
         rowsVersion++;
@@ -291,6 +304,11 @@
             <div class="row"><Button variant="primary" type="submit">Rename</Button></div>
           </form>
         </Popover>
+        {#if !isProject && name.trim().toLowerCase() === 'inbox'}<CommandButton command="nav.process" />{/if}
+        {#if dirty}
+          <Button icon="undo" onclick={resetToSaved}>Reset to saved</Button>
+          <Button variant="primary" icon="check" onclick={saveToView}>Save to view</Button>
+        {/if}
         <IconButton icon="filter" label="Quick filter" shortcut={shortcutFor('view.quickFilter')} pressed={quickOpen} onclick={() => (quickOpen ? closeQuick() : (quickOpen = true))} />
         {#if !isProject}<IconButton icon="target" label="Insights" shortcut="shift+i" pressed={insights} onclick={() => (insights = !insights)} />{/if}
         <IconButton icon="pin" label={pinId === null ? 'Pin view' : 'Unpin view'} shortcut={shortcutFor('view.pin')} pressed={pinId !== null} onclick={togglePin} />
@@ -308,7 +326,7 @@
       {/snippet}
     </PageHeader>
     {#if quickOpen}
-      <QuickFilter bind:text={quickText} bind:chips={quickChips} saveable={quickFilter !== null} onsave={saveQuick} onclose={closeQuick} entity={live.entity} />
+      <QuickFilter bind:text={quickText} bind:chips={quickChips} onclose={closeQuick} entity={live.entity} />
     {/if}
     <div class="cols">
     <main class="body">

@@ -54,8 +54,18 @@ export function httpApi(base: string = import.meta.env.VITE_API_URL ?? 'http://1
 }
 
 // Reads (and a layout pick) never change history; undo and redo show their own toast, so a second one would overwrite it.
-const READ = /^(get|list|kindsList|statusesList|query|search|status(?![a-z])|progress|children|parse|plan|for|bars|criticalPath|between|undoStatus|items$|stats$|velocity$|setLayout$)/;
+const READ = /^(get|list|kindsList|statusesList|query|search|similar|status(?![a-z])|progress|children|parse|plan|for|bars|criticalPath|between|undoStatus|items$|stats$|velocity$|setLayout$)/;
 const watched = new WeakSet<Api>();
+let depth = 0;
+
+/** The issues a write gave a new status, for the "Link the solution" prompt; null when it set no status. */
+function statusMove(name: string, args: unknown[]): { ids: number[]; status: number } | null {
+  const [ids, status] =
+    name === 'update' ? [[args[0] as number], (args[1] as { status_id?: number | null }).status_id]
+    : name === 'bulkUpdate' ? [args[0] as number[], (args[1] as { patch?: { status_id?: number | null } }).patch?.status_id]
+    : [[], null];
+  return typeof status === 'number' ? { ids, status } : null;
+}
 
 /** Makes every write tell the app (`history:wrote`) once it succeeds, so the undo toast can name the step. Wraps in place. */
 function watchWrites(a: Api): Api {
@@ -66,8 +76,12 @@ function watchWrites(a: Api): Api {
     for (const [name, fn] of Object.entries(fns)) {
       if (READ.test(name)) continue;
       fns[name] = async (...args) => {
-        const out = await fn(...args);
+        depth++;
+        const out = await fn(...args).finally(() => depth--);
         window.dispatchEvent(new Event('history:wrote'));
+        // The mock's bulk update calls update per issue; only the outermost call says what was asked.
+        const moved = mod === 'issues' && depth === 0 ? statusMove(name, args) : null;
+        if (moved) window.dispatchEvent(new CustomEvent('issues:status-set', { detail: moved }));
         return out;
       };
     }

@@ -88,6 +88,20 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	inboxList: (options?: InvokeOptions) => __TAURI_INVOKE<Issue[]>("inbox_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	inboxProcess: (id: IssueId, choice: InboxChoice, options?: InvokeOptions) => __TAURI_INVOKE<Issue>("inbox_process", { id, choice }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	workspaceStatus: (options?: InvokeOptions) => __TAURI_INVOKE<WorkspaceStatus>("workspace_status", undefined, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -270,6 +284,20 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	nextList: (options?: InvokeOptions) => __TAURI_INVOKE<NextAction[]>("next_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	projectsSetNext: (project: ProjectId, issue: IssueId | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("projects_set_next", { project, issue }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	projectsProgress: (id: ProjectId, options?: InvokeOptions) => __TAURI_INVOKE<[number, number]>("projects_progress", { id }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -425,6 +453,27 @@ export const commands = {
 	 * As that command.
 	 */
 	decisionsUnlink: (decision: DecisionId, issue: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<null>("decisions_unlink", { decision, issue }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	linksList: (issue: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<Link[]>("links_list", { issue }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	linksAdd: (issue: IssueId, url: string, title: string | null, kind: LinkKind | null, options?: InvokeOptions) => __TAURI_INVOKE<Link>("links_add", { issue, url, title, kind }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	linksRemove: (id: LinkId, options?: InvokeOptions) => __TAURI_INVOKE<null>("links_remove", { id }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -830,7 +879,42 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	focusStart: (issue: IssueId, deep: boolean | null, options?: InvokeOptions) => __TAURI_INVOKE<FocusSession>("focus_start", { issue, deep }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	focusStop: (options?: InvokeOptions) => __TAURI_INVOKE<FocusSession | null>("focus_stop", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	focusRunning: (options?: InvokeOptions) => __TAURI_INVOKE<FocusSession | null>("focus_running", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	focusLog: (issue: IssueId | null, from: string | null, to: string | null, options?: InvokeOptions) => __TAURI_INVOKE<FocusSession[]>("focus_log", { issue, from, to }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	searchSearch: (text: string, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<Issue[]>("search_search", { text, limit }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	searchSimilar: (text: string, projectId: ProjectId | null, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<Issue[]>("search_similar", { text, projectId, limit }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -1215,7 +1299,23 @@ export type DecisionOption = {
 
 export type DecisionStatus = "open" | "answered" | "withdrawn";
 
+export type DeepBucket = {
+	start: string,
+	hours: number | null,
+};
+
+/**  Deep focus hours per bucket of the range, the total, and the run of days (ending today) with some. */
+export type DeepHours = {
+	buckets: DeepBucket[],
+	total_hours: number | null,
+	streak_days: number,
+};
+
+export type Deferred = "hide" | "show";
+
 export type Density = "comfortable" | "compact";
+
+export type Depth = "deep" | "shallow";
 
 export type Due = ({ Date: string }) & { DateTime?: never } | 
 /**  `tz` is an IANA name. */
@@ -1268,7 +1368,9 @@ export type Filter = ({ And: Filter[] }) & { Cond?: never; Not?: never; Or?: nev
 	value: Value,
 } }) & { And?: never; Not?: never; Or?: never };
 
-export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "Points" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount" | 
+export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "Points" | 
+/**  Issues only: the day a deferred issue comes back. */
+"HiddenUntil" | "Depth" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount" | 
 /**  Shows `done/total` of the description's task lines; not sortable or filterable. */
 "Checklist" | 
 /**  Filter only: the issue has a relation of the given kind id(s), on either end. */
@@ -1297,6 +1399,15 @@ export type FlowEfficiency = {
 
 /**  Whether time in a status is work (`Active`), blocked on someone or something (`Waiting`) or neither (`Idle`). */
 export type FlowKind = "Active" | "Waiting" | "Idle";
+
+/**  A timer on one issue. `ended_at` is `None` while it runs; at most one session does. */
+export type FocusSession = {
+	id: number,
+	issue_id: IssueId,
+	started_at: string,
+	ended_at: string | null,
+	deep: boolean,
+};
 
 /**  The sidebar section a folder belongs to; its items live in the table of the same name. */
 export type FolderSection = "pin" | "view" | "project" | "cycle";
@@ -1340,6 +1451,25 @@ export type ImportPlan = {
 	unmapped?: string[],
 };
 
+/**  One Process Inbox choice for one issue. */
+export type InboxChoice = 
+/**  The two-minute rule: status Done. */
+"Done" | 
+/**  Status Delegated, and a comment "Waiting on: <note>". */
+({ Delegate: {
+	note: string,
+} }) & { Defer?: never; Next?: never } | 
+/**  Hide the issue until a later day. */
+({ Defer: {
+	until: string,
+} }) & { Delegate?: never; Next?: never } | 
+/**  Status Next, in `project` when given. */
+({ Next: {
+	project: ProjectId | null,
+} }) & { Defer?: never; Delegate?: never } | "Someday" | 
+/**  Archive. */
+"Trash";
+
 export type Issue = {
 	id: IssueId,
 	key: string,
@@ -1357,6 +1487,10 @@ export type Issue = {
 	estimate_minutes: number | null,
 	/**  At least 0, one decimal at most (checked on write). */
 	points: number | null,
+	/**  Deferred: views hide the issue until this day (the Process Inbox "Defer" choice). */
+	hidden_until: string | null,
+	/**  Deep or shallow work; `None` until chosen. */
+	depth: Depth | null,
 	properties: { [key in string]: Value },
 	created_at: string,
 	updated_at: string,
@@ -1378,9 +1512,11 @@ export type IssuePatch = {
 	cycle_id?: CycleId | null,
 	label_ids?: LabelId[] | null,
 	start_date?: string | null,
+	depth?: Depth | null,
 	due?: Due | null,
 	estimate_minutes?: number | null,
 	points?: number | null,
+	hidden_until?: string | null,
 	properties?: { [key in string]: Value } | null,
 };
 
@@ -1430,6 +1566,20 @@ export type LeadTime = {
 	n: number,
 };
 
+/**  Where something about an issue lives: a URL or a `taskapp://` link, with a title and what it is. */
+export type Link = {
+	id: LinkId,
+	issue_id: IssueId,
+	url: string,
+	title: string,
+	kind: LinkKind,
+	created_at: string,
+};
+
+export type LinkId = number;
+
+export type LinkKind = "solution" | "reference" | "pr" | "commit" | "doc" | "other";
+
 /**  What is summed: story points, issue count, or estimated time (minutes). */
 export type Measure = "points" | "count" | "time";
 
@@ -1451,6 +1601,7 @@ export type Metrics = {
 	cycle?: CycleCommit | null,
 	blocked?: Blocked | null,
 	flow?: FlowEfficiency | null,
+	deep?: DeepHours | null,
 };
 
 /**  One bucket; `scope` is open plus finished-in-range work at the bucket's end, `done_total` the finished part. */
@@ -1505,6 +1656,13 @@ export type NewIssue = {
 	properties?: { [key in string]: Value } | null,
 	created_at?: string | null,
 	completed_at?: string | null,
+};
+
+/**  A project with its open next action; `stuck` when the project is active and has none. */
+export type NextAction = {
+	project: Project,
+	issue: Issue | null,
+	stuck: boolean,
 };
 
 export type Op = "Eq" | "Neq" | "In" | "NotIn" | "Lt" | "Lte" | "Gt" | "Gte" | "Contains" | "IsEmpty" | "IsNotEmpty";
@@ -1848,6 +2006,8 @@ export type ViewDef = {
 	layout: Layout,
 	columns: FieldRef[],
 	include_archived: boolean,
+	/**  Whether issues deferred to a later day (`hidden_until`) are listed. */
+	deferred?: Deferred,
 	density?: Density,
 	show_empty_groups?: boolean,
 	show_sub_issues?: SubIssues,

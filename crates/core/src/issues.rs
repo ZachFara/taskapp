@@ -4,7 +4,7 @@ use serde_json::{Map, Value};
 use sqlx::{Row, SqliteConnection, sqlite::SqliteRow};
 
 use crate::{
-    ChangeSource, Db, Due, Error, Issue, IssueId, IssuePatch, LabelId, NewIssue, Result,
+    ChangeSource, Db, Depth, Due, Error, Issue, IssueId, IssuePatch, LabelId, NewIssue, Result,
     StatusCategory, StatusId, history, search, statuses::parse_category,
 };
 
@@ -37,7 +37,8 @@ pub(crate) async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Is
         r#"SELECT id AS "id!: i64", number, title, description, status_id, priority,
                   project_id, milestone_id, parent_id, cycle_id,
                   start_date AS "start_date: NaiveDate", due_date AS "due_date: NaiveDate",
-                  due_time_utc AS "due_time_utc: DateTime<Utc>", due_tz, estimate_minutes, points, properties,
+                  due_time_utc AS "due_time_utc: DateTime<Utc>", due_tz, estimate_minutes, points, depth, properties,
+                  hidden_until AS "hidden_until: NaiveDate",
                   created_at AS "created_at: DateTime<Utc>", updated_at AS "updated_at: DateTime<Utc>",
                   completed_at AS "completed_at: DateTime<Utc>", archived_at AS "archived_at: DateTime<Utc>"
            FROM issues WHERE id = ?"#,
@@ -80,12 +81,25 @@ pub(crate) async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Is
             .transpose()
             .map_err(bad)?,
         points: r.points,
+        hidden_until: r.hidden_until,
+        depth: r.depth.as_deref().map(parse_depth).transpose()?,
         properties: serde_json::from_str(&r.properties).map_err(bad)?,
         created_at: r.created_at,
         updated_at: r.updated_at,
         completed_at: r.completed_at,
         archived_at: r.archived_at,
     })
+}
+
+/// The stored word for a depth; anything else in the column is a bug in the writer.
+fn parse_depth(s: &str) -> Result<Depth> {
+    match s {
+        "deep" => Ok(Depth::Deep),
+        "shallow" => Ok(Depth::Shallow),
+        other => Err(Error::Invalid(format!(
+            "issue depth {other} is not deep or shallow"
+        ))),
+    }
 }
 
 /// Columns every issue query selects: the row plus its label ids as a comma list.
@@ -129,6 +143,12 @@ pub(crate) fn issue_from_row(r: &SqliteRow, prefix: &str) -> Result<Issue> {
             .map(|m| u32::try_from(m).map_err(|e| Error::Invalid(e.to_string())))
             .transpose()?,
         points: r.try_get("points")?,
+        hidden_until: r.try_get("hidden_until")?,
+        depth: r
+            .try_get::<Option<String>, _>("depth")?
+            .as_deref()
+            .map(parse_depth)
+            .transpose()?,
         properties: serde_json::from_str::<Map<String, Value>>(&props)
             .map_err(|e| Error::Invalid(format!("issue properties: {e}")))?,
         created_at: r.try_get("created_at")?,
@@ -367,6 +387,8 @@ fn apply_patch(old: &Issue, p: IssuePatch) -> Issue {
     n.due = p.due.unwrap_or(n.due);
     n.estimate_minutes = p.estimate_minutes.unwrap_or(n.estimate_minutes);
     n.points = p.points.unwrap_or(n.points);
+    n.hidden_until = p.hidden_until.unwrap_or(n.hidden_until);
+    n.depth = p.depth.unwrap_or(n.depth);
     if let Some(mut l) = p.label_ids {
         l.sort_by_key(|l| l.0);
         l.dedup();
@@ -445,6 +467,8 @@ fn changes(old: &Issue, n: &Issue) -> Vec<(&'static str, Value, Value)> {
         &n.estimate_minutes,
     );
     diff(&mut c, "points", &old.points, &n.points);
+    diff(&mut c, "hidden_until", &old.hidden_until, &n.hidden_until);
+    diff(&mut c, "depth", &old.depth, &n.depth);
     diff(&mut c, "properties", &old.properties, &n.properties);
     c
 }
@@ -482,6 +506,24 @@ pub async fn update(db: &Db, id: IssueId, patch: IssuePatch, src: ChangeSource) 
     Ok(issue)
 }
 
+/// The completion time after a move to `status`: kept when the issue was already done, else now, or none.
+async fn completed_after(
+    tx: &mut SqliteConnection,
+    old: &Issue,
+    status: StatusId,
+) -> Result<Option<DateTime<Utc>>> {
+    let was = is_done(category(tx, old.status_id).await?);
+    Ok(if is_done(category(tx, status).await?) {
+        if was {
+            old.completed_at
+        } else {
+            Some(Utc::now())
+        }
+    } else {
+        None
+    })
+}
+
 /// [`update`] inside the caller's transaction, which should be `BEGIN IMMEDIATE`.
 ///
 /// # Errors
@@ -503,26 +545,18 @@ pub async fn update_in(
         return Ok(old);
     }
     if new.status_id != old.status_id {
-        let was = is_done(category(tx, old.status_id).await?);
-        new.completed_at = if is_done(category(tx, new.status_id).await?) {
-            if was {
-                old.completed_at
-            } else {
-                Some(Utc::now())
-            }
-        } else {
-            None
-        };
+        new.completed_at = completed_after(tx, &old, new.status_id).await?;
     }
     new.updated_at = Utc::now();
     let due = due_cols(new.due.as_ref());
     let props = serde_json::to_string(&new.properties).map_err(bad)?;
+    let depth = new.depth.map(Depth::as_str);
     let (project, milestone) = (new.project_id.map(|p| p.0), new.milestone_id.map(|m| m.0));
     let (parent, cycle) = (new.parent_id.map(|p| p.0), new.cycle_id.map(|c| c.0));
     sqlx::query!(
         "UPDATE issues SET title = ?, description = ?, status_id = ?, priority = ?, project_id = ?,
            milestone_id = ?, parent_id = ?, cycle_id = ?, start_date = ?, due_date = ?, due_time_utc = ?,
-           due_tz = ?, estimate_minutes = ?, points = ?, properties = ?, updated_at = ?, completed_at = ? WHERE id = ?",
+           due_tz = ?, estimate_minutes = ?, points = ?, hidden_until = ?, depth = ?, properties = ?, updated_at = ?, completed_at = ? WHERE id = ?",
         new.title,
         new.description,
         new.status_id.0,
@@ -537,6 +571,8 @@ pub async fn update_in(
         due.tz,
         new.estimate_minutes,
         new.points,
+        new.hidden_until,
+        depth,
         props,
         new.updated_at,
         new.completed_at,

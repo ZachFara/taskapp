@@ -14,7 +14,7 @@ mod ext;
 use crate::{
     Bucket, ChangeSource, Cycle, CycleTime, CycleTimePoint, Db, Error, Issue, LabelBreakdown,
     LeadTime, Measure, Metrics, MetricsBucket, MetricsQuery, MetricsScope, Relation, Result,
-    SourceBreakdown, StatusCategory, VelocityCycle, ViewDef, cycles,
+    SourceBreakdown, StatusCategory, VelocityCycle, ViewDef, cycles, focus,
     insights::{local, zone},
     labels, statuses, views,
 };
@@ -95,7 +95,7 @@ fn percentile(days: &[f64], pct: usize) -> Option<f64> {
     v.get((v.len() * pct).div_ceil(100).max(1) - 1).copied()
 }
 
-fn bucket_start(day: NaiveDate, b: Bucket) -> NaiveDate {
+pub(crate) fn bucket_start(day: NaiveDate, b: Bucket) -> NaiveDate {
     match b {
         Bucket::Day => day,
         Bucket::Week => day - Duration::days(i64::from(day.weekday().num_days_from_monday())),
@@ -103,7 +103,7 @@ fn bucket_start(day: NaiveDate, b: Bucket) -> NaiveDate {
     }
 }
 
-fn next_start(start: NaiveDate, b: Bucket) -> NaiveDate {
+pub(crate) fn next_start(start: NaiveDate, b: Bucket) -> NaiveDate {
     match b {
         Bucket::Day => start + Duration::days(1),
         Bucket::Week => start + Duration::days(7),
@@ -544,6 +544,7 @@ pub async fn metrics_on(db: &Db, q: MetricsQuery, today: NaiveDate) -> Result<Me
             today,
         )),
         flow: Some(ext::flow(&done, &sts)),
+        deep: Some(focus::deep_hours(db, from, to, q.bucket, Utc::now(), tz).await?),
     })
 }
 

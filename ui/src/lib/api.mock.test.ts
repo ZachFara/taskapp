@@ -21,6 +21,18 @@ describe('mock api', () => {
     expect(rows.some((i) => i.due?.Date && i.due.Date < new Date().toISOString().slice(0, 10))).toBe(true);
   });
 
+  it('a deferred issue leaves views until its day unless the view shows deferred ones, and Hidden until filters', async () => {
+    const mock = createMockApi();
+    const all = (await mock.views.query(def(null))).length;
+    await mock.issues.update(1, { hidden_until: '2999-01-01' });
+    expect(await mock.views.query(def(null))).toHaveLength(all - 1);
+    expect(await mock.views.query({ ...def(null), deferred: 'show' })).toHaveLength(all);
+    const on = await mock.views.query({ ...def({ Cond: { field: { Fixed: 'HiddenUntil' }, op: 'Gt', value: 'today+30' } }), deferred: 'show' });
+    expect(on.map((i) => i.id)).toEqual([1]);
+    await mock.issues.update(1, { hidden_until: null });
+    expect(await mock.views.query(def(null))).toHaveLength(all);
+  });
+
   it('a relative date counts from today in the workspace zone', async () => {
     const mock = createMockApi();
     const tz = (await mock.workspace.status()).timezone;

@@ -28,6 +28,11 @@ macro_rules! with_commands {
                 quickadd::create_from(&s.db, &input, today(s)?, &s.tz, $source).await
             }
 
+            inbox_list(s) -> Vec<Issue> { inbox::list(&s.db, today(s)?).await }
+            inbox_process(s, id: IssueId, choice: InboxChoice) -> Issue {
+                inbox::process(&s.db, id, choice, today(s)?, $source).await
+            }
+
             workspace_status(s) -> WorkspaceStatus { workspace::status(&s.db).await }
             workspace_setup(s, name: String, key: String, timezone: Option<String>) -> WorkspaceStatus {
                 workspace::setup(&s.db, &name, &key, timezone.as_deref()).await
@@ -92,6 +97,10 @@ macro_rules! with_commands {
             }
             projects_update(s, project: Project) -> Project { projects::update(&s.db, project, $source).await }
             projects_delete(s, id: ProjectId) -> () { projects::delete(&s.db, id, $source).await }
+            next_list(s) -> Vec<NextAction> { next_actions::list(&s.db).await }
+            projects_set_next(s, project: ProjectId, issue: Option<IssueId>) -> () {
+                next_actions::set(&s.db, project, issue, $source).await
+            }
             projects_progress(s, id: ProjectId) -> (u32, u32) { projects::progress(&s.db, id).await }
             projects_list_milestones(s, project: ProjectId) -> Vec<Milestone> {
                 projects::list_milestones(&s.db, project).await
@@ -147,6 +156,12 @@ macro_rules! with_commands {
             decisions_unlink(s, decision: DecisionId, issue: IssueId) -> () {
                 decisions::unlink(&s.db, decision, issue, $source).await
             }
+
+            links_list(s, issue: IssueId) -> Vec<Link> { links::list(&s.db, issue).await }
+            links_add(s, issue: IssueId, url: String, title: Option<String>, kind: Option<LinkKind>) -> Link {
+                links::add(&s.db, issue, &url, title, kind, $source).await
+            }
+            links_remove(s, id: LinkId) -> () { links::remove(&s.db, id, $source).await }
 
             labels_list(s) -> Vec<Label> { labels::list(&s.db).await }
             labels_create(s, name: String, color: String, icon: Option<String>) -> Label {
@@ -276,7 +291,19 @@ macro_rules! with_commands {
 
             stale_list(s) -> Vec<StaleIssue> { stale::list(&s.db).await }
 
+            focus_start(s, issue: IssueId, deep: Option<bool>) -> FocusSession {
+                focus::start(&s.db, issue, deep, $source).await
+            }
+            focus_stop(s) -> Option<FocusSession> { focus::stop(&s.db, $source).await }
+            focus_running(s) -> Option<FocusSession> { focus::running(&s.db).await }
+            focus_log(s, issue: Option<IssueId>, from: Option<NaiveDate>, to: Option<NaiveDate>) -> Vec<FocusSession> {
+                focus::log(&s.db, issue, from, to).await
+            }
+
             search_search(s, text: String, limit: u32) -> Vec<Issue> { search::search(&s.db, &text, limit).await }
+            search_similar(s, text: String, project_id: Option<ProjectId>, limit: u32) -> Vec<Issue> {
+                search::similar(&s.db, &text, project_id, limit).await
+            }
 
             pins_pin(s, kind: PinKind, target: String, title: Option<String>) -> Pin {
                 pins::pin(&s.db, kind, &target, title).await

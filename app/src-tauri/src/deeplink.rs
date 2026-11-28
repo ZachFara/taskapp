@@ -17,10 +17,33 @@ pub fn parse_key(url: &str) -> Option<String> {
     valid.then(|| key.to_owned())
 }
 
-/// Focuses the main window and tells the UI to open each linked issue.
+/// The link `taskapp://<kind>/<arg>` for every item type but issues (see [`parse_key`]), or `None` for anything
+/// else. `arg` is a slug for a project and a plain number otherwise, so it can never name another route.
+#[must_use]
+pub fn parse_item(url: &str) -> Option<String> {
+    let (kind, arg) = url.strip_prefix("taskapp://")?.split_once('/')?;
+    let arg = arg.trim_end_matches('/');
+    let ok = match kind {
+        "project" => {
+            (1..=40).contains(&arg.len())
+                && !arg.starts_with('-')
+                && arg
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        }
+        "view" | "cycle" | "milestone" | "event" | "decision" => {
+            (1..=9).contains(&arg.len()) && arg.bytes().all(|b| b.is_ascii_digit())
+        }
+        _ => false,
+    };
+    ok.then(|| format!("taskapp://{kind}/{arg}"))
+}
+
+/// Focuses the main window and tells the UI to open each linked item.
 pub fn open(app: &AppHandle, urls: &[String]) {
     let keys: Vec<String> = urls.iter().filter_map(|u| parse_key(u)).collect();
-    if keys.is_empty() {
+    let items: Vec<String> = urls.iter().filter_map(|u| parse_item(u)).collect();
+    if keys.is_empty() && items.is_empty() {
         return;
     }
     if let Some(w) = app.get_webview_window("main") {
@@ -29,5 +52,8 @@ pub fn open(app: &AppHandle, urls: &[String]) {
     }
     for key in keys {
         app.emit("open-issue", key).ok();
+    }
+    for item in items {
+        app.emit("open-link", item).ok();
     }
 }

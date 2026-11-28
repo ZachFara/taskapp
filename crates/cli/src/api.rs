@@ -7,19 +7,20 @@ use serde_json::{Value, json};
 use taskapp_core::{
     Applied, AppliedTemplate, Attachment, AttachmentData, AttachmentId, Bar, BulkPatch, Change,
     ChangeSource, Comment, CommentId, Cycle, CycleId, Db, Decision, DecisionId, DecisionInput,
-    DecisionStatus, Error, Event, EventId, EventInput, FlowKind, FolderSection, Forecast,
-    ForecastQuery, ImportPlan, Issue, IssueId, IssuePatch, IssueStats, IssueTemplate, Label,
-    LabelId, Measure, Metrics, MetricsQuery, Milestone, MilestoneId, NewIssue, ParsedQuickAdd, Pin,
-    PinId, PinKind, Placement, ProgressScope, ProgressSeries, Project, ProjectId, ProjectRow,
-    ProjectStatus, ProjectStatusCategory, ProjectStatusId, PropertyAppliesTo, PropertyDef,
-    PropertyKind, Relation, RelationKind, RelationKindDef, Reschedule, ResolvedPin, Result,
-    SavedView, SelectOption, StaleIssue, Status, StatusCategory, StatusId, SyncState, SyncStatus,
-    TemplateId, TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewEntity, ViewFolder,
-    ViewFolderId, ViewId, ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus,
-    attachments, backup, blocks, bulk, comments, cycles, decisions, events, forecast, history,
-    import, insights, issues, labels, metrics, pins, project_statuses, projects, properties,
-    quickadd, relation_kinds, relations, schedule, search, settings, stale, statuses, templates,
-    undo, view_folders, view_templates, views, workspace,
+    DecisionStatus, Error, Event, EventId, EventInput, FlowKind, FocusSession, FolderSection,
+    Forecast, ForecastQuery, ImportPlan, InboxChoice, Issue, IssueId, IssuePatch, IssueStats,
+    IssueTemplate, Label, LabelId, Link, LinkId, LinkKind, Measure, Metrics, MetricsQuery,
+    Milestone, MilestoneId, NewIssue, NextAction, ParsedQuickAdd, Pin, PinId, PinKind, Placement,
+    ProgressScope, ProgressSeries, Project, ProjectId, ProjectRow, ProjectStatus,
+    ProjectStatusCategory, ProjectStatusId, PropertyAppliesTo, PropertyDef, PropertyKind, Relation,
+    RelationKind, RelationKindDef, Reschedule, ResolvedPin, Result, SavedView, SelectOption,
+    StaleIssue, Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId, TemplateInput,
+    UndoStatus, VelocityPeriod, ViewDef, ViewEntity, ViewFolder, ViewFolderId, ViewId,
+    ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, attachments, backup,
+    blocks, bulk, comments, cycles, decisions, events, focus, forecast, history, import, inbox,
+    insights, issues, labels, links, metrics, next_actions, pins, project_statuses, projects,
+    properties, quickadd, relation_kinds, relations, schedule, search, settings, stale, statuses,
+    templates, undo, view_folders, view_templates, views, workspace,
 };
 
 struct State<'a> {
@@ -124,6 +125,7 @@ pub fn guide() -> Value {
         "start": "Use taskapp --help and taskapp <command> --help to explore common commands.",
         "api": "Use taskapp api list, taskapp api describe <name>, and taskapp api call <name> --args '<JSON object>' for all core-backed app operations.",
         "output": "Use --json for structured output and errors; pass --db PATH for a different database.",
+        "before_filing": "Run taskapp issue similar 'title' [--project NAME] first; if an open issue matches, update it instead of filing a duplicate.",
         "examples": ["taskapp issue list --project Cairn --not-status Done,Someday", "taskapp issue create 'A task'", "taskapp --json api describe labels_update"]
     })
 }

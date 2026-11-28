@@ -56,7 +56,7 @@ fn validate(slug: &str, doc_link: Option<&str>) -> Result<()> {
 }
 
 /// Records one field's change, skipping unchanged values.
-async fn edit(
+pub(crate) async fn edit(
     tx: &mut SqliteConnection,
     src: ChangeSource,
     (entity, id): (&str, i64),

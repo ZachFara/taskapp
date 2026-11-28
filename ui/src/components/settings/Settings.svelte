@@ -5,6 +5,7 @@
   import Calendar from './Calendar.svelte';
   import Cycles from './Cycles.svelte';
   import Export from './Export.svelte';
+  import Features from './Features.svelte';
   import Fields from './Fields.svelte';
   import General from './General.svelte';
   import ImportPage from '../import/ImportPage.svelte';
@@ -16,6 +17,7 @@
   import RelationKinds from './RelationKinds.svelte';
   import Statuses from './Statuses.svelte';
   import Templates from './Templates.svelte';
+  import { isOn, SETTINGS_PAGES } from '../../lib/features.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
   import Icon from '../../ui/Icon.svelte';
   import PageHeader from '../../ui/PageHeader.svelte';
@@ -23,6 +25,7 @@
   // Keyboard shortcuts is not a page: its entry opens the cheat sheet command instead.
   const sections: { id: string; label: string; icon: string; screen?: Component; action?: string }[] = [
     { id: 'general', label: 'General', icon: 'settings', screen: General },
+    { id: 'features', label: 'Features', icon: 'layers', screen: Features },
     { id: 'statuses', label: 'Statuses', icon: 'circle', screen: Statuses },
     { id: 'project-statuses', label: 'Project statuses', icon: 'project', screen: ProjectStatuses },
     { id: 'labels', label: 'Labels', icon: 'tag', screen: Labels },
@@ -40,9 +43,11 @@
     { id: 'shortcuts', label: 'Keyboard shortcuts', icon: 'help', action: 'command:help.shortcuts' },
   ];
 
+  const shown = $derived(sections.filter((s) => !(SETTINGS_PAGES[s.id] && !isOn(SETTINGS_PAGES[s.id]))));
+
   let path = $state(location.pathname);
   const id = $derived(path.split('/')[2] ?? 'general');
-  const current = $derived(sections.find((s) => s.id === id));
+  const current = $derived(shown.find((s) => s.id === id));
 </script>
 
 <svelte:window onpopstate={() => (path = location.pathname)} />
@@ -54,7 +59,7 @@
 <div class="settings">
   <nav aria-label="Settings sections">
     <ul>
-      {#each sections as s (s.id)}
+      {#each shown as s (s.id)}
         <li>
           <a
             href={s.action ? '#shortcuts' : `/settings/${s.id}`}

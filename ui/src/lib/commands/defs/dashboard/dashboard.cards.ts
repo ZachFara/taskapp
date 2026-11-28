@@ -10,7 +10,7 @@ defineCommand({
   icon: 'eye',
   group: 'View',
   noShortcutReason: 'reached from the Cards button and the command menu',
-  when: (ctx) => dashboard.on && ctx.route === '/dashboard',
+  when: (ctx) => ctx.route === '/dashboard',
   page: () => ({
     title: 'Dashboard cards',
     items: CARDS.map((c) => ({ id: c.id, label: c.title, icon: 'chart', checked: () => !dashboard.hidden.includes(c.id), run: () => toggleCard(c.id) })),
@@ -23,7 +23,7 @@ defineCommand({
   icon: 'arrow-up',
   group: 'View',
   noShortcutReason: 'reached from the Cards button and the command menu',
-  when: (ctx) => dashboard.on && ctx.route === '/dashboard',
+  when: (ctx) => ctx.route === '/dashboard',
   page: () => ({
     title: 'Move a dashboard card',
     items: orderedCards().flatMap((id) => [

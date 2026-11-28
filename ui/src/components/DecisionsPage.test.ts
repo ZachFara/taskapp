@@ -36,6 +36,18 @@ const card = (id: number) => document.querySelector<HTMLElement>(`[data-decision
 const text = (el: Element) => el.textContent?.replace(/\s+/g, ' ');
 
 describe('DecisionsPage', () => {
+  it('a decision link opens the tab of that decision and focuses it', async () => {
+    history.replaceState(null, '', '/decisions#3');
+    await open(mockApi());
+    expect(card(3)).not.toBeNull();
+    const copied: string[] = [];
+    vi.stubGlobal('navigator', { clipboard: { writeText: async (t: string) => void copied.push(t) } });
+    dispatchEvent(new CustomEvent('command:decision.copyLink'));
+    await settle();
+    expect(copied).toEqual(['taskapp://decision/3']);
+    vi.unstubAllGlobals();
+  });
+
   it('a link in a decision context never navigates the app window', async () => {
     const seed = structuredClone(demoDecisions);
     seed[0].context = 'See [this page](https://example.com/evil)';

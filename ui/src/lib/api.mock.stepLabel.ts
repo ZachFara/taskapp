@@ -25,10 +25,12 @@ export function stepLabel(name: string, args: unknown[], out: unknown): string {
   switch (name) {
     case 'issues_create': case 'issues_create_from_quickadd': return `Created ${key}`;
     case 'issues_update': return `Edited ${key}`;
+    case 'inbox_process': return `Processed ${key}`;
     case 'issues_bulk_update': return bulk(args[0], (args[1] ?? {}) as Obj);
     case 'issues_duplicate': return `Duplicated ${count(len(args[0]), 'issue')}`;
     case 'import_apply': return `Imported ${count(Number((out as Obj).created ?? 0), 'issue')}`;
     case 'pins_set': return `${args[2] === false ? 'Unpinned' : 'Pinned'} ${count(len(args[1]), 'item')}`;
+    case 'projects_set_next': return args[1] === null || args[1] === undefined ? 'Cleared next action' : 'Set next action';
     case 'project_statuses_create': return 'Created project status';
     case 'project_statuses_update': return 'Edited project status';
     case 'project_statuses_reorder': return 'Reordered project statuses';

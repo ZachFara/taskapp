@@ -8,9 +8,9 @@ use std::{
 use chrono::{NaiveDate, TimeZone, Utc};
 use serde_json::json;
 use taskapp_core::{
-    ChangeSource, Db, Due, IssueId, Layout, NewIssue, PinKind, PropertyDef, PropertyKind, Relation,
-    RelationKind, StatusCategory, ViewDef, comments, cycles, issues, labels, pins, projects,
-    properties, relation_kinds, relations, settings, views,
+    ChangeSource, Db, Depth, Due, IssueId, IssuePatch, Layout, NewIssue, PinKind, PropertyDef,
+    PropertyKind, Relation, RelationKind, StatusCategory, ViewDef, comments, cycles, focus, issues,
+    labels, pins, projects, properties, relation_kinds, relations, settings, views,
 };
 use taskapp_export::{git, rebuild, write};
 
@@ -276,6 +276,42 @@ async fn points_survive_export_and_rebuild_and_stay_out_of_files_without_them() 
     let points = |n| issues::get(&rebuilt, IssueId(n));
     assert_eq!(points(1).await?.points, Some(3.5));
     assert_eq!(points(2).await?.points, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn depth_and_focus_sessions_survive_export_and_rebuild() -> R {
+    let db = seeded().await?;
+    issues::update(
+        &db,
+        IssueId(1),
+        IssuePatch {
+            depth: Some(Some(Depth::Deep)),
+            ..IssuePatch::default()
+        },
+        SRC,
+    )
+    .await?;
+    focus::start(&db, IssueId(1), None, SRC).await?;
+    focus::stop(&db, SRC).await?;
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let files = tree(src.path());
+    let text = String::from_utf8_lossy(&files["issues/ABC-1.md"]).into_owned();
+    assert!(
+        text.contains("depth: deep") && text.contains("focus:"),
+        "{text}"
+    );
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    assert_eq!(
+        issues::get(&rebuilt, IssueId(1)).await?.depth,
+        Some(Depth::Deep)
+    );
+    let back = focus::log(&rebuilt, Some(IssueId(1)), None, None).await?;
+    assert_eq!(
+        (back.len(), back[0].deep, back[0].ended_at.is_some()),
+        (1, true, true)
+    );
     Ok(())
 }
 
@@ -546,7 +582,9 @@ async fn dump(
         "relation_kinds",
         "events",
         "decisions",
+        "links",
         "work_blocks",
+        "focus_sessions",
     ] {
         let cols: Vec<String> = sqlx::query_scalar(
             "SELECT name FROM pragma_table_info(?1) WHERE (name != 'id' OR ?1 IN ('view_templates', 'view_folders'))
@@ -556,7 +594,7 @@ async fn dump(
         .fetch_all(&db.pool)
         .await?;
         let mut fields: Vec<String> = cols.iter().map(|c| format!("'{c}', \"{c}\"")).collect();
-        if t == "import_log" || t == "work_blocks" {
+        if ["import_log", "work_blocks", "focus_sessions"].contains(&t) {
             fields.push("'issue', (SELECT number FROM issues WHERE id = issue_id)".into());
         }
         let sql = format!(
@@ -597,6 +635,7 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
         "INSERT INTO view_folders (id, name, position) VALUES (3, 'Work', 0)",
         "INSERT INTO view_folders (id, name, position, section, parent_id) VALUES (4, 'Inner', 1, 'project', NULL), (5, 'Deep', 2, 'project', 4)",
         "UPDATE projects SET folder_id = 5, position = 2",
+        "UPDATE projects SET next_issue_id = (SELECT id FROM issues WHERE number = 1) WHERE slug = 'app'",
         "UPDATE cycles SET folder_id = NULL, position = 3",
         "UPDATE pins SET folder_id = 3",
         "UPDATE views SET icon = 'icon:star', color = 'yellow', template_id = 7, folder_id = 3 WHERE id = (SELECT min(id) FROM views)",
@@ -610,6 +649,8 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
         "INSERT INTO decisions (id, question, context, options, recommendation, mode, status, answer, note, source, external_id, answered_at)
            VALUES (6, 'Which?', '# ctx', '[{\"key\":\"a\",\"label\":\"A\",\"tradeoff\":\"x: y\"}]', 'a', 'blocking', 'answered', 'a', 'fine', 'curia', 'D-9', '2026-01-02 03:04:05')",
         "INSERT INTO decision_issues (decision_id, issue_id) VALUES (6, (SELECT id FROM issues WHERE number = 1))",
+        "INSERT INTO links (id, issue_id, url, title, kind, created_at)
+           VALUES (5, (SELECT id FROM issues WHERE number = 2), 'https://example.com/pr/3', 'The fix', 'pr', '2026-01-02 03:04:05')",
         "UPDATE import_log SET source_deleted = 1",
         "INSERT INTO work_blocks (issue_id, start_utc, end_utc)
            VALUES ((SELECT id FROM issues WHERE number = 2), '2026-01-05T09:00:00+00:00', '2026-01-05T10:30:00+00:00')",
@@ -635,6 +676,19 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
     .fetch_all(&rebuilt.pool)
     .await?;
     assert_eq!(dlinked, vec![1]);
+    links_and_next_point_at_the_right_issues(&rebuilt).await
+}
+
+/// A link and a project's next action refer to issues by id; after a rebuild they must reach the same issues.
+async fn links_and_next_point_at_the_right_issues(rebuilt: &Db) -> R {
+    let number = |sql: &'static str| sqlx::query_scalar::<_, i64>(sql).fetch_all(&rebuilt.pool);
+    let linked =
+        number("SELECT i.number FROM links l JOIN issues i ON i.id = l.issue_id WHERE l.id = 5");
+    assert_eq!(linked.await?, vec![2]);
+    let next = number(
+        "SELECT i.number FROM projects p JOIN issues i ON i.id = p.next_issue_id WHERE p.slug = 'app'",
+    );
+    assert_eq!(next.await?, vec![1]);
     Ok(())
 }
 
@@ -997,5 +1051,25 @@ async fn an_older_cycles_file_without_retrospective_fields_loads() -> R {
         ),
         (None, None, None, "")
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn hidden_until_survives_export_and_rebuild() -> R {
+    let db = seeded().await?;
+    let until = day(2999, 1, 1);
+    let patch = taskapp_core::IssuePatch {
+        hidden_until: Some(Some(until)),
+        ..taskapp_core::IssuePatch::default()
+    };
+    issues::update(&db, IssueId(1), patch, SRC).await?;
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    assert_eq!(
+        issues::get(&rebuilt, IssueId(1)).await?.hidden_until,
+        Some(until)
+    );
+    assert_eq!(issues::get(&rebuilt, IssueId(2)).await?.hidden_until, None);
     Ok(())
 }

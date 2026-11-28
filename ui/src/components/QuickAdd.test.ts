@@ -208,4 +208,24 @@ describe('QuickAdd', () => {
       label_ids: [label.id],
     }));
   });
+
+  it('quickadd_shows_possible_duplicates_as_the_title_is_typed_and_still_creates', async () => {
+    await api.issues.create({ title: 'Migrate blog to new CMS' });
+    await type('Migrate the blog');
+    expect(document.querySelectorAll('[data-dupe]')).toHaveLength(0); // debounced
+    await new Promise((r) => setTimeout(r, 300));
+    await settle();
+    const dupes = [...document.querySelectorAll<HTMLElement>('[data-dupe]')].map((d) => d.textContent);
+    expect(dupes.some((d) => d?.includes('Migrate blog to new CMS'))).toBe(true);
+    expect(dupes.length).toBeLessThanOrEqual(3);
+    await enter();
+    expect(oncreated).toHaveBeenCalledOnce();
+  });
+
+  it('quickadd_shows_no_duplicates_for_an_unrelated_title', async () => {
+    await type('zzzz qqqq');
+    await new Promise((r) => setTimeout(r, 300));
+    await settle();
+    expect(document.querySelectorAll('[data-dupe]')).toHaveLength(0);
+  });
 });

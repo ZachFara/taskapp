@@ -174,6 +174,28 @@ impl Names {
     }
 }
 
+/// `issue search` table: key, status, project and title, as `issue list` names them. Without `table`
+/// (`--json`) the full objects stay.
+pub async fn search_view(db: &Db, found: Value, table: bool) -> Result<Value> {
+    if !table {
+        return Ok(found);
+    }
+    let found: Vec<Issue> =
+        serde_json::from_value(found).map_err(|e| Error::Invalid(e.to_string()))?;
+    let names = Names::load(db).await?;
+    Ok(found
+        .iter()
+        .map(|i| {
+            json!({
+                "key": i.key,
+                "status": names.status(i),
+                "project": names.project(i),
+                "title": i.title,
+            })
+        })
+        .collect())
+}
+
 /// `issue get`: the raw issue plus names; ids and numeric priority stay.
 pub async fn get(db: &Db, key: &str) -> Result<Value> {
     let issue = issues::get_by_key(db, key).await?;

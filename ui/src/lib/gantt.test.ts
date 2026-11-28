@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Bar, Issue, Milestone, Project } from './bindings';
-import { axis, buildRows, dragDates, localDay, rollup, saturdays, shiftLocalDays, unscheduled, zoomBy } from './gantt';
+import { axis, buildRows, dragDates, localDay, range, rollup, saturdays, shiftLocalDays, unscheduled, zoomBy } from './gantt';
 import { fixtures, projectStatusSeed } from './api.mock';
 
 const issue = (id: number, o: Partial<Issue> = {}): Issue => ({ ...fixtures.issues[0], id, key: `ABC-${id}`, title: `t${id}`, parent_id: null, project_id: 1, start_date: null, due: null, estimate_minutes: null, ...o });
@@ -29,6 +29,25 @@ describe('gantt rows', () => {
     expect(buildRows({ ...base, issues: [issues[0]], bars: [bars[0]] }).some((r) => r.kind === 'group')).toBe(false);
   });
 
+  it('grouped_band_carries_its_projects_milestones_and_keeps_them_in_range', () => {
+    const issues = [issue(1), issue(2, { project_id: 2 })];
+    const bars = [bar(1, '2026-12-01', '2026-12-02'), bar(2, '2026-12-05', '2026-12-06')];
+    const milestones: Milestone[] = [{ id: 9, project_id: 1, name: 'Launch', target_date: '2026-12-20' }];
+    const grouped = buildRows({ ...base, issues, bars, milestones });
+    expect(grouped.find((r) => r.id === 'group-1')?.milestones?.map((m) => m.name)).toEqual(['Launch']);
+    expect(grouped.filter((r) => r.id.startsWith('milestone-'))).toEqual([]);
+    expect(range(grouped, base.today).end >= '2026-12-20').toBe(true);
+  });
+
+  it('an_ungrouped_project_gets_a_band_only_for_its_milestones', () => {
+    const milestones: Milestone[] = [{ id: 9, project_id: 1, name: 'Launch', target_date: '2026-12-20' }];
+    const plain = buildRows({ ...base, issues: [issue(1)], bars: [bar(1, '2026-12-01', '2026-12-02')] });
+    expect(plain.some((r) => r.kind === 'group')).toBe(false);
+    const banded = buildRows({ ...base, issues: [issue(1)], bars: [bar(1, '2026-12-01', '2026-12-02')], milestones });
+    expect(banded.map((r) => r.id)).toEqual(['group-1', 'issue-1']);
+    expect(banded[0].milestones?.map((m) => m.name)).toEqual(['Launch']);
+  });
+
   it('unscheduled_is_every_issue_without_a_row', () => {
     const issues = [issue(1), issue(2, { estimate_minutes: 60 }), issue(3, { start_date: '2026-12-01' })];
     const rows = buildRows({ ...base, issues, bars: [bar(3, '2026-12-01', '2026-12-02')] });
@@ -53,10 +72,15 @@ describe('gantt project rows', () => {
     expect(rows[0].start).toBeUndefined();
   });
 
-  it('a_dateless_projects_milestones_still_draw_under_it', () => {
-    const milestones: Milestone[] = [{ id: 9, project_id: 1, name: 'Launch', target_date: '2026-12-20' }];
+  it('milestones_ride_on_their_project_row_and_undated_ones_are_skipped', () => {
+    const milestones: Milestone[] = [
+      { id: 9, project_id: 1, name: 'Launch', target_date: '2026-12-20' },
+      { id: 10, project_id: 1, name: 'Someday', target_date: null },
+      { id: 11, project_id: 2, name: 'Other', target_date: '2026-12-01' },
+    ];
     const rows = rowsOf([proj({ start_date: null, target_date: null })], [], milestones);
-    expect(rows.map((r) => r.kind)).toEqual(['bar', 'milestone']);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].milestones?.map((m) => m.name)).toEqual(['Launch']);
   });
 
   it('a_start_only_project_runs_to_today_or_its_latest_issue', () => {

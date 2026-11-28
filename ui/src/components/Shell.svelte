@@ -28,7 +28,8 @@
     panelOpen = false,
     onsearch,
     route = '',
-  }: { sidebar?: Snippet; panel?: Snippet; children: Snippet; crumb?: { label: string; href?: string }[]; panelOpen?: boolean; onsearch?: () => void; route?: string } = $props();
+    focus = false,
+  }: { sidebar?: Snippet; panel?: Snippet; children: Snippet; crumb?: { label: string; href?: string }[]; panelOpen?: boolean; onsearch?: () => void; route?: string; focus?: boolean } = $props();
 
   let sync = $state<SyncStatus | null>(null);
   const syncError = $derived(
@@ -108,7 +109,7 @@
 
 </script>
 
-<div class="app cairn-root" data-on-frame style:--sidebar-w={collapsed ? '0px' : sideW === null ? null : `${sideW}px`}>
+<div class="app cairn-root" data-on-frame style:--sidebar-w={collapsed || focus ? '0px' : sideW === null ? null : `${sideW}px`}>
   <div class="brand">
     <span class="mark"><Icon name="cairn" size={24} /></span>
     <span class="wordmark">Cairn</span>
@@ -136,7 +137,7 @@
       <CommandButton command="theme.cycle" iconOnly />
     </div>
   </header>
-  <aside class="sidebar" bind:this={side} hidden={collapsed}>
+  <aside class="sidebar" bind:this={side} hidden={collapsed || focus}>
     {@render sidebar?.()}
     <div class="edge side"><Splitter label="Resize sidebar" clamp={clampSide} fromPointer={(x) => x / zoom()} onchange={setSide} onreset={() => setSide(null)} /></div>
   </aside>

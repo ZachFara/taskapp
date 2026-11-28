@@ -180,6 +180,24 @@ pub struct DecisionFile {
     pub issues: Vec<String>,
 }
 
+/// One entry of `links.yaml`; `issue` is a key. Older exports have no such file.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct LinkFile {
+    pub id: i64,
+    pub issue: String,
+    pub url: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default = "other")]
+    pub kind: String,
+    #[serde(default)]
+    pub created_at: String,
+}
+
+fn other() -> String {
+    "other".into()
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
 pub struct PinRow {
     pub kind: String,
@@ -223,6 +241,9 @@ pub struct ProjectFile {
     pub folder_id: Option<i64>,
     #[serde(default = "unplaced")]
     pub position: i64,
+    /// The number of the flagged next-action issue.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_issue: Option<i64>,
     #[sqlx(skip)]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub labels: Vec<String>,
@@ -347,6 +368,16 @@ pub struct WorkBlockRow {
     pub end: DateTime<Utc>,
 }
 
+/// One focus session of an issue, listed in its frontmatter; `end` is missing while it runs.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct FocusRow {
+    pub start: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub deep: bool,
+}
+
 /// Frontmatter of `issues/<KEY>.md`. Every reference is by name or key, never by database id.
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct IssueFront {
@@ -366,6 +397,8 @@ pub struct IssueFront {
     pub estimate_minutes: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub points: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden_until: Option<NaiveDate>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
@@ -383,6 +416,11 @@ pub struct IssueFront {
     pub properties: Map<String, Value>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub work_blocks: Vec<WorkBlockRow>,
+    /// `deep` or `shallow`; missing until chosen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub depth: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub focus: Vec<FocusRow>,
 }
 
 /// The frontmatter, the description, and the comments of one issue file.

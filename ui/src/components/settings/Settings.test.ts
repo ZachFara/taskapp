@@ -1,10 +1,24 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { features } from '../../lib/features.svelte';
 import '../../lib/commands';
 import { labelFor, shortcutFor } from '../../lib/commands';
 import Settings from './Settings.svelte';
 import { mountSettings } from './testing';
 
 describe('Settings', () => {
+  afterEach(() => Object.assign(features, { cycles: true, reminders: true, gcal: true }));
+
+  it('hides the settings pages of a feature that is switched off', async () => {
+    Object.assign(features, { cycles: false, reminders: false, gcal: false });
+    history.pushState(null, '', '/settings/general');
+    const { target } = await mountSettings(Settings);
+    const names = [...target.querySelectorAll('nav a')].map((a) => a.textContent?.trim());
+    expect(names).not.toContain('Cycles');
+    expect(names).not.toContain('Reminders');
+    expect(names).not.toContain('Calendar');
+    expect(names).toContain('Features');
+  });
+
   it('routes each section and marks the current one', async () => {
     history.pushState(null, '', '/settings/export');
     const { target } = await mountSettings(Settings);
@@ -33,7 +47,7 @@ describe('Settings', () => {
     const { target } = await mountSettings(Settings);
     const names = [...target.querySelectorAll('nav a')].map((a) => a.textContent?.trim());
     expect(names).toEqual([
-      'General', 'Statuses', 'Project statuses', 'Labels', 'Projects', 'Cycles', 'Fields', 'Properties', 'Relations', 'Templates', 'Import',
+      'General', 'Features', 'Statuses', 'Project statuses', 'Labels', 'Projects', 'Cycles', 'Fields', 'Properties', 'Relations', 'Templates', 'Import',
       'Reminders', 'Calendar', 'Export', 'Backups', 'Keyboard shortcuts',
     ]);
     expect(target.textContent).toContain('Keyboard shortcuts');

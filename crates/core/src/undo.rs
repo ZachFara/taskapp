@@ -29,6 +29,7 @@ const ISSUE_FIELDS: &[&str] = &[
     "due",
     "estimate_minutes",
     "points",
+    "hidden_until",
     "properties",
 ];
 

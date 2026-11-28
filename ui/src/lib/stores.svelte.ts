@@ -1,4 +1,5 @@
 import { api } from './api';
+import { openCairnLink } from './deepLink';
 import type { Issue, IssueId, Placement, Project, ProjectStatus, PropertyDef, SavedView, Status, ViewDef, ViewFolder, ViewId } from './bindings';
 
 // Runes cannot be reassigned across modules, so lists are replaced in place and scalars live in a box.
@@ -56,6 +57,7 @@ export async function listenToBackend(): Promise<void> {
     history.pushState(null, '', `/issue/${encodeURIComponent(payload)}`);
     dispatchEvent(new PopStateEvent('popstate'));
   });
+  await listen<string>('open-link', ({ payload }) => void openCairnLink(payload, api));
 }
 
 if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) void listenToBackend();

@@ -14,7 +14,9 @@ const IDS: [string, string][] = [
   ['event.edit', '/event/1'], ['event.delete', '/event/1'], ['event.link', '/event/1'], ['event.new', '/events'],
   ['event.open', '/events'], ['event.edit', '/events'], ['event.delete', '/events'], ['event.link', '/events'],
   ['project.rename', '/project/web'], ['project.description.edit', '/project/web'], ['milestone.new', '/project/web'],
-  ['decision.answer', '/decisions'], ['decision.withdraw', '/decisions'],
+  ['decision.answer', '/decisions'], ['decision.withdraw', '/decisions'], ['decision.copyLink', '/decisions'], ['event.copyLink', '/events'],
+  ['issue.link.add', '/issue/ABC-1'],
+  ...['do', 'delegate', 'defer', 'next', 'someday', 'trash', 'skip', 'back'].map((k): [string, string] => [`process.${k}`, '/process']),
   ['icon.change', '/view/1'], ['icon.change', '/project/web'], ['cycle.move_unfinished', '/cycles'], ['settings.save', '/settings/general'],
 ];
 

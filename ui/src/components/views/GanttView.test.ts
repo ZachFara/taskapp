@@ -282,6 +282,15 @@ describe('GanttView', () => {
     expect(document.querySelector('.line.bar, .line.rollup, .line.milestone, .label.bar')).toBeNull();
   });
 
+  it('a_milestone_is_a_labelled_marker_that_opens_its_project_milestones', async () => {
+    await show([dated(1, '2026-12-01', '2026-12-03')], {}, { milestones: [{ id: 9, project_id: 1, name: 'Launch', target_date: '2026-12-20' }] });
+    const mark = document.querySelector<HTMLButtonElement>('.ms-mark')!;
+    expect(mark.textContent).toContain('Launch');
+    mark.click();
+    expect(location.pathname).toBe(`/project/${fixtures.projects[0].slug}`);
+    expect(location.hash).toBe('#milestones');
+  });
+
   it('embedded_has_no_title_and_standalone_has_one', async () => {
     await show([dated(1, '2026-12-01', '2026-12-03')]);
     expect(document.querySelector('h1')).toBeNull();

@@ -53,6 +53,9 @@
   let highlight = $state(0);
   let field: HTMLInputElement | undefined = $state();
   let seq = 0;
+  let dupes = $state<Issue[]>([]);
+  let dupeTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => () => clearTimeout(dupeTimer));
   let estimation = $state<Estimation>('both');
   let scale = $state<ScaleName>('fibonacci');
   void readEstimation().then((r) => ({ estimation, scale } = r));
@@ -139,7 +142,20 @@
     if (slashQuery !== null) templates = await api.templates.list().catch(() => templates);
     const mine = ++seq;
     const p = text.trim() && !slashQuery ? await api.issues.parseQuickadd(text).catch(() => null) : null;
-    if (mine === seq) parsed = p;
+    if (mine !== seq) return;
+    parsed = p;
+    // Quiet and never blocking: a failed lookup just shows nothing.
+    clearTimeout(dupeTimer);
+    if (!p?.title.trim()) return (dupes = []);
+    dupeTimer = setTimeout(async () => {
+      const found = await api.search.similar(p.title, null, 3).catch(() => []);
+      if (mine === seq) dupes = found;
+    }, 250);
+  }
+
+  function openDupe(i: Issue) {
+    navigate(`/issue/${i.key}`);
+    onclose();
   }
 
   const hasDefaults = (d: IssueDefaults) =>
@@ -353,6 +369,14 @@
       {/each}
     </div>
   {/if}
+  {#if dupes.length}
+    <div class="dupes" role="group" aria-label="Possible duplicates">
+      <span class="dupes-label">Possible duplicates</span>
+      {#each dupes as d (d.id)}
+        <button type="button" class="dupe" data-dupe onclick={() => openDupe(d)}><span class="dupe-key">{d.key}</span> {d.title}</button>
+      {/each}
+    </div>
+  {/if}
   {#if error}<p class="error" role="alert">{error}</p>{/if}
 
   {#snippet actions()}
@@ -391,6 +415,11 @@
   .chips { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: var(--s-3); padding: var(--s-3) var(--s-2) 0; }
   .chip { display: inline-flex; align-items: center; gap: var(--s-3); height: var(--row-h-compact); padding: 0 var(--s-4); border: 1px solid var(--control); border-radius: var(--r-round); background: var(--raised); color: var(--ink); font-size: var(--fs-sm); font-weight: 600; transition: background var(--dur-1) var(--ease); }
   .chip:hover { background: var(--active); }
+  .dupes { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-2); padding: var(--s-4) var(--s-2) 0; color: var(--muted); font-size: var(--fs-sm); }
+  .dupes-label { font-size: var(--fs-xs); font-weight: 600; }
+  .dupe { max-width: 100%; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: var(--fs-sm); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dupe:hover, .dupe:focus-visible { color: var(--ink); text-decoration: underline; }
+  .dupe-key { font-weight: 600; }
   .error { margin: 0; color: var(--signal); font-size: var(--fs-sm); font-weight: 500; }
   .hints { display: flex; align-items: center; gap: var(--s-5); margin-right: auto; color: var(--muted); font-size: var(--fs-xs); }
   .hints span { display: inline-flex; align-items: center; gap: var(--s-2); }

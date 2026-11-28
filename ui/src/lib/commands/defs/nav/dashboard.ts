@@ -1,4 +1,3 @@
-import { dashboard } from '../../../../components/dashboard/dashboard.svelte';
 import { defineCommand } from '../../registry';
 
 defineCommand({
@@ -7,6 +6,5 @@ defineCommand({
   icon: 'chart',
   group: 'Navigation',
   shortcut: 'g b',
-  when: () => dashboard.on,
   run: (ctx) => ctx.navigate('/dashboard'),
 });

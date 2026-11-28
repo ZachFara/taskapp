@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount, setContext, tick, untrack } from 'svelte';
   import { matchRoute, navigate } from './routes';
+  import { FEATURES, isOn, ROUTES } from '../lib/features.svelte';
+  import EmptyState from '../ui/EmptyState.svelte';
   import { api } from '../lib/api';
   import { attachKeys, type Ctx, type Layout } from '../lib/commands';
   import { selection } from '../lib/selection.svelte';
@@ -18,12 +20,18 @@
   import Sidebar from '../components/Sidebar.svelte';
   import ImageViewer from '../components/ImageViewer.svelte';
   import UndoToast from '../components/UndoToast.svelte';
+  import LinkSolution from '../components/LinkSolution.svelte';
+  import NextPrompt from '../components/NextPrompt.svelte';
   import { fresh } from '../lib/motion.svelte';
   import { dismiss, onWrote, say } from '../components/undoState.svelte';
 
   let path = $state(location.pathname);
   const match = $derived(matchRoute(path));
+  // Focus mode: one issue and its timer, no sidebar and no toasts.
+  const focusing = $derived(path.startsWith('/focus/'));
   const Page = $derived(match?.component);
+  // A page whose feature is switched off says so instead of opening.
+  const off = $derived(FEATURES.find((f) => f.name === ROUTES['/' + path.split('/')[1]] && !isOn(f.name)));
 
   // 'loading' draws nothing, so a set-up workspace never flashes the setup screen.
   let setup = $state<'loading' | 'needed' | 'done'>('loading');
@@ -72,7 +80,7 @@
     if (f !== null && untrack(() => selectedIssueId.value) !== null) selectedIssueId.value = f;
   });
 
-  const LABELS: Record<string, string> = { my: 'My issues', inbox: 'Inbox', pinned: 'Pinned', cycles: 'Cycles', dashboard: 'Dashboard', decisions: 'Decisions', events: 'Events', event: 'Events', projects: 'Projects', views: 'Views', settings: 'Settings', design: 'Design' };
+  const LABELS: Record<string, string> = { my: 'My issues', inbox: 'Inbox', process: 'Process Inbox', pinned: 'Pinned', cycles: 'Cycles', dashboard: 'Dashboard', decisions: 'Decisions', events: 'Events', event: 'Events', projects: 'Projects', views: 'Views', settings: 'Settings', design: 'Design' };
   // A parent part that has a page of its own links to it (Projects, Views, Events, Cycles, Settings).
   const PAGES: Record<string, string> = { view: '/views', views: '/views', project: '/projects', projects: '/projects', event: '/events', events: '/events', cycles: '/cycles', settings: '/settings' };
   const crumb = $derived.by(() => {
@@ -203,14 +211,16 @@
 {#if setup === 'needed'}
   <Setup ondone={() => (setup = 'done')} />
 {:else if setup === 'done'}
-  <Shell {crumb} route={path} panelOpen={panelKey !== null} onsearch={() => ((palettePage = undefined), (paletteIssues = false), (overlay = 'palette'))}>
+  <Shell {crumb} route={path} focus={focusing} panelOpen={panelKey !== null} onsearch={() => ((palettePage = undefined), (paletteIssues = false), (overlay = 'palette'))}>
     {#snippet sidebar()}<Sidebar route={path} />{/snippet}
     {#snippet panel()}
       {#if shownKey !== null}
         {#key shownKey}<IssueDetail params={{ key: shownKey }} mode="panel" onclose={closePanel} onopen={(k) => navigate(`/issue/${k}`)} />{/key}
       {/if}
     {/snippet}
-    {#if Page}
+    {#if off}
+      <EmptyState title={`${off.label} is switched off`} hint="Turn it on in Settings, Features." />
+    {:else if Page}
       {#key refreshed}<Page params={match?.params ?? {}} />{/key}
     {:else}
       <p>Not found: {path}</p>
@@ -225,7 +235,9 @@
     <QuickAdd defaults={quickAddDefaults} onclose={() => (overlay = null)} oncreated={created} />
   {/if}
   <CheatSheet bind:open={cheat} />
-  <div class="toasts"><UndoToast /></div>
+  {#if !focusing}<div class="toasts"><UndoToast /></div>{/if}
+  <LinkSolution />
+  <NextPrompt />
   <ImageViewer />
 {/if}
 

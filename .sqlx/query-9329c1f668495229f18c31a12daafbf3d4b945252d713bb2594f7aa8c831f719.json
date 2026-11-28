@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE focus_sessions SET ended_at = ? WHERE ended_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "9329c1f668495229f18c31a12daafbf3d4b945252d713bb2594f7aa8c831f719"
+}

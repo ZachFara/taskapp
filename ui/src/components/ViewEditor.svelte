@@ -64,7 +64,7 @@
   // A project view's own field lists: the fields of a project, not of an issue.
   const quick: FixedField[] = project
     ? ['Status', 'StatusCategory', 'Priority', 'Label', 'StartDate', 'TargetDate', 'CreatedAt', 'UpdatedAt', 'Progress', 'IssueCount']
-    : ['Status', 'StatusCategory', 'Project', 'ProjectStatus', 'Label', 'Priority', 'DueDate', 'RelationKind'];
+    : ['Status', 'StatusCategory', 'Project', 'ProjectStatus', 'Label', 'Priority', 'DueDate', 'HiddenUntil', 'RelationKind'];
   const addable = $derived<{ field: FieldRef; name: string }[]>([
     ...quick.filter(on).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
     ...data.defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name })),

@@ -10,10 +10,10 @@ use sqlx::{Sqlite, Transaction};
 use taskapp_core::{Db, Error, IssueId, Result, ViewDef, attachments, search};
 
 use crate::files::{
-    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, ImportLogRow, IssueFront,
-    IssueTemplateFile, LabelRow, PinRow, ProjectFile, ProjectStatusRow, PropertyFile,
-    RelationKindRow, StatusRow, ViewFile, ViewFolderFile, ViewTemplateFile, invalid, parse_issue,
-    plain_dir, read_plain,
+    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, FocusRow, ImportLogRow,
+    IssueFront, IssueTemplateFile, LabelRow, LinkFile, PinRow, ProjectFile, ProjectStatusRow,
+    PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewFolderFile, ViewTemplateFile, invalid,
+    parse_issue, plain_dir, read_plain,
 };
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -49,6 +49,7 @@ pub async fn restore_into(db: &Db, dir: &Path) -> Result<()> {
     wipe(&mut tx).await?;
     restore_tables(db, &mut tx, dir).await?;
     restore_issues(&mut tx, dir).await?;
+    restore_next_actions(&mut tx, dir).await?;
     tx.commit().await?;
     // reindex rebuilds every search row at once; the id argument is not used.
     search::reindex(db, IssueId(0)).await?;
@@ -80,6 +81,7 @@ async fn wipe(tx: &mut Tx<'_>) -> Result<()> {
     for sql in [
         "DELETE FROM changes",
         "DELETE FROM attachments",
+        "DELETE FROM links",
         "DELETE FROM decision_issues",
         "DELETE FROM decisions",
         "DELETE FROM event_issues",
@@ -88,6 +90,7 @@ async fn wipe(tx: &mut Tx<'_>) -> Result<()> {
         "DELETE FROM issue_labels",
         "DELETE FROM comments",
         "DELETE FROM work_blocks",
+        "DELETE FROM focus_sessions",
         "DELETE FROM import_log",
         "DELETE FROM issues",
         "DELETE FROM property_defs",
@@ -142,7 +145,31 @@ async fn restore_issues(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     }
     restore_events(tx, dir, &prefix).await?;
     restore_decisions(tx, dir, &prefix).await?;
+    restore_links(tx, dir, &prefix).await?;
     restore_import_log(tx, dir).await
+}
+
+/// After the issues, which the links name. An older export has no `links.yaml`.
+async fn restore_links(tx: &mut Tx<'_>, dir: &Path, prefix: &str) -> Result<()> {
+    for l in read_list::<LinkFile>(&dir.join("links.yaml"))? {
+        sqlx::query(
+            "INSERT INTO links (id, issue_id, url, title, kind, created_at)
+             VALUES (?, (SELECT id FROM issues WHERE number = ?), ?, ?, ?, ?)",
+        )
+        .bind(l.id)
+        .bind(number_of(prefix, &l.issue)?)
+        .bind(l.url)
+        .bind(l.title)
+        .bind(l.kind)
+        .bind(if l.created_at.is_empty() {
+            "1970-01-01 00:00:00".to_owned()
+        } else {
+            l.created_at
+        })
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
 }
 
 /// After the issues, so the links can name them. An older export has no `decisions.yaml`.
@@ -386,6 +413,29 @@ async fn restore_cycles(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Needs the issues, so it runs after them.
+async fn restore_next_actions(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    for path in files_in(dir, "projects", "yaml")? {
+        let p: ProjectFile = read_yaml(&path)?;
+        if let Some(n) = p.next_issue {
+            sqlx::query(
+                "UPDATE projects SET next_issue_id = (SELECT id FROM issues WHERE number = ?) WHERE slug = ?",
+            )
+            .bind(n)
+            .bind(&p.slug)
+            .execute(&mut **tx)
+            .await?;
+            // The projects_touch trigger just bumped updated_at; put the exported value back.
+            sqlx::query("UPDATE projects SET updated_at = ? WHERE slug = ?")
+                .bind(p.updated_at.unwrap_or(p.created_at))
+                .bind(p.slug)
+                .execute(&mut **tx)
+                .await?;
+        }
+    }
+    Ok(())
+}
+
 async fn restore_projects(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     for path in files_in(dir, "projects", "yaml")? {
         let p: ProjectFile = read_yaml(&path)?;
@@ -595,14 +645,14 @@ async fn insert_issue(
     sqlx::query(
         "INSERT INTO issues (number, title, description, status_id, priority, project_id,
            milestone_id, cycle_id, start_date, due_date, due_time_utc, due_tz, estimate_minutes,
-           points, properties, created_at, updated_at, completed_at, archived_at)
+           points, hidden_until, depth, properties, created_at, updated_at, completed_at, archived_at)
          VALUES (?, ?, ?,
            (SELECT id FROM statuses WHERE name = ?), ?,
            (SELECT id FROM projects WHERE slug = ?),
            (SELECT m.id FROM milestones m JOIN projects p ON p.id = m.project_id
               WHERE p.slug = ? AND m.name = ? ORDER BY m.id LIMIT 1),
            (SELECT id FROM cycles WHERE number = ?),
-           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(number)
     .bind(&f.title)
@@ -619,6 +669,8 @@ async fn insert_issue(
     .bind(&f.due_tz)
     .bind(f.estimate_minutes)
     .bind(f.points)
+    .bind(f.hidden_until)
+    .bind(&f.depth)
     .bind(serde_json::to_string(&f.properties).map_err(invalid)?)
     .bind(f.created_at)
     .bind(f.updated_at)
@@ -689,6 +741,22 @@ async fn link_issue(
         .bind(number)
         .bind(b.start)
         .bind(b.end)
+        .execute(&mut **tx)
+        .await?;
+    }
+    insert_focus(tx, number, &f.focus).await
+}
+
+async fn insert_focus(tx: &mut Tx<'_>, number: i64, sessions: &[FocusRow]) -> Result<()> {
+    for s in sessions {
+        sqlx::query(
+            "INSERT INTO focus_sessions (issue_id, started_at, ended_at, deep)
+             VALUES ((SELECT id FROM issues WHERE number = ?), ?, ?, ?)",
+        )
+        .bind(number)
+        .bind(s.start)
+        .bind(s.end)
+        .bind(s.deep)
         .execute(&mut **tx)
         .await?;
     }

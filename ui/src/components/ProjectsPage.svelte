@@ -14,6 +14,7 @@
   import { rowActs, rowUi } from '../lib/rowUi.svelte';
   import { patch } from '../lib/rowActions';
   import { navigate } from '../app/routes';
+  import { isOn } from '../lib/features.svelte';
   import { refreshAll } from '../lib/stores.svelte';
   import { dayText } from './views/dates';
   import PageHeader from '../ui/PageHeader.svelte';
@@ -28,6 +29,7 @@
   type Row = Project & { done: number; total: number };
   let rows = $state<Row[]>([]);
   let loaded = $state(false);
+  let stuck = $state<Set<number>>(new Set());
   // Slugs of pinned projects.
   let pinned = $state<Set<string>>(new Set());
   let creating = $state(false);
@@ -70,6 +72,7 @@
     rows = list.map((p, i) => ({ ...p, done: progress[i][0], total: progress[i][1] }));
     [statuses, labels, defs, folders, places] = await Promise.all([api.project.statusesList(), api.labels.list(), api.properties.listDefs(), api.folders.list(), api.folders.items()]);
     pinned = new Set((await api.pins.listResolved()).filter((r) => r.pin.kind === 'Project').map((r) => r.pin.target));
+    stuck = new Set(isOn('next_actions') ? (await api.next.list()).filter((n) => n.stuck).map((n) => n.project.id) : []);
     loaded = true;
   }
 
@@ -143,6 +146,7 @@
                     <a class="name" href={`/project/${p.slug}`} onclick={(e) => (e.preventDefault(), navigate(`/project/${p.slug}`))}>{p.name}</a>
                   </RowActions>
                 </div>
+                {#if stuck.has(p.id)}<Pill color="red">Stuck</Pill>{/if}
               </td>
               <td><ProjectStatusPicker project={p} {statuses} onsaved={load} /></td>
               <td><span class="cell"><PriorityGlyph level={priorityGlyph(p.priority)} />{p.priority ? PRIORITIES[p.priority] : ''}</span></td>

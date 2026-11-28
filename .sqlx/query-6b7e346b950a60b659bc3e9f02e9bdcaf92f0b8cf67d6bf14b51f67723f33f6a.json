@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO focus_sessions (issue_id, started_at, deep) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "6b7e346b950a60b659bc3e9f02e9bdcaf92f0b8cf67d6bf14b51f67723f33f6a"
+}

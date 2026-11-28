@@ -24,7 +24,7 @@ export function rollup(spans: Span[]): Span | null {
 
 export type Row = {
   id: string;
-  kind: 'bar' | 'rollup' | 'milestone' | 'group';
+  kind: 'bar' | 'rollup' | 'group';
   label: string;
   key?: string;
   title?: string;
@@ -40,6 +40,8 @@ export type Row = {
   estimated?: boolean;
   /** A project with no dates: no bar, a slot that opens its dates. */
   undated?: boolean;
+  /** Dated milestones of the row's project, drawn as diamonds on the row. */
+  milestones?: Milestone[];
 };
 
 type Input = {
@@ -54,10 +56,8 @@ type Input = {
   projectStatuses?: ProjectStatus[];
 };
 
-const milestoneRows = (ms: Milestone[], indent: number): Row[] =>
-  ms.filter((m) => m.target_date).map((m) => ({
-    id: `milestone-${m.id}`, kind: 'milestone', label: m.name, indent, start: m.target_date!, end: m.target_date!,
-  }));
+// shortcut: a milestone without a date is not drawn; the project page lists it.
+const dated = (ms: Milestone[]) => ms.filter((m) => m.target_date);
 
 /** The bar a project draws from its own dates and its issues; `estimated` when one of its ends is a guess. */
 function projectSpan(p: Project, issues: Issue[], today: string): Span & { estimated: boolean } | null {
@@ -76,11 +76,11 @@ export function buildRows({ mode, today, issues, bars, projects, milestones, cri
     return projects.flatMap((p): Row[] => {
       const span = projectSpan(p, issues, today);
       const color = projectStatuses.find((s) => s.id === p.status_id)?.color ?? null;
+      const ms = dated(milestones.filter((m) => m.project_id === p.id));
       return [
         span
-          ? { id: `project-${p.id}`, kind: 'bar', label: p.name, indent: 0, projectId: p.id, color, start: span.start, end: span.end, estimated: span.estimated }
-          : { id: `project-${p.id}`, kind: 'bar', label: p.name, indent: 0, projectId: p.id, color, undated: true },
-        ...milestoneRows(milestones.filter((m) => m.project_id === p.id), 1),
+          ? { id: `project-${p.id}`, kind: 'bar', label: p.name, indent: 0, projectId: p.id, color, start: span.start, end: span.end, estimated: span.estimated, milestones: ms }
+          : { id: `project-${p.id}`, kind: 'bar', label: p.name, indent: 0, projectId: p.id, color, undated: true, milestones: ms },
       ];
     });
   }
@@ -106,19 +106,26 @@ export function buildRows({ mode, today, issues, bars, projects, milestones, cri
   };
   const top = issues.filter((i) => i.parent_id === null || !inView.has(i.parent_id));
   const ids = [...new Set(top.map((i) => i.project_id))];
-  if (ids.length <= 1) return [...top.flatMap((i) => issueRows(i, 0)), ...milestoneRows(milestones, 0)];
+  if (ids.length <= 1) {
+    // One project and no grouping: its band appears only to carry its dated milestones.
+    const ms = dated(milestones.filter((m) => m.project_id === ids[0]));
+    if (!ms.length) return top.flatMap((i) => issueRows(i, 0));
+    const pid = ids[0] ?? undefined;
+    const band: Row = { id: `group-${pid}`, kind: 'group', label: projects.find((p) => p.id === pid)?.name ?? 'No project', indent: 0, projectId: pid, milestones: ms };
+    return [band, ...top.flatMap((i) => issueRows(i, 1))];
+  }
   return ids.flatMap((pid): Row[] => {
     const inProject = top.filter((i) => i.project_id === pid);
     const total = rollup(inProject.flatMap(spans));
+    const ms = dated(milestones.filter((m) => m.project_id === pid));
     // A project with nothing scheduled would be an empty band; its issues are listed as unscheduled.
-    if (!total) return [];
+    if (!total && !ms.length) return [];
     return [
       {
         id: `group-${pid}`, kind: 'group', label: projects.find((p) => p.id === pid)?.name ?? 'No project', indent: 0,
-        projectId: pid ?? undefined, ...total,
+        projectId: pid ?? undefined, ...total, milestones: ms,
       },
       ...inProject.flatMap((i) => issueRows(i, 1)),
-      ...milestoneRows(milestones.filter((m) => m.project_id === pid), 1),
     ];
   });
 }
@@ -128,7 +135,8 @@ export const unscheduled = (issues: Issue[], rows: Row[]) => issues.filter((i) =
 
 /** First and last day to draw, padded; always includes `today` so the marker is on the chart. */
 export function range(rows: Row[], today: string): Span {
-  const r = rollup([...(rows.filter((x) => x.start && x.end) as Span[]), { start: today, end: today }])!;
+  const marks = rows.flatMap((x) => (x.milestones ?? []).map((m) => ({ start: m.target_date!, end: m.target_date! })));
+  const r = rollup([...(rows.filter((x) => x.start && x.end) as Span[]), ...marks, { start: today, end: today }])!;
   return { start: addDays(r.start, -3), end: addDays(r.end, 14) };
 }
 

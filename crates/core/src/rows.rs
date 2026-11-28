@@ -31,6 +31,8 @@ pub(crate) const TABLES: &[&str] = &[
     "event_issues",
     "decisions",
     "decision_issues",
+    "links",
+    "focus_sessions",
 ];
 
 pub(crate) const ENTITY_PREFIX: &str = "row:";

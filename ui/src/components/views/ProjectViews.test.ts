@@ -126,7 +126,7 @@ describe('project timeline', () => {
     await show(GanttView, 'Gantt', {}, '[data-row]');
     expect(document.querySelectorAll('[data-row^="project-"]').length).toBe(3);
     expect(document.querySelector('[data-testid="today"]')).not.toBeNull();
-    expect([...document.querySelectorAll('.label')].some((l) => l.textContent?.includes('Soft launch'))).toBe(true);
+    expect(document.querySelector('.ms-mark[aria-label^="Milestone Soft launch"]')).not.toBeNull();
   });
   it('dragging a bar end changes the target date', async () => {
     await show(GanttView, 'Gantt', {}, '[data-row]');

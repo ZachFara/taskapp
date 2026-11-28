@@ -8,7 +8,7 @@ use std::{
 };
 
 use taskapp_app::{
-    deeplink::parse_key,
+    deeplink::{parse_item, parse_key},
     sync_loop::{Real, Step, Steps, Syncer, Timing, poll_db, run, watch_reminders},
 };
 use taskapp_core::{Db, Error, Result, SyncState, settings};
@@ -256,6 +256,35 @@ fn deeplink_parses_key() {
         "https://issue/ABC-1",
     ] {
         assert_eq!(parse_key(bad), None, "{bad}");
+    }
+}
+
+#[test]
+fn deeplink_parses_every_other_item() {
+    for (url, want) in [
+        ("taskapp://project/web-app", "taskapp://project/web-app"),
+        ("taskapp://view/12/", "taskapp://view/12"),
+        ("taskapp://cycle/3", "taskapp://cycle/3"),
+        ("taskapp://milestone/7", "taskapp://milestone/7"),
+        ("taskapp://event/9", "taskapp://event/9"),
+        ("taskapp://decision/4", "taskapp://decision/4"),
+    ] {
+        assert_eq!(parse_item(url).as_deref(), Some(want));
+    }
+    for bad in [
+        "taskapp://project/",
+        "taskapp://project/Web",
+        "taskapp://project/-x",
+        "taskapp://project/a/b",
+        "taskapp://project/a?x=1",
+        "taskapp://view/x",
+        "taskapp://view/1/../2",
+        "taskapp://cycle/9999999999",
+        "taskapp://issue/ABC-1",
+        "taskapp://settings/general",
+        "https://view/1",
+    ] {
+        assert_eq!(parse_item(bad), None, "{bad}");
     }
 }
 

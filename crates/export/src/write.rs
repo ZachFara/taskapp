@@ -7,10 +7,10 @@ use sqlx::FromRow;
 use taskapp_core::{Db, Result, attachments, settings};
 
 use crate::files::{
-    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, ImportLogRow, IssueFront,
-    IssueTemplateFile, LabelRow, MilestoneRow, PinRow, ProjectFile, ProjectStatusRow, PropertyFile,
-    RelationKindRow, StatusRow, ViewFile, ViewFolderFile, ViewTemplateFile, WorkBlockRow, invalid,
-    key, plain_dir, read_plain, render_issue, safe_name,
+    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, FocusRow, ImportLogRow,
+    IssueFront, IssueTemplateFile, LabelRow, LinkFile, MilestoneRow, PinRow, ProjectFile,
+    ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewFolderFile,
+    ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir, read_plain, render_issue, safe_name,
 };
 
 pub struct ExportStats {
@@ -344,7 +344,28 @@ async fn decisions(db: &Db, prefix: &str) -> Result<Vec<DecisionFile>> {
         .collect()
 }
 
+async fn links(db: &Db, prefix: &str) -> Result<Vec<LinkFile>> {
+    let rows = sqlx::query_as::<_, (i64, i64, String, String, String, String)>(
+        "SELECT l.id, i.number, l.url, l.title, l.kind, l.created_at FROM links l
+         JOIN issues i ON i.id = l.issue_id ORDER BY l.id",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| LinkFile {
+            id: r.0,
+            issue: key(prefix, r.1),
+            url: r.2,
+            title: r.3,
+            kind: r.4,
+            created_at: r.5,
+        })
+        .collect())
+}
+
 async fn event_files(db: &Db, prefix: &str, files: &mut BTreeMap<String, String>) -> Result<()> {
+    files.insert("links.yaml".to_string(), yaml(&links(db, prefix).await?)?);
     files.insert(
         "decisions.yaml".to_string(),
         yaml(&decisions(db, prefix).await?)?,
@@ -562,7 +583,8 @@ async fn import_log(db: &Db) -> Result<Vec<ImportLogRow>> {
 async fn projects(db: &Db) -> Result<Vec<ProjectFile>> {
     let mut projects: Vec<ProjectFile> = sqlx::query_as(
         "SELECT p.slug, p.name, p.description, p.doc_link, p.start_date, p.target_date, p.archived_at,
-                p.created_at, p.updated_at, p.icon, p.color, s.name AS status, p.priority, p.folder_id, p.position
+                p.created_at, p.updated_at, p.icon, p.color, s.name AS status, p.priority, p.folder_id, p.position,
+                (SELECT i.number FROM issues i WHERE i.id = p.next_issue_id) AS next_issue
          FROM projects p JOIN project_statuses s ON s.id = p.status_id ORDER BY p.slug",
     )
     .fetch_all(&db.pool)
@@ -617,6 +639,8 @@ struct IssueRow {
     due_tz: Option<String>,
     estimate_minutes: Option<i64>,
     points: Option<f64>,
+    hidden_until: Option<NaiveDate>,
+    depth: Option<String>,
     properties: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -626,7 +650,7 @@ struct IssueRow {
 
 const ISSUE_SQL: &str = "SELECT i.number, i.title, i.description, s.name AS status, i.priority,
         p.slug AS project, m.name AS milestone, par.number AS parent, c.number AS cycle,
-        i.start_date, i.due_date, i.due_time_utc, i.due_tz, i.estimate_minutes, i.points, i.properties,
+        i.start_date, i.due_date, i.due_time_utc, i.due_tz, i.estimate_minutes, i.points, i.hidden_until, i.depth, i.properties,
         i.created_at, i.updated_at, i.completed_at, i.archived_at
     FROM issues i
     JOIN statuses s ON s.id = i.status_id
@@ -708,9 +732,24 @@ async fn issue_side(db: &Db) -> Result<IssueSide> {
     })
 }
 
+async fn focus_sessions(db: &Db) -> Result<BTreeMap<i64, Vec<FocusRow>>> {
+    Ok(group(
+        sqlx::query_as::<_, (i64, DateTime<Utc>, Option<DateTime<Utc>>, bool)>(
+            "SELECT i.number, f.started_at, f.ended_at, f.deep FROM focus_sessions f
+             JOIN issues i ON i.id = f.issue_id ORDER BY f.started_at, f.id",
+        )
+        .fetch_all(&db.pool)
+        .await?
+        .into_iter()
+        .map(|(number, start, end, deep)| (number, FocusRow { start, end, deep }))
+        .collect(),
+    ))
+}
+
 /// `(key, file text)` for every issue, in issue-number order.
 async fn issue_files(db: &Db, prefix: &str) -> Result<Vec<(String, String)>> {
     let mut side = issue_side(db).await?;
+    let mut focus = focus_sessions(db).await?;
     let mut out = Vec::new();
     for row in sqlx::query_as::<_, IssueRow>(ISSUE_SQL)
         .fetch_all(&db.pool)
@@ -722,6 +761,7 @@ async fn issue_files(db: &Db, prefix: &str) -> Result<Vec<(String, String)>> {
         let comments = side.comments.remove(&number).unwrap_or_default();
         let (mut front, description) = front_of(prefix, row, labels, &rels)?;
         front.work_blocks = side.blocks.remove(&number).unwrap_or_default();
+        front.focus = focus.remove(&number).unwrap_or_default();
         let text = render_issue(&front, &description, &comments)?;
         out.push((front.key, text));
     }
@@ -751,6 +791,8 @@ fn front_of(
         due_tz,
         estimate_minutes,
         points,
+        hidden_until,
+        depth,
         properties,
         created_at,
         updated_at,
@@ -773,6 +815,8 @@ fn front_of(
         due_tz,
         estimate_minutes,
         points,
+        hidden_until,
+        depth,
         created_at,
         updated_at,
         completed_at,
@@ -783,6 +827,7 @@ fn front_of(
         relations: other_kinds(rels, prefix),
         properties: serde_json::from_str(&properties).map_err(invalid)?,
         work_blocks: vec![],
+        focus: vec![],
     };
     Ok((front, description))
 }

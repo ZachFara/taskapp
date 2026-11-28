@@ -8,7 +8,7 @@ use std::{collections::HashMap, path::Path};
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 use taskapp_core::{
-    Applied, ChangeSource, Db, Due, Error, EventInput, IssueId, IssuePatch, Result, blocks,
+    Applied, ChangeSource, Db, Depth, Due, Error, EventInput, IssueId, IssuePatch, Result, blocks,
     comments, events, history, issues, relation_kinds, relations,
 };
 
@@ -169,6 +169,18 @@ fn patch_of(
     }
     if f.points != old.points {
         p.points = Some(f.points);
+    }
+    if f.hidden_until != old.hidden_until {
+        p.hidden_until = Some(f.hidden_until);
+    }
+    let depth = match f.depth.as_deref() {
+        None => None,
+        Some("deep") => Some(Depth::Deep),
+        Some("shallow") => Some(Depth::Shallow),
+        Some(other) => return Err(invalid(format!("depth {other} is not deep or shallow"))),
+    };
+    if depth != old.depth {
+        p.depth = Some(depth);
     }
     patch_refs(&mut p, f, old, l)?;
     patch_props(&mut p, f, old);

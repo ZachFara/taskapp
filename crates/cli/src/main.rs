@@ -4,6 +4,7 @@ mod api;
 mod commands;
 mod decision;
 mod forecast;
+mod inbox;
 mod list;
 mod look;
 mod metrics;
@@ -56,6 +57,8 @@ enum Cmd {
     #[command(subcommand)]
     Cycle(CycleCmd),
     #[command(subcommand)]
+    Focus(FocusCmd),
+    #[command(subcommand)]
     Event(EventCmd),
     #[command(subcommand)]
     Label(LabelCmd),
@@ -80,6 +83,15 @@ enum Cmd {
     History { key: String },
     /// Issues that have sat in their status past its nudge age, longest first.
     Stale,
+    /// Every project's next action, and which active projects are stuck without one.
+    Next,
+    /// The next Inbox items, oldest first; `inbox process KEY --do|--delegate NOTE|--defer DATE|--next PROJECT|--someday|--trash` clears one.
+    Inbox(inbox::InboxArgs),
+    /// Optional features and whether each is on; `features set NAME on|off` switches one (data stays).
+    Features {
+        #[command(subcommand)]
+        cmd: Option<FeaturesCmd>,
+    },
     /// Undo the newest step, whatever made it (UI, agent or CLI).
     Undo,
     /// Redo the step most recently undone.
@@ -111,6 +123,18 @@ enum Cmd {
         #[arg(long)]
         tz: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+enum FeaturesCmd {
+    /// Switches a feature on or off. Names: see `taskapp features`.
+    Set { name: String, state: OnOff },
+}
+
+#[derive(clap::ValueEnum, Clone, Copy)]
+enum OnOff {
+    On,
+    Off,
 }
 
 #[derive(Subcommand)]
@@ -251,6 +275,30 @@ enum IssueCmd {
         /// Project id, slug or exact name (case-insensitive).
         #[arg(long)]
         project: Option<String>,
+        /// Hide the issue from views until this day, YYYY-MM-DD, or `clear`.
+        #[arg(long, value_name = "DATE|clear")]
+        hide_until: Option<String>,
+        /// URL of the fix (a pull request, commit or doc); recorded as a link of kind solution.
+        #[arg(long)]
+        solution: Option<String>,
+        /// Deep or shallow work, or none to clear it.
+        #[arg(long)]
+        depth: Option<String>,
+    },
+    /// Adds a link to an issue; adding the same URL again changes nothing.
+    Link {
+        key: String,
+        /// http, https, mailto, obsidian or taskapp URL.
+        url: String,
+        #[arg(long)]
+        title: Option<String>,
+        /// solution, reference, pr, commit, doc or other.
+        #[arg(long, default_value = "other")]
+        kind: String,
+    },
+    /// Lists the links of an issue.
+    Links {
+        key: String,
     },
     /// Issues filtered by project, status, priority and label names, most urgent first.
     List(list::ListArgs),
@@ -263,6 +311,15 @@ enum IssueCmd {
     Search {
         text: String,
         #[arg(long, default_value_t = 20)]
+        limit: u32,
+    },
+    /// Open issues that look like this text (title, optionally plus description): run before filing.
+    Similar {
+        text: String,
+        /// Project id, slug or exact name (case-insensitive).
+        #[arg(long)]
+        project: Option<String>,
+        #[arg(long, default_value_t = 5)]
         limit: u32,
     },
 }
@@ -432,6 +489,11 @@ enum ProjectCmd {
         #[arg(long, default_value = "gray")]
         color: String,
     },
+    /// Flag an issue (KEY) as the project's next action, or `clear` the flag.
+    Next {
+        slug: String,
+        target: String,
+    },
     /// Change a project's name, look, dates, status, priority, labels or a custom property value.
     Set {
         slug: String,
@@ -470,6 +532,27 @@ struct ProjectEdit {
     /// YYYY-MM-DD.
     #[arg(long)]
     target: Option<String>,
+}
+
+#[derive(Subcommand)]
+enum FocusCmd {
+    /// Start a session on an issue; a running one ends first. Deep is the issue's depth unless --deep.
+    Start {
+        key: String,
+        #[arg(long)]
+        deep: bool,
+    },
+    /// End the running session.
+    Stop,
+    /// Sessions, newest first, with their total minutes (a running one counts up to now).
+    Log {
+        /// Issue key; all issues when left out.
+        #[arg(long)]
+        key: Option<String>,
+        /// day (today), week (last 7 days), month (last 30) or all.
+        #[arg(long)]
+        range: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -721,6 +804,7 @@ async fn run(cli: Cli) -> Result<()> {
         }
     }
     let list = matches!(cli.cmd, Cmd::Decision(decision::DecisionCmd::List { .. }));
+    let search = matches!(cli.cmd, Cmd::Issue(IssueCmd::Search { .. })) && !cli.json;
     let label = match &cli.cmd {
         Cmd::Api(ApiCmd::Call { name, .. }) => format!("api call {name}"),
         _ => words.join(" "),
@@ -732,6 +816,7 @@ async fn run(cli: Cli) -> Result<()> {
         return metrics::print(&db, args, cli.json).await;
     }
     let value = history::step(&label, commands::run(&db, &dir.join("backups"), cli.cmd)).await?;
+    let value = list::search_view(&db, value, search).await?;
     print_value(&view(value, list, cli.json), cli.json);
     Ok(())
 }

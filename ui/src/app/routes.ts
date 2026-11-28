@@ -3,8 +3,11 @@ import DecisionsPage from '../components/DecisionsPage.svelte';
 import DashboardPage from '../components/dashboard/DashboardPage.svelte';
 import CyclesPage from '../components/CyclesPage.svelte';
 import InboxPage from '../components/InboxPage.svelte';
+import FocusPage from '../components/FocusPage.svelte';
 import IssueDetail from '../components/IssueDetail.svelte';
+import NextPage from '../components/NextPage.svelte';
 import MyIssuesPage from '../components/MyIssuesPage.svelte';
+import ProcessPage from '../components/ProcessPage.svelte';
 import PinnedPage from '../components/PinnedPage.svelte';
 import ProjectPage from '../components/ProjectPage.svelte';
 import ProjectsPage from '../components/ProjectsPage.svelte';
@@ -21,17 +24,20 @@ export const routes: { pattern: string; component: Component }[] = [
   { pattern: '/view/:id', component: ViewPage },
   { pattern: '/view/:id/:layout', component: ViewPage },
   { pattern: '/issue/:key', component: IssueDetail },
+  { pattern: '/focus/:key', component: FocusPage },
   { pattern: '/project/:slug', component: ProjectPage },
   { pattern: '/projects/timeline', component: GanttView },
   { pattern: '/pinned', component: PinnedPage },
   { pattern: '/cycles', component: CyclesPage },
   { pattern: '/dashboard', component: DashboardPage },
   { pattern: '/decisions', component: DecisionsPage },
+  { pattern: '/next', component: NextPage },
   { pattern: '/events', component: EventsPage },
   { pattern: '/event/:id', component: EventPage },
   { pattern: '/settings/:section', component: Settings },
   { pattern: '/design', component: DesignGallery },
   { pattern: '/inbox', component: InboxPage },
+  { pattern: '/process', component: ProcessPage },
   { pattern: '/my', component: MyIssuesPage },
   { pattern: '/projects', component: ProjectsPage },
   { pattern: '/views', component: ViewsPage },

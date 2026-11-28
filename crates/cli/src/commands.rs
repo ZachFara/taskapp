@@ -7,18 +7,18 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use taskapp_core::{
-    AttachmentId, ChangeSource, CycleId, Db, Due, Error, EventId, EventInput, FlowKind, IssueId,
-    IssuePatch, Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef,
-    PropertyKind, Relation, RelationKind, Result, SelectOption, TemplateId, ViewDef, ViewId,
-    ViewTemplateId, attachments, backup, comments, cycles, events, history, import, insights,
-    issues, labels, pins, project_statuses, projects, properties, quickadd, relations, search,
-    statuses, templates, undo, view_templates, views,
+    AttachmentId, ChangeSource, CycleId, Db, Depth, Due, Error, EventId, EventInput, FlowKind,
+    IssueId, IssuePatch, LinkKind, Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId,
+    PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, TemplateId, ViewDef,
+    ViewId, ViewTemplateId, attachments, backup, comments, cycles, events, focus, history, import,
+    insights, issues, labels, links, metrics, pins, project_statuses, projects, properties,
+    quickadd, relations, search, statuses, templates, undo, view_templates, views,
 };
 
 use crate::{
-    AttachmentCmd, Cmd, CommentCmd, CycleCmd, EventCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd,
-    PinCmd, ProjectCmd, ProjectEdit, PropertyCmd, RelationCmd, ScopeArgs, StatusCmd, SyncCmd,
-    TemplateCmd, ViewCmd, look,
+    AttachmentCmd, Cmd, CommentCmd, CycleCmd, EventCmd, FeaturesCmd, FocusCmd, ImportCmd,
+    InsightsCmd, IssueCmd, LabelCmd, OnOff, PinCmd, ProjectCmd, ProjectEdit, PropertyCmd,
+    RelationCmd, ScopeArgs, StatusCmd, SyncCmd, TemplateCmd, ViewCmd, look,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
@@ -31,7 +31,6 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
             crate::api::call(db, dir, &name, args).await
         }
         Cmd::Undo => val(undo::undo(db).await?),
-        Cmd::Stale => val(taskapp_core::stale::list(db).await?),
         Cmd::Setup { name, key, tz } => {
             val(taskapp_core::workspace::setup(db, &name, &key, tz.as_deref()).await?)
         }
@@ -42,31 +41,43 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Status(cmd) => status(db, cmd).await,
         Cmd::Attachment(cmd) => attachment(db, cmd).await,
         Cmd::Sync(SyncCmd::Now { helper }) => sync_now(db, helper).await,
+        cmd @ (Cmd::Stale
+        | Cmd::Next
+        | Cmd::Inbox(_)
+        | Cmd::Decision(_)
+        | Cmd::Icons
+        | Cmd::Colors) => queues_and_lists(db, cmd).await,
+        cmd => run_group(db, dir, cmd).await,
+    }
+}
+
+/// Stale, the Inbox, decisions and the icon and colour names.
+async fn queues_and_lists(db: &Db, cmd: Cmd) -> Result<Value> {
+    match cmd {
+        Cmd::Stale => val(taskapp_core::stale::list(db).await?),
+        Cmd::Next => val(taskapp_core::next_actions::list(db).await?),
+        Cmd::Inbox(args) => crate::inbox::run(db, args).await,
         Cmd::Decision(cmd) => crate::decision::run(db, cmd).await,
         Cmd::Icons => Ok(json!(look::ICONS)),
-        Cmd::Colors => Ok(json!(
+        _ => Ok(json!(
             taskapp_core::palette::COLORS
                 .iter()
                 .map(|(key, _)| *key)
                 .collect::<Vec<_>>()
         )),
-        cmd => run_group(db, dir, cmd).await,
     }
 }
 
 async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
     match cmd {
+        Cmd::Features { cmd } => features(db, cmd).await,
         Cmd::Add { text, tz } => add(db, &text, tz.as_deref()).await,
         Cmd::Issue(cmd) => issue(db, cmd).await,
         Cmd::View(cmd) => view(db, cmd).await,
         Cmd::Property(cmd) => property(db, dir, cmd).await,
         Cmd::Project(cmd) => project(db, cmd).await,
         Cmd::Cycle(cmd) => cycle(db, cmd).await,
-        Cmd::Label(cmd) => label(db, cmd).await,
-        Cmd::Comment(cmd) => comment(db, cmd).await,
-        Cmd::Relation(cmd) => relation(db, cmd).await,
-        Cmd::Pin(cmd) => pin(db, cmd).await,
-        Cmd::Import(cmd) => import(db, cmd).await,
+        Cmd::Focus(cmd) => focus_cmd(db, cmd).await,
         Cmd::Backup(_) | Cmd::Restore { .. } | Cmd::Guide | Cmd::Api(_) => Err(Error::Invalid(
             "this command runs before the database opens".into(),
         )),
@@ -78,6 +89,8 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Metrics(_)
         | Cmd::Forecast(_)
         | Cmd::Stale
+        | Cmd::Next
+        | Cmd::Inbox(_)
         | Cmd::Status(_)
         | Cmd::Attachment(_)
         | Cmd::Event(_)
@@ -85,16 +98,42 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Icons
         | Cmd::Colors
         | Cmd::Sync(_) => handled_in_run(),
-        Cmd::History { key } => {
-            let id = issue_id(db, &key).await?;
-            val(history::list_for(db, "issue", &id.0.to_string()).await?)
-        }
+        Cmd::History { key } => issue_history(db, &key).await,
+        cmd => run_more(db, cmd).await,
+    }
+}
+
+async fn run_more(db: &Db, cmd: Cmd) -> Result<Value> {
+    match cmd {
+        Cmd::Label(cmd) => label(db, cmd).await,
+        Cmd::Comment(cmd) => comment(db, cmd).await,
+        Cmd::Relation(cmd) => relation(db, cmd).await,
+        Cmd::Pin(cmd) => pin(db, cmd).await,
+        Cmd::Import(cmd) => import(db, cmd).await,
+        _ => handled_in_run(),
     }
 }
 
 /// Undo, redo and templates are answered in [`run`] before the group commands.
 fn handled_in_run() -> Result<Value> {
     Err(Error::Invalid("handled by run".into()))
+}
+
+async fn issue_history(db: &Db, key: &str) -> Result<Value> {
+    let id = issue_id(db, key).await?;
+    val(history::list_for(db, "issue", &id.0.to_string()).await?)
+}
+
+async fn features(db: &Db, cmd: Option<FeaturesCmd>) -> Result<Value> {
+    if let Some(FeaturesCmd::Set { name, state }) = cmd {
+        taskapp_core::settings::set_feature(db, &name, matches!(state, OnOff::On)).await?;
+    }
+    let list = taskapp_core::settings::features(db).await?;
+    Ok(json!(
+        list.iter()
+            .map(|(name, on)| json!({"name": name, "on": on}))
+            .collect::<Vec<_>>()
+    ))
 }
 
 async fn add(db: &Db, text: &str, tz: Option<&str>) -> Result<Value> {
@@ -160,12 +199,25 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
         update @ IssueCmd::Update { .. } => issue_update(db, update).await,
         IssueCmd::List(args) => crate::list::run(db, &args).await,
         IssueCmd::Get { key } => crate::list::get(db, &key).await,
-        IssueCmd::Archive { key } => {
-            let id = issue_id(db, &key).await?;
-            issues::archive(db, id, SRC).await?;
-            Ok(json!({"archived": key}))
+        keyed @ (IssueCmd::Archive { .. } | IssueCmd::Link { .. } | IssueCmd::Links { .. }) => {
+            issue_keyed(db, keyed).await
         }
+        find @ (IssueCmd::Search { .. } | IssueCmd::Similar { .. }) => issue_find(db, find).await,
+    }
+}
+
+async fn issue_find(db: &Db, cmd: IssueCmd) -> Result<Value> {
+    match cmd {
         IssueCmd::Search { text, limit } => val(search::search(db, &text, limit).await?),
+        IssueCmd::Similar {
+            text,
+            project,
+            limit,
+        } => {
+            let project = crate::references::project(db, project.as_deref()).await?;
+            val(search::similar(db, &text, project, limit).await?)
+        }
+        _ => unreachable!("issue() sends only search and similar here"),
     }
 }
 
@@ -183,6 +235,9 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         start,
         estimate,
         project,
+        solution,
+        hide_until,
+        depth,
     } = cmd
     else {
         unreachable!("issue_update is only called with Update");
@@ -190,20 +245,12 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
     let id = issue_id(db, &key).await?;
     let status_id = crate::references::status(db, status.as_deref()).await?;
     let project_id = crate::references::project(db, project.as_deref()).await?;
-    let due = if clear_due {
-        Some(None)
-    } else {
-        due.as_deref()
-            .map(date)
-            .transpose()?
-            .map(|d| Some(Due::Date(d)))
-    };
     let patch = IssuePatch {
         title,
         description,
         priority: check_priority(priority)?,
         status_id,
-        due,
+        due: due_arg(clear_due, due.as_deref())?,
         points: if clear_points {
             Some(None)
         } else {
@@ -212,9 +259,118 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         start_date: start.as_deref().map(date).transpose()?.map(Some),
         estimate_minutes: estimate.map(Some),
         project_id: project_id.map(Some),
+        hidden_until: match hide_until.as_deref() {
+            None => None,
+            Some("clear") => Some(None),
+            Some(d) => Some(Some(date(d)?)),
+        },
+        depth: depth.as_deref().map(depth_arg).transpose()?,
         ..IssuePatch::default()
     };
+    // The link goes first: a URL that is refused must not leave the rest of the update applied.
+    if let Some(url) = solution {
+        links::add(db, id, &url, None, Some(LinkKind::Solution), SRC).await?;
+    }
+    if patch == IssuePatch::default() {
+        return val(issues::get(db, id).await?);
+    }
     val(issues::update(db, id, patch, SRC).await?)
+}
+
+/// `--due DATE` sets the day; `--clear-due` removes it.
+fn due_arg(clear: bool, due: Option<&str>) -> Result<taskapp_core::Clearable<Due>> {
+    if clear {
+        return Ok(Some(None));
+    }
+    Ok(due.map(date).transpose()?.map(|d| Some(Due::Date(d))))
+}
+
+async fn issue_keyed(db: &Db, cmd: IssueCmd) -> Result<Value> {
+    match cmd {
+        IssueCmd::Archive { key } => {
+            let id = issue_id(db, &key).await?;
+            issues::archive(db, id, SRC).await?;
+            Ok(json!({"archived": key}))
+        }
+        IssueCmd::Link {
+            key,
+            url,
+            title,
+            kind,
+        } => {
+            let id = issue_id(db, &key).await?;
+            val(links::add(db, id, &url, title, Some(link_kind(&kind)?), SRC).await?)
+        }
+        IssueCmd::Links { key } => val(links::list(db, issue_id(db, &key).await?).await?),
+        _ => unreachable!("issue_keyed is only called with Archive, Link or Links"),
+    }
+}
+
+fn link_kind(kind: &str) -> Result<LinkKind> {
+    serde_json::from_value(json!(kind)).map_err(|_| {
+        Error::Invalid(format!(
+            "kind {kind} must be solution, reference, pr, commit, doc or other"
+        ))
+    })
+}
+
+/// `deep` or `shallow`; `none` clears the depth.
+fn depth_arg(text: &str) -> Result<Option<Depth>> {
+    match text {
+        "deep" => Ok(Some(Depth::Deep)),
+        "shallow" => Ok(Some(Depth::Shallow)),
+        "none" => Ok(None),
+        other => Err(Error::Invalid(format!(
+            "depth is deep, shallow or none, not {other}"
+        ))),
+    }
+}
+
+async fn focus_cmd(db: &Db, cmd: FocusCmd) -> Result<Value> {
+    match cmd {
+        FocusCmd::Start { key, deep } => {
+            let id = issue_id(db, &key).await?;
+            val(focus::start(db, id, deep.then_some(true), SRC).await?)
+        }
+        FocusCmd::Stop => val(focus::stop(db, SRC).await?),
+        FocusCmd::Log { key, range } => {
+            let issue = match key {
+                Some(key) => Some(issue_id(db, &key).await?),
+                None => None,
+            };
+            let (from, to) = focus_days(db, range.as_deref()).await?;
+            let sessions = focus::log(db, issue, from, to).await?;
+            let secs: i64 = sessions
+                .iter()
+                .map(|s| {
+                    (s.ended_at.unwrap_or_else(Utc::now) - s.started_at)
+                        .num_seconds()
+                        .max(0)
+                })
+                .sum();
+            Ok(json!({ "sessions": sessions, "total_minutes": secs / 60 }))
+        }
+    }
+}
+
+/// The local days a `--range` covers; `all` (or none) covers every session.
+async fn focus_days(
+    db: &Db,
+    range: Option<&str>,
+) -> Result<(Option<NaiveDate>, Option<NaiveDate>)> {
+    let back = match range {
+        None | Some("all") => return Ok((None, None)),
+        Some("day") => 0,
+        Some("week") => 6,
+        Some("month") => 29,
+        Some(other) => {
+            return Err(Error::Invalid(format!(
+                "range is day, week, month or all, not {other}"
+            )));
+        }
+    };
+    let today = metrics::today(db).await?;
+    Ok((Some(today - chrono::Duration::days(back)), Some(today)))
 }
 
 fn scope(a: &ScopeArgs) -> Result<(ProgressScope, Measure)> {
@@ -496,6 +652,7 @@ async fn project_set(db: &Db, slug: &str, edit: ProjectEdit) -> Result<Value> {
     val(projects::update(db, p, SRC).await?)
 }
 
+/// `stale` or `next`: the two read-only lists.
 async fn project(db: &Db, cmd: ProjectCmd) -> Result<Value> {
     match cmd {
         ProjectCmd::List => val(projects::list(db).await?),
@@ -505,6 +662,18 @@ async fn project(db: &Db, cmd: ProjectCmd) -> Result<Value> {
             category,
             color,
         } => val(project_statuses::create(db, &name, named(&category)?, &color, None, SRC).await?),
+        ProjectCmd::Next { slug, target } => {
+            let project = crate::references::project(db, Some(&slug))
+                .await?
+                .ok_or_else(|| Error::NotFound(format!("project {slug}")))?;
+            let issue = if target == "clear" {
+                None
+            } else {
+                Some(taskapp_core::issues::get_by_key(db, &target).await?.id)
+            };
+            taskapp_core::next_actions::set(db, project, issue, SRC).await?;
+            val(taskapp_core::next_actions::list(db).await?)
+        }
         ProjectCmd::Set { slug, edit } => project_set(db, &slug, edit).await,
         ProjectCmd::Create {
             slug,
@@ -714,7 +883,7 @@ fn val<T: Serialize>(value: T) -> Result<Value> {
     serde_json::to_value(value).map_err(|e| Error::Invalid(e.to_string()))
 }
 
-fn date(text: &str) -> Result<NaiveDate> {
+pub fn date(text: &str) -> Result<NaiveDate> {
     NaiveDate::parse_from_str(text, "%Y-%m-%d")
         .map_err(|_| Error::Invalid(format!("not a date (YYYY-MM-DD): {text}")))
 }

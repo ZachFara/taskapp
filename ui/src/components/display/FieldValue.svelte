@@ -91,6 +91,8 @@
   <span class="num">{estimate(issue.estimate_minutes)}</span>
 {:else if field.Fixed === 'Points'}
   {#if ctx.points && issue.points !== null}<span class="num">{issue.points}</span>{/if}
+{:else if field.Fixed === 'Depth'}
+  {#if issue.depth}<span class="muted">{issue.depth}</span>{/if}
 {:else if field.Fixed === 'CreatedAt'}
   <span class="num">{day(issue.created_at)}</span>
 {:else if field.Fixed === 'UpdatedAt'}

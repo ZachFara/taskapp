@@ -67,6 +67,7 @@ pub fn step_label(name: &str, args: &Value, out: Option<&Value>) -> String {
     match name {
         "issues_create" | "issues_create_from_quickadd" => format!("Created {}", key()),
         "issues_update" => format!("Edited {}", key()),
+        "inbox_process" => format!("Processed {}", key()),
         "issues_bulk_update" => bulk(args),
         "issues_duplicate" => format!("Duplicated {}", count(ids(args), "issue")),
         "import_apply" => {
@@ -85,6 +86,12 @@ pub fn step_label(name: &str, args: &Value, out: Option<&Value>) -> String {
             let n = args["targets"].as_array().map_or(0, Vec::len);
             format!("{verb} {}", count(n, "item"))
         }
+        "projects_set_next" => if args["issue"].is_null() {
+            "Cleared next action"
+        } else {
+            "Set next action"
+        }
+        .into(),
         "project_statuses_create" => "Created project status".into(),
         "project_statuses_update" => "Edited project status".into(),
         "project_statuses_reorder" => "Reordered project statuses".into(),

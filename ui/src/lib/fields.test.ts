@@ -12,7 +12,7 @@ const offered = (id: string) => listCommands(ctx).some((c) => c.id === id);
 it('normalize keeps the stored order, drops unknown and repeated names, and appends the rest on', () => {
   const list = normalize([{ field: 'due', on: false }, { field: 'nope', on: true }, { field: 'due', on: true }, { field: 'labels', on: true }]);
   expect(list.slice(0, 2)).toEqual([{ field: 'due', on: false }, { field: 'labels', on: true }]);
-  expect(list).toHaveLength(10);
+  expect(list).toHaveLength(11);
   expect(list.slice(2).every((f) => f.on)).toBe(true);
 });
 

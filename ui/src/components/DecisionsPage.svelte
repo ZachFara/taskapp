@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { navigate } from '../app/routes';
   import { api } from '../lib/api';
+  import { copyLink } from '../lib/deepLink';
   import type { Decision } from '../lib/bindings';
   import { decisions, openDecisions, refreshDecisions } from '../lib/decisions.svelte';
   import Button from '../ui/Button.svelte';
@@ -24,6 +25,8 @@
   const closed = $derived(decisions.all.filter((d) => d.status !== 'open'));
   const shown = $derived(tab === 'open' ? open : closed);
   const target = $derived(open.find((d) => d.id === focused) ?? open[0]);
+  // Copy link works on answered decisions too, so it looks in the shown list.
+  const linkTarget = $derived(shown.find((d) => d.id === focused) ?? shown[0]);
   const optionLabel = (d: Decision, key: string | null) => d.options.find((o) => o.key === key)?.label ?? key ?? '';
 
   // Linked issues show as their keys; ids not seen yet are looked up once.
@@ -53,13 +56,23 @@
     const on: Record<string, () => void> = {
       'decision.answer': () => target?.recommendation && void answer(target, target.recommendation, null),
       'decision.withdraw': () => target && void withdraw(target),
+      'decision.copyLink': () => linkTarget && void copyLink('decision', linkTarget.id),
       'view.refresh': () => void refreshDecisions(),
     };
     for (const [k, f] of Object.entries(on)) addEventListener(`command:${k}`, f);
     return () => Object.entries(on).forEach(([k, f]) => removeEventListener(`command:${k}`, f));
   });
 
-  onMount(refreshDecisions);
+  // `/decisions#<id>` (a decision link) shows that decision's tab, focuses it and scrolls to it.
+  onMount(async () => {
+    await refreshDecisions();
+    const d = decisions.all.find((x) => `#${x.id}` === location.hash);
+    if (!d) return;
+    tab = d.status === 'open' ? 'open' : 'closed';
+    focused = d.id;
+    await tick();
+    document.getElementById(`decision-${d.id}`)?.scrollIntoView?.({ block: 'center' });
+  });
 </script>
 
 <PageHeader title="Decisions" icon="icon:help">
@@ -77,7 +90,7 @@
   {#if error}<p role="alert" class="error">{error}</p>{/if}
 
   {#each shown as d (d.id)}
-    <div class="slot" role="presentation" onfocusin={() => (focused = d.id)} onclick={() => (focused = d.id)}>
+    <div class="slot" id="decision-{d.id}" role="presentation" onfocusin={() => (focused = d.id)} onclick={() => (focused = d.id)}>
     <article class="card" data-decision={d.id} data-blocking={d.mode === 'blocking' || undefined} data-target={target?.id === d.id || undefined} aria-label={d.question}>
       <div class="meta">
         {#if d.mode === 'blocking'}<Pill color="red">Blocking</Pill>{:else}<Pill>Assumed</Pill>{/if}

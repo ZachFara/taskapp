@@ -8,9 +8,9 @@
   import { SKINS, setSkin, setTheme, theme } from '../../lib/theme.svelte';
   import { interfaceSize, setInterfaceSize, SIZES } from '../../lib/interfaceSize.svelte';
   import { motion, setSpeed, type Speed } from '../../lib/motion.svelte';
+  import { linkPrompt, setLinkPrompt } from '../../lib/linkPrompt.svelte';
   import { setTooltips, tooltips } from '../../lib/tooltips.svelte';
   import Switch from '../../ui/Switch.svelte';
-  import { dashboard, setDashboard } from '../dashboard/dashboard.svelte';
   import { estimationItems, scaleItems } from '../insights/estimation';
 
   const KEY = /^[A-Z]{2,5}$/;
@@ -49,7 +49,6 @@
   let saved = $state(false);
   let estimation = $state('both');
   let scale = $state('fibonacci');
-  let charts = $state(true);
   let sparklines = $state(false);
 
   const read = (k: string) => api.settings.get(k) as Promise<string | null>;
@@ -61,7 +60,6 @@
     week = (await read('week_start')) ?? 'sunday';
     estimation = (await read('estimation')) ?? 'both';
     scale = (await read('point_scale')) ?? 'fibonacci';
-    charts = ((await api.settings.get('insights_charts')) ?? true) !== false;
     sparklines = (await api.settings.get('sidebar_sparklines')) === true;
   });
 
@@ -87,7 +85,6 @@
       await api.settings.set('theme', themeChoice);
       await api.settings.set('estimation', estimation);
       await api.settings.set('point_scale', scale);
-      await api.settings.set('insights_charts', charts);
       await api.settings.set('sidebar_sparklines', sparklines);
       setTheme(themeChoice as 'light' | 'dark' | 'system', false);
       saved = true;
@@ -150,7 +147,12 @@
     <div class="st-field">
       <span>Show tooltips</span>
       <Switch label="Show tooltips" bind:checked={() => tooltips.show, setTooltips} />
-      <span class="st-hint">Name and shortcut on hover. Off by default; every shortcut is still listed in the command menu. Applies at once.</span>
+      <span class="st-hint">Name and shortcut on hover, for this device only (the other optional features are on the Features page). Off by default; every shortcut is still listed in the command menu. Applies at once.</span>
+    </div>
+    <div class="st-field">
+      <span>Ask for the solution link</span>
+      <Switch label="Ask for the solution link" bind:checked={() => linkPrompt.on, setLinkPrompt} />
+      <span class="st-hint">When an issue moves to a Completed status, offer to link its pull request, commit or doc. Skippable, never blocks. On by default; applies at once.</span>
     </div>
     <div class="st-field">
       <span>Estimation</span>
@@ -160,16 +162,6 @@
     <div class="st-field">
       <span>Point scale</span>
       <Select label="Point scale" items={scaleItems} bind:value={scale} disabled={estimation === 'none' || estimation === 'time'} />
-    </div>
-    <div class="st-field">
-      <span>Progress charts</span>
-      <Switch label="Progress charts" bind:checked={charts} />
-      <span class="st-hint">Burn-up charts on projects and cycles. The insights panel on a view still opens on demand.</span>
-    </div>
-    <div class="st-field">
-      <span>Dashboard</span>
-      <Switch label="Dashboard" bind:checked={() => dashboard.on, (v) => void setDashboard(v)} />
-      <span class="st-hint">Shows the Dashboard page in the sidebar. Applies at once; no need to save.</span>
     </div>
     <div class="st-field">
       <span>Sidebar sparklines</span>

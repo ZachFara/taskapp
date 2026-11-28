@@ -27,6 +27,7 @@ ids!(
     TemplateId,
     EventId,
     DecisionId,
+    LinkId,
     AttachmentId
 );
 
@@ -126,6 +127,10 @@ pub struct Issue {
     pub estimate_minutes: Option<u32>,
     /// At least 0, one decimal at most (checked on write).
     pub points: Option<f64>,
+    /// Deferred: views hide the issue until this day (the Process Inbox "Defer" choice).
+    pub hidden_until: Option<NaiveDate>,
+    /// Deep or shallow work; `None` until chosen.
+    pub depth: Option<Depth>,
     pub properties: Map<String, Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -198,6 +203,12 @@ pub struct IssuePatch {
         deserialize_with = "double_option",
         skip_serializing_if = "Option::is_none"
     )]
+    #[specta(type = Option<Depth>)]
+    pub depth: Clearable<Depth>,
+    #[serde(
+        deserialize_with = "double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     #[specta(type = Option<Due>)]
     pub due: Clearable<Due>,
     #[serde(
@@ -212,6 +223,12 @@ pub struct IssuePatch {
     )]
     #[specta(type = Option<f64>)]
     pub points: Clearable<f64>,
+    #[serde(
+        deserialize_with = "double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[specta(type = Option<NaiveDate>)]
+    pub hidden_until: Clearable<NaiveDate>,
     pub properties: Option<Map<String, Value>>,
 }
 
@@ -465,6 +482,47 @@ pub struct WorkBlock {
     pub end_utc: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum Depth {
+    Deep,
+    Shallow,
+}
+
+impl Depth {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Deep => "deep",
+            Self::Shallow => "shallow",
+        }
+    }
+}
+
+/// A timer on one issue. `ended_at` is `None` while it runs; at most one session does.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct FocusSession {
+    pub id: i64,
+    pub issue_id: IssueId,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
+    pub deep: bool,
+}
+
+/// Deep focus hours per bucket of the range, the total, and the run of days (ending today) with some.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct DeepHours {
+    pub buckets: Vec<DeepBucket>,
+    pub total_hours: f64,
+    pub streak_days: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct DeepBucket {
+    pub start: NaiveDate,
+    pub hours: f64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 pub enum FixedField {
     Title,
@@ -480,6 +538,9 @@ pub enum FixedField {
     DueDate,
     Estimate,
     Points,
+    /// Issues only: the day a deferred issue comes back.
+    HiddenUntil,
+    Depth,
     CreatedAt,
     UpdatedAt,
     CompletedAt,
@@ -573,6 +634,14 @@ pub enum Wrap {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
+pub enum Deferred {
+    #[default]
+    Hide,
+    Show,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
 pub enum SubIssues {
     #[default]
     Nest,
@@ -594,6 +663,9 @@ pub struct ViewDef {
     pub layout: Layout,
     pub columns: Vec<FieldRef>,
     pub include_archived: bool,
+    /// Whether issues deferred to a later day (`hidden_until`) are listed.
+    #[serde(default)]
+    pub deferred: Deferred,
     #[serde(default)]
     pub density: Density,
     #[serde(default)]
@@ -619,6 +691,7 @@ impl Default for ViewDef {
             layout: Layout::default(),
             columns: vec![],
             include_archived: false,
+            deferred: Deferred::default(),
             density: Density::default(),
             show_empty_groups: false,
             show_sub_issues: SubIssues::default(),
@@ -940,6 +1013,14 @@ pub struct StaleIssue {
     pub days: i32,
 }
 
+/// A project with its open next action; `stuck` when the project is active and has none.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct NextAction {
+    pub project: Project,
+    pub issue: Option<Issue>,
+    pub stuck: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct Metrics {
     pub from: NaiveDate,
@@ -962,6 +1043,8 @@ pub struct Metrics {
     pub blocked: Option<Blocked>,
     #[serde(default)]
     pub flow: Option<FlowEfficiency>,
+    #[serde(default)]
+    pub deep: Option<DeepHours>,
 }
 
 /// A cycle's commitment: its members at the end of its start day against what it holds and finished by its end
@@ -1031,6 +1114,28 @@ pub struct FlowEfficiency {
     pub waiting: Vec<WaitingStatus>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum LinkKind {
+    Solution,
+    Reference,
+    Pr,
+    Commit,
+    Doc,
+    Other,
+}
+
+/// Where something about an issue lives: a URL or a `taskapp://` link, with a title and what it is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct Link {
+    pub id: LinkId,
+    pub issue_id: IssueId,
+    pub url: String,
+    pub title: String,
+    pub kind: LinkKind,
+    pub created_at: String,
+}
+
 /// One choice of a [`Decision`]; `key` is what an answer and the recommendation name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct DecisionOption {
@@ -1090,4 +1195,26 @@ pub struct DecisionInput {
     pub external_id: Option<String>,
     #[serde(default)]
     pub issue_ids: Vec<IssueId>,
+}
+
+/// One Process Inbox choice for one issue.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub enum InboxChoice {
+    /// The two-minute rule: status Done.
+    Done,
+    /// Status Delegated, and a comment "Waiting on: <note>".
+    Delegate {
+        note: String,
+    },
+    /// Hide the issue until a later day.
+    Defer {
+        until: NaiveDate,
+    },
+    /// Status Next, in `project` when given.
+    Next {
+        project: Option<ProjectId>,
+    },
+    Someday,
+    /// Archive.
+    Trash,
 }

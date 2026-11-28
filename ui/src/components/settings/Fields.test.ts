@@ -8,12 +8,12 @@ const flush = () => new Promise((r) => setTimeout(r, 30));
 describe('Fields settings', () => {
   it('lists every field on, then switches one off with one write that keeps the order', async () => {
     const { target, calls, api } = await mountSettings(Fields);
-    expect(names(target)).toHaveLength(10);
+    expect(names(target)).toHaveLength(11);
     await toggle(target, 'Show Due');
     expect(calls.filter((c) => c === 'settings.set')).toHaveLength(1);
     const stored = (await api.settings.get('issue_fields')) as { field: string; on: boolean }[];
     expect(stored.find((f) => f.field === 'due')?.on).toBe(false);
-    expect(stored.filter((f) => f.on)).toHaveLength(9);
+    expect(stored.filter((f) => f.on)).toHaveLength(10);
     expect(field(target, 'Show Due').getAttribute('data-state')).toBe('unchecked');
   });
 
