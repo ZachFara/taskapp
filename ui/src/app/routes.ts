@@ -3,6 +3,7 @@ import DecisionsPage from '../components/DecisionsPage.svelte';
 import DashboardPage from '../components/dashboard/DashboardPage.svelte';
 import CyclesPage from '../components/CyclesPage.svelte';
 import InboxPage from '../components/InboxPage.svelte';
+import FocusPage from '../components/FocusPage.svelte';
 import IssueDetail from '../components/IssueDetail.svelte';
 import NextPage from '../components/NextPage.svelte';
 import MyIssuesPage from '../components/MyIssuesPage.svelte';
@@ -23,6 +24,7 @@ export const routes: { pattern: string; component: Component }[] = [
   { pattern: '/view/:id', component: ViewPage },
   { pattern: '/view/:id/:layout', component: ViewPage },
   { pattern: '/issue/:key', component: IssueDetail },
+  { pattern: '/focus/:key', component: FocusPage },
   { pattern: '/project/:slug', component: ProjectPage },
   { pattern: '/projects/timeline', component: GanttView },
   { pattern: '/pinned', component: PinnedPage },

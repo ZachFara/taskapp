@@ -15,6 +15,7 @@ pub mod comments;
 pub mod cycles;
 pub mod decisions;
 pub mod events;
+pub mod focus;
 pub mod forecast;
 pub mod history;
 pub mod import;

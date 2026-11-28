@@ -129,6 +129,8 @@ pub struct Issue {
     pub points: Option<f64>,
     /// Deferred: views hide the issue until this day (the Process Inbox "Defer" choice).
     pub hidden_until: Option<NaiveDate>,
+    /// Deep or shallow work; `None` until chosen.
+    pub depth: Option<Depth>,
     pub properties: Map<String, Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -197,6 +199,12 @@ pub struct IssuePatch {
     )]
     #[specta(type = Option<NaiveDate>)]
     pub start_date: Clearable<NaiveDate>,
+    #[serde(
+        deserialize_with = "double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[specta(type = Option<Depth>)]
+    pub depth: Clearable<Depth>,
     #[serde(
         deserialize_with = "double_option",
         skip_serializing_if = "Option::is_none"
@@ -474,6 +482,47 @@ pub struct WorkBlock {
     pub end_utc: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum Depth {
+    Deep,
+    Shallow,
+}
+
+impl Depth {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Deep => "deep",
+            Self::Shallow => "shallow",
+        }
+    }
+}
+
+/// A timer on one issue. `ended_at` is `None` while it runs; at most one session does.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct FocusSession {
+    pub id: i64,
+    pub issue_id: IssueId,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
+    pub deep: bool,
+}
+
+/// Deep focus hours per bucket of the range, the total, and the run of days (ending today) with some.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct DeepHours {
+    pub buckets: Vec<DeepBucket>,
+    pub total_hours: f64,
+    pub streak_days: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct DeepBucket {
+    pub start: NaiveDate,
+    pub hours: f64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 pub enum FixedField {
     Title,
@@ -491,6 +540,7 @@ pub enum FixedField {
     Points,
     /// Issues only: the day a deferred issue comes back.
     HiddenUntil,
+    Depth,
     CreatedAt,
     UpdatedAt,
     CompletedAt,
@@ -993,6 +1043,8 @@ pub struct Metrics {
     pub blocked: Option<Blocked>,
     #[serde(default)]
     pub flow: Option<FlowEfficiency>,
+    #[serde(default)]
+    pub deep: Option<DeepHours>,
 }
 
 /// A cycle's commitment: its members at the end of its start day against what it holds and finished by its end

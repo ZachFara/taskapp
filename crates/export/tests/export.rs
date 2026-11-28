@@ -8,9 +8,9 @@ use std::{
 use chrono::{NaiveDate, TimeZone, Utc};
 use serde_json::json;
 use taskapp_core::{
-    ChangeSource, Db, Due, IssueId, Layout, NewIssue, PinKind, PropertyDef, PropertyKind, Relation,
-    RelationKind, StatusCategory, ViewDef, comments, cycles, issues, labels, pins, projects,
-    properties, relation_kinds, relations, settings, views,
+    ChangeSource, Db, Depth, Due, IssueId, IssuePatch, Layout, NewIssue, PinKind, PropertyDef,
+    PropertyKind, Relation, RelationKind, StatusCategory, ViewDef, comments, cycles, focus, issues,
+    labels, pins, projects, properties, relation_kinds, relations, settings, views,
 };
 use taskapp_export::{git, rebuild, write};
 
@@ -276,6 +276,42 @@ async fn points_survive_export_and_rebuild_and_stay_out_of_files_without_them() 
     let points = |n| issues::get(&rebuilt, IssueId(n));
     assert_eq!(points(1).await?.points, Some(3.5));
     assert_eq!(points(2).await?.points, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn depth_and_focus_sessions_survive_export_and_rebuild() -> R {
+    let db = seeded().await?;
+    issues::update(
+        &db,
+        IssueId(1),
+        IssuePatch {
+            depth: Some(Some(Depth::Deep)),
+            ..IssuePatch::default()
+        },
+        SRC,
+    )
+    .await?;
+    focus::start(&db, IssueId(1), None, SRC).await?;
+    focus::stop(&db, SRC).await?;
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let files = tree(src.path());
+    let text = String::from_utf8_lossy(&files["issues/ABC-1.md"]).into_owned();
+    assert!(
+        text.contains("depth: deep") && text.contains("focus:"),
+        "{text}"
+    );
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    assert_eq!(
+        issues::get(&rebuilt, IssueId(1)).await?.depth,
+        Some(Depth::Deep)
+    );
+    let back = focus::log(&rebuilt, Some(IssueId(1)), None, None).await?;
+    assert_eq!(
+        (back.len(), back[0].deep, back[0].ended_at.is_some()),
+        (1, true, true)
+    );
     Ok(())
 }
 
@@ -548,6 +584,7 @@ async fn dump(
         "decisions",
         "links",
         "work_blocks",
+        "focus_sessions",
     ] {
         let cols: Vec<String> = sqlx::query_scalar(
             "SELECT name FROM pragma_table_info(?1) WHERE (name != 'id' OR ?1 IN ('view_templates', 'view_folders'))
@@ -557,7 +594,7 @@ async fn dump(
         .fetch_all(&db.pool)
         .await?;
         let mut fields: Vec<String> = cols.iter().map(|c| format!("'{c}', \"{c}\"")).collect();
-        if t == "import_log" || t == "work_blocks" {
+        if ["import_log", "work_blocks", "focus_sessions"].contains(&t) {
             fields.push("'issue', (SELECT number FROM issues WHERE id = issue_id)".into());
         }
         let sql = format!(

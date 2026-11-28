@@ -12,7 +12,7 @@ export const FEATURES = [
   { name: 'gcal', key: 'feature_gcal', label: 'Google Calendar', blurb: 'Calendar alerts for due dates, and its Settings page.' },
   { name: 'process_inbox', key: 'feature_process_inbox', label: 'Process Inbox', blurb: 'Go through the Inbox one issue at a time: do it, delegate, defer, plan, park or trash. The Process Inbox page and its commands.' },
   { name: 'next_actions', key: 'feature_next_actions', label: 'Next actions', blurb: 'One flagged next action per project, the Next page, and a Stuck marker and dashboard card for active projects without one.' },
-  { name: 'focus', key: 'feature_focus', label: 'Focus mode', blurb: 'Coming: one issue at a time, nothing else on screen.' },
+  { name: 'focus', key: 'feature_focus', label: 'Focus mode', blurb: 'One issue at a time on a timer, with a focus log per issue and the Deep hours card.' },
 ] as const;
 export type Feature = (typeof FEATURES)[number]['name'];
 
@@ -45,8 +45,9 @@ const COMMANDS: [RegExp, Feature][] = [
   [/^(nav\.process|process\.)/, 'process_inbox'],
   [/^settings\.reminders$/, 'reminders'],
   [/^settings\.calendar$/, 'gcal'],
+  [/^(issue\.focus$|focus\.)/, 'focus'],
 ];
 export const featureOfCommand = (id: string) => COMMANDS.find(([re]) => re.test(id))?.[1];
 
-export const ROUTES: Record<string, Feature> = { '/dashboard': 'dashboard', '/decisions': 'decisions', '/cycles': 'cycles', '/events': 'events', '/event': 'events', '/next': 'next_actions', '/process': 'process_inbox' };
+export const ROUTES: Record<string, Feature> = { '/focus': 'focus', '/dashboard': 'dashboard', '/decisions': 'decisions', '/cycles': 'cycles', '/events': 'events', '/event': 'events', '/next': 'next_actions', '/process': 'process_inbox' };
 export const SETTINGS_PAGES: Record<string, Feature> = { cycles: 'cycles', reminders: 'reminders', calendar: 'gcal' };

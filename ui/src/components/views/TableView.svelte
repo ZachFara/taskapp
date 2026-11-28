@@ -41,6 +41,7 @@
     DueDate: { label: 'Due', kind: 'Date' },
     Estimate: { label: 'Estimate', kind: 'Number' },
     Points: { label: 'Points', kind: 'Read' },
+    Depth: { label: 'Depth', kind: 'Read' },
     Project: { label: 'Project', kind: 'Project' },
     Label: { label: 'Labels', kind: 'Labels' },
     // Shown through FieldValue and not editable here.
@@ -141,6 +142,7 @@
       case 'Label': return i.label_ids.join(',');
       case 'Estimate': return i.estimate_minutes;
       case 'Points': return i.points;
+      case 'Depth': return i.depth;
       default: return null;
     }
   };

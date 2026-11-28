@@ -30,6 +30,16 @@ describe('Features', () => {
     expect(ids()).toContain('feature.cycles.toggle');
   });
 
+  it('focus commands and the focus route follow the focus switch', async () => {
+    const onIssue = () => listCommands({ ...ctx, focusedIssueId: 1 } as Ctx).map((c) => c.id);
+    const { target } = await mountSettings(Features);
+    expect(onIssue()).toContain('issue.focus');
+    await toggle(target, 'Focus mode');
+    expect(isOn('focus')).toBe(false);
+    expect(onIssue()).not.toContain('issue.focus');
+    expect(ids()).toContain('feature.focus.toggle');
+  });
+
   it('dashboard and charts keep their existing keys', async () => {
     const { target, api } = await mountSettings(Features);
     await toggle(target, 'Dashboard');

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT started_at AS \"started_at: DateTime<Utc>\", ended_at AS \"ended_at: DateTime<Utc>\"\n           FROM focus_sessions WHERE deep = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "started_at: DateTime<Utc>",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "ended_at: DateTime<Utc>",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "df88c42002043aa68a5a299f888597cd7cead588e368a7a726fc18596d0f1ed3"
+}

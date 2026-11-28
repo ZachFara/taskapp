@@ -57,6 +57,8 @@ enum Cmd {
     #[command(subcommand)]
     Cycle(CycleCmd),
     #[command(subcommand)]
+    Focus(FocusCmd),
+    #[command(subcommand)]
     Event(EventCmd),
     #[command(subcommand)]
     Label(LabelCmd),
@@ -279,6 +281,9 @@ enum IssueCmd {
         /// URL of the fix (a pull request, commit or doc); recorded as a link of kind solution.
         #[arg(long)]
         solution: Option<String>,
+        /// Deep or shallow work, or none to clear it.
+        #[arg(long)]
+        depth: Option<String>,
     },
     /// Adds a link to an issue; adding the same URL again changes nothing.
     Link {
@@ -527,6 +532,27 @@ struct ProjectEdit {
     /// YYYY-MM-DD.
     #[arg(long)]
     target: Option<String>,
+}
+
+#[derive(Subcommand)]
+enum FocusCmd {
+    /// Start a session on an issue; a running one ends first. Deep is the issue's depth unless --deep.
+    Start {
+        key: String,
+        #[arg(long)]
+        deep: bool,
+    },
+    /// End the running session.
+    Stop,
+    /// Sessions, newest first, with their total minutes (a running one counts up to now).
+    Log {
+        /// Issue key; all issues when left out.
+        #[arg(long)]
+        key: Option<String>,
+        /// day (today), week (last 7 days), month (last 30) or all.
+        #[arg(long)]
+        range: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]

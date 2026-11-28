@@ -381,6 +381,7 @@ mod tests {
             estimate_minutes: None,
             points: None,
             hidden_until: None,
+            depth: None,
             properties: serde_json::Map::default(),
             created_at: now,
             updated_at: now,

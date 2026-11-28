@@ -27,6 +27,8 @@
 
   let path = $state(location.pathname);
   const match = $derived(matchRoute(path));
+  // Focus mode: one issue and its timer, no sidebar and no toasts.
+  const focusing = $derived(path.startsWith('/focus/'));
   const Page = $derived(match?.component);
   // A page whose feature is switched off says so instead of opening.
   const off = $derived(FEATURES.find((f) => f.name === ROUTES['/' + path.split('/')[1]] && !isOn(f.name)));
@@ -209,7 +211,7 @@
 {#if setup === 'needed'}
   <Setup ondone={() => (setup = 'done')} />
 {:else if setup === 'done'}
-  <Shell {crumb} route={path} panelOpen={panelKey !== null} onsearch={() => ((palettePage = undefined), (paletteIssues = false), (overlay = 'palette'))}>
+  <Shell {crumb} route={path} focus={focusing} panelOpen={panelKey !== null} onsearch={() => ((palettePage = undefined), (paletteIssues = false), (overlay = 'palette'))}>
     {#snippet sidebar()}<Sidebar route={path} />{/snippet}
     {#snippet panel()}
       {#if shownKey !== null}
@@ -233,7 +235,7 @@
     <QuickAdd defaults={quickAddDefaults} onclose={() => (overlay = null)} oncreated={created} />
   {/if}
   <CheatSheet bind:open={cheat} />
-  <div class="toasts"><UndoToast /></div>
+  {#if !focusing}<div class="toasts"><UndoToast /></div>{/if}
   <LinkSolution />
   <NextPrompt />
   <ImageViewer />

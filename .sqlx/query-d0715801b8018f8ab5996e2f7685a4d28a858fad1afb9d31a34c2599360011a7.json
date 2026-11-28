@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT depth FROM issues WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "depth",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "d0715801b8018f8ab5996e2f7685a4d28a858fad1afb9d31a34c2599360011a7"
+}

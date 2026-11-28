@@ -22,7 +22,10 @@ export type Metrics = {
   cycle?: CycleCommit | null;
   blocked?: Blocked | null;
   flow?: FlowEfficiency | null;
+  /** Deep focus hours per bucket; absent from an engine that predates the focus feature. */
+  deep?: DeepHours | null;
 };
+export type DeepHours = { buckets: { start: string; hours: number | null }[]; total_hours: number | null; streak_days: number };
 export type CycleCommit = {
   committed: number; committed_points: number; done: number; done_points: number; say_do_pct: number | null; say_do_points_pct: number | null;
   added: number; added_points: number; removed: number; removed_points: number; scope_change_pct: number | null; scope_change_points_pct: number | null;

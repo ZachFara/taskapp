@@ -291,6 +291,15 @@ macro_rules! with_commands {
 
             stale_list(s) -> Vec<StaleIssue> { stale::list(&s.db).await }
 
+            focus_start(s, issue: IssueId, deep: Option<bool>) -> FocusSession {
+                focus::start(&s.db, issue, deep, $source).await
+            }
+            focus_stop(s) -> Option<FocusSession> { focus::stop(&s.db, $source).await }
+            focus_running(s) -> Option<FocusSession> { focus::running(&s.db).await }
+            focus_log(s, issue: Option<IssueId>, from: Option<NaiveDate>, to: Option<NaiveDate>) -> Vec<FocusSession> {
+                focus::log(&s.db, issue, from, to).await
+            }
+
             search_search(s, text: String, limit: u32) -> Vec<Issue> { search::search(&s.db, &text, limit).await }
             search_similar(s, text: String, project_id: Option<ProjectId>, limit: u32) -> Vec<Issue> {
                 search::similar(&s.db, &text, project_id, limit).await

@@ -17,6 +17,7 @@ import VelocityCard from './VelocityCard.svelte';
 import CycleCard from './CycleCard.svelte';
 import BlockedCard from './BlockedCard.svelte';
 import FlowCard from './FlowCard.svelte';
+import DeepHoursCard from './DeepHoursCard.svelte';
 
 export type CardProps = { metrics: Metrics; measure: 'Count' | 'Points'; filter: Filter | null; cycle: number | null; stale: StaleIssue[]; stuck: NextAction[] };
 /** One entry per card; the later tickets (MIT-328 to 334) add theirs here. A card never fetches: it draws `metrics`. */
@@ -37,4 +38,5 @@ export const CARDS: { id: string; title: string; wide?: boolean; component: Comp
   { id: 'flow', title: 'Flow efficiency', component: FlowCard },
   { id: 'stale', title: 'Stale', component: StaleCard },
   { id: 'stuck', title: 'Stuck projects', component: StuckCard },
+  { id: 'deep', title: 'Deep hours', component: DeepHoursCard },
 ];

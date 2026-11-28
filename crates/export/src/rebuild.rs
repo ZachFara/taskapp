@@ -10,10 +10,10 @@ use sqlx::{Sqlite, Transaction};
 use taskapp_core::{Db, Error, IssueId, Result, ViewDef, attachments, search};
 
 use crate::files::{
-    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, ImportLogRow, IssueFront,
-    IssueTemplateFile, LabelRow, LinkFile, PinRow, ProjectFile, ProjectStatusRow, PropertyFile,
-    RelationKindRow, StatusRow, ViewFile, ViewFolderFile, ViewTemplateFile, invalid, parse_issue,
-    plain_dir, read_plain,
+    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, FocusRow, ImportLogRow,
+    IssueFront, IssueTemplateFile, LabelRow, LinkFile, PinRow, ProjectFile, ProjectStatusRow,
+    PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewFolderFile, ViewTemplateFile, invalid,
+    parse_issue, plain_dir, read_plain,
 };
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -90,6 +90,7 @@ async fn wipe(tx: &mut Tx<'_>) -> Result<()> {
         "DELETE FROM issue_labels",
         "DELETE FROM comments",
         "DELETE FROM work_blocks",
+        "DELETE FROM focus_sessions",
         "DELETE FROM import_log",
         "DELETE FROM issues",
         "DELETE FROM property_defs",
@@ -644,14 +645,14 @@ async fn insert_issue(
     sqlx::query(
         "INSERT INTO issues (number, title, description, status_id, priority, project_id,
            milestone_id, cycle_id, start_date, due_date, due_time_utc, due_tz, estimate_minutes,
-           points, hidden_until, properties, created_at, updated_at, completed_at, archived_at)
+           points, hidden_until, depth, properties, created_at, updated_at, completed_at, archived_at)
          VALUES (?, ?, ?,
            (SELECT id FROM statuses WHERE name = ?), ?,
            (SELECT id FROM projects WHERE slug = ?),
            (SELECT m.id FROM milestones m JOIN projects p ON p.id = m.project_id
               WHERE p.slug = ? AND m.name = ? ORDER BY m.id LIMIT 1),
            (SELECT id FROM cycles WHERE number = ?),
-           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(number)
     .bind(&f.title)
@@ -669,6 +670,7 @@ async fn insert_issue(
     .bind(f.estimate_minutes)
     .bind(f.points)
     .bind(f.hidden_until)
+    .bind(&f.depth)
     .bind(serde_json::to_string(&f.properties).map_err(invalid)?)
     .bind(f.created_at)
     .bind(f.updated_at)
@@ -739,6 +741,22 @@ async fn link_issue(
         .bind(number)
         .bind(b.start)
         .bind(b.end)
+        .execute(&mut **tx)
+        .await?;
+    }
+    insert_focus(tx, number, &f.focus).await
+}
+
+async fn insert_focus(tx: &mut Tx<'_>, number: i64, sessions: &[FocusRow]) -> Result<()> {
+    for s in sessions {
+        sqlx::query(
+            "INSERT INTO focus_sessions (issue_id, started_at, ended_at, deep)
+             VALUES ((SELECT id FROM issues WHERE number = ?), ?, ?, ?)",
+        )
+        .bind(number)
+        .bind(s.start)
+        .bind(s.end)
+        .bind(s.deep)
         .execute(&mut **tx)
         .await?;
     }

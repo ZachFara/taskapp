@@ -7,18 +7,18 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use taskapp_core::{
-    AttachmentId, ChangeSource, CycleId, Db, Due, Error, EventId, EventInput, FlowKind, IssueId,
-    IssuePatch, LinkKind, Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef,
-    PropertyKind, Relation, RelationKind, Result, SelectOption, TemplateId, ViewDef, ViewId,
-    ViewTemplateId, attachments, backup, comments, cycles, events, history, import, insights,
-    issues, labels, links, pins, project_statuses, projects, properties, quickadd, relations,
-    search, statuses, templates, undo, view_templates, views,
+    AttachmentId, ChangeSource, CycleId, Db, Depth, Due, Error, EventId, EventInput, FlowKind,
+    IssueId, IssuePatch, LinkKind, Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId,
+    PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, TemplateId, ViewDef,
+    ViewId, ViewTemplateId, attachments, backup, comments, cycles, events, focus, history, import,
+    insights, issues, labels, links, metrics, pins, project_statuses, projects, properties,
+    quickadd, relations, search, statuses, templates, undo, view_templates, views,
 };
 
 use crate::{
-    AttachmentCmd, Cmd, CommentCmd, CycleCmd, EventCmd, FeaturesCmd, ImportCmd, InsightsCmd,
-    IssueCmd, LabelCmd, OnOff, PinCmd, ProjectCmd, ProjectEdit, PropertyCmd, RelationCmd,
-    ScopeArgs, StatusCmd, SyncCmd, TemplateCmd, ViewCmd, look,
+    AttachmentCmd, Cmd, CommentCmd, CycleCmd, EventCmd, FeaturesCmd, FocusCmd, ImportCmd,
+    InsightsCmd, IssueCmd, LabelCmd, OnOff, PinCmd, ProjectCmd, ProjectEdit, PropertyCmd,
+    RelationCmd, ScopeArgs, StatusCmd, SyncCmd, TemplateCmd, ViewCmd, look,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
@@ -77,11 +77,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Property(cmd) => property(db, dir, cmd).await,
         Cmd::Project(cmd) => project(db, cmd).await,
         Cmd::Cycle(cmd) => cycle(db, cmd).await,
-        Cmd::Label(cmd) => label(db, cmd).await,
-        Cmd::Comment(cmd) => comment(db, cmd).await,
-        Cmd::Relation(cmd) => relation(db, cmd).await,
-        Cmd::Pin(cmd) => pin(db, cmd).await,
-        Cmd::Import(cmd) => import(db, cmd).await,
+        Cmd::Focus(cmd) => focus_cmd(db, cmd).await,
         Cmd::Backup(_) | Cmd::Restore { .. } | Cmd::Guide | Cmd::Api(_) => Err(Error::Invalid(
             "this command runs before the database opens".into(),
         )),
@@ -103,6 +99,18 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Colors
         | Cmd::Sync(_) => handled_in_run(),
         Cmd::History { key } => issue_history(db, &key).await,
+        cmd => run_more(db, cmd).await,
+    }
+}
+
+async fn run_more(db: &Db, cmd: Cmd) -> Result<Value> {
+    match cmd {
+        Cmd::Label(cmd) => label(db, cmd).await,
+        Cmd::Comment(cmd) => comment(db, cmd).await,
+        Cmd::Relation(cmd) => relation(db, cmd).await,
+        Cmd::Pin(cmd) => pin(db, cmd).await,
+        Cmd::Import(cmd) => import(db, cmd).await,
+        _ => handled_in_run(),
     }
 }
 
@@ -229,6 +237,7 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         project,
         solution,
         hide_until,
+        depth,
     } = cmd
     else {
         unreachable!("issue_update is only called with Update");
@@ -236,20 +245,12 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
     let id = issue_id(db, &key).await?;
     let status_id = crate::references::status(db, status.as_deref()).await?;
     let project_id = crate::references::project(db, project.as_deref()).await?;
-    let due = if clear_due {
-        Some(None)
-    } else {
-        due.as_deref()
-            .map(date)
-            .transpose()?
-            .map(|d| Some(Due::Date(d)))
-    };
     let patch = IssuePatch {
         title,
         description,
         priority: check_priority(priority)?,
         status_id,
-        due,
+        due: due_arg(clear_due, due.as_deref())?,
         points: if clear_points {
             Some(None)
         } else {
@@ -263,6 +264,7 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
             Some("clear") => Some(None),
             Some(d) => Some(Some(date(d)?)),
         },
+        depth: depth.as_deref().map(depth_arg).transpose()?,
         ..IssuePatch::default()
     };
     // The link goes first: a URL that is refused must not leave the rest of the update applied.
@@ -273,6 +275,14 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         return val(issues::get(db, id).await?);
     }
     val(issues::update(db, id, patch, SRC).await?)
+}
+
+/// `--due DATE` sets the day; `--clear-due` removes it.
+fn due_arg(clear: bool, due: Option<&str>) -> Result<taskapp_core::Clearable<Due>> {
+    if clear {
+        return Ok(Some(None));
+    }
+    Ok(due.map(date).transpose()?.map(|d| Some(Due::Date(d))))
 }
 
 async fn issue_keyed(db: &Db, cmd: IssueCmd) -> Result<Value> {
@@ -302,6 +312,65 @@ fn link_kind(kind: &str) -> Result<LinkKind> {
             "kind {kind} must be solution, reference, pr, commit, doc or other"
         ))
     })
+}
+
+/// `deep` or `shallow`; `none` clears the depth.
+fn depth_arg(text: &str) -> Result<Option<Depth>> {
+    match text {
+        "deep" => Ok(Some(Depth::Deep)),
+        "shallow" => Ok(Some(Depth::Shallow)),
+        "none" => Ok(None),
+        other => Err(Error::Invalid(format!(
+            "depth is deep, shallow or none, not {other}"
+        ))),
+    }
+}
+
+async fn focus_cmd(db: &Db, cmd: FocusCmd) -> Result<Value> {
+    match cmd {
+        FocusCmd::Start { key, deep } => {
+            let id = issue_id(db, &key).await?;
+            val(focus::start(db, id, deep.then_some(true), SRC).await?)
+        }
+        FocusCmd::Stop => val(focus::stop(db, SRC).await?),
+        FocusCmd::Log { key, range } => {
+            let issue = match key {
+                Some(key) => Some(issue_id(db, &key).await?),
+                None => None,
+            };
+            let (from, to) = focus_days(db, range.as_deref()).await?;
+            let sessions = focus::log(db, issue, from, to).await?;
+            let secs: i64 = sessions
+                .iter()
+                .map(|s| {
+                    (s.ended_at.unwrap_or_else(Utc::now) - s.started_at)
+                        .num_seconds()
+                        .max(0)
+                })
+                .sum();
+            Ok(json!({ "sessions": sessions, "total_minutes": secs / 60 }))
+        }
+    }
+}
+
+/// The local days a `--range` covers; `all` (or none) covers every session.
+async fn focus_days(
+    db: &Db,
+    range: Option<&str>,
+) -> Result<(Option<NaiveDate>, Option<NaiveDate>)> {
+    let back = match range {
+        None | Some("all") => return Ok((None, None)),
+        Some("day") => 0,
+        Some("week") => 6,
+        Some("month") => 29,
+        Some(other) => {
+            return Err(Error::Invalid(format!(
+                "range is day, week, month or all, not {other}"
+            )));
+        }
+    };
+    let today = metrics::today(db).await?;
+    Ok((Some(today - chrono::Duration::days(back)), Some(today)))
 }
 
 fn scope(a: &ScopeArgs) -> Result<(ProgressScope, Measure)> {

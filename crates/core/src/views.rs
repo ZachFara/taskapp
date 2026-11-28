@@ -330,6 +330,7 @@ fn fixed_col(entity: ViewEntity, x: FixedField) -> Result<Col> {
         FixedField::Estimate => ("issues.estimate_minutes", false),
         FixedField::Points => ("issues.points", false),
         FixedField::HiddenUntil => ("issues.hidden_until", false),
+        FixedField::Depth => ("issues.depth", true),
         FixedField::CreatedAt => ("issues.created_at", false),
         FixedField::UpdatedAt => ("issues.updated_at", false),
         FixedField::CompletedAt => ("issues.completed_at", false),

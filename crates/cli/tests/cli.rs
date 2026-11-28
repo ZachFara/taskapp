@@ -1450,3 +1450,29 @@ fn inbox_lists_and_processes_and_hide_until_hides() {
             .success()
     );
 }
+
+#[test]
+fn focus_start_stop_and_log_write_sessions() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Draft the spec"]);
+    run(&db, &["issue", "update", "ABC-1", "--depth", "deep"]);
+    let started = run_json(&db, &["focus", "start", "ABC-1"]);
+    assert_eq!(
+        (started["deep"].as_bool(), started["ended_at"].is_null()),
+        (Some(true), true)
+    );
+    let stopped = run_json(&db, &["focus", "stop"]);
+    assert!(stopped["ended_at"].is_string(), "{stopped}");
+    let log = run_json(&db, &["focus", "log", "--key", "ABC-1", "--range", "week"]);
+    assert_eq!(log["sessions"].as_array().map(Vec::len), Some(1));
+    assert!(run_json(&db, &["focus", "stop"]).is_null());
+}
+
+#[test]
+fn issue_depth_rejects_unknown_words() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Read"]);
+    let out = run(&db, &["issue", "update", "ABC-1", "--depth", "medium"]);
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("deep, shallow or none"));
+}

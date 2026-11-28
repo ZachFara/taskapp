@@ -7,6 +7,7 @@ import * as insights from './api.mock.insights';
 import { forecast, metrics } from './api.mock.metrics';
 import { stale } from './api.mock.stale';
 import { nextActions } from './api.mock.next';
+import { deepHours } from './api.mock.focus';
 import { stepLabel } from './api.mock.stepLabel';
 import { byStatusOrder, flowDefaults } from './statusOrder';
 import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
@@ -18,7 +19,7 @@ import { scrubDef, seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
   AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, Decision, Event, EventInput, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Link, Milestone,
   NewIssue, Pin, Placement, Project, ProjectRow, ProjectStatus, ProjectStatusCategory, PropertyAppliesTo, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
-  TemplateInput, Value, ViewDef, ViewEntity, ViewFolder, ViewTemplate, WorkBlock,
+  FocusSession, TemplateInput, Value, ViewDef, ViewEntity, ViewFolder, ViewTemplate, WorkBlock,
 } from './bindings';
 
 export type MockSeed = {
@@ -49,7 +50,7 @@ export type MockApi = Api & {
 };
 
 const nullableIssueFields = [
-  'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until',
+  'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until', 'depth',
 ] as const;
 // The backend's error text is `<kind>: <detail>`; the UI shows it as is.
 const fail = (kind: string, message: string): never => {
@@ -122,12 +123,13 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const blocks: WorkBlock[] = [];
   // [project id, flagged issue id]; an array so undo snapshots it with the other collections.
   const nextFlags: [number, number][] = [];
+  const focusSessions: FocusSession[] = [];
   const changes: Change[] = [...(s.history ?? [])];
   // One step per command that changed anything, like the backend; undo and redo cover every entity.
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, decisions, links, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog, nextFlags] as unknown[][];
+  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, decisions, links, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog, nextFlags, focusSessions] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -361,7 +363,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       priority: input.priority ?? 0, project_id: input.project_id ?? null, milestone_id: input.milestone_id ?? null,
       parent_id: input.parent_id ?? null, cycle_id: input.cycle_id ?? null, label_ids: [...new Set(input.label_ids ?? [])].sort((a, b) => a - b),
       start_date: input.start_date ?? null, due: input.due ?? null, estimate_minutes: input.estimate_minutes ?? null, points: input.points ?? null, hidden_until: null,
-      properties: input.properties ?? {}, created_at: input.created_at ?? at, updated_at: at,
+      depth: null, properties: input.properties ?? {}, created_at: input.created_at ?? at, updated_at: at,
       completed_at: input.completed_at ?? null, archived_at: null,
     };
     checkIssue(issue, issue.properties);
@@ -372,6 +374,12 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     return issue;
   };
   const getIssue = (id: number) => find(s.issues, id, 'issue');
+  // Only one session runs: a start ends the open one.
+  const endOpen = (at: string) => {
+    const open = focusSessions.find((f) => f.ended_at === null);
+    if (open) open.ended_at = at;
+    return open ?? null;
+  };
   const templates: IssueTemplate[] = s.templates ?? [];
   // Same rule as core: a reference that no longer resolves is dropped and named in `skipped`.
   const liveRefs = (f: Partial<TemplateFields>, skipped: string[]): TemplateFields => {
@@ -1135,7 +1143,32 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       for: async (q) => forecast(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, tz: workspace.timezone, today: zoneToday() }, fail),
     },
     metrics: {
-      for: async (q) => metrics(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, relations, everyone: query(withDisplay({ filter: null, layout: 'List' })), tz: workspace.timezone, today: zoneToday() }, fail),
+      for: async (q) => {
+        const m = metrics(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, relations, everyone: query(withDisplay({ filter: null, layout: 'List' })), tz: workspace.timezone, today: zoneToday() }, fail);
+        return { ...m, deep: deepHours(focusSessions, m.from, m.to, q.bucket, workspace.timezone, zoneToday()) };
+      },
+    },
+    focus: {
+      start: async (issue, deep) => {
+        const found = getIssue(issue);
+        const at = new Date().toISOString();
+        endOpen(at);
+        const row: FocusSession = { id: next(focusSessions), issue_id: issue, started_at: at, ended_at: null, deep: deep ?? found.depth === 'deep' };
+        focusSessions.push(row);
+        return { ...row };
+      },
+      stop: async () => {
+        const open = endOpen(new Date().toISOString());
+        return open ? { ...open } : null;
+      },
+      running: async () => {
+        const open = focusSessions.find((f) => f.ended_at === null);
+        return open ? { ...open } : null;
+      },
+      log: async (issue, from, to) => focusSessions
+        .filter((f) => (issue === null || f.issue_id === issue) && (!from || insights.localDay(f.started_at, workspace.timezone) >= from) && (!to || insights.localDay(f.started_at, workspace.timezone) <= to))
+        .sort((a, b) => (a.started_at < b.started_at ? 1 : a.started_at > b.started_at ? -1 : b.id - a.id))
+        .map((f) => ({ ...f })),
     },
     next: {
       list: async () => nextActions(s.projects, s.issues, s.statuses, projectStatuses, labels, new Map(nextFlags)),
@@ -1367,7 +1400,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink decisions.create decisions.answer decisions.withdraw decisions.link decisions.unlink links.add links.remove templates.create templates.update templates.delete templates.apply ' +
     'labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
     'relations.add relations.remove relation.kindsCreate relation.kindsUpdate relation.kindsDelete views.save views.saveProject views.delete views.reorder folders.create folders.rename folders.delete folders.place folders.placeItem views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
-    'view.templatesCreate view.templatesUpdate view.templatesDelete pins.pin pins.unpin pins.reorder pins.set import.apply'
+    'view.templatesCreate view.templatesUpdate view.templatesDelete pins.pin pins.unpin pins.reorder pins.set import.apply focus.start focus.stop'
   ).split(' ');
   for (const name of mutating) {
     const [mod, fn] = name.split('.');
@@ -1481,7 +1514,7 @@ const issues: Issue[] = rows.map((r, k) => {
     project_id: r.project, milestone_id: r.milestone ?? null, parent_id: r.parent ?? null, cycle_id: r.cycle ?? null,
     label_ids: r.labels ?? [], start_date: r.start === undefined ? null : day(r.start),
     due: r.due === undefined ? null : { Date: day(r.due) }, estimate_minutes: r.hours === undefined ? null : r.hours * 60,
-    points: POINTS[n] ?? null, hidden_until: null,
+    points: POINTS[n] ?? null, hidden_until: null, depth: null,
     properties: { ...(r.area && { area: r.area }), ...(r.effort && { effort: r.effort }) } as Issue['properties'],
     created_at: created, updated_at: created, completed_at: finished ? created : null, archived_at: null,
   };

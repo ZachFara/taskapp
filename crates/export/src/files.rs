@@ -368,6 +368,16 @@ pub struct WorkBlockRow {
     pub end: DateTime<Utc>,
 }
 
+/// One focus session of an issue, listed in its frontmatter; `end` is missing while it runs.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct FocusRow {
+    pub start: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub deep: bool,
+}
+
 /// Frontmatter of `issues/<KEY>.md`. Every reference is by name or key, never by database id.
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct IssueFront {
@@ -406,6 +416,11 @@ pub struct IssueFront {
     pub properties: Map<String, Value>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub work_blocks: Vec<WorkBlockRow>,
+    /// `deep` or `shallow`; missing until chosen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub depth: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub focus: Vec<FocusRow>,
 }
 
 /// The frontmatter, the description, and the comments of one issue file.

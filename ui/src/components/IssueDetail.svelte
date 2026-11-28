@@ -4,6 +4,7 @@
   import { api } from '../lib/api';
   import type { Issue, IssuePatch, Project, ResolvedPin, Status } from '../lib/bindings';
   import { shortcutFor } from '../lib/commands/registry';
+  import { isOn } from '../lib/features.svelte';
   import Button from '../ui/Button.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import IconButton from '../ui/IconButton.svelte';
@@ -13,6 +14,7 @@
   import TextInput from '../ui/TextInput.svelte';
   import { dateOf, humanDate } from './detail/format';
   import Comments from './detail/Comments.svelte';
+  import FocusLog from './detail/FocusLog.svelte';
   import Description from './detail/Description.svelte';
   import History from './detail/History.svelte';
   import Properties from './detail/Properties.svelte';
@@ -189,12 +191,14 @@
           <h2><button type="button" aria-label="Title" onclick={startTitle}>{issue.title}</button></h2>
         {/if}
         {#if issue.archived_at}<p class="arch">Archived {humanDate(dateOf(issue.archived_at))}</p>{/if}
+        {#if isOn('focus')}<p class="focus-entry"><Button variant="quiet" onclick={() => navigate(`/focus/${issue!.key}`)}>Focus on this issue</Button></p>{/if}
       </div>
       {#if error}<p role="alert" class="error">{error}</p>{/if}
       <div class="cols">
         <main>
           <Description {issue} {save} bind:editing={editingDesc} />
           <SubIssues {issue} {act} {rev} {open} />
+          {#if isOn('focus')}<FocusLog {issue} {rev} />{/if}
           <Relations {issue} {act} {rev} {open} />
           <IssueEvents {issue} {act} {rev} />
           <IssueDecisions {issue} {rev} />
@@ -233,6 +237,7 @@
   h2 button { display: block; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; font-size: var(--fs-display); font-weight: 800; letter-spacing: -0.03em; line-height: var(--lh-tight); }
   h2 button:hover { text-decoration: underline dotted; text-underline-offset: var(--s-2); }
   .arch { font-weight: 700; color: var(--signal); }
+  .focus-entry { margin: 0; }
   .cols { display: grid; grid-template-columns: minmax(0, 1fr) calc(var(--panel-w) - var(--s-4)); }
   main { display: grid; align-content: start; gap: var(--s-6); padding: var(--s-7) var(--s-8) var(--s-10); min-width: 0; }
   aside { padding: var(--s-7); background: var(--card); border-left: 1px solid var(--border); position: relative; overflow: hidden; }

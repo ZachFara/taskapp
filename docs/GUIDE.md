@@ -447,6 +447,19 @@ imported Linear issues stay quiet unless their status has one. Stale rows in the
 Stale card on the Dashboard counts them by status and lists the oldest first; click a key to open the issue. The CLI
 prints the same list: `taskapp stale`.
 
+### Focus and deep work
+
+Depth is a field on each issue: Deep work, Shallow work or none, set in the issue's Details (Depth) or with "Set depth"
+in the command menu. Focus mode (Settings > Features, on by default) works one issue at a time: "Focus on this issue"
+in the command menu, the target button in an issue's header, or `taskapp focus start KEY` (`--deep` marks the session
+deep whatever the issue's depth; otherwise the depth decides). The page shows the issue, its description and checklist, and
+a timer with Start or Resume, Pause, and Stop focus (Stop goes back to the issue). The sidebar and toasts are hidden there.
+Only one session runs: starting another ends the running one. A running session survives a reload and is the one
+the page resumes. Each session is written when it ends, and the issue's Focus log lists them with their total. The
+Dashboard's Deep hours card sums deep sessions per day or week for the range, with the total and the streak of days
+ending today with deep time. CLI: `taskapp focus stop`, `taskapp focus log [--key ABC-1] [--range day|week|month|all]`.
+Turning Focus mode off hides its commands, page and card; the sessions stay in the database.
+
 ## Points and insights
 
 - **Estimation setting** (Settings > General): None, Points, Time or Both. Points show only for Points or Both; time
@@ -993,6 +1006,8 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `issue link <key> <url>` | Add a link (`--title`, `--kind solution\|reference\|pr\|commit\|doc\|other`); the same URL twice is one link. | `taskapp issue link ABC-1 https://example.com/pr/7 --kind pr` |
 | `issue links <key>` | List an issue's links. | `taskapp issue links ABC-1` |
 | `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --solution <url> --hide-until DATE\|clear`. | `taskapp issue update ABC-1 --status 3` |
+| `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --depth deep\|shallow\|none`. | `taskapp issue update ABC-1 --status 3` |
+| `focus start <key> [--deep]`, `focus stop`, `focus log [--key] [--range]` | Focus sessions: start one (ends a running one), end the running one, list sessions with their total minutes. | `taskapp focus start ABC-1 --deep` |
 | `issue list [...]` | Issues by name filters, most urgent first, with status, priority, project and label names: `--project --status --not-status --priority --label` (repeat or comma-separate). | `taskapp issue list --project Cairn --not-status Done,Canceled,Someday` |
 | `issue get <key>` | Show one issue, with `status`, `project`, `labels` and `priority_name` as names next to the ids. | `taskapp issue get ABC-1` |
 | `inbox [--limit N]` | The next Inbox items, oldest first, and how many there are (deferred ones left out). | `taskapp inbox --limit 3` |
@@ -1145,7 +1160,7 @@ Server `taskapp-mcp` over stdio (`taskapp-mcp [--db <path>]`). Writes use source
 
 From PROGRESS.md "After this plan" and from reading the code:
 
-- Not built: themes (only light, dark, system); agents as assignees; decision tickets; cost per issue; multi-device
+- Not built: focus tools in the MCP server (the CLI has them); themes (only light, dark, system); agents as assignees; decision tickets; cost per issue; multi-device
   sync; a phone app; recurring tasks; remind dates and snooze; an inbox view (the page is a stub); a weekly review
   screen; relative dates in filters ("due within 7 days" is a fixed date); changing the time zone without a restart;
   keyboard resize of panels.

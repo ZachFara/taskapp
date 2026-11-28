@@ -2,7 +2,7 @@
   import { askDelete } from '../../lib/rowUi.svelte';
   import LabelPicker from './LabelPicker.svelte';
   import { api } from '../../lib/api';
-  import type { Cycle, Issue, IssuePatch, Label, Milestone, Project, PropertyDef, Status, Value } from '../../lib/bindings';
+  import type { Cycle, Depth, Issue, IssuePatch, Label, Milestone, Project, PropertyDef, Status, Value } from '../../lib/bindings';
   import Button from '../../ui/Button.svelte';
   import Checkbox from '../../ui/Checkbox.svelte';
   import EntityIcon from '../../ui/EntityIcon.svelte';
@@ -174,6 +174,15 @@
 
   {#snippet row_points()}<PointsRow {issue} {save} bind:openRow />{/snippet}
 
+  {#snippet row_depth()}
+  <PropertyRow id="depth" name="Depth" cmd="issue.depth" bind:openRow>
+    {#snippet value()}{issue.depth === null ? '' : issue.depth === 'deep' ? 'Deep work' : 'Shallow work'}{#if issue.depth === null}{@render none()}{/if}{/snippet}
+    {#snippet editor(close)}
+      <OptionList label="Depth" value={issue.depth ?? 'none'} options={[{ id: 'deep', name: 'Deep work' }, { id: 'shallow', name: 'Shallow work' }, { id: 'none', name: 'No depth' }]} onpick={(id) => { close(); save({ depth: id === 'none' ? null : (id as Depth) }); }} />
+    {/snippet}
+  </PropertyRow>
+  {/snippet}
+
   {#snippet row_parent()}
   <PropertyRow id="parent" name="Parent" cmd="issue.detail.parent" bind:openRow>
     {#snippet value()}{#if parent}{parent.key} {parent.title}{:else}{@render none()}{/if}{/snippet}
@@ -188,7 +197,7 @@
 
   {#each fieldList() as f (f.field)}
     {#if fieldOn(f.field)}
-      {@const rows = { priority: row_priority, project: row_project, milestone: row_milestone, cycle: row_cycle, labels: row_labels, start: row_start, due: row_due, estimate: row_estimate, points: row_points, parent: row_parent }}
+      {@const rows = { priority: row_priority, project: row_project, milestone: row_milestone, cycle: row_cycle, labels: row_labels, start: row_start, due: row_due, estimate: row_estimate, points: row_points, depth: row_depth, parent: row_parent }}
       {@render rows[f.field]()}
     {/if}
   {/each}
