@@ -6,7 +6,6 @@ import { listCommands, type Ctx } from '../../lib/commands';
 import Sidebar from '../Sidebar.svelte';
 import { CARDS } from './cards';
 import DashboardPage from './DashboardPage.svelte';
-import { CARDS } from './cards';
 import { dashboard, moveCard, orderedCards, setDashboard, toggleCard } from './dashboard.svelte';
 import type { Metrics, MetricsQuery } from './metrics';
 
