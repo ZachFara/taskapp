@@ -673,4 +673,8 @@ export const cases: Case[] = [
   query('pviews: a project field on an issue view is Invalid', { filter: cond(fixed('TargetDate'), 'IsEmpty') }),
   call('pviews: undo the last save', 'history_undo'),
   call('pviews: the list after undo', 'views_list'),
+  // Stale: the seed's own nudges, then a tighter one on the first status.
+  call('stale: the seeded nudges list their issues', 'stale_list'),
+  call('stale: a one-day nudge on the first status', 'statuses_set_flow', { id: 1, definition: null, flow_kind: null, nudge_days: 1 }),
+  call('stale: a one-day nudge lists more', 'stale_list'),
 ];

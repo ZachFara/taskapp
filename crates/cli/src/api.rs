@@ -13,13 +13,13 @@ use taskapp_core::{
     PinId, PinKind, Placement, ProgressScope, ProgressSeries, Project, ProjectId, ProjectRow,
     ProjectStatus, ProjectStatusCategory, ProjectStatusId, PropertyAppliesTo, PropertyDef,
     PropertyKind, Relation, RelationKind, RelationKindDef, Reschedule, ResolvedPin, Result,
-    SavedView, SelectOption, Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId,
-    TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewEntity, ViewFolder, ViewFolderId,
-    ViewId, ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, attachments,
-    backup, blocks, bulk, comments, cycles, decisions, events, forecast, history, import, insights,
-    issues, labels, metrics, pins, project_statuses, projects, properties, quickadd,
-    relation_kinds, relations, schedule, search, settings, statuses, templates, undo, view_folders,
-    view_templates, views, workspace,
+    SavedView, SelectOption, StaleIssue, Status, StatusCategory, StatusId, SyncState, SyncStatus,
+    TemplateId, TemplateInput, UndoStatus, VelocityPeriod, ViewDef, ViewEntity, ViewFolder,
+    ViewFolderId, ViewId, ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus,
+    attachments, backup, blocks, bulk, comments, cycles, decisions, events, forecast, history,
+    import, insights, issues, labels, metrics, pins, project_statuses, projects, properties,
+    quickadd, relation_kinds, relations, schedule, search, settings, stale, statuses, templates,
+    undo, view_folders, view_templates, views, workspace,
 };
 
 struct State<'a> {

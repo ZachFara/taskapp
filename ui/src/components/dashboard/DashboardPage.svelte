@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
-  import type { Cycle, Label, Project } from '../../lib/bindings';
+  import type { Cycle, Label, Project, StaleIssue } from '../../lib/bindings';
   import { localDay } from '../../lib/gantt';
   import Button from '../../ui/Button.svelte';
   import Checkbox from '../../ui/Checkbox.svelte';
@@ -24,6 +24,7 @@
   let projects = $state<Project[]>([]);
   let labels = $state<Label[]>([]);
   let metrics = $state<Metrics | null>(null);
+  let stale = $state<StaleIssue[]>([]);
   let error = $state('');
   let ready = $state(false);
 
@@ -45,8 +46,10 @@
     const q = { scope: range.scope, bucket: bucketFor(range.from, range.to), filter: filterOf(dashboard.project, dashboard.label), measure: dashboard.measure };
     error = '';
     metrics = null;
-    metricsFor(q).then(
-      (m) => n === asked && (metrics = m),
+    Promise.all([metricsFor(q), api.stale.list()]).then(
+      ([m, st]) => {
+        if (n === asked) [metrics, stale] = [m, st];
+      },
       (e) => n === asked && (error = (e as { message?: string }).message ?? String(e)),
     );
   });
@@ -97,7 +100,7 @@
       {#each shown as c (c.id)}
         <section class="card" class:wide={c.wide} aria-label={c.title}>
           <h2>{c.title}</h2>
-          <c.component {metrics} measure={dashboard.measure} filter={filterOf(dashboard.project, dashboard.label)} cycle={range && 'Cycle' in range.scope ? range.scope.Cycle : null} />
+          <c.component {metrics} measure={dashboard.measure} filter={filterOf(dashboard.project, dashboard.label)} cycle={range && 'Cycle' in range.scope ? range.scope.Cycle : null} {stale} />
         </section>
       {/each}
     </div>

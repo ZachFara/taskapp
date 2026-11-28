@@ -274,6 +274,8 @@ macro_rules! with_commands {
             forecast_for(s, query: ForecastQuery) -> Forecast { forecast::forecast_for(&s.db, query).await }
             metrics_for(s, query: MetricsQuery) -> Metrics { metrics::metrics_for(&s.db, query).await }
 
+            stale_list(s) -> Vec<StaleIssue> { stale::list(&s.db).await }
+
             search_search(s, text: String, limit: u32) -> Vec<Issue> { search::search(&s.db, &text, limit).await }
 
             pins_pin(s, kind: PinKind, target: String, title: Option<String>) -> Pin {

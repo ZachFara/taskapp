@@ -5,6 +5,7 @@ import { FIELDS } from './issueFields';
 import { parseQuickadd } from './api.mock.quickadd';
 import * as insights from './api.mock.insights';
 import { forecast, metrics } from './api.mock.metrics';
+import { stale } from './api.mock.stale';
 import { stepLabel } from './api.mock.stepLabel';
 import { byStatusOrder, flowDefaults } from './statusOrder';
 import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
@@ -1085,6 +1086,9 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     },
     metrics: {
       for: async (q) => metrics(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, relations, everyone: query(withDisplay({ filter: null, layout: 'List' })), tz: workspace.timezone, today: zoneToday() }, fail),
+    },
+    stale: {
+      list: async () => stale(s.issues, s.statuses, changes, new Date()),
     },
     search: {
       // shortcut: results come in id order; the backend ranks by bm25. Upgrade when a screen depends on relevance order.

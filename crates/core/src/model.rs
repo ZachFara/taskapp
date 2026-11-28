@@ -921,6 +921,16 @@ pub struct VelocityCycle {
     pub count: u32,
 }
 
+/// An issue past its status's nudge age: where it sits, since when, and for how many whole days.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct StaleIssue {
+    pub issue: Issue,
+    pub status_name: String,
+    pub nudge_days: i32,
+    pub since: DateTime<Utc>,
+    pub days: i32,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct Metrics {
     pub from: NaiveDate,

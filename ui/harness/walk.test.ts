@@ -384,6 +384,7 @@ describe('walk', { timeout: 20_000 }, () => {
     await page.getByRole('link', { name: 'Dashboard' }).click();
     await pw(page.getByRole('region', { name: 'Summary' })).toBeVisible();
     await pw(page.getByRole('region', { name: 'Burn-up' })).toBeVisible();
+    await pw(page.getByRole('region', { name: 'Stale' })).toBeVisible();
     await page.getByRole('button', { name: 'Cards' }).click();
     await page.getByRole('checkbox', { name: 'Burn-up' }).click();
     await pw(page.getByRole('region', { name: 'Burn-up' })).toHaveCount(0);

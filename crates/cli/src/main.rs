@@ -78,6 +78,8 @@ enum Cmd {
     Insights(InsightsCmd),
     /// Change history of an issue.
     History { key: String },
+    /// Issues that have sat in their status past its nudge age, longest first.
+    Stale,
     /// Undo the newest step, whatever made it (UI, agent or CLI).
     Undo,
     /// Redo the step most recently undone.

@@ -9,6 +9,7 @@
   import { defaultStatusId, issues as issueStore, selectedIssueId } from '../../lib/stores.svelte';
   import { defaultsFromFilter, mergeIssueDefaults } from '../filters/defaults';
   import { selection } from '../../lib/selection.svelte';
+  import { refreshStale, stale } from '../../lib/stale.svelte';
   import { navigate } from '../../app/routes';
   import Checkbox from '../../ui/Checkbox.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
@@ -143,8 +144,12 @@
     view;
     localSort;
     untrack(load);
+    void refreshStale();
   });
-  onRowsChanged(() => void load());
+  onRowsChanged(() => {
+    void load();
+    void refreshStale();
+  });
 
   const groupField = $derived(view.def.group_by?.Fixed === 'Points' && !ctx.points ? null : (view.def.group_by?.Fixed ?? null));
   const groups = $derived.by<Group[]>(() => {
@@ -437,6 +442,7 @@
                 </form>
               {:else}
                 <span class="text">{i.title}</span>
+                {#if stale.ids.has(i.id)}<span class="stale">stale</span>{/if}
               {/if}
             </span>
             {#each cells as { f, key, right } (key)}
@@ -502,6 +508,7 @@
   .row[aria-current='true'][data-selected] { background: var(--selection); }
   .check, .prio { display: grid; place-items: center; }
   .key { color: var(--muted); font-weight: 500; }
+  .stale { flex: none; padding: 0 var(--s-3); border-radius: var(--r-sheet); border: 1px solid var(--border); color: var(--muted); font-size: var(--fs-sm); font-weight: 500; white-space: nowrap; }
   .status { border: 0; background: transparent; padding: 0; display: grid; place-items: center; border-radius: var(--r-ctl); }
   .status:hover { background: var(--active); }
   .title { min-width: 0; font-weight: 500; display: flex; align-items: center; gap: var(--s-2); }

@@ -367,6 +367,15 @@ cycle time, and which Waiting statuses held work longest). The Cards button show
 reorders cards, kept on this device. Every choice is also in the command menu ("Dashboard range", "Dashboard: show or
 hide cards"). Settings > General > Dashboard turns the whole page off; it is on by default.
 
+### Stale issues
+
+An issue is stale when it has sat in its status longer than that status's nudge days (Settings > Statuses). The clock
+starts at the issue's last status change; an issue with no status history (an import, for example) uses its last
+update. A status with no nudge, or 0 days, never makes issues stale, so nothing lights up until you set nudges, and
+imported Linear issues stay quiet unless their status has one. Stale rows in the table carry a quiet "stale" tag. The
+Stale card on the Dashboard counts them by status and lists the oldest first; click a key to open the issue. The CLI
+prints the same list: `taskapp stale`.
+
 ## Points and insights
 
 - **Estimation setting** (Settings > General): None, Points, Time or Both. Points show only for Points or Both; time

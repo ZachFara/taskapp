@@ -19,11 +19,13 @@ const wire = new Map<string, [string, string, string[]]>(
 );
 
 // Timestamps and nothing else: the two sides run at different moments. Ids are kept because both start from the same seed.
-const isTime = (k: string) => k === 'at' || k.endsWith('_at');
+const isTime = (k: string) => k === 'at' || k === 'since' || k.endsWith('_at');
 export function normalise(v: unknown, key = ''): unknown {
   if (Array.isArray(v)) return v.map((x) => normalise(x));
   // A history row's id counts every entity's changes, which the mock does not keep.
   if (v && typeof v === 'object' && 'entity_id' in v && 'old_value' in v) return normalise({ ...v, id: '<id>' });
+  // A stale row's day count follows the clock, like its since: the two sides run at different moments.
+  if (v && typeof v === 'object' && 'nudge_days' in v && 'since' in v) return normalise({ ...v, days: '<days>' });
   if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, normalise(x, k)]));
   return isTime(key) && typeof v === 'string' ? '<time>' : v;
 }

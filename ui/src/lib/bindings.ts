@@ -823,6 +823,13 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	staleList: (options?: InvokeOptions) => __TAURI_INVOKE<StaleIssue[]>("stale_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	searchSearch: (text: string, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<Issue[]>("search_search", { text, limit }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1717,6 +1724,15 @@ export type SourceBreakdown = {
 	source: string,
 	created: number,
 	completed: number,
+};
+
+/**  An issue past its status's nudge age: where it sits, since when, and for how many whole days. */
+export type StaleIssue = {
+	issue: Issue,
+	status_name: string,
+	nudge_days: number,
+	since: string,
+	days: number,
 };
 
 export type Status = {

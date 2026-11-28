@@ -31,6 +31,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
             crate::api::call(db, dir, &name, args).await
         }
         Cmd::Undo => val(undo::undo(db).await?),
+        Cmd::Stale => val(taskapp_core::stale::list(db).await?),
         Cmd::Setup { name, key, tz } => {
             val(taskapp_core::workspace::setup(db, &name, &key, tz.as_deref()).await?)
         }
@@ -76,6 +77,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Insights(_)
         | Cmd::Metrics(_)
         | Cmd::Forecast(_)
+        | Cmd::Stale
         | Cmd::Status(_)
         | Cmd::Attachment(_)
         | Cmd::Event(_)

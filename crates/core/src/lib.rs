@@ -34,6 +34,7 @@ pub mod rows;
 pub mod schedule;
 pub mod search;
 pub mod settings;
+pub mod stale;
 pub mod statuses;
 pub mod templates;
 pub mod undo;

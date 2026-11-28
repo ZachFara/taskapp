@@ -1237,3 +1237,15 @@ fn forecast_says_when_history_is_too_thin_and_checks_names() {
         Some(0)
     );
 }
+
+#[test]
+fn stale_prints_an_empty_list_until_a_nudged_issue_waits() {
+    let (_d, db) = fresh();
+    run(
+        &db,
+        &["status", "create", "Parked", "--category", "Backlog"],
+    );
+    run(&db, &["status", "update", "Parked", "--nudge-days", "7"]);
+    run(&db, &["add", "Fresh idea"]);
+    assert_eq!(run_json(&db, &["stale"]), serde_json::json!([]));
+}
