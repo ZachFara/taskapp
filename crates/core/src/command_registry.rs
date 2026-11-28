@@ -13,6 +13,9 @@ macro_rules! with_commands {
             issues_bulk_update(s, ids: Vec<IssueId>, patch: BulkPatch) -> () {
                 bulk::update(&s.db, &ids, patch, $source).await
             }
+            issues_mark_duplicate(s, id: IssueId, of: IssueId) -> Issue {
+                relations::mark_duplicate(&s.db, id, of, $source).await
+            }
             issues_duplicate(s, ids: Vec<IssueId>) -> Vec<Issue> {
                 bulk::duplicate(&s.db, &ids, $source).await
             }

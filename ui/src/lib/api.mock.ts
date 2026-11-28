@@ -612,6 +612,13 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         const from = ids.map(getIssue);
         return from.map((i) => create({ ...structuredClone(i), created_at: undefined, completed_at: undefined }));
       },
+      markDuplicate: async (id, of) => {
+        const st = s.statuses.find((x) => x.name.toLowerCase() === 'duplicate');
+        if (!st) fail('Invalid', 'no status called Duplicate; add one in Settings');
+        if (id === of) fail('Invalid', 'an issue cannot relate to itself');
+        await api.relations.add({ from: id, to: of, kind: 'duplicate' });
+        return api.issues.update(id, { status_id: st.id });
+      },
       // Port of bulk.rs: per issue the patch (labels merged from add/remove), then archive, then the relation; any failure undoes all.
       bulkUpdate: async (ids, b) => {
         const [before, linked, mark] = [structuredClone(s.issues), [...relations], changes.length];
@@ -1400,7 +1407,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   };
   const commandOf = (mod: string, fn: string) => `${mod}_${fn.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}`;
   const mutating = (
-    'inbox.process issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.setFlow statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
+    'inbox.process issues.create issues.update issues.bulkUpdate issues.duplicate issues.markDuplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.setFlow statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
     'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
     'projects.create projects.update projects.setNext projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink decisions.create decisions.answer decisions.withdraw decisions.link decisions.unlink links.add links.remove templates.create templates.update templates.delete templates.apply ' +

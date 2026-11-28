@@ -32,6 +32,13 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	issuesMarkDuplicate: (id: IssueId, of: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<Issue>("issues_mark_duplicate", { id, of }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	issuesDuplicate: (ids: IssueId[], options?: InvokeOptions) => __TAURI_INVOKE<Issue[]>("issues_duplicate", { ids }, options),
 	/**
 	 * Forwards to the command of the same name.

@@ -1,13 +1,44 @@
 use sqlx::SqliteConnection;
 
 use crate::{
-    ChangeSource, Db, Error, IssueId, Relation, RelationKind, Result,
+    ChangeSource, Db, Error, Issue, IssueId, IssuePatch, Relation, RelationKind, Result, StatusId,
     history::{self, Edit},
-    relation_kinds, rows,
+    issues, relation_kinds, rows,
 };
 
 fn to_json(rel: &Relation) -> Result<serde_json::Value> {
     serde_json::to_value(rel).map_err(|e| Error::Invalid(e.to_string()))
+}
+
+/// Marks `id` a duplicate of `of`: a duplicate relation from `id` to `of`, and status Duplicate on `id`.
+/// Both writes belong to one command call, so one undo step reverts both.
+///
+/// # Errors
+///
+/// `Invalid` when no status is called Duplicate, or when the two issues are the same; `NotFound` for an unknown issue.
+pub async fn mark_duplicate(db: &Db, id: IssueId, of: IssueId, src: ChangeSource) -> Result<Issue> {
+    let status: Option<i64> = sqlx::query_scalar(
+        "SELECT id FROM statuses WHERE lower(name) = 'duplicate' ORDER BY position, id LIMIT 1",
+    )
+    .fetch_optional(&db.pool)
+    .await?;
+    let status = status
+        .ok_or_else(|| Error::Invalid("no status called Duplicate; add one in Settings".into()))?;
+    add(
+        db,
+        Relation {
+            from: id,
+            to: of,
+            kind: RelationKind::new("duplicate"),
+        },
+        src,
+    )
+    .await?;
+    let patch = IssuePatch {
+        status_id: Some(StatusId(status)),
+        ..IssuePatch::default()
+    };
+    issues::update(db, id, patch, src).await
 }
 
 /// Idempotent: adding an existing relation succeeds and records nothing.

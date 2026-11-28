@@ -26,6 +26,7 @@ export function stepLabel(name: string, args: unknown[], out: unknown): string {
     case 'issues_create': case 'issues_create_from_quickadd': return `Created ${key}`;
     case 'issues_update': return `Edited ${key}`;
     case 'inbox_process': return `Processed ${key}`;
+    case 'issues_mark_duplicate': return `Marked ${key} duplicate`;
     case 'issues_bulk_update': return bulk(args[0], (args[1] ?? {}) as Obj);
     case 'issues_duplicate': return `Duplicated ${count(len(args[0]), 'issue')}`;
     case 'import_apply': return `Imported ${count(Number((out as Obj).created ?? 0), 'issue')}`;

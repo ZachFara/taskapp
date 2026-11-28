@@ -175,6 +175,8 @@ export const cases: Case[] = [
   call('relations: add Related', 'relations_add', { rel: { from: 4, to: 12, kind: 'Related' } }),
   call('relations: adding twice is a no-op', 'relations_add', { rel: { from: 4, to: 8, kind: 'Blocks' } }),
   call('relations: unknown issue is NotFound', 'relations_add', { rel: { from: 4, to: 999, kind: 'Blocks' } }),
+  call('relations: mark duplicate without a Duplicate status is Invalid', 'issues_mark_duplicate', { id: 4, of: 8 }),
+  call('relations: an issue cannot be marked a duplicate of itself', 'issues_mark_duplicate', { id: 4, of: 4 }),
   call('relations: for issue', 'relations_for_issue', { id: 4 }),
   call('schedule: bars for open issues', 'schedule_bars', { def: def({ filter: { Cond: { field: fixed('StatusCategory'), op: 'In', value: ['unstarted', 'started'] } } }) }),
   call('schedule: critical path of one project', 'schedule_critical_path', { def: def({ filter: { Cond: { field: fixed('Project'), op: 'Eq', value: 1 } } }) }),

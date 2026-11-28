@@ -68,6 +68,7 @@ pub fn step_label(name: &str, args: &Value, out: Option<&Value>) -> String {
         "issues_create" | "issues_create_from_quickadd" => format!("Created {}", key()),
         "issues_update" => format!("Edited {}", key()),
         "inbox_process" => format!("Processed {}", key()),
+        "issues_mark_duplicate" => format!("Marked {} duplicate", key()),
         "issues_bulk_update" => bulk(args),
         "issues_duplicate" => format!("Duplicated {}", count(ids(args), "issue")),
         "import_apply" => {

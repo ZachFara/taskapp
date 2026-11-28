@@ -175,6 +175,9 @@ issue has items (the Checklist field, on by default). `taskapp issue get` report
   it. Built-in kinds cannot be changed. A view can filter on "Relation kind" (issues with a relation of that kind, on
   either end).
   CLI: `relation add`. In the timeline, "blocks" relations draw as arrows and a critical path is highlighted.
+- **Similar issues.** The issue page lists up to three open issues whose titles overlap most with this one's (in the same
+  project first). Click one to open it, or use its Mark duplicate action: this issue gets status Duplicate and a
+  duplicate relation to that one, as a single undo step. Needs a status called Duplicate.
 - **Comments.** Markdown. Panel "Comments" section: type and press the Comment button. CLI `comment add`; MCP `add_comment`.
 - **History.** The panel's History section lists every change with its source (UI, Agent, Cli, import, Undo, ...).
   CLI `history <key>`; MCP `get_history`.
