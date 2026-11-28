@@ -10,9 +10,9 @@ const ids = () => listCommands(ctx).map((c) => c.id);
 beforeEach(() => FEATURES.forEach((f) => (features[f.name] = true)));
 
 describe('Features', () => {
-  it('lists every feature with a switch, all on by default', async () => {
+  it('lists every feature with a switch, all on by default but the shutdown ritual', async () => {
     const { target } = await mountSettings(Features);
-    for (const f of FEATURES) expect(field(target, f.label).getAttribute('aria-checked')).toBe('true');
+    for (const f of FEATURES) expect(field(target, f.label).getAttribute('aria-checked')).toBe(f.name === 'shutdown' ? 'false' : 'true');
   });
 
   it('shows a stored off switch', async () => {
@@ -50,6 +50,29 @@ describe('Features', () => {
     expect(onIssue()).not.toContain('issue.repeat.skip');
   });
 
+  it('goal commands follow the goals switch', async () => {
+    const at = (route: string) => listCommands({ ...ctx, route } as Ctx).map((c) => c.id);
+    const { target } = await mountSettings(Features);
+    expect(ids()).toContain('nav.goals');
+    expect(at('/goals')).toContain('goal.new');
+    expect(at('/goal/1')).toContain('goal.achieve');
+    await toggle(target, 'Goals');
+    expect(isOn('goals')).toBe(false);
+    expect(ids()).not.toContain('nav.goals');
+    expect(at('/goals')).not.toContain('goal.new');
+    expect(ids()).toContain('feature.goals.toggle');
+  });
+
+  it('waiting commands follow the Waiting for switch', async () => {
+    const onIssue = () => listCommands({ ...ctx, focusedIssueId: 1 } as Ctx).map((c) => c.id);
+    const { target } = await mountSettings(Features);
+    expect(onIssue()).toContain('issue.wait');
+    await toggle(target, 'Waiting for');
+    expect(isOn('waiting')).toBe(false);
+    expect(onIssue()).not.toContain('issue.wait');
+    expect(onIssue()).not.toContain('issue.followUp');
+  });
+
   it('dashboard and charts keep their existing keys', async () => {
     const { target, api } = await mountSettings(Features);
     await toggle(target, 'Dashboard');
@@ -60,5 +83,16 @@ describe('Features', () => {
 
   it('has a command per switch', () => {
     for (const f of FEATURES) expect(ids()).toContain(`feature.${f.name}.toggle`);
+  });
+});
+
+describe('Shutdown ritual switch', () => {
+  it('is off until switched on, and its command follows the switch', async () => {
+    const { target } = await mountSettings(Features);
+    expect(field(target, 'Shutdown ritual').getAttribute('aria-checked')).toBe('false');
+    expect(ids()).not.toContain('shutdown.open');
+    await toggle(target, 'Shutdown ritual');
+    expect(isOn('shutdown')).toBe(true);
+    expect(ids()).toContain('shutdown.open');
   });
 });

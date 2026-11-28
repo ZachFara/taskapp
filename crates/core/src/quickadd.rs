@@ -1,6 +1,8 @@
 use chrono::{Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc, Weekday};
 use chrono_tz::Tz;
 
+use crate::recur::Rule;
+
 use crate::{
     ChangeSource, Db, Due, Issue, NewIssue, ParsedQuickAdd, Result, issues, labels, projects,
     settings, templates,
@@ -55,6 +57,7 @@ fn parse_with(input: &str, today: NaiveDate, tz: &str, off: &[String]) -> Parsed
         label_names: parts.labels,
         estimate_minutes: parts.estimate,
         points: parts.points,
+        repeat: parts.repeat,
     }
 }
 
@@ -144,6 +147,7 @@ pub async fn new_issue(db: &Db, input: &str, today: NaiveDate, tz: &str) -> Resu
         due: parsed.due,
         estimate_minutes: parsed.estimate_minutes,
         points: parsed.points,
+        repeat: parsed.repeat,
         properties: None,
         created_at: None,
         completed_at: None,
@@ -161,6 +165,7 @@ struct Parts<'a> {
     labels: Vec<String>,
     estimate: Option<u32>,
     points: Option<f64>,
+    repeat: Option<String>,
 }
 
 /// Consumes the token(s) at `i` into `p`; returns how many were consumed (0 = plain title word).
@@ -191,18 +196,11 @@ fn take<'a>(tokens: &[&'a str], i: usize, today: NaiveDate, p: &mut Parts<'a>) -
         p.estimate = Some(minutes);
         return 1;
     }
-    if on("points") {
-        if let Some(pts) = points(&w) {
-            p.points = Some(pts);
-            return 1;
-        }
-        let unit = tokens.get(i + 1).map(|t| t.to_ascii_lowercase());
-        if let (Some(pts), Some("pt" | "pts")) = (points_number(&w), unit.as_deref()) {
-            p.points = Some(pts);
-            return 2;
-        }
+    if let Some(n) = on("points").then(|| points_at(tokens, i, &w, p)).flatten() {
+        return n;
     }
     match w.as_str() {
+        "every" => every(tokens, i, p),
         "by" | "due" if on("due") => date_at(tokens, i + 1, today).map_or(0, |(d, n)| {
             p.due_date = Some(d);
             1 + n
@@ -225,6 +223,31 @@ fn take<'a>(tokens: &[&'a str], i: usize, today: NaiveDate, p: &mut Parts<'a>) -
             n
         }),
     }
+}
+
+/// `3pt` at `i`, or `3 pt` over two tokens; sets the points and returns how many tokens it used.
+fn points_at(tokens: &[&str], i: usize, w: &str, p: &mut Parts) -> Option<usize> {
+    if let Some(pts) = points(w) {
+        p.points = Some(pts);
+        return Some(1);
+    }
+    let unit = tokens.get(i + 1).map(|t| t.to_ascii_lowercase());
+    let (Some(pts), Some("pt" | "pts")) = (points_number(w), unit.as_deref()) else {
+        return None;
+    };
+    p.points = Some(pts);
+    Some(2)
+}
+
+/// The longest run of tokens from `i` that is a valid rule ("every 2 weeks from done"); 0 when none is.
+fn every(tokens: &[&str], i: usize, p: &mut Parts) -> usize {
+    for n in (2..=(tokens.len() - i).min(8)).rev() {
+        if let Ok(rule) = tokens[i..i + n].join(" ").parse::<Rule>() {
+            p.repeat = Some(rule.to_string());
+            return n;
+        }
+    }
+    0
 }
 
 fn priority(w: &str) -> Option<u8> {
@@ -480,6 +503,49 @@ mod tests {
         assert_eq!(q.label_names, vec!["work", "home"]);
         assert_eq!(q.start_date, Some(date(2026, 11, 21)));
         assert_eq!(q.due, None);
+    }
+
+    #[test]
+    fn every_phrase_sets_repeat_and_leaves_the_title() {
+        let q = parse_today("water plants every monday p1");
+        assert_eq!(q.title, "water plants");
+        assert_eq!(q.repeat.as_deref(), Some("every 1 week on mon from due"));
+        assert_eq!(q.priority, Some(1));
+        assert_eq!(q.due, None);
+    }
+
+    #[test]
+    fn every_takes_the_longest_valid_phrase() {
+        let q = parse_today("backup every 2 weeks from done tomorrow");
+        assert_eq!(q.title, "backup");
+        assert_eq!(q.repeat.as_deref(), Some("every 2 week from done"));
+        assert_eq!(q.due, Some(Due::Date(date(2026, 11, 21))));
+    }
+
+    #[test]
+    fn every_without_a_rule_stays_in_title() {
+        let q = parse_today("clean up every thing");
+        assert_eq!(q.title, "clean up every thing");
+        assert_eq!(q.repeat, None);
+    }
+
+    #[tokio::test]
+    async fn repeat_is_set_on_create() {
+        let db = Db::open_in_memory().await.expect("in-memory db");
+        let issue = create_from(
+            &db,
+            "water plants every monday",
+            date(2026, 11, 20),
+            TZ,
+            ChangeSource::Ui,
+        )
+        .await
+        .expect("create_from");
+        assert_eq!(issue.title, "water plants");
+        assert_eq!(
+            issue.repeat.as_deref(),
+            Some("every 1 week on mon from due")
+        );
     }
 
     #[test]

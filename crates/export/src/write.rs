@@ -7,10 +7,11 @@ use sqlx::FromRow;
 use taskapp_core::{Db, Result, attachments, settings};
 
 use crate::files::{
-    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, FocusRow, ImportLogRow,
-    IssueFront, IssueTemplateFile, LabelRow, LinkFile, MilestoneRow, PinRow, ProjectFile,
-    ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewFolderFile,
-    ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir, read_plain, render_issue, safe_name,
+    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, FocusRow, GoalFile,
+    ImportLogRow, IssueFront, IssueTemplateFile, LabelGroupRow, LabelRow, LinkFile, MilestoneRow,
+    PinRow, ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow, ViewFile,
+    ViewFolderFile, ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir, read_plain,
+    render_issue, safe_name,
 };
 
 pub struct ExportStats {
@@ -143,7 +144,7 @@ async fn render(db: &Db) -> Result<BTreeMap<String, String>> {
     let mut files = BTreeMap::new();
     files.insert("settings.yaml".to_string(), yaml(&settings_map(db).await?)?);
     files.insert("statuses.yaml".to_string(), yaml(&statuses(db).await?)?);
-    files.insert("labels.yaml".to_string(), yaml(&labels(db).await?)?);
+    label_files(db, &mut files).await?;
     files.insert("cycles.yaml".to_string(), yaml(&cycles(db).await?)?);
     files.insert("properties.yaml".to_string(), yaml(&properties(db).await?)?);
     files.insert("views.yaml".to_string(), yaml(&views(db).await?)?);
@@ -264,8 +265,27 @@ async fn project_statuses(db: &Db) -> Result<Vec<ProjectStatusRow>> {
     Ok(rows)
 }
 
+async fn label_files(db: &Db, files: &mut BTreeMap<String, String>) -> Result<()> {
+    files.insert("labels.yaml".to_string(), yaml(&labels(db).await?)?);
+    files.insert(
+        "label_groups.yaml".to_string(),
+        yaml(&label_groups(db).await?)?,
+    );
+    Ok(())
+}
+
 async fn labels(db: &Db) -> Result<Vec<LabelRow>> {
-    let rows = sqlx::query_as("SELECT name, color, icon FROM labels ORDER BY name")
+    let rows = sqlx::query_as(
+        "SELECT l.name, l.color, l.icon, g.name AS \"group\" FROM labels l
+         LEFT JOIN label_groups g ON g.id = l.group_id ORDER BY l.name",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
+async fn label_groups(db: &Db) -> Result<Vec<LabelGroupRow>> {
+    let rows = sqlx::query_as("SELECT name, exclusive FROM label_groups ORDER BY name")
         .fetch_all(&db.pool)
         .await?;
     Ok(rows)
@@ -344,6 +364,34 @@ async fn decisions(db: &Db, prefix: &str) -> Result<Vec<DecisionFile>> {
         .collect()
 }
 
+async fn goals(db: &Db) -> Result<Vec<GoalFile>> {
+    let rows = sqlx::query_as::<_, (i64, String, String, String, String, String)>(
+        "SELECT id, title, quarter, description, status, created_at FROM goals ORDER BY id",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    let mut links = group(
+        sqlx::query_as::<_, (i64, String)>(
+            "SELECT g.goal_id, p.slug FROM goal_projects g JOIN projects p ON p.id = g.project_id
+             ORDER BY p.slug",
+        )
+        .fetch_all(&db.pool)
+        .await?,
+    );
+    Ok(rows
+        .into_iter()
+        .map(|r| GoalFile {
+            projects: links.remove(&r.0).unwrap_or_default(),
+            id: r.0,
+            title: r.1,
+            quarter: r.2,
+            description: r.3,
+            status: r.4,
+            created_at: r.5,
+        })
+        .collect())
+}
+
 async fn links(db: &Db, prefix: &str) -> Result<Vec<LinkFile>> {
     let rows = sqlx::query_as::<_, (i64, i64, String, String, String, String)>(
         "SELECT l.id, i.number, l.url, l.title, l.kind, l.created_at FROM links l
@@ -366,6 +414,7 @@ async fn links(db: &Db, prefix: &str) -> Result<Vec<LinkFile>> {
 
 async fn event_files(db: &Db, prefix: &str, files: &mut BTreeMap<String, String>) -> Result<()> {
     files.insert("links.yaml".to_string(), yaml(&links(db, prefix).await?)?);
+    files.insert("goals.yaml".to_string(), yaml(&goals(db).await?)?);
     files.insert(
         "decisions.yaml".to_string(),
         yaml(&decisions(db, prefix).await?)?,
@@ -642,6 +691,8 @@ struct IssueRow {
     hidden_until: Option<NaiveDate>,
     depth: Option<String>,
     repeat_rule: Option<String>,
+    waiting_on: Option<String>,
+    follow_up: Option<NaiveDate>,
     properties: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -651,7 +702,7 @@ struct IssueRow {
 
 const ISSUE_SQL: &str = "SELECT i.number, i.title, i.description, s.name AS status, i.priority,
         p.slug AS project, m.name AS milestone, par.number AS parent, c.number AS cycle,
-        i.start_date, i.due_date, i.due_time_utc, i.due_tz, i.estimate_minutes, i.points, i.hidden_until, i.depth, i.repeat_rule, i.properties,
+        i.start_date, i.due_date, i.due_time_utc, i.due_tz, i.estimate_minutes, i.points, i.hidden_until, i.depth, i.repeat_rule, i.waiting_on, i.follow_up, i.properties,
         i.created_at, i.updated_at, i.completed_at, i.archived_at
     FROM issues i
     JOIN statuses s ON s.id = i.status_id
@@ -795,6 +846,8 @@ fn front_of(
         hidden_until,
         depth,
         repeat_rule,
+        waiting_on,
+        follow_up,
         properties,
         created_at,
         updated_at,
@@ -820,6 +873,8 @@ fn front_of(
         hidden_until,
         depth,
         repeat: repeat_rule,
+        waiting_on,
+        follow_up,
         created_at,
         updated_at,
         completed_at,
@@ -829,8 +884,7 @@ fn front_of(
         duplicate: keys_of(rels, "duplicate", prefix),
         relations: other_kinds(rels, prefix),
         properties: serde_json::from_str(&properties).map_err(invalid)?,
-        work_blocks: vec![],
-        focus: vec![],
+        ..Default::default()
     };
     Ok((front, description))
 }

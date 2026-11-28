@@ -12,10 +12,10 @@
   <p class="note">No finished issue here has a cycle time yet, so flow efficiency is blank.</p>
 {:else}
   <dl class="stats">
-    <div><dt>Average flow efficiency</dt><dd>{pct(f.avg_pct)}</dd></div>
+    <div><dt>Average flow efficiency</dt><dd>{f.waiting.length > 0 ? pct(f.avg_pct) : '–'}</dd></div>
     <div><dt>Issues</dt><dd>{f.n}</dd></div>
   </dl>
-  <BarChart bars={f.distribution.map((value, i) => ({ label: labels[i], value }))} unit="issues" title="Issues by flow efficiency" />
+  {#if f.waiting.length > 0}<BarChart bars={f.distribution.map((value, i) => ({ label: labels[i], value }))} unit="issues" title="Issues by flow efficiency" />{/if}
   {#if f.waiting.length > 0}
     <table>
       <thead><tr><th scope="col">Waiting status</th><th scope="col">Days held</th><th scope="col">Per issue</th></tr></thead>

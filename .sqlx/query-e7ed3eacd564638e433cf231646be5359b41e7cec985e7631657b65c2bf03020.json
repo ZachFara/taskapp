@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issues SET title = ?, description = ?, status_id = ?, priority = ?, project_id = ?,\n           milestone_id = ?, parent_id = ?, cycle_id = ?, start_date = ?, due_date = ?, due_time_utc = ?,\n           due_tz = ?, estimate_minutes = ?, points = ?, hidden_until = ?, depth = ?, repeat_rule = ?, waiting_on = ?, follow_up = ?, properties = ?, updated_at = ?, completed_at = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 23
+    },
+    "nullable": []
+  },
+  "hash": "e7ed3eacd564638e433cf231646be5359b41e7cec985e7631657b65c2bf03020"
+}

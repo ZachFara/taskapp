@@ -2,7 +2,7 @@
   import { askDelete } from '../../lib/rowUi.svelte';
   import LabelPicker from './LabelPicker.svelte';
   import { api } from '../../lib/api';
-  import type { Cycle, Depth, Issue, IssuePatch, Label, Milestone, Project, PropertyDef, Status, Value } from '../../lib/bindings';
+  import type { Cycle, Depth, Issue, IssuePatch, Label, LabelGroup, Milestone, Project, PropertyDef, Status, Value } from '../../lib/bindings';
   import Button from '../../ui/Button.svelte';
   import Checkbox from '../../ui/Checkbox.svelte';
   import EntityIcon from '../../ui/EntityIcon.svelte';
@@ -32,13 +32,14 @@
   let projects = $state<Project[]>([]);
   let cycles = $state<Cycle[]>([]);
   let labels = $state<Label[]>([]);
+  let groups = $state<LabelGroup[]>([]);
   let milestones = $state<Milestone[]>([]);
   let defs = $state<PropertyDef[]>([]);
   let parent = $state<Issue | null>(null);
 
   $effect(() => {
-    Promise.all([api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.properties.listDefs()]).then(([s, p, c, l, d]) => {
-      [statuses, projects, cycles, labels, defs] = [s, p, c, l, d];
+    Promise.all([api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.properties.listDefs(), api.label.groupsList()]).then(([s, p, c, l, d, g]) => {
+      [statuses, projects, cycles, labels, defs, groups] = [s, p, c, l, d, g];
     });
   });
   $effect(() => {
@@ -134,7 +135,7 @@
       {#each labels.filter((l) => issue.label_ids.includes(l.id)) as l (l.id)}<Pill color={l.color}>{l.name}</Pill>{:else}{@render none()}{/each}
     {/snippet}
     {#snippet editor()}
-      <LabelPicker {labels} selected={issue.label_ids} ontoggle={toggleLabel} oncreate={createLabel} ondelete={(l) => askDelete({ kind: 'label', id: l.id, name: l.name })} />
+      <LabelPicker {labels} {groups} selected={issue.label_ids} ontoggle={toggleLabel} oncreate={createLabel} ondelete={(l) => askDelete({ kind: 'label', id: l.id, name: l.name })} />
     {/snippet}
   </PropertyRow>
   {/snippet}
@@ -198,6 +199,27 @@
   </PropertyRow>
   {/snippet}
 
+  {#snippet row_waiting()}
+  <PropertyRow id="waiting" name="Waiting on" cmd="issue.wait" bind:openRow>
+    {#snippet value()}{issue.waiting_on ?? ''}{#if issue.waiting_on === null}{@render none()}{/if}{/snippet}
+    {#snippet editor(close)}
+      <div class="stack">
+        <TextInput label="Waiting on" placeholder="Sam, the vendor, a reply" value={issue.waiting_on ?? ''} onchange={(v) => { if (v.trim()) { close(); save({ waiting_on: v.trim() }); } }} />
+        {#if issue.waiting_on !== null}<Button onclick={() => { close(); save({ waiting_on: null, follow_up: null }); }}>Stop waiting</Button>{/if}
+      </div>
+    {/snippet}
+  </PropertyRow>
+  <PropertyRow id="follow_up" name="Follow up" cmd="issue.followUp" bind:openRow>
+    {#snippet value()}{issue.follow_up ?? ''}{#if issue.follow_up === null}{@render none()}{/if}{/snippet}
+    {#snippet editor(close)}
+      <div class="stack">
+        <TextInput type="date" label="Follow up on" value={issue.follow_up ?? ''} onchange={(v) => { close(); save({ follow_up: v || null }); }} />
+        {#if issue.follow_up !== null}<Button onclick={() => { close(); save({ follow_up: null }); }}>No follow-up day</Button>{/if}
+      </div>
+    {/snippet}
+  </PropertyRow>
+  {/snippet}
+
   {#snippet row_repeat()}
   <PropertyRow id="repeat" name="Repeat" cmd="issue.repeat" bind:openRow>
     {#snippet value()}{repeatWords(issue.repeat) ?? ''}{#if issue.repeat === null}{@render none()}{/if}{/snippet}
@@ -219,6 +241,7 @@
   {/each}
 
   {#if isOn('recurring')}{@render row_repeat()}{/if}
+  {#if isOn('waiting')}{@render row_waiting()}{/if}
 
   <PropertyRows defs={visible} values={issue.properties} {setProp} bind:openRow />
 </section>

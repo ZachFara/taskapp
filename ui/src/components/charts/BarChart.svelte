@@ -43,7 +43,8 @@
       {#each bars as b, i (b.label)}
         {@const x = box.left + slot * i + (slot - bw) / 2}
         <rect class="bar" class:latest={i === bars.length - 1} {x} y={s.y(b.value)} width={bw} height={base - s.y(b.value)} />
-        <text class="val" x={x + bw / 2} y={s.y(b.value) - 4} text-anchor="middle">{format(b.value)}</text>
+        <!-- Only non-zero bars are labelled, so empty days do not read as a row of 0s (the axis and table still show them). -->
+        {#if b.value !== 0}<text class="val" x={x + bw / 2} y={s.y(b.value) - 4} text-anchor="middle">{format(b.value)}</text>{/if}
         {#if i % every === 0}<text class="tick" x={x + bw / 2} y={h - 5} text-anchor="middle">{b.label}</text>{/if}
       {/each}
       {#if avg !== null}

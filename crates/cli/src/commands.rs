@@ -11,12 +11,12 @@ use taskapp_core::{
     IssueId, IssuePatch, LinkKind, Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId,
     PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, TemplateId, ViewDef,
     ViewId, ViewTemplateId, attachments, backup, comments, cycles, events, focus, history, import,
-    insights, issues, labels, links, metrics, pins, project_statuses, projects, properties,
-    quickadd, relations, search, statuses, templates, undo, view_templates, views,
+    insights, issues, label_groups, labels, links, metrics, pins, project_statuses, projects,
+    properties, quickadd, relations, search, statuses, templates, undo, view_templates, views,
 };
 
 use crate::{
-    AttachmentCmd, Cmd, CommentCmd, CycleCmd, EventCmd, FeaturesCmd, FocusCmd, ImportCmd,
+    AttachmentCmd, Cmd, CommentCmd, CycleCmd, EventCmd, FeaturesCmd, FocusCmd, GroupCmd, ImportCmd,
     InsightsCmd, IssueCmd, LabelCmd, OnOff, PinCmd, ProjectCmd, ProjectEdit, PropertyCmd,
     RelationCmd, ScopeArgs, StatusCmd, SyncCmd, TemplateCmd, ViewCmd, look,
 };
@@ -43,8 +43,12 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Sync(SyncCmd::Now { helper }) => sync_now(db, helper).await,
         cmd @ (Cmd::Stale
         | Cmd::Next
+        | Cmd::Shutdown
+        | Cmd::Waiting
         | Cmd::Inbox(_)
+        | Cmd::Plan(_)
         | Cmd::Decision(_)
+        | Cmd::Goal(_)
         | Cmd::Icons
         | Cmd::Colors) => queues_and_lists(db, cmd).await,
         cmd => run_group(db, dir, cmd).await,
@@ -56,8 +60,14 @@ async fn queues_and_lists(db: &Db, cmd: Cmd) -> Result<Value> {
     match cmd {
         Cmd::Stale => val(taskapp_core::stale::list(db).await?),
         Cmd::Next => val(taskapp_core::next_actions::list(db).await?),
+        Cmd::Shutdown => {
+            val(taskapp_core::shutdown::state(db, taskapp_core::metrics::today(db).await?).await?)
+        }
+        Cmd::Waiting => val(taskapp_core::waiting::list(db).await?),
         Cmd::Inbox(args) => crate::inbox::run(db, args).await,
+        Cmd::Plan(args) => crate::plan::run(db, args).await,
         Cmd::Decision(cmd) => crate::decision::run(db, cmd).await,
+        Cmd::Goal(cmd) => crate::goal::run(db, cmd).await,
         Cmd::Icons => Ok(json!(look::ICONS)),
         _ => Ok(json!(
             taskapp_core::palette::COLORS
@@ -91,11 +101,14 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Forecast(_)
         | Cmd::Stale
         | Cmd::Next
+        | Cmd::Shutdown
         | Cmd::Inbox(_)
+        | Cmd::Plan(_)
         | Cmd::Status(_)
         | Cmd::Attachment(_)
         | Cmd::Event(_)
         | Cmd::Decision(_)
+        | Cmd::Goal(_)
         | Cmd::Icons
         | Cmd::Colors
         | Cmd::Sync(_) => handled_in_run(),
@@ -203,10 +216,38 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
         keyed @ (IssueCmd::Archive { .. }
         | IssueCmd::Delete { .. }
         | IssueCmd::Link { .. }
-        | IssueCmd::Links { .. }) => issue_keyed(db, keyed).await,
+        | IssueCmd::Links { .. }
+        | IssueCmd::Wait { .. }) => issue_keyed(db, keyed).await,
         repeat @ IssueCmd::Repeat { .. } => issue_repeat(db, repeat).await,
         find @ (IssueCmd::Search { .. } | IssueCmd::Similar { .. }) => issue_find(db, find).await,
     }
+}
+
+async fn issue_wait(
+    db: &Db,
+    key: String,
+    on: Option<String>,
+    until: Option<String>,
+    clear: bool,
+) -> Result<Value> {
+    if on.is_none() && until.is_none() && !clear {
+        return Err(Error::Invalid("give --on, --until or --clear".into()));
+    }
+    let id = issue_id(db, &key).await?;
+    let patch = if clear {
+        IssuePatch {
+            waiting_on: Some(None),
+            follow_up: Some(None),
+            ..IssuePatch::default()
+        }
+    } else {
+        IssuePatch {
+            waiting_on: on.map(|n| Some(n.trim().to_string())),
+            follow_up: until.as_deref().map(date).transpose()?.map(Some),
+            ..IssuePatch::default()
+        }
+    };
+    val(issues::update(db, id, patch, SRC).await?)
 }
 
 async fn issue_repeat(db: &Db, cmd: IssueCmd) -> Result<Value> {
@@ -314,6 +355,12 @@ fn due_arg(clear: bool, due: Option<&str>) -> Result<taskapp_core::Clearable<Due
 
 async fn issue_keyed(db: &Db, cmd: IssueCmd) -> Result<Value> {
     match cmd {
+        IssueCmd::Wait {
+            key,
+            on,
+            until,
+            clear,
+        } => issue_wait(db, key, on, until, clear).await,
         IssueCmd::Delete { key, yes } => crate::archive::delete_issue(db, &key, yes).await,
         IssueCmd::Archive { key } => {
             let id = issue_id(db, &key).await?;
@@ -839,6 +886,57 @@ async fn label(db: &Db, cmd: LabelCmd) -> Result<Value> {
             let found = found.ok_or_else(|| Error::NotFound(format!("label {label}")))?;
             labels::add_label(db, issue_id(db, &key).await?, found.id, SRC).await?;
             val(issues::get_by_key(db, &key).await?)
+        }
+        LabelCmd::Group(cmd) => group(db, cmd).await,
+    }
+}
+
+async fn find_label(db: &Db, name: &str) -> Result<taskapp_core::Label> {
+    let all = labels::list(db).await?;
+    let found = all.into_iter().find(|l| l.name.eq_ignore_ascii_case(name));
+    found.ok_or_else(|| Error::NotFound(format!("label {name}")))
+}
+
+async fn find_group(db: &Db, name: &str) -> Result<taskapp_core::LabelGroup> {
+    let all = label_groups::list(db).await?;
+    let found = all.into_iter().find(|g| g.name.eq_ignore_ascii_case(name));
+    found.ok_or_else(|| Error::NotFound(format!("label group {name}")))
+}
+
+async fn move_label(
+    db: &Db,
+    name: &str,
+    group: Option<taskapp_core::LabelGroupId>,
+) -> Result<Value> {
+    let mut l = find_label(db, name).await?;
+    l.group_id = group;
+    val(labels::update(db, l, SRC).await?)
+}
+
+async fn group(db: &Db, cmd: GroupCmd) -> Result<Value> {
+    match cmd {
+        GroupCmd::List => val(label_groups::list(db).await?),
+        GroupCmd::Create { name, exclusive } => {
+            let g = label_groups::create(db, &name, SRC).await?;
+            val(if exclusive {
+                label_groups::set_exclusive(db, g.id, true, SRC).await?
+            } else {
+                g
+            })
+        }
+        GroupCmd::Add { group, label } => {
+            let g = find_group(db, &group).await?;
+            move_label(db, &label, Some(g.id)).await
+        }
+        GroupCmd::Remove { label } => move_label(db, &label, None).await,
+        GroupCmd::Exclusive { group, state } => {
+            let g = find_group(db, &group).await?;
+            val(label_groups::set_exclusive(db, g.id, matches!(state, OnOff::On), SRC).await?)
+        }
+        GroupCmd::Delete { group } => {
+            let g = find_group(db, &group).await?;
+            label_groups::delete(db, g.id, SRC).await?;
+            val(serde_json::json!({"deleted": g.name}))
         }
     }
 }

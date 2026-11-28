@@ -2,7 +2,7 @@
   import { askDelete } from '../../lib/rowUi.svelte';
   import LabelPicker from '../detail/LabelPicker.svelte';
   import { api } from '../../lib/api';
-  import type { Label, Project, ProjectStatus, PropertyDef, Value } from '../../lib/bindings';
+  import type { Label, LabelGroup, Project, ProjectStatus, PropertyDef, Value } from '../../lib/bindings';
   import { glyphCategory } from '../../lib/projectFields';
   import { PRIORITIES, priorityGlyph } from '../detail/format';
   import Pill from '../../ui/Pill.svelte';
@@ -18,10 +18,11 @@
 
   let statuses = $state<ProjectStatus[]>([]);
   let labels = $state<Label[]>([]);
+  let groups = $state<LabelGroup[]>([]);
   let defs = $state<PropertyDef[]>([]);
   let openRow = $state<string | null>(null);
   $effect(() => {
-    Promise.all([api.project.statusesList(), api.labels.list(), api.properties.listDefs()]).then(([s, l, d]) => ([statuses, labels, defs] = [s, l, d]));
+    Promise.all([api.project.statusesList(), api.labels.list(), api.properties.listDefs(), api.label.groupsList()]).then(([s, l, d, g]) => ([statuses, labels, defs, groups] = [s, l, d, g]));
   });
   const status = $derived(statuses.find((s) => s.id === project.status_id));
   const visible = $derived(defs.filter((d) => d.applies_to !== 'Issues'));
@@ -66,7 +67,7 @@
       {#each labels.filter((l) => project.label_ids.includes(l.id)) as l (l.id)}<Pill color={l.color}>{l.name}</Pill>{:else}<span class="none">None</span>{/each}
     {/snippet}
     {#snippet editor()}
-      <LabelPicker {labels} selected={project.label_ids} ontoggle={toggleLabel} oncreate={createLabel} ondelete={(l) => askDelete({ kind: 'label', id: l.id, name: l.name })} />
+      <LabelPicker {labels} {groups} selected={project.label_ids} ontoggle={toggleLabel} oncreate={createLabel} ondelete={(l) => askDelete({ kind: 'label', id: l.id, name: l.name })} />
     {/snippet}
   </PropertyRow>
   <NextActionRow {project} bind:openRow />

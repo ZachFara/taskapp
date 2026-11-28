@@ -1,5 +1,6 @@
 <script lang="ts">
   import RowDialogHost from './RowDialogHost.svelte';
+  import ShutdownPanel from './ShutdownPanel.svelte';
   import type { Snippet } from 'svelte';
   import { onMount } from 'svelte';
   import { cubicOut } from 'svelte/easing';
@@ -145,6 +146,7 @@
     <div class="main">
       <main bind:this={mainEl}>{@render children()}</main>
       <RowDialogHost />
+      <ShutdownPanel />
       <footer class="legend">
         {#each hints as h (h.text)}
           <span><Kbd keys={h.keys} />{h.text}</span>

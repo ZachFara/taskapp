@@ -10,10 +10,10 @@ use sqlx::{Sqlite, Transaction};
 use taskapp_core::{Db, Error, IssueId, Result, ViewDef, attachments, search};
 
 use crate::files::{
-    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, FocusRow, ImportLogRow,
-    IssueFront, IssueTemplateFile, LabelRow, LinkFile, PinRow, ProjectFile, ProjectStatusRow,
-    PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewFolderFile, ViewTemplateFile, invalid,
-    parse_issue, plain_dir, read_plain,
+    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, FocusRow, GoalFile,
+    ImportLogRow, IssueFront, IssueTemplateFile, LabelGroupRow, LabelRow, LinkFile, PinRow,
+    ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow, ViewFile,
+    ViewFolderFile, ViewTemplateFile, invalid, parse_issue, plain_dir, read_plain,
 };
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -82,6 +82,8 @@ async fn wipe(tx: &mut Tx<'_>) -> Result<()> {
         "DELETE FROM changes",
         "DELETE FROM attachments",
         "DELETE FROM links",
+        "DELETE FROM goal_projects",
+        "DELETE FROM goals",
         "DELETE FROM decision_issues",
         "DELETE FROM decisions",
         "DELETE FROM event_issues",
@@ -99,6 +101,7 @@ async fn wipe(tx: &mut Tx<'_>) -> Result<()> {
         "DELETE FROM projects",
         "DELETE FROM cycles",
         "DELETE FROM labels",
+        "DELETE FROM label_groups",
         "DELETE FROM pins",
         "DELETE FROM views",
         "DELETE FROM view_folders",
@@ -145,8 +148,37 @@ async fn restore_issues(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     }
     restore_events(tx, dir, &prefix).await?;
     restore_decisions(tx, dir, &prefix).await?;
+    restore_goals(tx, dir).await?;
     restore_links(tx, dir, &prefix).await?;
     restore_import_log(tx, dir).await
+}
+
+/// After the projects, which the links name by slug. An older export has no `goals.yaml`.
+async fn restore_goals(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    for g in read_list::<GoalFile>(&dir.join("goals.yaml"))? {
+        sqlx::query(
+            "INSERT INTO goals (id, title, quarter, description, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(g.id)
+        .bind(g.title)
+        .bind(g.quarter)
+        .bind(g.description)
+        .bind(g.status)
+        .bind(g.created_at)
+        .execute(&mut **tx)
+        .await?;
+        for slug in &g.projects {
+            sqlx::query(
+                "INSERT INTO goal_projects (goal_id, project_id)
+                 VALUES (?, (SELECT id FROM projects WHERE slug = ?))",
+            )
+            .bind(g.id)
+            .bind(slug)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+    Ok(())
 }
 
 /// After the issues, which the links name. An older export has no `links.yaml`.
@@ -357,15 +389,32 @@ async fn restore_project_statuses(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn restore_labels(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
-    let labels: Vec<LabelRow> = read_yaml(&dir.join("labels.yaml"))?;
-    for l in labels {
-        sqlx::query("INSERT INTO labels (name, color, icon) VALUES (?, ?, ?)")
-            .bind(l.name)
-            .bind(l.color)
-            .bind(l.icon)
+async fn restore_label_groups(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let groups: Vec<LabelGroupRow> = read_list(&dir.join("label_groups.yaml"))?;
+    for g in groups {
+        sqlx::query("INSERT INTO label_groups (name, exclusive) VALUES (?, ?)")
+            .bind(g.name)
+            .bind(g.exclusive)
             .execute(&mut **tx)
             .await?;
+    }
+    Ok(())
+}
+
+async fn restore_labels(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    restore_label_groups(tx, dir).await?;
+    let labels: Vec<LabelRow> = read_yaml(&dir.join("labels.yaml"))?;
+    for l in labels {
+        sqlx::query(
+            "INSERT INTO labels (name, color, icon, group_id)
+             VALUES (?, ?, ?, (SELECT id FROM label_groups WHERE name = ?))",
+        )
+        .bind(l.name)
+        .bind(l.color)
+        .bind(l.icon)
+        .bind(l.group)
+        .execute(&mut **tx)
+        .await?;
     }
     Ok(())
 }
@@ -645,14 +694,14 @@ async fn insert_issue(
     sqlx::query(
         "INSERT INTO issues (number, title, description, status_id, priority, project_id,
            milestone_id, cycle_id, start_date, due_date, due_time_utc, due_tz, estimate_minutes,
-           points, hidden_until, depth, repeat_rule, properties, created_at, updated_at, completed_at, archived_at)
+           points, hidden_until, depth, repeat_rule, waiting_on, follow_up, properties, created_at, updated_at, completed_at, archived_at)
          VALUES (?, ?, ?,
            (SELECT id FROM statuses WHERE name = ?), ?,
            (SELECT id FROM projects WHERE slug = ?),
            (SELECT m.id FROM milestones m JOIN projects p ON p.id = m.project_id
               WHERE p.slug = ? AND m.name = ? ORDER BY m.id LIMIT 1),
            (SELECT id FROM cycles WHERE number = ?),
-           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(number)
     .bind(&f.title)
@@ -672,6 +721,8 @@ async fn insert_issue(
     .bind(f.hidden_until)
     .bind(&f.depth)
     .bind(&f.repeat)
+    .bind(&f.waiting_on)
+    .bind(f.follow_up)
     .bind(serde_json::to_string(&f.properties).map_err(invalid)?)
     .bind(f.created_at)
     .bind(f.updated_at)

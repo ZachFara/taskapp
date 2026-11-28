@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use chrono::NaiveDate;
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{ChangeSource, Db, Error, Result, rows, workspace};
@@ -79,6 +80,7 @@ const USER_KEYS: &[&str] = &[
     "backup_dir",
     "default_view_template",
     "default_status",
+    "last_review",
 ];
 
 /// Prefixes of keys the UI writes per item: `insights.<kind>.<id>` and `sidebar_*`.
@@ -96,10 +98,19 @@ pub const FEATURES: &[(&str, &str)] = &[
     ("reminders", "feature_reminders"),
     ("gcal", "feature_gcal"),
     ("process_inbox", "feature_process_inbox"),
+    ("weekly_review", "feature_weekly_review"),
     ("next_actions", "feature_next_actions"),
     ("focus", "feature_focus"),
     ("recurring", "feature_recurring"),
+    ("time_blocking", "feature_time_blocking"),
+    ("shutdown", "feature_shutdown"),
+    ("goals", "feature_goals"),
+    ("waiting", "feature_waiting"),
+    ("contexts", "feature_contexts"),
 ];
+
+/// Switches that start off; a never-written one is off.
+const OFF_BY_DEFAULT: &[&str] = &["feature_shutdown"];
 
 /// Every feature with whether it is on (a never-written switch is on).
 ///
@@ -113,12 +124,14 @@ pub async fn features(db: &Db) -> Result<Vec<(&'static str, bool)>> {
     Ok(out)
 }
 
-/// Whether one feature switch (its setting key) is on; a never-written switch is on.
+/// Whether one feature switch (its setting key) is on; a never-written switch is on unless it starts off.
 ///
 /// # Errors
 /// Fails when the stored value is not true or false.
 pub async fn feature_on(db: &Db, key: &str) -> Result<bool> {
-    Ok(get::<bool>(db, key).await?.unwrap_or(true))
+    Ok(get::<bool>(db, key)
+        .await?
+        .unwrap_or(!OFF_BY_DEFAULT.contains(&key)))
 }
 
 /// # Errors
@@ -175,6 +188,14 @@ pub async fn set_from_user(db: &Db, key: &str, value: &serde_json::Value) -> Res
                 .any(|st| st.id.0 == id)
             {
                 return Err(bad("an existing status"));
+            }
+        }
+        "last_review" => {
+            let day = value
+                .as_str()
+                .and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+            if day.is_none() {
+                return Err(bad("a date (YYYY-MM-DD)"));
             }
         }
         "default_view_template" if !(value.is_null() || value.is_i64()) => {

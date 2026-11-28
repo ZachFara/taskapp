@@ -69,6 +69,15 @@ describe('QuickAdd', () => {
     expect(chips()).toEqual(['High', '+home', '#errands', '30m']);
   });
 
+  it('quickadd_every_phrase_shows_a_repeat_chip_and_sets_repeat', async () => {
+    await type('water plants every monday');
+    expect(chips()).toContain('Every week on Mon');
+    await enter();
+    const made = oncreated.mock.calls[0][0].issue;
+    expect(made.title).toBe('water plants');
+    expect(made.repeat).toBe('every 1 week on mon from due');
+  });
+
   it('quickadd_slash_lists_templates_and_inserts_slug', async () => {
     await api.templates.create({ name: 'Incident', slug: 'incident', icon: null, color: null, body: {} });
     await type('/');

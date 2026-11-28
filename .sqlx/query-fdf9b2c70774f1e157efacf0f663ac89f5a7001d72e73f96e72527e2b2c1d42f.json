@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", name, color, icon FROM labels ORDER BY id",
+  "query": "SELECT id AS \"id!: i64\", name, exclusive AS \"exclusive: bool\" FROM label_groups ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -14,14 +14,9 @@
         "type_info": "Text"
       },
       {
-        "name": "color",
+        "name": "exclusive: bool",
         "ordinal": 2,
-        "type_info": "Text"
-      },
-      {
-        "name": "icon",
-        "ordinal": 3,
-        "type_info": "Text"
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -30,9 +25,8 @@
     "nullable": [
       false,
       false,
-      false,
-      true
+      false
     ]
   },
-  "hash": "b531b209a42ab880b0fab4877d5ab809b76cf33f2639499ef999d07ff2be602a"
+  "hash": "fdf9b2c70774f1e157efacf0f663ac89f5a7001d72e73f96e72527e2b2c1d42f"
 }

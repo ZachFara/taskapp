@@ -673,6 +673,33 @@ fn a_label_is_put_on_an_issue_by_its_name() {
 }
 
 #[test]
+fn labels_go_into_an_exclusive_group_by_name() {
+    let (_d, db) = fresh();
+    run_json(&db, &["add", "Call back"]);
+    run_json(&db, &["label", "create", "@home", "blue"]);
+    run_json(&db, &["label", "create", "@phone", "blue"]);
+    let group = run_json(&db, &["label", "group", "create", "Context", "--exclusive"]);
+    assert_eq!(group["exclusive"], true);
+    let home = run_json(&db, &["label", "group", "add", "context", "@home"]);
+    assert_eq!(home["group_id"], group["id"]);
+    run_json(&db, &["label", "group", "add", "Context", "@phone"]);
+    run_json(&db, &["label", "add", "ABC-1", "@home"]);
+    let issue = run_json(&db, &["label", "add", "ABC-1", "@phone"]);
+    assert_eq!(issue["label_ids"].as_array().map(Vec::len), Some(1));
+    assert_eq!(
+        run_json(&db, &["label", "group", "list"])
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
+    assert!(
+        !run(&db, &["label", "group", "add", "Nope", "@home"])
+            .status
+            .success()
+    );
+}
+
+#[test]
 fn update_sets_the_start_date_and_estimate() {
     let (_d, db) = fresh();
     run_json(&db, &["add", "Plan it"]);
@@ -1345,7 +1372,7 @@ fn features_default_on_and_switch() {
         all.as_array()
             .expect("list")
             .iter()
-            .all(|f| f["on"] == true)
+            .all(|f| f["on"] == (f["name"] != "shutdown"))
     );
     let after = run_json(&db, &["features", "set", "cycles", "off"]);
     let on = |name: &str| {
@@ -1579,4 +1606,103 @@ fn issue_repeat_refuses_a_bad_rule_and_finishing_makes_the_next_one() {
     let next = run_json(&db, &["issue", "get", "ABC-2"]);
     assert_eq!(next["title"], "Water plants");
     assert_eq!(next["repeat"], "every 1 day from due");
+}
+
+#[test]
+fn plan_add_makes_a_linked_block_and_plan_counts_done() {
+    let (_d, db) = fresh();
+    run_json(&db, &["add", "Write report"]);
+    run_json(&db, &["add", "Call bank"]);
+    let day = ["--date", "2030-01-02"];
+    let add = |key: &str, at: &str, len: &str| {
+        let mut a = vec!["plan", "add", key, "--at", at, "--for", len];
+        a.extend(day);
+        run_json(&db, &a)
+    };
+    let ev = add("ABC-1", "14:00", "1h30m");
+    assert_eq!(ev["starts_at"], "2030-01-02T14:00:00");
+    assert_eq!(ev["ends_at"], "2030-01-02T15:30:00");
+    assert_eq!(ev["issue_ids"].as_array().expect("array").len(), 1);
+    add("ABC-2", "16:00", "30m");
+    run_json(&db, &["issue", "update", "ABC-2", "--status", "Done"]);
+    let plan = run_json(&db, &["plan", "--date", "2030-01-02"]);
+    assert_eq!(plan["blocks"].as_array().expect("array").len(), 2);
+    assert_eq!(plan["planned_minutes"], 120);
+    assert_eq!(plan["done_minutes"], 30);
+    let next = run_json(&db, &["plan", "--date", "2030-01-03"]);
+    assert_eq!(next["blocks"].as_array().expect("array").len(), 0);
+    assert!(
+        !run(
+            &db,
+            &["plan", "add", "ABC-1", "--at", "25:00", "--for", "1h"]
+        )
+        .status
+        .success()
+    );
+}
+
+#[test]
+fn shutdown_prints_the_checklist_as_json() {
+    let (_dir, db) = fresh();
+    let v = run_json(&db, &["shutdown"]);
+    assert_eq!(v["done_today"], false);
+    assert_eq!(v["streak"], 0);
+    assert!(v["tomorrow"].as_array().is_some_and(Vec::is_empty));
+    assert!(v["deep"].as_array().is_some_and(Vec::is_empty));
+}
+
+#[test]
+fn goal_create_list_and_link_by_slug() {
+    let (_d, db) = fresh();
+    run_json(&db, &["project", "create", "web", "Website"]);
+    let g = run_json(&db, &["goal", "create", "Launch", "--quarter", "2027-Q1"]);
+    assert_eq!(
+        (g["id"].as_i64(), g["status"].as_str()),
+        (Some(1), Some("active"))
+    );
+    assert!(
+        !run(&db, &["goal", "create", "Bad", "--quarter", "soon"])
+            .status
+            .success()
+    );
+    assert!(!run(&db, &["goal", "link", "web", "9"]).status.success());
+    run_json(&db, &["goal", "link", "web", "1"]);
+    let list = run_json(&db, &["goal", "list"]);
+    assert_eq!(list[0]["title"], "Launch");
+    assert_eq!(list[0]["project_ids"], serde_json::json!([1]));
+    assert_eq!(list[0]["progress"], serde_json::json!([0, 0]));
+}
+
+#[test]
+fn issue_wait_sets_lists_and_clears_a_waiting_issue() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Send the contract"]);
+    run(&db, &["add", "Unrelated"]);
+    let set = run_json(
+        &db,
+        &[
+            "issue",
+            "wait",
+            "ABC-1",
+            "--on",
+            "Sam",
+            "--until",
+            "2999-01-01",
+        ],
+    );
+    assert_eq!(set["waiting_on"], "Sam");
+    assert_eq!(set["follow_up"], "2999-01-01");
+    let listed = run_json(&db, &["waiting"]);
+    let keys: Vec<&str> = listed
+        .as_array()
+        .expect("a list")
+        .iter()
+        .map(|i| i["title"].as_str().unwrap_or(""))
+        .collect();
+    assert_eq!(keys, ["Send the contract"]);
+    let cleared = run_json(&db, &["issue", "wait", "ABC-1", "--clear"]);
+    assert!(cleared["waiting_on"].is_null());
+    assert!(cleared["follow_up"].is_null());
+    let none = run_json(&db, &["waiting"]);
+    assert_eq!(none.as_array().map(Vec::len), Some(0));
 }

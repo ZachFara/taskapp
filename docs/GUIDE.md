@@ -7,7 +7,7 @@ registry (`ui/src/lib/commands/defs/**`); `ui/src/lib/commands/guide.test.ts` ke
 
 Contents: [What it is](#what-cairn-is) - [First run](#first-run) - [The screen](#the-screen) - [Issues](#issues) -
 [Selection and bulk edit](#selection-and-bulk-edit) - [Undo and redo](#undo-and-redo) - [Views](#views) -
-[Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) - [Events](#events) - [Decisions](#decisions) - [Process Inbox](#process-the-inbox) -
+[Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) - [Events](#events) - [Decisions](#decisions) - [Goals](#goals) - [Process Inbox](#process-the-inbox) -
 [Points and insights](#points-and-insights) - [Custom properties](#custom-properties) -
 [Statuses, labels, icons, colours](#statuses-labels-icons-and-colours) - [Templates](#issue-templates) - [Images](#images) -
 [Import, export, backups](#import-export-and-backups) - [Restore](#restore) - [Reminders and Google Calendar](#reminders-and-google-calendar) -
@@ -102,6 +102,7 @@ case). Dates are relative to today in the workspace time zone.
 | `by <date>`, `due <date>` | Due date with an explicit word. Without a valid date after it, the words stay in the title. | `by friday` |
 | `start <date>` | Start date. | `start monday` |
 | `at 3pm`, `at 9:15am`, `at 15:30` | Time of day on the due date (today if no date). A bare hour needs am or pm. | `fri at 3pm` |
+| `every <rule>` | Repeat rule: the longest valid phrase after `every` is taken and left out of the title; shown as a chip. | `water plants every monday` |
 | `/slug` first | Create from an issue template; the rest of the line fills in or overrides fields. Typing `/` opens the template list. | `/bug login fails p2` |
 
 Quick-add has no token for status, parent, cycle or milestone. Example: `Pay rent friday p1 +home #bills ~30m 3pt`.
@@ -177,7 +178,8 @@ issue has items (the Checklist field, on by default). `taskapp issue get` report
   CLI: `relation add`. In the timeline, "blocks" relations draw as arrows and a critical path is highlighted.
 - **Similar issues.** The issue page lists up to three open issues whose titles overlap most with this one's (in the same
   project first). Click one to open it, or use its Mark duplicate action: this issue gets status Duplicate and a
-  duplicate relation to that one, as a single undo step. Needs a status called Duplicate.
+  duplicate relation to that one, as a single undo step. Needs a status called Duplicate. The command menu and the
+  right-click menu have "Mark as duplicate of…": similar issues are listed first, then every other issue.
 - **Comments.** Markdown. Panel "Comments" section: type and press the Comment button. CLI `comment add`; MCP `add_comment`.
 - **History.** The panel's History section lists every change with its source (UI, Agent, Cli, import, Undo, ...).
   CLI `history <key>`; MCP `get_history`.
@@ -407,6 +409,23 @@ with its recommendation until you answer). Decisions are Cairn's own; nothing ou
   `--source`, such as `agent:builder` or later `curia`), and `external_id` is the raiser's own id, unique per source, so a
   later integration can mirror a decision and not raise it twice. Nothing reads them yet.
 
+## Goals
+
+A goal is an outcome you want in a quarter, one level above projects (GTD's horizons of focus). It has a title, a
+quarter such as `2027-Q1`, an optional description and a status: active, achieved or dropped. Projects link to goals,
+many to many.
+
+- **Goals page** (sidebar "Goals", `g k`, command `Go to Goals`): goals grouped by quarter, newest first, each with a
+  progress bar: done over total issues of its linked projects (archived issues are not counted). "New goal" opens a
+  dialog; the command menu has "New goal" too.
+- **Goal page** (click a goal): status, description and the linked projects with their own progress. Edit, Achieved,
+  Drop, Reopen, Delete (asks first) and "Link a project" are buttons and commands. Unlink removes one project.
+- **Project page**: a "Goals" row lists the goals the project works towards; click one to open it.
+- Settings > Features has a Goals switch. Undo covers every goal write, including the links a deleted project loses. The
+  export writes `goals.yaml` (projects by slug) and a rebuild restores it.
+- CLI: `taskapp goal create "Launch the site" --quarter 2027-Q1`, `taskapp goal link website 1`, `taskapp goal list`.
+- Not built: points as the progress measure (issues only), goals on areas (labels), and a current-quarter filter.
+
 ## Process the Inbox
 
 Process Inbox (sidebar, `g o`, or the button on a view named Inbox) shows one Inbox issue at a time, oldest first, full
@@ -433,6 +452,15 @@ switch Process Inbox off; its page, sidebar entry and commands go, the data stay
 
 For agents: `taskapp inbox [--limit N]` lists the next Inbox items and the total; `taskapp inbox process ABC-1 --do`, `--next PROJECT --as-next-action` also flags it as the project's next action,
 `--delegate "Sam"`, `--defer 2026-12-24`, `--next <project>`, `--someday` or `--trash` clears one (exactly one flag).
+
+## Weekly review
+
+Weekly review (sidebar, `g r`, or "Weekly review: start" in the command menu) walks one step at a time: Inbox to zero,
+Waiting (issues in Delegated or Waiting), Stuck projects (no next action), Stale issues, Someday, and the next 7 days
+(due issues and events). Each step shows its count and its list. Back and Next move between steps; "Done for this step"
+ticks the step. Finish is on once every step is ticked. It records today's date as the last review, and the Dashboard's
+"Weekly review" card shows the days since. The ticks last until you finish or start again.
+Settings > Features can switch it off ("Weekly review"); its page, sidebar entry, commands and card go.
 
 ## Dashboard
 
@@ -489,8 +517,44 @@ issue stops repeating. Cancelling does not create one. "Skip this occurrence" mo
 without creating anything; "Does not repeat" stops the series. The Repeats field can be shown in views and filtered
 (Repeats is set). Google Calendar needs nothing extra: the next occurrence has a due date and appears like any issue
 (no recurring-event series yet). CLI: `taskapp issue repeat ABC-1 "every monday"`, `--clear`, `--skip`; `issue get`
-shows `repeat` and `repeat_words`. Settings > Features > Recurring issues hides the row and commands. Not built:
-repeat in quick add.
+shows `repeat` and `repeat_words`. Settings > Features > Recurring issues hides the row and commands. Quick add
+accepts `every <rule>`.
+
+### Time blocking: the Today plan page
+
+Today plan (sidebar, `g l`, Settings > Features > Time blocking) shows a day column from 07:00 to 22:00 on a 15-minute
+grid for today and tomorrow, and a list of issues to plan: Next actions, issues due within three days (or overdue), and
+deep work. Drag an issue onto a column to make a block: a Cairn event titled "KEY title", linked to the issue, as long as its
+estimate (an hour when it has none). Without the mouse, pick an issue in the list and use "Time-block an issue" (command
+menu or the page button): choose the issue, day, start time and length in minutes. Click a block to select it, then drag
+it to move it (also to the other day), drag its bottom bar to resize it, use the x on the block or "Remove time block" to
+delete it (undo brings it back), or "Change time block start and length" to type a new time. Other events of the day show
+as grey bars. Blocks are ordinary events, so the Events page lists them and the existing Google Calendar sync sends
+them to the calendar. Under each column: minutes planned, and minutes in blocks whose issues are all Done.
+CLI: `taskapp plan [--date D]` lists the day's blocks with planned and done minutes; `taskapp plan add ABC-1 --at 14:00
+--for 90m [--date D]` makes a block. Turning the feature off hides the page and commands; the events stay.
+
+## Shutdown ritual
+
+The end-of-day checklist is off until Settings > Features switches "Shutdown ritual" on. Then the Shutdown command (in the
+command menu, and a button on My issues) opens it. It has three parts. The Inbox line says how many issues are left in the
+Inbox. Tomorrow's deep work lists the open issues marked deep (set the depth in an issue's details); tick up to three and
+save them, and they show again on the checklist until the next day. Loose ends takes a quick-add line, the same grammar as
+the Add box. Finish shutdown records today; the panel then says "Shutdown complete" and shows the streak of days finished
+in a row. The checklist keeps its data in settings, so undo takes back a finish or a saved plan. The CLI prints the same
+state as JSON with `taskapp shutdown`.
+
+### Waiting for
+
+Delegated work gets a Waiting on note (who or what you wait on) and a Follow up day (when to check back). Both are
+rows in the issue's Details, and the commands "Waiting on" (`issue.wait`) and "Follow-up day" (`issue.followUp`) set
+them from the command menu; "Stop waiting" clears both. The Waiting for page (`g w`, or the sidebar) lists the open
+issues in three groups: Due follow-up, Later and No date. The Dashboard card "Follow-ups due" lists the follow-ups
+that have come. Once the day has come the issue also shows in Next actions (a Follow-ups due list above the projects)
+and in every list with a "follow up" marker. The fields are views fields too: Waiting on and Follow up can be shown and
+filtered. CLI: `taskapp issue wait ABC-1 --on Sam --until 2026-12-04`, `--clear`; `taskapp waiting` lists them.
+Settings > Features > Waiting for hides the row, the page, the card and the commands. Not built: waiting in quick add,
+and the Process Inbox Delegate choice does not set the Waiting on field yet (it still adds a "Waiting on" comment).
 
 ## Points and insights
 
@@ -564,6 +628,19 @@ templates and imports. Unset, or if that status is deleted, new issues start in 
   `taskapp status update NAME --definition "..." --kind active|waiting|idle --nudge-days N`.
 - **Priority** shows as three bars of rising height: none faint, low one bar, medium two, high three, urgent three in red.
 - **Labels** (Settings > Labels): name, icon, colour. Add to issues with `l`, the panel, or `#name` in quick-add.
+- **Label groups** (Settings > Labels, below the list): a group is a named set of labels, such as Context with @home,
+  @computer, @errands and @phone, or Kind for Area and Collection labels. A label is in at most one group; pick the group
+  in the label's row ("No group" takes it out). Deleting a group keeps its labels. A group can be **exclusive**: an issue
+  then holds at most one of its labels. Adding another (the `l` picker, the panel, CLI, MCP) swaps it in for the old one,
+  and saving a set with two is refused as Invalid; issues that already held two stay as they are. New groups are not
+  exclusive. The label pickers list a group's labels under its name. In a view's filter, the field **Label group**
+  matches issues with a label from the chosen group (is any of / is none of). On an issue list, the quick filter bar
+  has a **Context** button (when a group named Context exists; switch it off in Settings > Features): one click on a
+  label filters the list to it, another click swaps it. Command menu: "New label group". Export writes
+  `label_groups.yaml` and each label's `group`; restore brings them back. Nothing is created for you. CLI:
+  `taskapp label group create Context [--exclusive]`, `label group add Context @home`, `label group remove @home`,
+  `label group exclusive Context on|off`, `label group list`, `label group delete Context`; API:
+  `label_groups_list/create/update/delete`, and `labels_update` carries a label's `group_id`.
 - **Colours** are a fixed palette of 12 keys: gray, red, orange, amber, yellow, green, teal, cyan, blue, indigo, purple,
   pink. A `#rrggbb` value sent by CLI or MCP maps to the nearest key.
 - **Icons**: `icon:<id>` from the built-in set or `emoji:<emoji>` (any 1 to 8 non-ASCII characters). Today the
@@ -698,9 +775,9 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 
 ### Features
 
-Settings > Features lists every optional feature with a switch, all on by default: Dashboard, Decisions, Cycles,
+Settings > Features lists every optional feature with a switch, all on by default except the Shutdown ritual: Dashboard, Decisions, Cycles,
 Events, Progress charts (burn-ups and sparklines on projects and cycles), Stale nudges, Reminders capture, Google
-Calendar, Next actions, Process Inbox, Focus mode and Recurring issues. Switching one off hides its sidebar entries, its
+Calendar, Next actions, Process Inbox, Weekly review, Focus mode, Recurring issues, the Shutdown ritual, Time blocking, Goals, Waiting for and the Context filter. Switching one off hides its sidebar entries, its
 page (the address shows "is switched off"), its commands in the command menu, its Settings page where it has one
 (Cycles, Reminders, Calendar) and its dashboard card. Switching Cycles off also hides the cycle row in issue details and
 the cycle field in views. Switching Reminders capture or Google Calendar off stops their background sync too; Sync now
@@ -710,7 +787,7 @@ applies at once, has its own command ("Turn Cycles on or off"), and is stored as
 device and off by default, so it is a preference, not a workspace feature.
 
 From the terminal: `taskapp features` lists them; `taskapp features set cycles off` (names: dashboard, decisions,
-cycles, events, charts, stale, reminders, gcal, process_inbox, next_actions, focus).
+cycles, events, charts, stale, reminders, gcal, process_inbox, next_actions, focus, recurring, contexts).
 
 Sidebar and issue panel widths are remembered per device. Drag an edge to resize; double-click it to reset.
 
@@ -794,8 +871,12 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.archive` | Go to Archive | `g a` | Go to the Archive page: archived issues, restore, delete for good. |
 | `nav.next` | Go to Next actions | `g n` | Go to the next action of each project (when it is switched on in Settings). |
 | `nav.dashboard` | Go to Dashboard | `g b` | Go to the Dashboard (when it is switched on in Settings). |
+| `nav.plan` | Go to Today plan | `g l` | Go to the Today plan page (when it is switched on in Settings). |
 | `nav.process` | Process Inbox | `g o` | Go to Process Inbox (when it is switched on in Settings). |
+| `nav.review` | Go to Weekly review | `g r` | Go to the Weekly review (when it is switched on in Settings). |
+| `nav.waiting` | Go to Waiting for | `g w` | Go to the open issues you are waiting on (when it is switched on in Settings). |
 | `nav.decisions` | Go to Decisions | `g q` | Go to Decisions. |
+| `nav.goals` | Go to Goals | `g k` | Go to Goals (when it is switched on in Settings). |
 | `nav.views` | Go to Views | `g v` | Go to Views. |
 | `nav.timeline` | Go to Timeline | `g t` | Go to the all-projects timeline. |
 | `nav.settings` | Go to Settings | `g s` | Go to Settings. |
@@ -925,6 +1006,8 @@ These appear in the command menu (when they apply) and have no shortcut.
 |---|---|---|---|
 | `issue.repeat` | Repeat | (none) | Pick a repeat preset or type a rule; "Stop repeating" clears it. |
 | `issue.repeat.skip` | Skip this occurrence | (none) | Move a repeating issue's due date to its next occurrence. |
+| `issue.wait` | Waiting on | (none) | Type who the issue waits on; "Stop waiting" clears it and the follow-up day. |
+| `issue.followUp` | Follow-up day | (none) | Tomorrow, in a week, a typed day, or no follow-up day. |
 | `issue.next` | Make next action | (none) | Flag the issue as its project's next action. |
 | `project.next` | Set next action | (none) | On a project page: pick the project's next action from its open issues, or clear it. |
 | `image.attach` | Attach image | (none) | Choose an image file for the description or comment box you used last. |
@@ -938,6 +1021,11 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `cycle.copyLink` | Copy link to cycle | (none) | On the Cycles page: copy `taskapp://cycle/<number>` of the open or current cycle. Also in a cycle's right-click menu. |
 | `event.copyLink` | Copy link to event | (none) | On an event page, or the event right-clicked on the Events list: copy `taskapp://event/<id>`. |
 | `decision.copyLink` | Copy link to decision | (none) | On the Decisions page: copy `taskapp://decision/<id>` of the decision last clicked. |
+| `goal.new` | New goal | (none) | On the Goals page: open the New goal dialog. |
+| `goal.edit` | Edit goal | (none) | On a goal page: edit title, quarter and description. |
+| `goal.achieve` / `goal.drop` / `goal.reopen` | Mark goal achieved / Drop goal / Reopen goal | (none) | On a goal page: set its status. |
+| `goal.link` | Link a project to this goal | (none) | On a goal page: focus the project picker. |
+| `goal.delete` | Delete goal | (none) | On a goal page: delete it after a confirmation (undo brings it back). |
 | `issue.link.add` | Add a link to this issue | (none) | Focus the URL field of the Links section of the open issue. |
 | `cycle.move_unfinished` | Move unfinished issues to the next cycle | (none) | Move unfinished issues of the cycle to the next cycle (Cycles page). |
 | `cycle.new` | New cycle | (none) | New cycle. |
@@ -1044,10 +1132,14 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `issue links <key>` | List an issue's links. | `taskapp issue links ABC-1` |
 | `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --solution <url> --hide-until DATE\|clear`. | `taskapp issue update ABC-1 --status 3` |
 | `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --depth deep\|shallow\|none`. | `taskapp issue update ABC-1 --status 3` |
+| `issue wait <key> [--on NAME] [--until DATE] [--clear]` | Set who the issue waits on and the day to check back, or `--clear` both. | `taskapp issue wait ABC-1 --on Sam --until 2026-12-04` |
+| Open issues you are waiting on, due follow-ups first: `waiting` | List them. | `taskapp waiting` |
 | `issue repeat <key> [rule]` | Set a repeat rule ("every monday"), or `--clear` it, or `--skip` to the next occurrence. | `taskapp issue repeat ABC-1 "every 2 weeks"` |
+| `shutdown` checklist | The end-of-day checklist as it stands today: Inbox count, deep issues, tomorrow's picks, whether today is finished and the streak. | `taskapp shutdown` |
 | `focus start <key> [--deep]`, `focus stop`, `focus log [--key] [--range]` | Focus sessions: start one (ends a running one), end the running one, list sessions with their total minutes. | `taskapp focus start ABC-1 --deep` |
 | `issue list [...]` | Issues by name filters, most urgent first, with status, priority, project and label names: `--project --status --not-status --priority --label` (repeat or comma-separate). | `taskapp issue list --project Cairn --not-status Done,Canceled,Someday` |
 | `issue get <key>` | Show one issue, with `status`, `project`, `labels` and `priority_name` as names next to the ids. | `taskapp issue get ABC-1` |
+| `plan [--date D]`, `plan add <key> --at HH:MM --for 90m [--date D]` | The day's time blocks (events linked to issues) with planned and done minutes; or block time for an issue. | `taskapp plan add ABC-1 --at 14:00 --for 90m` |
 | `inbox [--limit N]` | The next Inbox items, oldest first, and how many there are (deferred ones left out). | `taskapp inbox --limit 3` |
 | `inbox process <key> (--do \| --delegate NOTE \| --defer DATE \| --next PROJECT [--as-next-action] \| --someday \| --trash)` | Clear one Inbox issue, as the Process Inbox page does; one undo step. | `taskapp inbox process ABC-1 --defer 2026-12-24` |
 | `issue archive <key>` | Archive an issue. | `taskapp issue archive ABC-1` |
@@ -1056,6 +1148,10 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `event link <id> <key>` | Link an event to an issue. | `taskapp event link 1 ABC-1` |
 | `decision create <question> [--option KEY="label: trade-off" --recommend KEY --mode blocking\|assume --context --source --external-id --issue KEY]` | Raise a decision for the owner. | `taskapp decision create "Ship now?" --option y="Yes: fast" --option n="No: safe" --recommend n` |
 | `decision list [--status open]` / `decision get <id>` | Read decisions (`open`, `answered`, `withdrawn`, `all`). The table shows options as `a) Label; b) Label`; `get` and `--json` give the trade-offs. | `taskapp decision list --status all` |
+| `goal create <title> --quarter 2027-Q1 [--description]` | Add a goal for a quarter. | `taskapp goal create "Launch the site" --quarter 2027-Q1` |
+| `goal list` | Goals by quarter with `project_ids` and `progress` as `[done, total]` issues. | `taskapp goal list --json` |
+| `goal set <id> [--status active\|achieved\|dropped --title --quarter --description]` | Edit a goal. | `taskapp goal set 1 --status achieved` |
+| `goal link <project> <goal id>` / `goal unlink <project> <goal id>` | Link or unlink a project (slug or name). | `taskapp goal link website 1` |
 | `decision answer <id> (--option KEY \| --text TEXT) [--note]` / `decision withdraw <id>` | Answer or close an open decision. | `taskapp decision answer 1 --option n` |
 | `issue search <text> [--limit 20]` | Full-text search (archived issues are left out). | `taskapp issue search rent` |
 | `issue similar <text> [--project NAME] [--limit 5]` | Open issues whose words overlap the text (likely duplicates), best first. Agents run this before `issue create`. | `taskapp issue similar "Fix login crash" --project Cairn` |

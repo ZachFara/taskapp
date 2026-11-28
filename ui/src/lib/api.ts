@@ -3,6 +3,7 @@ import { commands } from './bindings';
 import bindingsSource from './bindings.ts?raw';
 import { createMockApi, fixtures } from './api.mock';
 import { demoDecisions } from './api.mock.decisions';
+import { demoGoals } from './api.mock.goals';
 
 type Cmds = typeof commands;
 // `issuesGetByKey` -> ["issues", "getByKey"]
@@ -92,7 +93,7 @@ function watchWrites(a: Api): Api {
 const mode = import.meta.env.VITE_API_MODE;
 
 export let api: Api = watchWrites(
-  mode === 'mock' ? createMockApi(location.search.includes('fresh') ? { ...fixtures, workspace: { setup_done: false, name: null, key: 'ABC', timezone: 'UTC' } } : { ...fixtures, decisions: structuredClone(demoDecisions) }) : mode === 'http' ? httpApi() : build((key, args) => (commands as any)[key](...args)),
+  mode === 'mock' ? createMockApi(location.search.includes('fresh') ? { ...fixtures, workspace: { setup_done: false, name: null, key: 'ABC', timezone: 'UTC' } } : { ...fixtures, decisions: structuredClone(demoDecisions), goals: demoGoals(fixtures.projects.map((p) => p.id)) }) : mode === 'http' ? httpApi() : build((key, args) => (commands as any)[key](...args)),
 );
 
 /** Swaps the implementation; tests use it to install the mock. */

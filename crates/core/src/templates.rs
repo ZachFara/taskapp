@@ -392,6 +392,7 @@ async fn apply_in(
         due: overrides.due,
         estimate_minutes: overrides.estimate_minutes.or(base.estimate_minutes),
         points: overrides.points.or(base.points),
+        repeat: overrides.repeat,
         properties: Some(props),
         created_at: overrides.created_at,
         completed_at: overrides.completed_at,

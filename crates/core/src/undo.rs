@@ -32,6 +32,8 @@ const ISSUE_FIELDS: &[&str] = &[
     "hidden_until",
     "depth",
     "repeat",
+    "waiting_on",
+    "follow_up",
     "properties",
 ];
 
@@ -144,6 +146,7 @@ async fn run(db: &Db, undo: bool) -> Result<UndoStatus> {
 /// Entities whose old descriptive rows ("created", "deleted", "name") sit beside the row snapshots that undo uses.
 const DESCRIPTIVE: &[&str] = &[
     "label",
+    "label_group",
     "comment",
     "project",
     "milestone",

@@ -346,3 +346,18 @@ describe('recurring issues', () => {
     await expect(mock.issues.get(a.id + 1)).rejects.toMatchObject({ kind: 'NotFound' });
   });
 });
+
+describe('goals', () => {
+  it('sums project progress, drops links with a deleted project and undoes it', async () => {
+    const api = createMockApi(fixtures);
+    const p = fixtures.projects[0];
+    const g = await api.goals.create('G', '2027-Q1', null);
+    await expect(api.goals.create('G', '2027-Q5', null)).rejects.toMatchObject({ kind: 'Invalid' });
+    await api.goals.link(g.id, p.id);
+    expect(await api.goals.progress(g.id)).toEqual(await api.projects.progress(p.id));
+    await api.projects.delete(p.id);
+    expect((await api.goals.list())[0].project_ids).toEqual([]);
+    await api.history.undo();
+    expect((await api.goals.list())[0].project_ids).toEqual([p.id]);
+  });
+});

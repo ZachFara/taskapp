@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT name, color, icon FROM labels WHERE id = ?",
+  "query": "SELECT name, color, icon, group_id FROM labels WHERE id = ?",
   "describe": {
     "columns": [
       {
@@ -17,6 +17,11 @@
         "name": "icon",
         "ordinal": 2,
         "type_info": "Text"
+      },
+      {
+        "name": "group_id",
+        "ordinal": 3,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -25,8 +30,9 @@
     "nullable": [
       false,
       false,
+      true,
       true
     ]
   },
-  "hash": "b7bfcf7365e074416bf09512e11fd70f3cc04102052346fa20d217c6d2651a96"
+  "hash": "ae5bf8d2fb381f66274627298cd8ac3cd144ebde4fbd4073548adaad928f314f"
 }

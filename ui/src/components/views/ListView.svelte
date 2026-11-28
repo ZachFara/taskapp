@@ -9,7 +9,7 @@
   import { defaultStatusId, issues as issueStore, selectedIssueId } from '../../lib/stores.svelte';
   import { defaultsFromFilter, mergeIssueDefaults } from '../filters/defaults';
   import { selection } from '../../lib/selection.svelte';
-  import { refreshStale, stale } from '../../lib/stale.svelte';
+  import { followUps, refreshStale, stale } from '../../lib/stale.svelte';
   import { navigate } from '../../app/routes';
   import Checkbox from '../../ui/Checkbox.svelte';
   import EmptyState from '../../ui/EmptyState.svelte';
@@ -444,6 +444,7 @@
               {:else}
                 <span class="text">{i.title}</span>
                 {#if stale.ids.has(i.id)}<span class="stale">stale</span>{/if}
+                {#if followUps.ids.has(i.id)}<span class="stale">follow up</span>{/if}
               {/if}
             </span>
             {#each cells as { f, key, right } (key)}

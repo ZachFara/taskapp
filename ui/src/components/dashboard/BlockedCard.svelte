@@ -19,7 +19,7 @@
     <table>
       <thead><tr><th scope="col">Issue</th><th scope="col">Blocked by</th><th scope="col">Days</th></tr></thead>
       <tbody>
-        {#each b.now as i (i.issue_id)}<tr><th scope="row"><span class="key">{i.key}</span> {i.title}</th><td>{i.blocked_by.join(', ')}</td><td>{i.days}</td></tr>{/each}
+        {#each b.now as i (i.issue_id)}<tr><th scope="row"><span class="key">{i.key}</span> {i.title}</th><td>{i.blocked_by.join(', ')}</td><td class="days">{i.days} d</td></tr>{/each}
       </tbody>
     </table>
   {/if}
@@ -27,7 +27,7 @@
     <h3>Finished in this range, longest blocked</h3>
     <table>
       <tbody>
-        {#each b.time.slice(0, 5) as t (t.issue_id)}<tr><th scope="row"><span class="key">{t.key}</span> {t.title}</th><td>{t.days} d</td></tr>{/each}
+        {#each b.time.slice(0, 5) as t (t.issue_id)}<tr><th scope="row"><span class="key">{t.key}</span> {t.title}</th><td class="days">{t.days} d</td></tr>{/each}
       </tbody>
     </table>
   {/if}
@@ -43,6 +43,7 @@
   th, td { text-align: left; padding: var(--s-2) var(--s-3) var(--s-2) 0; font-size: var(--fs-sm); }
   thead th { color: var(--muted); font-weight: 500; }
   tbody th { font-weight: 500; }
+  .days { white-space: nowrap; }
   .key { color: var(--muted); }
   .note { margin: var(--s-4) 0 0; color: var(--muted); font-size: var(--fs-sm); }
 </style>

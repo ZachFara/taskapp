@@ -2,7 +2,7 @@
   import { onMount, tick, untrack } from 'svelte';
   import type { FieldRef, FixedField, Issue, IssuePatch, PropertyKind, SavedView, StatusCategory, Value } from '../../lib/bindings';
   import { selection } from '../../lib/selection.svelte';
-  import { refreshStale, stale } from '../../lib/stale.svelte';
+  import { followUps, refreshStale, stale } from '../../lib/stale.svelte';
   import { currentViewId, issues, propertyDefs, refreshAll, statuses, views } from '../../lib/stores.svelte';
   import Checkbox from '../../ui/Checkbox.svelte';
   import CommandButton from '../CommandButton.svelte';
@@ -44,6 +44,8 @@
     Points: { label: 'Points', kind: 'Read' },
     Depth: { label: 'Depth', kind: 'Read' },
     Repeat: { label: 'Repeats', kind: 'Read' },
+    WaitingOn: { label: 'Waiting on', kind: 'Read' },
+    FollowUp: { label: 'Follow up', kind: 'Read' },
     Project: { label: 'Project', kind: 'Project' },
     Label: { label: 'Labels', kind: 'Labels' },
     // Shown through FieldValue and not editable here.
@@ -146,6 +148,8 @@
       case 'Points': return i.points;
       case 'Depth': return i.depth;
       case 'Repeat': return i.repeat;
+      case 'WaitingOn': return i.waiting_on;
+      case 'FollowUp': return i.follow_up;
       default: return null;
     }
   };
@@ -486,7 +490,7 @@
           {#if !collapsed.has(g.name)}
             {#each g.rows as issue (issue.id)}
               <tr use:flash={{ id: issue.id, sig: `${issue.status_id}:${issue.priority}`, key: issue.key }} data-key={issue.key} data-id={issue.id} aria-selected={rowSelected(issue)} data-focused={issue.id === activeRowId ? '' : undefined}>
-                <th scope="row" class="key-cell">{issue.key}{#if stale.ids.has(issue.id)}<span class="stale">stale</span>{/if}</th>
+                <th scope="row" class="key-cell">{issue.key}{#if stale.ids.has(issue.id)}<span class="stale">stale</span>{/if}{#if followUps.ids.has(issue.id)}<span class="stale">follow up</span>{/if}</th>
                 {#each cols as col, c (col.id)}
                   {@const isEditing = editing !== null && visibleIds[editing.row] === issue.id && editing.col === c}
                   <td

@@ -97,6 +97,15 @@ pub struct LabelRow {
     pub color: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// The name of its label group.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
+pub struct LabelGroupRow {
+    pub name: String,
+    pub exclusive: bool,
 }
 
 /// A custom relation kind; the built-in ones come with the database.
@@ -178,6 +187,19 @@ pub struct DecisionFile {
     pub answered_at: Option<String>,
     #[serde(default)]
     pub issues: Vec<String>,
+}
+
+/// One entry of `goals.yaml`; `projects` are slugs. Older exports have no such file.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct GoalFile {
+    pub id: i64,
+    pub title: String,
+    pub quarter: String,
+    pub description: String,
+    pub status: String,
+    pub created_at: String,
+    #[serde(default)]
+    pub projects: Vec<String>,
 }
 
 /// One entry of `links.yaml`; `issue` is a key. Older exports have no such file.
@@ -422,6 +444,12 @@ pub struct IssueFront {
     /// The repeat rule text; missing when the issue does not repeat.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repeat: Option<String>,
+    /// Who the issue waits on; missing when not set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waiting_on: Option<String>,
+    /// The day to check back on the issue; missing when not set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follow_up: Option<NaiveDate>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub focus: Vec<FocusRow>,
 }

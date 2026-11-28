@@ -5,10 +5,12 @@ mod archive;
 mod commands;
 mod decision;
 mod forecast;
+mod goal;
 mod inbox;
 mod list;
 mod look;
 mod metrics;
+mod plan;
 mod references;
 
 use std::path::{Path, PathBuf};
@@ -89,8 +91,14 @@ enum Cmd {
     Stale,
     /// Every project's next action, and which active projects are stuck without one.
     Next,
+    /// The end-of-day shutdown as it stands today: Inbox left, deep issues for tomorrow, streak.
+    Shutdown,
+    /// Open issues you are waiting on, due follow-ups first; `issue wait KEY --on NAME --until DATE` sets one.
+    Waiting,
     /// The next Inbox items, oldest first; `inbox process KEY --do|--delegate NOTE|--defer DATE|--next PROJECT|--someday|--trash` clears one.
     Inbox(inbox::InboxArgs),
+    /// The day's time blocks and planned vs done (--date D); `plan add KEY --at 14:00 --for 90m` blocks time for an issue.
+    Plan(plan::PlanArgs),
     /// Optional features and whether each is on; `features set NAME on|off` switches one (data stays).
     Features {
         #[command(subcommand)]
@@ -108,6 +116,9 @@ enum Cmd {
     /// Questions for the owner: raise one with options, read it, answer it.
     #[command(subcommand)]
     Decision(decision::DecisionCmd),
+    /// Quarterly goals that projects link to.
+    #[command(subcommand)]
+    Goal(goal::GoalCmd),
     /// Icon names for `project set --icon`.
     Icons,
     /// Palette colors for `project set --color`.
@@ -301,6 +312,19 @@ enum IssueCmd {
         /// Move the due date to the next occurrence without creating one.
         #[arg(long)]
         skip: bool,
+    },
+    /// Sets who an issue waits on and the day to check back, or clears both.
+    Wait {
+        key: String,
+        /// Who or what the issue waits on.
+        #[arg(long, conflicts_with = "clear")]
+        on: Option<String>,
+        /// The day to check back, YYYY-MM-DD.
+        #[arg(long, value_name = "DATE", conflicts_with = "clear")]
+        until: Option<String>,
+        /// Clear both the waiting note and the follow-up day.
+        #[arg(long)]
+        clear: bool,
     },
     /// Adds a link to an issue; adding the same URL again changes nothing.
     Link {
@@ -715,6 +739,37 @@ enum LabelCmd {
         key: String,
         label: String,
     },
+    /// Label groups, e.g. a Context group of @home and @phone.
+    #[command(subcommand)]
+    Group(GroupCmd),
+}
+
+#[derive(Subcommand)]
+enum GroupCmd {
+    List,
+    /// Make a group; with --exclusive an issue holds at most one of its labels.
+    Create {
+        name: String,
+        #[arg(long)]
+        exclusive: bool,
+    },
+    /// Put a label (by name) into a group (by name).
+    Add {
+        group: String,
+        label: String,
+    },
+    /// Take a label out of its group.
+    Remove {
+        label: String,
+    },
+    /// Switch whether an issue may hold only one label of the group.
+    Exclusive {
+        group: String,
+        state: OnOff,
+    },
+    Delete {
+        group: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -782,6 +837,15 @@ async fn main() -> ExitCode {
     }
 }
 
+/// Runs one command as a history step. Boxed: the command futures are too large to sit in `run`'s state.
+async fn recorded(label: &str, db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
+    history::step(
+        label,
+        Box::pin(commands::run(db, &dir.join("backups"), cmd)),
+    )
+    .await
+}
+
 async fn run(cli: Cli) -> Result<()> {
     match &cli.cmd {
         Cmd::Guide => {
@@ -838,7 +902,7 @@ async fn run(cli: Cli) -> Result<()> {
     if let Cmd::Metrics(args) = &cli.cmd {
         return metrics::print(&db, args, cli.json).await;
     }
-    let value = history::step(&label, commands::run(&db, &dir.join("backups"), cli.cmd)).await?;
+    let value = recorded(&label, &db, &dir, cli.cmd).await?;
     let value = list::search_view(&db, value, search).await?;
     print_value(&view(value, list, cli.json), cli.json);
     Ok(())

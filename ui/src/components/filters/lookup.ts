@@ -1,15 +1,15 @@
-import type { Cycle, FieldRef, FixedField, Label, Project, ProjectStatus, RelationKindDef, PropertyDef, PropertyKind, Status, StatusCategory, Value, ViewEntity } from '../../lib/bindings';
+import type { Cycle, FieldRef, FixedField, Label, LabelGroup, Project, ProjectStatus, RelationKindDef, PropertyDef, PropertyKind, Status, StatusCategory, Value, ViewEntity } from '../../lib/bindings';
 import { PRIORITY_OPTIONS } from '../../lib/priority';
 import { PROJECT_FIELD_NAMES } from '../../lib/projectViews';
 import { fixedKind } from './model';
 
-export type Data = { statuses: Status[]; projects: Project[]; defs: PropertyDef[]; cycles: Cycle[]; labels: Label[]; relationKinds: RelationKindDef[]; projectStatuses?: ProjectStatus[] };
+export type Data = { statuses: Status[]; projects: Project[]; defs: PropertyDef[]; cycles: Cycle[]; labels: Label[]; relationKinds: RelationKindDef[]; projectStatuses?: ProjectStatus[]; labelGroups?: LabelGroup[] };
 export type Choice = { value: Value; label: string };
 
 const categories: StatusCategory[] = ['Backlog', 'Unstarted', 'Started', 'Completed', 'Canceled'];
 const names: Record<string, string> = {
-  StatusCategory: 'Status category', DueDate: 'Due', StartDate: 'Start', HiddenUntil: 'Hidden until', CreatedAt: 'Created', UpdatedAt: 'Updated',
-  CompletedAt: 'Completed', RelationKind: 'Relation kind', ProjectStatus: 'Project status', TargetDate: 'Target', IssueCount: 'Issues', ProgressChart: 'Progress chart',
+  StatusCategory: 'Status category', DueDate: 'Due', StartDate: 'Start', HiddenUntil: 'Hidden until', FollowUp: 'Follow up', WaitingOn: 'Waiting on', CreatedAt: 'Created', UpdatedAt: 'Updated',
+  CompletedAt: 'Completed', RelationKind: 'Relation kind', LabelGroup: 'Label group', ProjectStatus: 'Project status', TargetDate: 'Target', IssueCount: 'Issues', ProgressChart: 'Progress chart',
 };
 const projectCategories = ['Planned', 'Started', 'Paused', 'Completed', 'Cancelled'];
 
@@ -30,6 +30,7 @@ export function makeLookup(d: Data, entity: ViewEntity = 'issue') {
       case 'Project': return named(d.projects);
       case 'Cycle': return named(d.cycles.map((c) => ({ id: c.id, name: c.name ?? `${c.start_date} to ${c.end_date}` })));
       case 'Label': return named(d.labels);
+      case 'LabelGroup': return named(d.labelGroups ?? []);
       case 'RelationKind': return d.relationKinds.map((k) => ({ value: k.id, label: k.name }));
       case 'StatusCategory': return (project ? projectCategories : categories).map((c) => ({ value: c.toLowerCase(), label: c })); // stored lowercase in the db
       case 'Priority': return PRIORITY_OPTIONS.map(({ value, name }) => ({ value, label: name }));

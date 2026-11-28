@@ -41,6 +41,9 @@ export function stepLabel(name: string, args: unknown[], out: unknown): string {
     case 'project_statuses_delete': return 'Deleted project status';
     case 'folders_place': return 'Moved folder';
     case 'folders_place_item': return `Moved ${typeof args[0] === 'string' ? args[0] : 'item'}`;
+    case 'label_groups_create': return 'Created label group';
+    case 'label_groups_update': return 'Edited label group';
+    case 'label_groups_delete': return 'Deleted label group';
     case 'relation_kinds_create': return 'Created relation kind';
     case 'relation_kinds_update': return 'Edited relation kind';
     case 'relation_kinds_delete': return 'Deleted relation kind';

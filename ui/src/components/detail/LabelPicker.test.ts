@@ -43,4 +43,13 @@ describe('LabelPicker', () => {
     target.querySelector<HTMLButtonElement>('[aria-label="Delete label Bug"]')!.click();
     expect(ondelete).toHaveBeenCalledWith(expect.objectContaining({ id: 1, name: 'Bug' }));
   });
+
+  it('puts a group\'s labels under its name and the rest last', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const mk = (id: number, name: string, group_id: number | null) => ({ ...label(id, name), group_id }) as Label;
+    const groups = [{ id: 7, name: 'Context', exclusive: true }];
+    mount(LabelPicker, { target, props: { labels: [mk(1, 'Bug', null), mk(2, '@home', 7)], groups, selected: [], ontoggle: vi.fn(), oncreate: vi.fn() } });
+    const rows = [...target.querySelectorAll('li')].map((li) => li.textContent?.trim().replace(/\s+/g, ' '));
+    expect(rows).toEqual(['Context, pick one', '@home', 'Bug']);
+  });
 });

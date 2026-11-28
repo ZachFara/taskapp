@@ -1,5 +1,6 @@
 // Port of crates/core/src/quickadd.rs `parse`, so the mock reads quick-add text exactly as the backend does.
 import type { Due, ParsedQuickAdd } from './bindings';
+import { parseRule, ruleText } from './recur';
 
 const DAY = 86_400_000;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -106,7 +107,7 @@ const points = (w: string) => {
 export function parseQuickadd(input: string, today: string, tz: string, off: string[] = []): ParsedQuickAdd {
   const on = (f: string) => !off.includes(f);
   const tokens = input.split(/\s+/).filter(Boolean);
-  const out = { dueDate: null as string | null, time: null as [[number, number], string] | null, start: null as string | null, priority: null as number | null, slug: null as string | null, labels: [] as string[], estimate: null as number | null, points: null as number | null };
+  const out = { dueDate: null as string | null, time: null as [[number, number], string] | null, start: null as string | null, priority: null as number | null, slug: null as string | null, labels: [] as string[], estimate: null as number | null, points: null as number | null, repeat: null as string | null };
   const title: string[] = [];
   for (let i = 0; i < tokens.length; ) {
     const raw = tokens[i];
@@ -116,7 +117,13 @@ export function parseQuickadd(input: string, today: string, tz: string, off: str
       const r = dateAt(tokens, at, today);
       if (r) { set(r[0]); used = extra + r[1]; }
     };
-    if (on('priority') && priority(w) !== null) { out.priority = priority(w); used = 1; }
+    if (w === 'every') {
+      // The longest run of tokens that is a valid rule, else "every" is a title word.
+      for (let n = Math.min(8, tokens.length - i); n >= 2 && !used; n--) {
+        const r = parseRule(tokens.slice(i, i + n).join(' '));
+        if (r) { out.repeat = ruleText(r); used = n; }
+      }
+    } else if (on('priority') && priority(w) !== null) { out.priority = priority(w); used = 1; }
     else if (on('project') && w.length > 1 && w.startsWith('+')) { out.slug = w.slice(1); used = 1; }
     else if (on('labels') && raw.length > 1 && (raw.startsWith('#') || raw.startsWith('@'))) { out.labels.push(raw.slice(1)); used = 1; }
     else if (on('estimate') && estimate(w) !== null) { out.estimate = estimate(w); used = 1; }
@@ -138,6 +145,6 @@ export function parseQuickadd(input: string, today: string, tz: string, off: str
   }
   return {
     title: title.length ? title.join(' ') : tokens.join(' '), due, start_date: out.start, priority: out.priority,
-    project_slug: out.slug, label_names: out.labels, estimate_minutes: out.estimate, points: out.points,
+    project_slug: out.slug, label_names: out.labels, estimate_minutes: out.estimate, points: out.points, repeat: out.repeat,
   };
 }

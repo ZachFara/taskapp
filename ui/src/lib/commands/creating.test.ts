@@ -8,6 +8,7 @@ const table: [id: string, route: string, event: string][] = [
   ['project.new', '/projects', 'command:project.new'],
   ['view.new', '/views', 'command:view.new'],
   ['label.new', '/settings/labels', 'command:label.new'],
+  ['label.group.new', '/settings/labels', 'command:label.group.new'],
   ['status.new', '/settings/statuses', 'command:status.new'],
   ['template.new', '/settings/templates', 'command:template.new'],
   ['import.csv', '/settings/import', 'command:import.csv'],

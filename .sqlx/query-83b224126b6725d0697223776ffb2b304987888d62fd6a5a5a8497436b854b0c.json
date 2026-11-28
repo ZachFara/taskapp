@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE label_groups SET name = ?, exclusive = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "83b224126b6725d0697223776ffb2b304987888d62fd6a5a5a8497436b854b0c"
+}

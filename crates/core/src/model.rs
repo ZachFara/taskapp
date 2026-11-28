@@ -18,6 +18,7 @@ ids!(
     MilestoneId,
     CycleId,
     LabelId,
+    LabelGroupId,
     ViewId,
     ViewTemplateId,
     ViewFolderId,
@@ -27,6 +28,7 @@ ids!(
     TemplateId,
     EventId,
     DecisionId,
+    GoalId,
     LinkId,
     AttachmentId
 );
@@ -133,6 +135,10 @@ pub struct Issue {
     pub depth: Option<Depth>,
     /// Canonical repeat rule (`every 1 week on mon from due`); completing the issue creates the next one.
     pub repeat: Option<String>,
+    /// Who the issue waits on; with `follow_up` it puts the issue on the Waiting page.
+    pub waiting_on: Option<String>,
+    /// The day to check back on the issue; once it has come, the issue is a due follow-up.
+    pub follow_up: Option<NaiveDate>,
     pub properties: Map<String, Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -157,6 +163,8 @@ pub struct NewIssue {
     pub due: Option<Due>,
     pub estimate_minutes: Option<u32>,
     pub points: Option<f64>,
+    /// A repeat rule in any accepted form; stored canonical.
+    pub repeat: Option<String>,
     pub properties: Option<Map<String, Value>>,
     pub created_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
@@ -213,6 +221,18 @@ pub struct IssuePatch {
     )]
     #[specta(type = Option<String>)]
     pub repeat: Clearable<String>,
+    #[serde(
+        deserialize_with = "double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[specta(type = Option<String>)]
+    pub waiting_on: Clearable<String>,
+    #[serde(
+        deserialize_with = "double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[specta(type = Option<NaiveDate>)]
+    pub follow_up: Clearable<NaiveDate>,
     #[serde(
         deserialize_with = "double_option",
         skip_serializing_if = "Option::is_none"
@@ -378,6 +398,16 @@ pub struct Label {
     /// The reference hex for `color`, for showing it without the palette.
     pub color_hex: String,
     pub icon: Option<String>,
+    /// The label group this label belongs to, if any.
+    pub group_id: Option<LabelGroupId>,
+}
+
+/// A named set of labels; in an exclusive group an issue holds at most one of them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct LabelGroup {
+    pub id: LabelGroupId,
+    pub name: String,
+    pub exclusive: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -551,6 +581,10 @@ pub enum FixedField {
     Depth,
     /// Issues only: the repeat rule, empty when the issue does not repeat.
     Repeat,
+    /// Issues only: who the issue waits on.
+    WaitingOn,
+    /// Issues only: the day to check back on a waiting issue.
+    FollowUp,
     CreatedAt,
     UpdatedAt,
     CompletedAt,
@@ -563,6 +597,8 @@ pub enum FixedField {
     Checklist,
     /// Filter only: the issue has a relation of the given kind id(s), on either end.
     RelationKind,
+    /// Filter only: the issue has a label in the given label group id(s).
+    LabelGroup,
     /// An issue's project status; on a project view, use `Status`.
     ProjectStatus,
     /// Project views only.
@@ -819,6 +855,8 @@ pub struct ParsedQuickAdd {
     pub label_names: Vec<String>,
     pub estimate_minutes: Option<u32>,
     pub points: Option<f64>,
+    /// A canonical repeat rule from an `every <rule>` phrase.
+    pub repeat: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, specta::Type)]
@@ -1207,6 +1245,26 @@ pub struct DecisionInput {
     pub external_id: Option<String>,
     #[serde(default)]
     pub issue_ids: Vec<IssueId>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum GoalStatus {
+    Active,
+    Achieved,
+    Dropped,
+}
+
+/// A goal for a quarter (`quarter` is like `2027-Q1`) with the projects that work towards it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct Goal {
+    pub id: GoalId,
+    pub title: String,
+    pub quarter: String,
+    pub description: String,
+    pub status: GoalStatus,
+    pub created_at: String,
+    pub project_ids: Vec<ProjectId>,
 }
 
 /// One Process Inbox choice for one issue.

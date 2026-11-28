@@ -130,6 +130,27 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	shutdownState: (options?: InvokeOptions) => __TAURI_INVOKE<ShutdownState>("shutdown_state", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	shutdownSetTomorrow: (ids: IssueId[], options?: InvokeOptions) => __TAURI_INVOKE<ShutdownState>("shutdown_set_tomorrow", { ids }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	shutdownComplete: (options?: InvokeOptions) => __TAURI_INVOKE<ShutdownState>("shutdown_complete", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	workspaceStatus: (options?: InvokeOptions) => __TAURI_INVOKE<WorkspaceStatus>("workspace_status", undefined, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -487,6 +508,55 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	goalsList: (options?: InvokeOptions) => __TAURI_INVOKE<Goal[]>("goals_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	goalsCreate: (title: string, quarter: string, description: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Goal>("goals_create", { title, quarter, description }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	goalsUpdate: (goal: Goal, options?: InvokeOptions) => __TAURI_INVOKE<Goal>("goals_update", { goal }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	goalsDelete: (id: GoalId, options?: InvokeOptions) => __TAURI_INVOKE<null>("goals_delete", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	goalsProgress: (id: GoalId, options?: InvokeOptions) => __TAURI_INVOKE<[number, number]>("goals_progress", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	goalsLink: (goal: GoalId, project: ProjectId, options?: InvokeOptions) => __TAURI_INVOKE<null>("goals_link", { goal, project }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	goalsUnlink: (goal: GoalId, project: ProjectId, options?: InvokeOptions) => __TAURI_INVOKE<null>("goals_unlink", { goal, project }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	linksList: (issue: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<Link[]>("links_list", { issue }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -530,6 +600,34 @@ export const commands = {
 	 * As that command.
 	 */
 	labelsDelete: (id: LabelId, options?: InvokeOptions) => __TAURI_INVOKE<null>("labels_delete", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	labelGroupsList: (options?: InvokeOptions) => __TAURI_INVOKE<LabelGroup[]>("label_groups_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	labelGroupsCreate: (name: string, options?: InvokeOptions) => __TAURI_INVOKE<LabelGroup>("label_groups_create", { name }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	labelGroupsUpdate: (group: LabelGroup, options?: InvokeOptions) => __TAURI_INVOKE<LabelGroup>("label_groups_update", { group }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	labelGroupsDelete: (id: LabelGroupId, options?: InvokeOptions) => __TAURI_INVOKE<null>("label_groups_delete", { id }, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -901,6 +999,13 @@ export const commands = {
 	 * As that command.
 	 */
 	staleList: (options?: InvokeOptions) => __TAURI_INVOKE<StaleIssue[]>("stale_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	waitingList: (options?: InvokeOptions) => __TAURI_INVOKE<Issue[]>("waiting_list", undefined, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -1400,11 +1505,17 @@ export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "P
 /**  Issues only: the day a deferred issue comes back. */
 "HiddenUntil" | "Depth" | 
 /**  Issues only: the repeat rule, empty when the issue does not repeat. */
-"Repeat" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount" | 
+"Repeat" | 
+/**  Issues only: who the issue waits on. */
+"WaitingOn" | 
+/**  Issues only: the day to check back on a waiting issue. */
+"FollowUp" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount" | 
 /**  Shows `done/total` of the description's task lines; not sortable or filterable. */
 "Checklist" | 
 /**  Filter only: the issue has a relation of the given kind id(s), on either end. */
 "RelationKind" | 
+/**  Filter only: the issue has a label in the given label group id(s). */
+"LabelGroup" | 
 /**  An issue's project status; on a project view, use `Status`. */
 "ProjectStatus" | 
 /**  Project views only. */
@@ -1461,6 +1572,21 @@ export type ForecastQuery = {
 	filter: Filter | null,
 	cycle: CycleId | null,
 };
+
+/**  A goal for a quarter (`quarter` is like `2027-Q1`) with the projects that work towards it. */
+export type Goal = {
+	id: GoalId,
+	title: string,
+	quarter: string,
+	description: string,
+	status: GoalStatus,
+	created_at: string,
+	project_ids: ProjectId[],
+};
+
+export type GoalId = number;
+
+export type GoalStatus = "active" | "achieved" | "dropped";
 
 /**
  *  Everything an import would create. The lists of statuses, labels, projects, cycles and property
@@ -1524,6 +1650,10 @@ export type Issue = {
 	depth: Depth | null,
 	/**  Canonical repeat rule (`every 1 week on mon from due`); completing the issue creates the next one. */
 	repeat: string | null,
+	/**  Who the issue waits on; with `follow_up` it puts the issue on the Waiting page. */
+	waiting_on: string | null,
+	/**  The day to check back on the issue; once it has come, the issue is a due follow-up. */
+	follow_up: string | null,
 	properties: { [key in string]: Value },
 	created_at: string,
 	updated_at: string,
@@ -1547,6 +1677,8 @@ export type IssuePatch = {
 	start_date?: string | null,
 	depth?: Depth | null,
 	repeat?: string | null,
+	waiting_on?: string | null,
+	follow_up?: string | null,
 	due?: Due | null,
 	estimate_minutes?: number | null,
 	points?: number | null,
@@ -1580,6 +1712,8 @@ export type Label = {
 	/**  The reference hex for `color`, for showing it without the palette. */
 	color_hex: string,
 	icon: string | null,
+	/**  The label group this label belongs to, if any. */
+	group_id: LabelGroupId | null,
 };
 
 export type LabelBreakdown = {
@@ -1588,6 +1722,15 @@ export type LabelBreakdown = {
 	completed: number,
 	points: number | null,
 };
+
+/**  A named set of labels; in an exclusive group an issue holds at most one of them. */
+export type LabelGroup = {
+	id: LabelGroupId,
+	name: string,
+	exclusive: boolean,
+};
+
+export type LabelGroupId = number;
 
 export type LabelId = number;
 
@@ -1687,6 +1830,8 @@ export type NewIssue = {
 	due?: Due | null,
 	estimate_minutes?: number | null,
 	points?: number | null,
+	/**  A repeat rule in any accepted form; stored canonical. */
+	repeat?: string | null,
 	properties?: { [key in string]: Value } | null,
 	created_at?: string | null,
 	completed_at?: string | null,
@@ -1710,6 +1855,8 @@ export type ParsedQuickAdd = {
 	label_names: string[],
 	estimate_minutes: number | null,
 	points: number | null,
+	/**  A canonical repeat rule from an `every <rule>` phrase. */
+	repeat: string | null,
 };
 
 export type Pin = {
@@ -1903,6 +2050,18 @@ export type SavedView = {
 export type SelectOption = {
 	value: string,
 	color: string,
+};
+
+/**  Where the ritual stands today, with the lists it shows. */
+export type ShutdownState = {
+	inbox_count: number,
+	/**  Open issues marked deep, to choose tomorrow's from. */
+	deep: Issue[],
+	/**  Chosen today for tomorrow. */
+	tomorrow: Issue[],
+	done_today: boolean,
+	/**  Days in a row finished, ending today (or yesterday, until today is finished). */
+	streak: number,
 };
 
 /**  A source row that will not be imported. `row` counts from 1 (CSV: the header is row 1). */

@@ -581,6 +581,7 @@ async fn dump(
     let mut out = BTreeMap::new();
     for t in [
         "statuses",
+        "label_groups",
         "labels",
         "projects",
         "project_statuses",
@@ -596,6 +597,7 @@ async fn dump(
         "relation_kinds",
         "events",
         "decisions",
+        "goals",
         "links",
         "work_blocks",
         "focus_sessions",
@@ -663,6 +665,8 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
         "INSERT INTO decisions (id, question, context, options, recommendation, mode, status, answer, note, source, external_id, answered_at)
            VALUES (6, 'Which?', '# ctx', '[{\"key\":\"a\",\"label\":\"A\",\"tradeoff\":\"x: y\"}]', 'a', 'blocking', 'answered', 'a', 'fine', 'curia', 'D-9', '2026-01-02 03:04:05')",
         "INSERT INTO decision_issues (decision_id, issue_id) VALUES (6, (SELECT id FROM issues WHERE number = 1))",
+        "INSERT INTO goals (id, title, quarter, description, status) VALUES (8, 'Launch', '2027-Q1', 'Why', 'achieved')",
+        "INSERT INTO goal_projects (goal_id, project_id) SELECT 8, id FROM projects WHERE slug = 'app'",
         "INSERT INTO links (id, issue_id, url, title, kind, created_at)
            VALUES (5, (SELECT id FROM issues WHERE number = 2), 'https://example.com/pr/3', 'The fix', 'pr', '2026-01-02 03:04:05')",
         "UPDATE import_log SET source_deleted = 1",
@@ -703,6 +707,10 @@ async fn links_and_next_point_at_the_right_issues(rebuilt: &Db) -> R {
         "SELECT i.number FROM projects p JOIN issues i ON i.id = p.next_issue_id WHERE p.slug = 'app'",
     );
     assert_eq!(next.await?, vec![1]);
+    let goal = sqlx::query_scalar::<_, String>(
+        "SELECT p.slug FROM goal_projects g JOIN projects p ON p.id = g.project_id WHERE g.goal_id = 8",
+    );
+    assert_eq!(goal.fetch_all(&rebuilt.pool).await?, vec!["app"]);
     Ok(())
 }
 
@@ -994,6 +1002,25 @@ async fn project_status_priority_labels_and_properties_survive_export_and_rebuil
 }
 
 #[tokio::test]
+async fn label_groups_survive_export_and_rebuild() -> R {
+    let db = seeded().await?;
+    for sql in [
+        "INSERT INTO label_groups (name, exclusive) VALUES ('Context', 1)",
+        "UPDATE labels SET group_id = (SELECT id FROM label_groups) WHERE name = 'bug'",
+    ] {
+        sqlx::query(sql).execute(&db.pool).await?;
+    }
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    let q = "SELECT l.name || '|' || g.name || '|' || g.exclusive FROM labels l JOIN label_groups g ON g.id = l.group_id";
+    let got: Vec<String> = sqlx::query_scalar(q).fetch_all(&rebuilt.pool).await?;
+    assert_eq!(got, vec!["bug|Context|1".to_string()]);
+    assert_eq!(dump(&db).await?, dump(&rebuilt).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn images_in_use_are_exported_and_rebuilt() -> R {
     let db = Db::open_in_memory().await?;
     let png = b"\x89PNG\r\n\x1a\nused".to_vec();
@@ -1085,6 +1112,25 @@ async fn hidden_until_survives_export_and_rebuild() -> R {
         Some(until)
     );
     assert_eq!(issues::get(&rebuilt, IssueId(2)).await?.hidden_until, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn waiting_fields_survive_export_and_rebuild() -> R {
+    let db = seeded().await?;
+    let patch = taskapp_core::IssuePatch {
+        waiting_on: Some(Some("Sam".into())),
+        follow_up: Some(Some(day(2999, 1, 1))),
+        ..taskapp_core::IssuePatch::default()
+    };
+    issues::update(&db, IssueId(1), patch, SRC).await?;
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    let got = issues::get(&rebuilt, IssueId(1)).await?;
+    assert_eq!(got.waiting_on.as_deref(), Some("Sam"));
+    assert_eq!(got.follow_up, Some(day(2999, 1, 1)));
+    assert_eq!(issues::get(&rebuilt, IssueId(2)).await?.waiting_on, None);
     Ok(())
 }
 

@@ -65,6 +65,15 @@ describe('LeadTimeCard', () => {
   });
 });
 
+describe('LeadTimeCard singular', () => {
+  it('says 1 day, not 1 days', () => {
+    show(LeadTimeCard, { ...m(), lead_time: { p50_days: 1, p85_days: 2, n: 6 } });
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('1 day');
+    expect(text).not.toContain('1 days');
+  });
+});
+
 describe('WipCard', () => {
   it('shows work in progress now and Little\'s Law with the averages', () => {
     show(WipCard, m());

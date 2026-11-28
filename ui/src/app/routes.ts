@@ -1,14 +1,19 @@
 import type { Component } from 'svelte';
 import ArchivePage from '../components/ArchivePage.svelte';
 import DecisionsPage from '../components/DecisionsPage.svelte';
+import GoalPage from '../components/GoalPage.svelte';
+import GoalsPage from '../components/GoalsPage.svelte';
 import DashboardPage from '../components/dashboard/DashboardPage.svelte';
 import CyclesPage from '../components/CyclesPage.svelte';
 import InboxPage from '../components/InboxPage.svelte';
 import FocusPage from '../components/FocusPage.svelte';
 import IssueDetail from '../components/IssueDetail.svelte';
 import NextPage from '../components/NextPage.svelte';
+import WaitingPage from '../components/WaitingPage.svelte';
 import MyIssuesPage from '../components/MyIssuesPage.svelte';
+import PlanPage from '../components/PlanPage.svelte';
 import ProcessPage from '../components/ProcessPage.svelte';
+import ReviewPage from '../components/ReviewPage.svelte';
 import PinnedPage from '../components/PinnedPage.svelte';
 import ProjectPage from '../components/ProjectPage.svelte';
 import ProjectsPage from '../components/ProjectsPage.svelte';
@@ -33,13 +38,18 @@ export const routes: { pattern: string; component: Component }[] = [
   { pattern: '/cycles', component: CyclesPage },
   { pattern: '/dashboard', component: DashboardPage },
   { pattern: '/decisions', component: DecisionsPage },
+  { pattern: '/goals', component: GoalsPage },
+  { pattern: '/goal/:id', component: GoalPage },
   { pattern: '/next', component: NextPage },
+  { pattern: '/waiting', component: WaitingPage },
   { pattern: '/events', component: EventsPage },
   { pattern: '/event/:id', component: EventPage },
   { pattern: '/settings/:section', component: Settings },
   { pattern: '/design', component: DesignGallery },
   { pattern: '/inbox', component: InboxPage },
   { pattern: '/process', component: ProcessPage },
+  { pattern: '/review', component: ReviewPage },
+  { pattern: '/plan', component: PlanPage },
   { pattern: '/my', component: MyIssuesPage },
   { pattern: '/projects', component: ProjectsPage },
   { pattern: '/views', component: ViewsPage },

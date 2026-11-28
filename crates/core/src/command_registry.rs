@@ -38,6 +38,11 @@ macro_rules! with_commands {
             inbox_process(s, id: IssueId, choice: InboxChoice) -> Issue {
                 inbox::process(&s.db, id, choice, today(s)?, $source).await
             }
+            shutdown_state(s) -> ShutdownState { shutdown::state(&s.db, today(s)?).await }
+            shutdown_set_tomorrow(s, ids: Vec<IssueId>) -> ShutdownState {
+                shutdown::set_tomorrow(&s.db, today(s)?, &ids).await
+            }
+            shutdown_complete(s) -> ShutdownState { shutdown::complete(&s.db, today(s)?).await }
 
             workspace_status(s) -> WorkspaceStatus { workspace::status(&s.db).await }
             workspace_setup(s, name: String, key: String, timezone: Option<String>) -> WorkspaceStatus {
@@ -163,6 +168,20 @@ macro_rules! with_commands {
                 decisions::unlink(&s.db, decision, issue, $source).await
             }
 
+            goals_list(s) -> Vec<Goal> { goals::list(&s.db).await }
+            goals_create(s, title: String, quarter: String, description: Option<String>) -> Goal {
+                goals::create(&s.db, &title, &quarter, description, $source).await
+            }
+            goals_update(s, goal: Goal) -> Goal { goals::update(&s.db, goal, $source).await }
+            goals_delete(s, id: GoalId) -> () { goals::delete(&s.db, id, $source).await }
+            goals_progress(s, id: GoalId) -> (u32, u32) { goals::progress(&s.db, id).await }
+            goals_link(s, goal: GoalId, project: ProjectId) -> () {
+                goals::link(&s.db, goal, project, $source).await
+            }
+            goals_unlink(s, goal: GoalId, project: ProjectId) -> () {
+                goals::unlink(&s.db, goal, project, $source).await
+            }
+
             links_list(s, issue: IssueId) -> Vec<Link> { links::list(&s.db, issue).await }
             links_add(s, issue: IssueId, url: String, title: Option<String>, kind: Option<LinkKind>) -> Link {
                 links::add(&s.db, issue, &url, title, kind, $source).await
@@ -175,6 +194,16 @@ macro_rules! with_commands {
             }
             labels_update(s, label: Label) -> Label { labels::update(&s.db, label, $source).await }
             labels_delete(s, id: LabelId) -> () { labels::delete(&s.db, id, $source).await }
+            label_groups_list(s) -> Vec<LabelGroup> { label_groups::list(&s.db).await }
+            label_groups_create(s, name: String) -> LabelGroup {
+                label_groups::create(&s.db, &name, $source).await
+            }
+            label_groups_update(s, group: LabelGroup) -> LabelGroup {
+                label_groups::update(&s.db, group, $source).await
+            }
+            label_groups_delete(s, id: LabelGroupId) -> () {
+                label_groups::delete(&s.db, id, $source).await
+            }
             labels_add_label(s, issue: IssueId, label: LabelId) -> () {
                 labels::add_label(&s.db, issue, label, $source).await
             }
@@ -296,6 +325,7 @@ macro_rules! with_commands {
             metrics_for(s, query: MetricsQuery) -> Metrics { metrics::metrics_for(&s.db, query).await }
 
             stale_list(s) -> Vec<StaleIssue> { stale::list(&s.db).await }
+            waiting_list(s) -> Vec<Issue> { waiting::list(&s.db).await }
 
             focus_start(s, issue: IssueId, deep: Option<bool>) -> FocusSession {
                 focus::start(&s.db, issue, deep, $source).await

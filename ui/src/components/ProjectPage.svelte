@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../lib/api';
-  import type { FieldRef, Issue, Layout, Milestone, Project, ResolvedPin, Status, ViewDef } from '../lib/bindings';
+  import type { FieldRef, Goal, Issue, Layout, Milestone, Project, ResolvedPin, Status, ViewDef } from '../lib/bindings';
   import { nextSort } from '../lib/viewSort';
   import { navigate } from '../app/routes';
   import { tick } from 'svelte';
@@ -43,6 +43,7 @@
   let insights = $state(false);
   let iconOpen = $state(false);
   let stuck = $state(false);
+  let goals = $state<Goal[]>([]);
 
   const pinned = $derived(pins.find((p) => p.pin.kind === 'Project' && p.pin.target === slug));
   // Only Obsidian and https links get a button; anything else (javascript:, http:, file:) is dropped.
@@ -64,6 +65,7 @@
       sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false,
     });
     stuck = isOn('next_actions') && !!(await api.next.list()).find((n) => n.project.id === found.id)?.stuck;
+    goals = isOn('goals') ? (await api.goals.list()).filter((g) => g.project_ids.includes(found.id)) : [];
     [progress, milestones, pins, rows, statuses] = await Promise.all([
       api.projects.progress(found.id),
       api.projects.listMilestones(found.id),
@@ -159,6 +161,12 @@
       <ProjectHeader {project} {progress} bind:renaming onsaved={(p) => (project = p)} />
       <div class="details" data-testid="forecast">{#key rows}<ForecastLine filter={{ Cond: { field: { Fixed: 'Project' }, op: 'Eq', value: project.id } }} />{/key}</div>
       <div class="details"><ProjectDetails {project} onsaved={(p) => (project = p)} /></div>
+      {#if goals.length}
+        <div class="details goals" aria-label="Goals">
+          <span class="lbl">Goals</span>
+          {#each goals as g (g.id)}<a href={`/goal/${g.id}`} onclick={(e) => (e.preventDefault(), navigate(`/goal/${g.id}`))}><Pill>{g.quarter} · {g.title}</Pill></a>{/each}
+        </div>
+      {/if}
       <div class="ms" id="milestones">
         <Milestones projectId={project.id} {milestones} issues={rows} {statuses} onchange={() => reload(slug)} />
       </div>
@@ -185,6 +193,9 @@
   .cols { flex: 1; min-height: 0; display: flex; }
   .scroll { flex: 1; min-height: 0; overflow-y: auto; }
   .details { padding: var(--s-5) var(--s-7) 0; }
+  .goals { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+  .goals a { color: inherit; text-decoration: none; }
+  .lbl { font-size: var(--fs-sm); font-weight: 600; color: var(--muted); }
   .ms { padding: var(--s-7); }
   .toolbar { display: flex; align-items: center; gap: var(--s-7); flex-wrap: wrap; padding: 0 var(--s-7); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
   .tag { margin-left: var(--s-4); }

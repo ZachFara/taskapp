@@ -55,6 +55,11 @@ describe('FlowCard', () => {
     expect(text).toContain('Review');
     expect(text).toContain('2.5 d');
   });
+  it('shows the Waiting hint instead of a bare 100% when no time sat waiting', () => {
+    const text = show(FlowCard, { ...base, flow: { avg_pct: 100, n: 2, distribution: [0, 0, 0, 0, 2], waiting: [] } });
+    expect(text).not.toContain('100%');
+    expect(text).toContain('Mark statuses as Waiting');
+  });
   it('is blank without a finished issue that has a cycle time', () => {
     expect(show(FlowCard, { ...base, flow: { avg_pct: null, n: 0, distribution: [0, 0, 0, 0, 0], waiting: [] } })).toContain('blank');
   });

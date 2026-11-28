@@ -119,7 +119,7 @@ describe('walk', { timeout: 20_000 }, () => {
     await rows().nth(2).click({ button: 'right' });
     const items = page.getByRole('menuitem');
     await items.first().waitFor();
-    expect(await items.count()).toBeLessThanOrEqual(18);
+    expect(await items.count()).toBeLessThanOrEqual(19);
     const top = await page.getByRole('menu').evaluate((m) => m.getBoundingClientRect().top);
     expect(top).toBeGreaterThanOrEqual(0);
   });
@@ -404,6 +404,30 @@ describe('walk', { timeout: 20_000 }, () => {
     await pw(page.locator('tr[data-slug=office]')).toContainText('Stuck');
   });
 
+  it('REVIEW the weekly review walks its six steps, records the day, and the Dashboard card shows it', async () => {
+    await open('/my');
+    await page.getByRole('link', { name: 'Weekly review' }).click();
+    await pw(page.getByRole('heading', { name: 'Inbox to zero' })).toBeVisible();
+    for (let i = 0; i < 6; i++) {
+      await page.getByRole('button', { name: 'Done for this step' }).click();
+      if (i < 5) await page.getByRole('button', { name: 'Next', exact: true }).click();
+    }
+    await page.getByRole('button', { name: 'Finish', exact: true }).click();
+    await go('/dashboard');
+    await pw(page.getByRole('region', { name: 'Weekly review' })).toContainText('since your weekly review');
+  });
+
+  it('PLAN an issue is time-blocked from the form and the block shows planned time', async () => {
+    await open('/plan');
+    await page.locator('button[data-issue]').first().click();
+    await page.getByRole('button', { name: 'Time-block an issue', exact: true }).click();
+    await page.getByRole('button', { name: 'Add block' }).click();
+    await pw(page.locator('[data-event]')).toHaveCount(1);
+    await pw(page.locator('[data-summary]').first()).toContainText('in 1 block');
+    await page.getByRole('button', { name: 'Remove time block' }).click();
+    await pw(page.locator('[data-event]')).toHaveCount(0);
+  });
+
   it('ARCHIVE an archived issue is deleted for good only after the dialog, and Cancel keeps it', async () => {
     await open();
     await press('j');
@@ -464,5 +488,52 @@ describe('walk', { timeout: 20_000 }, () => {
     await page.getByRole('switch', { name: 'Recurring issues' }).click();
     await go('/issue/ABC-1');
     await pw(page.getByRole('button', { name: 'Repeat', exact: true })).toHaveCount(0);
+  });
+
+  it('GOALS the Goals page groups by quarter, a goal links a project, and the switch removes the entry', async () => {
+    await open('/goals');
+    await pw(page.getByRole('heading', { name: '2027-Q1' })).toBeVisible();
+    await page.getByRole('link', { name: /Launch the website/ }).click();
+    await pw(page.getByRole('heading', { name: 'Launch the website' })).toBeVisible();
+    await page.getByRole('combobox', { name: 'Link a project' }).click();
+    await page.getByRole('option').first().click();
+    await pw(page.getByRole('button', { name: 'Unlink' })).toHaveCount(3);
+    await page.getByRole('button', { name: 'Achieved' }).click();
+    await pw(page.getByRole('button', { name: 'Reopen' })).toBeVisible();
+    await page.keyboard.press('g');
+    await page.keyboard.press('k');
+    await pw(page.getByRole('button', { name: 'New goal' })).toBeVisible();
+    await open('/settings/features');
+    await page.getByRole('switch', { name: 'Goals' }).click();
+    await pw(page.getByRole('link', { name: 'Goals' })).toHaveCount(0);
+  });
+
+  it('WAIT the Waiting on row sets who, the Waiting for page lists it, and the switch removes the page and the row', async () => {
+    await open('/issue/ABC-1');
+    await page.getByRole('button', { name: 'Waiting on', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Waiting on' }).fill('Sam');
+    await page.getByRole('textbox', { name: 'Waiting on' }).press('Enter');
+    await pw(page.getByRole('button', { name: 'Waiting on', exact: true })).toHaveText('Sam');
+    await press('g', 'w');
+    await pw(page.getByRole('heading', { name: 'Waiting for' })).toBeVisible();
+    await pw(page.locator('[data-key="ABC-1"]')).toContainText('waiting on Sam');
+    await open('/settings/features');
+    await page.getByRole('switch', { name: 'Waiting for' }).click();
+    await pw(page.getByRole('link', { name: 'Waiting for' })).toHaveCount(0);
+    await go('/issue/ABC-1');
+    await pw(page.getByRole('button', { name: 'Waiting on', exact: true })).toHaveCount(0);
+  });
+});
+
+describe('Shutdown ritual', () => {
+  it('turns on from the command menu, then finishes the day from the checklist', async () => {
+    await open('/my');
+    await press('Meta+k');
+    await page.keyboard.type('Shutdown ritual');
+    await press('Enter');
+    await page.getByRole('button', { name: 'Shutdown', exact: true }).click();
+    await pw(page.getByRole('dialog')).toContainText('Inbox reviewed');
+    await page.getByRole('button', { name: /Finish shutdown/ }).click();
+    await pw(page.getByRole('dialog')).toContainText('Shutdown complete');
   });
 });

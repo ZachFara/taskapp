@@ -97,6 +97,11 @@ describe('BarChart', () => {
     expect(h[1]).toBeGreaterThan(h[0]);
     expect(h[1] / h[0]).toBeCloseTo(12 / 8, 1);
   });
+  it('labels only the non-zero bars when they are dense', async () => {
+    const dense = Array.from({ length: 30 }, (_, i) => ({ label: `d${i}`, value: i === 5 ? 3 : 0 }));
+    await show(BarChart, { bars: dense, unit: 'issues', title: 'Completed per day' });
+    expect([...document.querySelectorAll('text.val')].map((t) => t.textContent)).toEqual(['3']);
+  });
   it('has a text summary and a table toggle', async () => {
     await show(BarChart, { bars, unit: 'points', title: 'Completed per week' });
     expect(document.querySelector('svg[role=img]')!.getAttribute('aria-label')).toBe('Completed per week: Wk 44 8, Wk 45 12, Wk 46 10 points.');
