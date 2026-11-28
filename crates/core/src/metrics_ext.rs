@@ -106,8 +106,19 @@ pub(super) async fn links(db: &Db, log: &Log, every: &[Facts], tz: Tz) -> Result
     let rows = sqlx::query("SELECT from_id, to_id FROM relations WHERE kind = 'blocks'")
         .fetch_all(&db.pool)
         .await?;
-    for r in &rows {
-        let (blocker, target) = (r.try_get::<i64, _>(0)?, r.try_get::<i64, _>(1)?);
+    let now: Vec<(i64, i64)> = rows
+        .iter()
+        .map(|r| Ok((r.try_get(0)?, r.try_get(1)?)))
+        .collect::<Result<_>>()?;
+    // The table is the truth: a link the history leaves open but the table lacks (an undo, say) never lasted.
+    for (target, mine) in &mut out {
+        for l in mine.iter_mut().filter(|l| l.until.is_none()) {
+            if !now.contains(&(l.blocker, *target)) {
+                l.until = Some(l.from);
+            }
+        }
+    }
+    for (blocker, target) in now {
         let mine = out.entry(target).or_default();
         if !mine
             .iter()

@@ -115,10 +115,12 @@ fn next_start(start: NaiveDate, b: Bucket) -> NaiveDate {
 
 /// (when, source, old, new) of one status change.
 type Move = (DateTime<Utc>, String, Option<String>, Option<String>);
-/// (when, old, new) of one cycle change.
-type CycleMove = (DateTime<Utc>, Option<i64>, Option<i64>);
+/// (when, old, new, made with the issue) of one cycle change; creation rows say what the issue was made into.
+type CycleMove = (DateTime<Utc>, Option<i64>, Option<i64>, bool);
 /// (when, relation, added) of one add or remove of a `blocks` relation.
 type BlockEdit = (DateTime<Utc>, Relation, bool);
+/// (local day, status id entered), oldest first.
+type StatusPath = Vec<(NaiveDate, i64)>;
 /// The days a query covers and the cycle it is about, if any.
 type Span = (NaiveDate, NaiveDate, Option<Cycle>);
 
@@ -156,11 +158,12 @@ async fn log(db: &Db) -> Result<Log> {
         if field == "key" {
             out.made_by.entry(id).or_insert(source);
         } else if field == "cycle_id" {
-            let (old, new) = (id_of(r.try_get(4)?), id_of(r.try_get(5)?));
+            let raw: Option<String> = r.try_get(4)?;
+            let (old, new) = (id_of(raw.clone()), id_of(r.try_get(5)?));
             out.cycles
                 .entry(id)
                 .or_default()
-                .push((r.try_get(2)?, old, new));
+                .push((r.try_get(2)?, old, new, raw.is_none()));
         } else if field == "relation" {
             let added = r.try_get::<Option<String>, _>(5)?;
             let json = added.clone().or(r.try_get(4)?);
@@ -181,6 +184,21 @@ async fn log(db: &Db) -> Result<Log> {
     Ok(out)
 }
 
+/// The status before the first move, and each status entered as (local day, id).
+fn status_path(issue: &Issue, events: &[Move], tz: Tz) -> (i64, StatusPath) {
+    let sid = |s: &Option<String>| s.as_deref().and_then(|s| s.parse::<i64>().ok());
+    (
+        events
+            .first()
+            .and_then(|e| sid(&e.2))
+            .unwrap_or(issue.status_id.0),
+        events
+            .iter()
+            .filter_map(|e| Some((local(e.0, tz), sid(&e.3)?)))
+            .collect(),
+    )
+}
+
 fn story(issue: Issue, log: &Log, cats: &HashMap<i64, StatusCategory>, tz: Tz) -> Facts {
     let cat_of = |s: &Option<String>| {
         s.as_deref()
@@ -199,7 +217,8 @@ fn story(issue: Issue, log: &Log, cats: &HashMap<i64, StatusCategory>, tz: Tz) -
         .iter()
         .filter_map(|e| Some((local(e.0, tz), cat_of(&e.3)?, &e.1)))
         .collect();
-    let sid = |s: &Option<String>| s.as_deref().and_then(|s| s.parse::<i64>().ok());
+    let made = local(issue.created_at, tz);
+    let (status0, path) = status_path(&issue, events, tz);
     let cyc = log.cycles.get(&issue.id.0).map_or(&[][..], Vec::as_slice);
     // Linear imports have no history: their completed_at stands in for the move.
     let finishing = moves
@@ -219,23 +238,21 @@ fn story(issue: Issue, log: &Log, cats: &HashMap<i64, StatusCategory>, tz: Tz) -
         .map(|m| m.0)
         .filter(|s| done.is_some_and(|d| *s <= d));
     Facts {
-        made: local(issue.created_at, tz),
+        made,
         made_by: log
             .made_by
             .get(&issue.id.0)
             .cloned()
             .unwrap_or_else(|| "Migration".into()),
         cat0: before,
-        status0: events
-            .first()
-            .and_then(|e| sid(&e.2))
-            .unwrap_or(issue.status_id.0),
-        path: events
-            .iter()
-            .filter_map(|e| Some((local(e.0, tz), sid(&e.3)?)))
-            .collect(),
+        status0,
+        path,
         cycle0: cyc.first().map_or(issue.cycle_id.map(|c| c.0), |c| c.1),
-        cycles: cyc.iter().map(|c| (local(c.0, tz), c.2)).collect(),
+        // A creation row stands at the issue's own creation day, whenever the row was written.
+        cycles: cyc
+            .iter()
+            .map(|c| (if c.3 { made } else { local(c.0, tz) }, c.2))
+            .collect(),
         moves: moves.into_iter().map(|m| (m.0, m.1)).collect(),
         started,
         done,

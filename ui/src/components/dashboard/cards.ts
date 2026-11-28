@@ -12,6 +12,9 @@ import LeadTimeCard from './LeadTimeCard.svelte';
 import WipCard from './WipCard.svelte';
 import ThroughputCard from './ThroughputCard.svelte';
 import VelocityCard from './VelocityCard.svelte';
+import CycleCard from './CycleCard.svelte';
+import BlockedCard from './BlockedCard.svelte';
+import FlowCard from './FlowCard.svelte';
 
 export type CardProps = { metrics: Metrics; measure: 'Count' | 'Points'; filter: Filter | null; cycle: number | null };
 /** One entry per card; the later tickets (MIT-328 to 334) add theirs here. A card never fetches: it draws `metrics`. */
@@ -27,4 +30,7 @@ export const CARDS: { id: string; title: string; wide?: boolean; component: Comp
   { id: 'ai-vs-me', title: 'AI vs me', component: AiVsMeCard },
   { id: 'by-label', title: 'By label', component: ByLabelCard },
   { id: 'forecast', title: 'Forecast', component: ForecastCard },
+  { id: 'cycle', title: 'Cycle commitment', component: CycleCard },
+  { id: 'blocked', title: 'Blocked work', component: BlockedCard },
+  { id: 'flow', title: 'Flow efficiency', component: FlowCard },
 ];

@@ -457,6 +457,7 @@ export const cases: Case[] = [
   call('statuses: update unknown is NotFound', 'statuses_update', { id: 99, name: 'x', color: null, position: null, icon: null }),
   call('statuses: list after edits', 'statuses_list'),
   call('statuses: set definition, kind and nudge', 'statuses_set_flow', { id: 2, definition: ' Ready to pick up ', flow_kind: 'Waiting', nudge_days: 7 }),
+  metrics('metrics: flow counts time in a Waiting status', { scope: { Range: { from: ago(35), to: ago(0) } }, bucket: 'Month' }),
   call('statuses: nudge 0 clears it, other fields stay', 'statuses_set_flow', { id: 2, definition: null, flow_kind: null, nudge_days: 0 }),
   call('statuses: a negative nudge is Invalid', 'statuses_set_flow', { id: 2, definition: null, flow_kind: null, nudge_days: -1 }),
   call('statuses: set flow on unknown is NotFound', 'statuses_set_flow', { id: 99, definition: 'x', flow_kind: null, nudge_days: null }),

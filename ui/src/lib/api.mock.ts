@@ -196,6 +196,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     if (!valid) fail('Invalid', `pin target ${JSON.stringify(target)} for ${kind.toLowerCase()}`);
   };
   const next = (rows: { id: number }[]) => Math.max(0, ...rows.map((r) => r.id)) + 1;
+  // The real seed adds these through the core, which records them.
+  for (const r of relations) rec(r.from, 'relation', null, r);
   const find = <T extends { id: number }>(rows: T[], id: number, what: string) =>
     rows.find((r) => r.id === id) ?? fail('NotFound', `${what} ${id}`);
   const remove = <T extends { id: number }>(rows: T[], id: number, what: string) =>
@@ -967,12 +969,13 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           if (reach(rel.to)) fail('Conflict', 'would create a dependency cycle');
         }
         relations.push(rel);
+        rec(rel.from, 'relation', null, rel);
         return null;
       },
       remove: async (given) => {
         const rel = { ...given, kind: kinds.resolve(given.kind) };
         const at = relations.findIndex((r) => r.from === rel.from && r.to === rel.to && r.kind === rel.kind);
-        if (at >= 0) relations.splice(at, 1);
+        if (at >= 0) rec(rel.from, 'relation', relations.splice(at, 1)[0], null);
         return null;
       },
       forIssue: async (id) => relations.filter((r) => r.from === id || r.to === id),
@@ -1081,7 +1084,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       for: async (q) => forecast(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, tz: workspace.timezone, today: zoneToday() }, fail),
     },
     metrics: {
-      for: async (q) => metrics(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, tz: workspace.timezone, today: zoneToday() }, fail),
+      for: async (q) => metrics(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, relations, everyone: query(withDisplay({ filter: null, layout: 'List' })), tz: workspace.timezone, today: zoneToday() }, fail),
     },
     search: {
       // shortcut: results come in id order; the backend ranks by bm25. Upgrade when a screen depends on relevance order.

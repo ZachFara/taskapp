@@ -361,7 +361,9 @@ their average as a dashed line), AI vs me (created and completed split into you 
 and other), By label (the top five labels by completed, the rest as Other), Cycle time (one dot per finished issue,
 by the day it finished against its days; the lines mark the median and the 85th percentile, and "85% finish within N
 days"; click a dot to open the issue), Lead time (created to finished), and Work in progress (now, and per period with
-Little's Law: average cycle time = WIP / throughput). The Cards button shows, hides and
+Little's Law: average cycle time = WIP / throughput), Cycle commitment (pick a cycle in Range: say/do and scope change),
+Blocked work (issues waiting on an unfinished blocker, approximate blocked time) and Flow efficiency (active time over
+cycle time, and which Waiting statuses held work longest). The Cards button shows, hides and
 reorders cards, kept on this device. Every choice is also in the command menu ("Dashboard range", "Dashboard: show or
 hide cards"). Settings > General > Dashboard turns the whole page off; it is on by default.
 
