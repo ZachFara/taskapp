@@ -501,6 +501,20 @@ without creating anything; "Does not repeat" stops the series. The Repeats field
 shows `repeat` and `repeat_words`. Settings > Features > Recurring issues hides the row and commands. Not built:
 repeat in quick add.
 
+### Time blocking: the Today plan page
+
+Today plan (sidebar, `g l`, Settings > Features > Time blocking) shows a day column from 07:00 to 22:00 on a 15-minute
+grid for today and tomorrow, and a list of issues to plan: Next actions, issues due within three days (or overdue), and
+deep work. Drag an issue onto a column to make a block: a Cairn event titled "KEY title", linked to the issue, as long as its
+estimate (an hour when it has none). Without the mouse, pick an issue in the list and use "Time-block an issue" (command
+menu or the page button): choose the issue, day, start time and length in minutes. Click a block to select it, then drag
+it to move it (also to the other day), drag its bottom bar to resize it, use the x on the block or "Remove time block" to
+delete it (undo brings it back), or "Change time block start and length" to type a new time. Other events of the day show
+as grey bars. Blocks are ordinary events, so the Events page lists them and the existing Google Calendar sync sends
+them to the calendar. Under each column: minutes planned, and minutes in blocks whose issues are all Done.
+CLI: `taskapp plan [--date D]` lists the day's blocks with planned and done minutes; `taskapp plan add ABC-1 --at 14:00
+--for 90m [--date D]` makes a block. Turning the feature off hides the page and commands; the events stay.
+
 ## Points and insights
 
 - **Estimation setting** (Settings > General): None, Points, Time or Both. Points show only for Points or Both; time
@@ -803,6 +817,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.archive` | Go to Archive | `g a` | Go to the Archive page: archived issues, restore, delete for good. |
 | `nav.next` | Go to Next actions | `g n` | Go to the next action of each project (when it is switched on in Settings). |
 | `nav.dashboard` | Go to Dashboard | `g b` | Go to the Dashboard (when it is switched on in Settings). |
+| `nav.plan` | Go to Today plan | `g l` | Go to the Today plan page (when it is switched on in Settings). |
 | `nav.process` | Process Inbox | `g o` | Go to Process Inbox (when it is switched on in Settings). |
 | `nav.review` | Go to Weekly review | `g r` | Go to the Weekly review (when it is switched on in Settings). |
 | `nav.decisions` | Go to Decisions | `g q` | Go to Decisions. |
@@ -1058,6 +1073,7 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `focus start <key> [--deep]`, `focus stop`, `focus log [--key] [--range]` | Focus sessions: start one (ends a running one), end the running one, list sessions with their total minutes. | `taskapp focus start ABC-1 --deep` |
 | `issue list [...]` | Issues by name filters, most urgent first, with status, priority, project and label names: `--project --status --not-status --priority --label` (repeat or comma-separate). | `taskapp issue list --project Cairn --not-status Done,Canceled,Someday` |
 | `issue get <key>` | Show one issue, with `status`, `project`, `labels` and `priority_name` as names next to the ids. | `taskapp issue get ABC-1` |
+| `plan [--date D]`, `plan add <key> --at HH:MM --for 90m [--date D]` | The day's time blocks (events linked to issues) with planned and done minutes; or block time for an issue. | `taskapp plan add ABC-1 --at 14:00 --for 90m` |
 | `inbox [--limit N]` | The next Inbox items, oldest first, and how many there are (deferred ones left out). | `taskapp inbox --limit 3` |
 | `inbox process <key> (--do \| --delegate NOTE \| --defer DATE \| --next PROJECT [--as-next-action] \| --someday \| --trash)` | Clear one Inbox issue, as the Process Inbox page does; one undo step. | `taskapp inbox process ABC-1 --defer 2026-12-24` |
 | `issue archive <key>` | Archive an issue. | `taskapp issue archive ABC-1` |

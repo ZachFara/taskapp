@@ -102,6 +102,7 @@ pub const FEATURES: &[(&str, &str)] = &[
     ("next_actions", "feature_next_actions"),
     ("focus", "feature_focus"),
     ("recurring", "feature_recurring"),
+    ("time_blocking", "feature_time_blocking"),
 ];
 
 /// Every feature with whether it is on (a never-written switch is on).

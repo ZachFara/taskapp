@@ -417,6 +417,17 @@ describe('walk', { timeout: 20_000 }, () => {
     await pw(page.getByRole('region', { name: 'Weekly review' })).toContainText('since your weekly review');
   });
 
+  it('PLAN an issue is time-blocked from the form and the block shows planned time', async () => {
+    await open('/plan');
+    await page.locator('button[data-issue]').first().click();
+    await page.getByRole('button', { name: 'Time-block an issue', exact: true }).click();
+    await page.getByRole('button', { name: 'Add block' }).click();
+    await pw(page.locator('[data-event]')).toHaveCount(1);
+    await pw(page.locator('[data-summary]').first()).toContainText('in 1 block');
+    await page.getByRole('button', { name: 'Remove time block' }).click();
+    await pw(page.locator('[data-event]')).toHaveCount(0);
+  });
+
   it('ARCHIVE an archived issue is deleted for good only after the dialog, and Cancel keeps it', async () => {
     await open();
     await press('j');

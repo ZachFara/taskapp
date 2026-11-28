@@ -42,7 +42,7 @@ pub enum InboxCmd {
     },
 }
 
-async fn today(db: &Db) -> Result<NaiveDate> {
+pub(crate) async fn today(db: &Db) -> Result<NaiveDate> {
     let tz: String = taskapp_core::settings::get(db, "timezone")
         .await?
         .unwrap_or_else(|| "UTC".into());

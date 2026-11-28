@@ -15,6 +15,7 @@ export const FEATURES = [
   { name: 'next_actions', key: 'feature_next_actions', label: 'Next actions', blurb: 'One flagged next action per project, the Next page, and a Stuck marker and dashboard card for active projects without one.' },
   { name: 'focus', key: 'feature_focus', label: 'Focus mode', blurb: 'One issue at a time on a timer, with a focus log per issue and the Deep hours card.' },
   { name: 'recurring', key: 'feature_recurring', label: 'Recurring issues', blurb: 'A Repeat rule on an issue: finishing it creates the next one. The Repeat row and its commands.' },
+  { name: 'time_blocking', key: 'feature_time_blocking', label: 'Time blocking', blurb: 'Plan the day: drag issues onto time blocks for today and tomorrow, which become calendar events. The Today plan page and its commands.' },
 ] as const;
 export type Feature = (typeof FEATURES)[number]['name'];
 
@@ -50,8 +51,9 @@ const COMMANDS: [RegExp, Feature][] = [
   [/^settings\.calendar$/, 'gcal'],
   [/^(issue\.focus$|focus\.)/, 'focus'],
   [/^issue\.repeat/, 'recurring'],
+  [/^(nav\.plan|plan\.)/, 'time_blocking'],
 ];
 export const featureOfCommand = (id: string) => COMMANDS.find(([re]) => re.test(id))?.[1];
 
-export const ROUTES: Record<string, Feature> = { '/focus': 'focus', '/dashboard': 'dashboard', '/decisions': 'decisions', '/cycles': 'cycles', '/events': 'events', '/event': 'events', '/next': 'next_actions', '/process': 'process_inbox', '/review': 'weekly_review' };
+export const ROUTES: Record<string, Feature> = { '/focus': 'focus', '/dashboard': 'dashboard', '/decisions': 'decisions', '/cycles': 'cycles', '/events': 'events', '/event': 'events', '/next': 'next_actions', '/process': 'process_inbox', '/plan': 'time_blocking', '/review': 'weekly_review' };
 export const SETTINGS_PAGES: Record<string, Feature> = { cycles: 'cycles', reminders: 'reminders', calendar: 'gcal' };

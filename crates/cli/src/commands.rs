@@ -44,6 +44,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         cmd @ (Cmd::Stale
         | Cmd::Next
         | Cmd::Inbox(_)
+        | Cmd::Plan(_)
         | Cmd::Decision(_)
         | Cmd::Icons
         | Cmd::Colors) => queues_and_lists(db, cmd).await,
@@ -57,6 +58,7 @@ async fn queues_and_lists(db: &Db, cmd: Cmd) -> Result<Value> {
         Cmd::Stale => val(taskapp_core::stale::list(db).await?),
         Cmd::Next => val(taskapp_core::next_actions::list(db).await?),
         Cmd::Inbox(args) => crate::inbox::run(db, args).await,
+        Cmd::Plan(args) => crate::plan::run(db, args).await,
         Cmd::Decision(cmd) => crate::decision::run(db, cmd).await,
         Cmd::Icons => Ok(json!(look::ICONS)),
         _ => Ok(json!(
@@ -92,6 +94,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Stale
         | Cmd::Next
         | Cmd::Inbox(_)
+        | Cmd::Plan(_)
         | Cmd::Status(_)
         | Cmd::Attachment(_)
         | Cmd::Event(_)

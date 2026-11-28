@@ -9,6 +9,7 @@ mod inbox;
 mod list;
 mod look;
 mod metrics;
+mod plan;
 mod references;
 
 use std::path::{Path, PathBuf};
@@ -91,6 +92,8 @@ enum Cmd {
     Next,
     /// The next Inbox items, oldest first; `inbox process KEY --do|--delegate NOTE|--defer DATE|--next PROJECT|--someday|--trash` clears one.
     Inbox(inbox::InboxArgs),
+    /// The day's time blocks and planned vs done (--date D); `plan add KEY --at 14:00 --for 90m` blocks time for an issue.
+    Plan(plan::PlanArgs),
     /// Optional features and whether each is on; `features set NAME on|off` switches one (data stays).
     Features {
         #[command(subcommand)]

@@ -1580,3 +1580,36 @@ fn issue_repeat_refuses_a_bad_rule_and_finishing_makes_the_next_one() {
     assert_eq!(next["title"], "Water plants");
     assert_eq!(next["repeat"], "every 1 day from due");
 }
+
+#[test]
+fn plan_add_makes_a_linked_block_and_plan_counts_done() {
+    let (_d, db) = fresh();
+    run_json(&db, &["add", "Write report"]);
+    run_json(&db, &["add", "Call bank"]);
+    let day = ["--date", "2030-01-02"];
+    let add = |key: &str, at: &str, len: &str| {
+        let mut a = vec!["plan", "add", key, "--at", at, "--for", len];
+        a.extend(day);
+        run_json(&db, &a)
+    };
+    let ev = add("ABC-1", "14:00", "1h30m");
+    assert_eq!(ev["starts_at"], "2030-01-02T14:00:00");
+    assert_eq!(ev["ends_at"], "2030-01-02T15:30:00");
+    assert_eq!(ev["issue_ids"].as_array().expect("array").len(), 1);
+    add("ABC-2", "16:00", "30m");
+    run_json(&db, &["issue", "update", "ABC-2", "--status", "Done"]);
+    let plan = run_json(&db, &["plan", "--date", "2030-01-02"]);
+    assert_eq!(plan["blocks"].as_array().expect("array").len(), 2);
+    assert_eq!(plan["planned_minutes"], 120);
+    assert_eq!(plan["done_minutes"], 30);
+    let next = run_json(&db, &["plan", "--date", "2030-01-03"]);
+    assert_eq!(next["blocks"].as_array().expect("array").len(), 0);
+    assert!(
+        !run(
+            &db,
+            &["plan", "add", "ABC-1", "--at", "25:00", "--for", "1h"]
+        )
+        .status
+        .success()
+    );
+}

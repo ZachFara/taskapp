@@ -298,6 +298,7 @@
   <ul class="top">
     {#if isOn('process_inbox')}<li>{@render navLink('/process', 'inbox', 'Process Inbox', 'nav.process', route === '/process')}</li>{/if}
     {#if isOn('dashboard')}<li>{@render navLink('/dashboard', 'chart', 'Dashboard', 'nav.dashboard', route === '/dashboard')}</li>{/if}
+    {#if isOn('time_blocking')}<li>{@render navLink('/plan', 'clock', 'Today plan', 'nav.plan', route === '/plan')}</li>{/if}
     {#if isOn('next_actions')}<li>{@render navLink('/next', 'flag', 'Next actions', 'nav.next', route === '/next')}</li>{/if}
     {#if isOn('weekly_review')}<li>{@render navLink('/review', 'check', 'Weekly review', 'nav.review', route === '/review')}</li>{/if}
     {#if isOn('events')}<li>{@render navLink('/events', 'calendar', 'Events', 'nav.events', route === '/events' || route.startsWith('/event/'))}</li>{/if}
