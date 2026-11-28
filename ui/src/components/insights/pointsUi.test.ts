@@ -123,7 +123,7 @@ describe('QuickAdd points chip', () => {
 });
 
 describe('General estimation settings', () => {
-  it('saves estimation, scale and the two chart switches', async () => {
+  it('saves estimation, scale and the sidebar sparklines switch (progress charts moved to Features)', async () => {
     const { target, api: a } = await mountSettings(General);
     await pick(target, 'Estimation', 'Points');
     await pick(target, 'Point scale', 'T-shirt (XS to XL)');
@@ -132,7 +132,6 @@ describe('General estimation settings', () => {
     expect(await a.settings.get('estimation')).toBe('points');
     expect(await a.settings.get('point_scale')).toBe('tshirt');
     expect(await a.settings.get('sidebar_sparklines')).toBe(true);
-    expect(await a.settings.get('insights_charts')).toBe(true);
   });
   it('shows the stored choices', async () => {
     const { target } = await mountSettings(General, { settings: { get: async (k: unknown) => (k === 'estimation' ? 'time' : null) } });
