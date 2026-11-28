@@ -936,6 +936,80 @@ pub struct Metrics {
     pub velocity: Vec<VelocityCycle>,
     /// Fewer than five issues finished in the range: read the numbers as anecdotes.
     pub thin: bool,
+    /// Present for a cycle scope only.
+    #[serde(default)]
+    pub cycle: Option<CycleCommit>,
+    #[serde(default)]
+    pub blocked: Option<Blocked>,
+    #[serde(default)]
+    pub flow: Option<FlowEfficiency>,
+}
+
+/// A cycle's commitment: its members at the end of its start day against what it holds and finished by its end
+/// (or today, for a cycle still running). Percentages are `None` when nothing was committed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct CycleCommit {
+    pub committed: u32,
+    pub committed_points: f64,
+    /// Committed issues finished.
+    pub done: u32,
+    pub done_points: f64,
+    pub say_do_pct: Option<f64>,
+    pub say_do_points_pct: Option<f64>,
+    /// Issues that joined or left the cycle after its start day.
+    pub added: u32,
+    pub added_points: f64,
+    pub removed: u32,
+    pub removed_points: f64,
+    /// (added + removed) as a percentage of what was committed.
+    pub scope_change_pct: Option<f64>,
+    pub scope_change_points_pct: Option<f64>,
+}
+
+/// An open issue with an unfinished `blocks` blocker; `days` since the newest such link began.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct BlockedItem {
+    pub issue_id: IssueId,
+    pub key: String,
+    pub title: String,
+    pub blocked_by: Vec<String>,
+    pub days: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct BlockedTime {
+    pub issue_id: IssueId,
+    pub key: String,
+    pub title: String,
+    pub days: f64,
+}
+
+/// `time` is approximate: whole days, from creation to finish, whose end found an unfinished blocker linked.
+/// `avg_days` spreads it over every issue finished in the range.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct Blocked {
+    pub now: Vec<BlockedItem>,
+    pub time: Vec<BlockedTime>,
+    pub avg_days: Option<f64>,
+}
+
+/// Days the finished issues spent in one Waiting status between starting and finishing.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct WaitingStatus {
+    pub status_id: StatusId,
+    pub name: String,
+    pub days: f64,
+    pub issues: u32,
+}
+
+/// Active-kind days over cycle-time days, per finished issue that has a cycle time above zero (`n` of them).
+/// `distribution` counts them in five 20% bins, lowest first.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct FlowEfficiency {
+    pub avg_pct: Option<f64>,
+    pub n: u32,
+    pub distribution: Vec<u32>,
+    pub waiting: Vec<WaitingStatus>,
 }
 
 /// One choice of a [`Decision`]; `key` is what an answer and the recommendation name.

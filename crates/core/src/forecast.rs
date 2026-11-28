@@ -108,7 +108,7 @@ pub async fn forecast_on(db: &Db, q: ForecastQuery, today: NaiveDate) -> Result<
     {
         return Err(Error::NotFound(format!("cycle {}", id.0)));
     }
-    let all = metrics::facts(db, q.filter).await?;
+    let all = metrics::facts_for(db, q.filter).await?;
     Ok(forecast(&all, q.cycle, today))
 }
 

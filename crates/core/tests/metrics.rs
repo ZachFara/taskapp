@@ -1,9 +1,10 @@
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use serde_json::json;
 use taskapp_core::{
-    Bucket, ChangeSource, Db, Error, FieldRef, Filter, FixedField, IssueId, IssuePatch, LabelId,
-    Measure, Metrics, MetricsQuery, MetricsScope, NewIssue, Op, StatusId, cycles, issues, labels,
-    metrics, palette::Look, settings,
+    Bucket, ChangeSource, Db, Error, FieldRef, Filter, FixedField, FlowKind, IssueId, IssuePatch,
+    LabelId, Measure, Metrics, MetricsQuery, MetricsScope, NewIssue, Op, Relation, RelationKind,
+    StatusCategory, StatusId, cycles, issues, labels, metrics, palette::Look, relations, settings,
+    statuses,
 };
 
 type R = Result<(), Box<dyn std::error::Error>>;
@@ -274,5 +275,167 @@ async fn imported_issue_without_history_has_lead_time_but_no_cycle_time() -> R {
         (1, Some(3.0), 0)
     );
     assert_eq!(m.by_source[0].source, "Migration");
+    Ok(())
+}
+
+/// Runs `act`, then dates every change it recorded to `day`.
+async fn on_day<T>(
+    db: &Db,
+    day: u32,
+    act: impl Future<Output = Result<T, Error>>,
+) -> Result<T, Error> {
+    let before: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(id), 0) FROM changes")
+        .fetch_one(&db.pool)
+        .await?;
+    let out = act.await?;
+    sqlx::query("UPDATE changes SET at = ? WHERE id > ?")
+        .bind(noon(day))
+        .bind(before)
+        .execute(&db.pool)
+        .await?;
+    Ok(out)
+}
+
+async fn fresh() -> Result<Db, Error> {
+    let db = Db::open_in_memory().await?;
+    settings::set(&db, "timezone", &"UTC").await?;
+    Ok(db)
+}
+
+fn cycle_of(id: Option<taskapp_core::CycleId>) -> IssuePatch {
+    IssuePatch {
+        cycle_id: Some(id),
+        ..IssuePatch::default()
+    }
+}
+
+#[tokio::test]
+async fn cycle_commitment_counts_start_day_members_and_scope_change() -> R {
+    let db = fresh().await?;
+    let cy = cycles::create(&db, None, d(1), d(5), Look::default(), UI)
+        .await?
+        .id;
+    let a = make(&db, 1, 3.0, None, UI).await?;
+    let b = make(&db, 1, 2.0, None, UI).await?;
+    make(&db, 1, 1.0, None, UI).await?; // never in the cycle
+    let dan = make(&db, 2, 5.0, None, UI).await?;
+    on_day(&db, 1, issues::update(&db, a, cycle_of(Some(cy)), UI)).await?;
+    on_day(&db, 1, issues::update(&db, b, cycle_of(Some(cy)), UI)).await?;
+    on_day(&db, 2, issues::update(&db, dan, cycle_of(Some(cy)), UI)).await?;
+    on_day(&db, 3, issues::update(&db, b, cycle_of(None), UI)).await?;
+    mv(&db, a, DONE, 4, UI).await?;
+    let q = MetricsQuery {
+        scope: MetricsScope::Cycle(cy),
+        ..query(1, 1, Bucket::Day, None)
+    };
+    let c = metrics::metrics_on(&db, q, d(6))
+        .await?
+        .cycle
+        .ok_or("no cycle block")?;
+    assert_eq!(
+        (c.committed, c.committed_points, c.done, c.done_points),
+        (2, 5.0, 1, 3.0)
+    );
+    assert_eq!(
+        (c.say_do_pct, c.say_do_points_pct),
+        (Some(50.0), Some(60.0))
+    );
+    assert_eq!(
+        (c.added, c.added_points, c.removed, c.removed_points),
+        (1, 5.0, 1, 2.0)
+    );
+    assert_eq!(
+        (c.scope_change_pct, c.scope_change_points_pct),
+        (Some(100.0), Some(140.0))
+    );
+    // A range scope has no commitment block.
+    assert!(
+        metrics::metrics_on(&db, query(1, 5, Bucket::Day, None), d(6))
+            .await?
+            .cycle
+            .is_none()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn blocked_now_and_blocked_time_follow_the_relation_history() -> R {
+    let db = fresh().await?;
+    let [ex, why, zed, dub] = [
+        make(&db, 1, 1.0, None, UI).await?,
+        make(&db, 1, 1.0, None, UI).await?,
+        make(&db, 1, 1.0, None, UI).await?,
+        make(&db, 1, 1.0, None, UI).await?,
+    ];
+    let blocks = |from: IssueId, to: IssueId| Relation {
+        from,
+        to,
+        kind: RelationKind::new("blocks"),
+    };
+    on_day(&db, 2, relations::add(&db, blocks(ex, zed), UI)).await?;
+    on_day(&db, 3, relations::add(&db, blocks(dub, why), UI)).await?;
+    mv(&db, ex, DONE, 5, UI).await?;
+    mv(&db, zed, DONE, 7, UI).await?;
+    let got = metrics::metrics_on(&db, query(1, 8, Bucket::Day, None), d(8))
+        .await?
+        .blocked
+        .ok_or("no blocked block")?;
+    // Y waits on W since day 3; Z is finished, so it is not blocked now.
+    let now: Vec<_> = got
+        .now
+        .iter()
+        .map(|i| (i.key.as_str(), i.blocked_by.clone(), i.days))
+        .collect();
+    assert_eq!(now, [("ABC-2", vec!["ABC-4".to_string()], 5.0)]);
+    // Z was blocked at the end of days 2, 3 and 4 (X finished on day 5); X and Z finished: 3 days over 2 issues.
+    assert_eq!(
+        got.time
+            .iter()
+            .map(|t| (t.key.as_str(), t.days))
+            .collect::<Vec<_>>(),
+        [("ABC-3", 3.0)]
+    );
+    assert_eq!(got.avg_days, Some(1.5));
+    // Removing a link ends the blocking.
+    on_day(&db, 6, relations::remove(&db, blocks(dub, why), UI)).await?;
+    let got = metrics::metrics_on(&db, query(1, 8, Bucket::Day, None), d(8))
+        .await?
+        .blocked
+        .ok_or("no blocked block")?;
+    assert_eq!(got.now.len(), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn flow_efficiency_is_active_days_over_cycle_time_and_ranks_waiting_statuses() -> R {
+    let db = fresh().await?;
+    let review = statuses::create(&db, "Review", StatusCategory::Started, "blue", None, UI).await?;
+    statuses::set_flow(&db, review.id, None, Some(FlowKind::Waiting), None, UI).await?;
+    // P: doing 2 to 5, review 5 to 6 (75% active). Q: doing 1 to 2, review 2 to 6 (20%).
+    let (p, q) = (
+        make(&db, 1, 1.0, None, UI).await?,
+        make(&db, 1, 1.0, None, UI).await?,
+    );
+    mv(&db, p, DOING, 2, UI).await?;
+    mv(&db, q, DOING, 1, UI).await?;
+    mv(&db, q, review.id.0, 2, UI).await?;
+    mv(&db, p, review.id.0, 5, UI).await?;
+    mv(&db, p, DONE, 6, UI).await?;
+    mv(&db, q, DONE, 6, UI).await?;
+    let f = metrics::metrics_on(&db, query(1, 7, Bucket::Day, None), d(7))
+        .await?
+        .flow
+        .ok_or("no flow block")?;
+    assert_eq!(
+        (f.n, f.avg_pct, f.distribution.clone()),
+        (2, Some(47.5), vec![0, 1, 0, 1, 0])
+    );
+    assert_eq!(
+        f.waiting
+            .iter()
+            .map(|w| (w.name.as_str(), w.days, w.issues))
+            .collect::<Vec<_>>(),
+        [("Review", 5.0, 2)]
+    );
     Ok(())
 }

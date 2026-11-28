@@ -1,5 +1,7 @@
 //! `taskapp metrics`: delivery numbers for a range or a cycle, as a readable table or JSON.
 
+use std::fmt::Write;
+
 use chrono::{Datelike, Duration, NaiveDate};
 use serde_json::{Value, json};
 use taskapp_core::{
@@ -120,6 +122,57 @@ fn table(rows: &[Value]) -> String {
     }
 }
 
+/// The cycle, blocked and flow sections, when the metrics carry them.
+fn extras(m: &Metrics) -> String {
+    let mut extra = String::new();
+    if let Some(c) = &m.cycle {
+        let p = |v: Option<f64>| v.map_or_else(|| "-".into(), |v| format!("{v:.0}%"));
+        let _ = write!(
+            extra,
+            "\nCycle commitment: {} committed ({} pts), {} done: say/do {} ({} by points)\nScope change: +{} / -{} issues ({} of commitment, {} by points)\n",
+            c.committed,
+            c.committed_points,
+            c.done,
+            p(c.say_do_pct),
+            p(c.say_do_points_pct),
+            c.added,
+            c.removed,
+            p(c.scope_change_pct),
+            p(c.scope_change_points_pct),
+        );
+    }
+    if let Some(b) = &m.blocked {
+        let now: Vec<Value> = b
+            .now
+            .iter()
+            .map(|i| json!({"issue": i.key, "title": i.title, "blocked_by": i.blocked_by.join(", "), "days": i.days}))
+            .collect();
+        let _ = write!(
+            extra,
+            "\nBlocked now\n{}Blocked time per finished issue (approx., whole days): avg {}\n",
+            table(&now),
+            b.avg_days
+                .map_or_else(|| "-".into(), |v| format!("{v:.1}d")),
+        );
+    }
+    if let Some(f) = &m.flow {
+        let waiting: Vec<Value> = f
+            .waiting
+            .iter()
+            .map(|w| json!({"waiting status": w.name, "days": w.days, "issues": w.issues}))
+            .collect();
+        let _ = write!(
+            extra,
+            "\nFlow efficiency: avg {} (n={}), bins of 20%: {:?}\n{}",
+            f.avg_pct.map_or_else(|| "-".into(), |v| format!("{v:.0}%")),
+            f.n,
+            f.distribution,
+            table(&waiting),
+        );
+    }
+    extra
+}
+
 /// The readable form: a summary, then one small table per breakdown.
 pub fn text(m: &Metrics) -> String {
     let buckets: Vec<Value> = m
@@ -150,8 +203,9 @@ pub fn text(m: &Metrics) -> String {
     } else {
         ""
     };
+    let extra = extras(m);
     format!(
-        "Metrics {} to {} (per {:?})\n{thin}Lead time:  {}\nCycle time: {}\nIn progress now: {}\n\n{}\nBy label\n{}\nBy source\n{}\nVelocity (last finished cycles)\n{}",
+        "Metrics {} to {} (per {:?})\n{thin}Lead time:  {}\nCycle time: {}\nIn progress now: {}\n\n{}\nBy label\n{}\nBy source\n{}\nVelocity (last finished cycles)\n{}{extra}",
         m.from,
         m.to,
         m.bucket,
