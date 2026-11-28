@@ -20,7 +20,7 @@ import { attachmentsApi } from './api.mock.attachments';
 import { foldersApi } from './api.mock.folders';
 import { scrubDef, seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
-  AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, Decision, Goal, Event, EventInput, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Link, Milestone,
+  AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, Decision, Goal, Event, EventInput, FieldRef, Filter, Issue, IssueTemplate, Label, LabelGroup, Layout, Link, Milestone,
   NewIssue, Pin, Placement, Project, ProjectRow, ProjectStatus, ProjectStatusCategory, PropertyAppliesTo, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
   Due, FocusSession, TemplateInput, Value, ViewDef, ViewEntity, ViewFolder, ViewTemplate, WorkBlock,
 } from './bindings';
@@ -32,6 +32,7 @@ export type MockSeed = {
   propertyDefs: PropertyDef[];
   issues: Issue[];
   labels?: Label[];
+  labelGroups?: LabelGroup[];
   cycles?: Cycle[];
   decisions?: Decision[];
   goals?: Goal[];
@@ -106,6 +107,13 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const s = structuredClone(seed);
   let workspace: Workspace = s.workspace ?? { setup_done: false, name: null, key: 'ABC', timezone: tz };
   const labels = s.labels ?? [];
+  const labelGroups = (s.labelGroups ??= []);
+  // Core: labels::check_exclusive. Two labels of one exclusive group on an issue are refused.
+  const checkExclusive = (ids: number[]) => {
+    for (const g of labelGroups.filter((x) => x.exclusive)) {
+      if (ids.filter((id) => labels.find((l) => l.id === id)?.group_id === g.id).length > 1) fail('Invalid', `an issue can hold only one label from the group ${g.name}`);
+    }
+  };
   const projectStatuses = (s.projectStatuses ??= structuredClone(projectStatusSeed));
   // A cycle always carries its retrospective fields, as the backend sends them.
   const retro = { goal: null, goal_met: null, rating: null, notes: '' };
@@ -134,7 +142,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, decisions, goals, links, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog, nextFlags, focusSessions, blocks] as unknown[][];
+  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labelGroups, labels, cycles, events, decisions, goals, links, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog, nextFlags, focusSessions, blocks] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -258,6 +266,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       ProjectStatus: s.projects.find((x) => x.id === i.project_id)?.status_id ?? null,
       Title: i.title, Status: i.status_id, StatusCategory: category(i)?.toLowerCase() ?? null, Priority: i.priority,
       Project: i.project_id, Milestone: i.milestone_id, Cycle: i.cycle_id, Label: i.label_ids,
+      LabelGroup: i.label_ids.flatMap((id) => labels.find((l) => l.id === id)?.group_id ?? []),
       Parent: i.parent_id, StartDate: i.start_date, DueDate: dueDay(i), Estimate: i.estimate_minutes, Points: i.points, HiddenUntil: i.hidden_until, Repeat: i.repeat, WaitingOn: i.waiting_on, FollowUp: i.follow_up,
       CreatedAt: i.created_at, UpdatedAt: i.updated_at, CompletedAt: i.completed_at,
       Archived: i.archived_at !== null, Key: i.id,
@@ -588,10 +597,15 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
 
   const api: MockApi = {
     issues: {
-      create: async (input) => create(input),
+      create: async (input) => {
+        checkExclusive(input.label_ids ?? []);
+        return create(input);
+      },
       update: async (id, patch) => {
         const i = getIssue(id);
         const old = structuredClone(i);
+        // Core checks only a changed set; a set already held stays as it is.
+        if (patch.label_ids && [...new Set(patch.label_ids)].sort((a, b) => a - b).join() !== i.label_ids.join()) checkExclusive(patch.label_ids);
         for (const [k, v] of Object.entries(patch) as [keyof Issue & string, never][]) {
           if (v === undefined || k === 'properties') continue;
           if (v === null && !(nullableIssueFields as readonly string[]).includes(k)) continue;
@@ -1027,7 +1041,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         if (labels.some((l) => l.name === name)) fail('Db', 'error returned from database: (code: 2067) UNIQUE constraint failed: labels.name');
         checkIcon(icon);
         const key = colorKey(color)!;
-        const l = { id: next(labels), name, color: key, color_hex: hexOf(key)!, icon: icon ?? null };
+        const l = { id: next(labels), name, color: key, color_hex: hexOf(key)!, icon: icon ?? null, group_id: null };
         labels.push(l);
         return l;
       },
@@ -1046,9 +1060,14 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return null;
       },
       addLabel: async (issue, label) => {
-        find(labels, label, 'label');
+        const added = find(labels, label, 'label');
         const i = getIssue(issue);
         if (!i.label_ids.includes(label)) {
+          // In an exclusive group the new label takes the place of the issue's other label from it.
+          if (labelGroups.find((g) => g.id === added.group_id)?.exclusive) {
+            for (const o of i.label_ids.filter((x) => labels.find((l) => l.id === x)?.group_id === added.group_id)) rec(issue, 'label', o, null);
+            i.label_ids = i.label_ids.filter((x) => labels.find((l) => l.id === x)?.group_id !== added.group_id);
+          }
           i.label_ids = [...i.label_ids, label].sort((a, b) => a - b);
           rec(issue, 'label', null, label);
         }
@@ -1058,6 +1077,29 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         const i = getIssue(issue);
         if (i.label_ids.includes(label)) rec(issue, 'label', label, null);
         i.label_ids = i.label_ids.filter((x) => x !== label);
+        return null;
+      },
+    },
+    label: {
+      groupsList: async () => labelGroups,
+      groupsCreate: async (name) => {
+        const n = name.trim();
+        if (!n) fail('Invalid', 'a label group needs a name');
+        if (labelGroups.some((g) => g.name === n)) fail('Db', 'error returned from database: (code: 2067) UNIQUE constraint failed: label_groups.name');
+        const g = { id: next(labelGroups), name: n, exclusive: false };
+        labelGroups.push(g);
+        return g;
+      },
+      groupsUpdate: async (g) => {
+        const n = g.name.trim();
+        if (!n) fail('Invalid', 'a label group needs a name');
+        if (labelGroups.some((x) => x.id !== g.id && x.name === n)) fail('Db', 'error returned from database: (code: 2067) UNIQUE constraint failed: label_groups.name');
+        return upsert(labelGroups, { ...g, name: n }, 'label group');
+      },
+      groupsDelete: async (id) => {
+        find(labelGroups, id, 'label group');
+        labels.forEach((l) => l.group_id === id && (l.group_id = null));
+        remove(labelGroups, id, 'label group');
         return null;
       },
     },
@@ -1460,7 +1502,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
             keptStatuses.push(made);
           }
         }
-        for (const l of plan.labels ?? []) if (!byName(labels, l)) labels.push({ id: next(labels), name: l, color: 'gray', color_hex: hexOf('gray')!, icon: null });
+        for (const l of plan.labels ?? []) if (!byName(labels, l)) labels.push({ id: next(labels), name: l, color: 'gray', color_hex: hexOf('gray')!, icon: null, group_id: null });
         for (const name of plan.projects ?? []) {
           if (byName(s.projects, name)) continue;
           const base = projectSlug(name);
@@ -1528,7 +1570,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
     'projects.create projects.update projects.setNext projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink decisions.create decisions.answer decisions.withdraw decisions.link decisions.unlink goals.create goals.update goals.delete goals.link goals.unlink links.add links.remove templates.create templates.update templates.delete templates.apply ' +
-    'labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
+    'label.groupsCreate label.groupsUpdate label.groupsDelete labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
     'relations.add relations.remove relation.kindsCreate relation.kindsUpdate relation.kindsDelete views.save views.saveProject views.delete views.reorder folders.create folders.rename folders.delete folders.place folders.placeItem views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
     'view.templatesCreate view.templatesUpdate view.templatesDelete pins.pin pins.unpin pins.reorder pins.set import.apply focus.start focus.stop shutdown.setTomorrow shutdown.complete'
   ).split(' ');
@@ -1570,7 +1612,7 @@ const labels: Label[] = (
   ['Bug:red:flag', 'Feature:blue:bolt', 'Design:purple:star', 'Research:teal:target', 'Docs:green:bookmark', 'Ops:orange:tag'] as const
 ).map((x, i) => {
   const [name, color, icon] = x.split(':');
-  return { id: i + 1, name, color, color_hex: hexOf(color)!, icon: `icon:${icon}` };
+  return { id: i + 1, name, color, color_hex: hexOf(color)!, icon: `icon:${icon}`, group_id: null };
 });
 
 // Everything dated is relative to today (UTC), so the workspace always has overdue and this-week work.

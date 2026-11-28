@@ -739,6 +739,37 @@ enum LabelCmd {
         key: String,
         label: String,
     },
+    /// Label groups, e.g. a Context group of @home and @phone.
+    #[command(subcommand)]
+    Group(GroupCmd),
+}
+
+#[derive(Subcommand)]
+enum GroupCmd {
+    List,
+    /// Make a group; with --exclusive an issue holds at most one of its labels.
+    Create {
+        name: String,
+        #[arg(long)]
+        exclusive: bool,
+    },
+    /// Put a label (by name) into a group (by name).
+    Add {
+        group: String,
+        label: String,
+    },
+    /// Take a label out of its group.
+    Remove {
+        label: String,
+    },
+    /// Switch whether an issue may hold only one label of the group.
+    Exclusive {
+        group: String,
+        state: OnOff,
+    },
+    Delete {
+        group: String,
+    },
 }
 
 #[derive(Subcommand)]

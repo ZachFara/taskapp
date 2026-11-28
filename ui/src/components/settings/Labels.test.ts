@@ -3,7 +3,7 @@ import { mount } from 'svelte';
 import Labels from './Labels.svelte';
 import RowDialogHost from '../RowDialogHost.svelte';
 import '../../lib/commands';
-import { clickLabel, field, mountSettings, press, setField } from './testing';
+import { clickLabel, field, mountSettings, pick, press, setField, toggle } from './testing';
 import { setTooltips } from '../../lib/tooltips.svelte';
 
 async function add(target: Element, name: string) {
@@ -45,6 +45,30 @@ describe('Labels', () => {
     await vi.waitFor(() => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((e) => e.textContent?.trim() === 'Delete urgent')!.click());
     await press(document.body, 'Delete');
     expect(calls.filter((c) => c === 'labels.delete')).toHaveLength(1);
+  });
+
+  it('creates a group, makes it exclusive and deletes it after asking', async () => {
+    const { target, calls, api } = await mountSettings(Labels);
+    await setField(target, 'Group name', 'Context');
+    await press(target, 'Add group');
+    expect(calls.filter((c) => c === 'label.groupsCreate')).toHaveLength(1);
+    expect(field(target, 'Group name').value).toBe('');
+    await toggle(target, 'Exclusive: Context');
+    expect((await api.label.groupsList())[0].exclusive).toBe(true);
+    await clickLabel('Delete group Context');
+    expect(calls).not.toContain('label.groupsDelete');
+    await press(document.body, 'Delete group');
+    expect(calls.filter((c) => c === 'label.groupsDelete')).toHaveLength(1);
+  });
+
+  it('a label moves into a group from its row', async () => {
+    const { target, api } = await mountSettings(Labels);
+    await setField(target, 'Group name', 'Context');
+    await press(target, 'Add group');
+    await add(target, 'urgent');
+    await pick(target, 'Group of urgent', 'Context');
+    const g = (await api.label.groupsList())[0];
+    expect((await api.labels.list()).find((l) => l.name === 'urgent')!.group_id).toBe(g.id);
   });
 
   it('a refused create shows its message', async () => {

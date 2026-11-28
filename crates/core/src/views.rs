@@ -140,7 +140,10 @@ impl Ctx<'_> {
 
     fn cond(&mut self, field: &FieldRef, op: Op, value: &Value) -> Result<String> {
         match field {
-            FieldRef::Fixed(FixedField::Label) => return self.label(op, value),
+            FieldRef::Fixed(FixedField::Label) => return self.label(op, value, false),
+            FieldRef::Fixed(FixedField::LabelGroup) if self.entity == ViewEntity::Issue => {
+                return self.label(op, value, true);
+            }
             FieldRef::Fixed(FixedField::Archived) => return archived(self.entity, op, value),
             FieldRef::Fixed(FixedField::RelationKind) if self.entity == ViewEntity::Issue => {
                 return self.relation_kind(op, value);
@@ -223,7 +226,7 @@ impl Ctx<'_> {
         Ok(format!("{e} {sym} ?"))
     }
 
-    fn label(&mut self, op: Op, value: &Value) -> Result<String> {
+    fn label(&mut self, op: Op, value: &Value, group: bool) -> Result<String> {
         let any = if self.entity == ViewEntity::Issue {
             "EXISTS (SELECT 1 FROM issue_labels WHERE issue_id = issues.id"
         } else {
@@ -246,7 +249,12 @@ impl Ctx<'_> {
             self.binds.push(scalar(i)?);
         }
         let not = if negate { "NOT " } else { "" };
-        Ok(format!("{not}{any} AND label_id IN ({m}))"))
+        let by = if group {
+            format!("label_id IN (SELECT id FROM labels WHERE group_id IN ({m}))")
+        } else {
+            format!("label_id IN ({m})")
+        };
+        Ok(format!("{not}{any} AND {by})"))
     }
 
     fn relation_kind(&mut self, op: Op, value: &Value) -> Result<String> {
@@ -356,11 +364,10 @@ fn fixed_col(entity: ViewEntity, x: FixedField) -> Result<Col> {
             "(SELECT status_id FROM projects WHERE id = issues.project_id)",
             false,
         ),
-        FixedField::Label => return Err(Error::Invalid("cannot sort by label".into())),
-        FixedField::Checklist => return Err(Error::Invalid("cannot sort by checklist".into())),
-        FixedField::RelationKind => {
-            return Err(Error::Invalid("cannot sort by relation kind".into()));
-        }
+        FixedField::Label
+        | FixedField::Checklist
+        | FixedField::RelationKind
+        | FixedField::LabelGroup => return Err(unsortable(x)),
         FixedField::TargetDate
         | FixedField::Progress
         | FixedField::ProgressChart
@@ -369,6 +376,16 @@ fn fixed_col(entity: ViewEntity, x: FixedField) -> Result<Col> {
         }
     };
     Ok(Col::fixed(sql, text))
+}
+
+fn unsortable(x: FixedField) -> Error {
+    let what = match x {
+        FixedField::Label => "label",
+        FixedField::Checklist => "checklist",
+        FixedField::RelationKind => "relation kind",
+        _ => "label group",
+    };
+    Error::Invalid(format!("cannot sort by {what}"))
 }
 
 fn project_col(x: FixedField) -> Result<Col> {

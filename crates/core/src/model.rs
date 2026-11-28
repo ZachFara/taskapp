@@ -18,6 +18,7 @@ ids!(
     MilestoneId,
     CycleId,
     LabelId,
+    LabelGroupId,
     ViewId,
     ViewTemplateId,
     ViewFolderId,
@@ -397,6 +398,16 @@ pub struct Label {
     /// The reference hex for `color`, for showing it without the palette.
     pub color_hex: String,
     pub icon: Option<String>,
+    /// The label group this label belongs to, if any.
+    pub group_id: Option<LabelGroupId>,
+}
+
+/// A named set of labels; in an exclusive group an issue holds at most one of them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct LabelGroup {
+    pub id: LabelGroupId,
+    pub name: String,
+    pub exclusive: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -586,6 +597,8 @@ pub enum FixedField {
     Checklist,
     /// Filter only: the issue has a relation of the given kind id(s), on either end.
     RelationKind,
+    /// Filter only: the issue has a label in the given label group id(s).
+    LabelGroup,
     /// An issue's project status; on a project view, use `Status`.
     ProjectStatus,
     /// Project views only.

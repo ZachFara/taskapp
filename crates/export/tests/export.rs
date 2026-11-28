@@ -581,6 +581,7 @@ async fn dump(
     let mut out = BTreeMap::new();
     for t in [
         "statuses",
+        "label_groups",
         "labels",
         "projects",
         "project_statuses",
@@ -997,6 +998,25 @@ async fn project_status_priority_labels_and_properties_survive_export_and_rebuil
         dump(&db).await?["project_statuses"],
         dump(&rebuilt).await?["project_statuses"]
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn label_groups_survive_export_and_rebuild() -> R {
+    let db = seeded().await?;
+    for sql in [
+        "INSERT INTO label_groups (name, exclusive) VALUES ('Context', 1)",
+        "UPDATE labels SET group_id = (SELECT id FROM label_groups) WHERE name = 'bug'",
+    ] {
+        sqlx::query(sql).execute(&db.pool).await?;
+    }
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    let q = "SELECT l.name || '|' || g.name || '|' || g.exclusive FROM labels l JOIN label_groups g ON g.id = l.group_id";
+    let got: Vec<String> = sqlx::query_scalar(q).fetch_all(&rebuilt.pool).await?;
+    assert_eq!(got, vec!["bug|Context|1".to_string()]);
+    assert_eq!(dump(&db).await?, dump(&rebuilt).await?);
     Ok(())
 }
 

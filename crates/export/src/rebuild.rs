@@ -11,9 +11,9 @@ use taskapp_core::{Db, Error, IssueId, Result, ViewDef, attachments, search};
 
 use crate::files::{
     AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, FocusRow, GoalFile,
-    ImportLogRow, IssueFront, IssueTemplateFile, LabelRow, LinkFile, PinRow, ProjectFile,
-    ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewFolderFile,
-    ViewTemplateFile, invalid, parse_issue, plain_dir, read_plain,
+    ImportLogRow, IssueFront, IssueTemplateFile, LabelGroupRow, LabelRow, LinkFile, PinRow,
+    ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow, ViewFile,
+    ViewFolderFile, ViewTemplateFile, invalid, parse_issue, plain_dir, read_plain,
 };
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -101,6 +101,7 @@ async fn wipe(tx: &mut Tx<'_>) -> Result<()> {
         "DELETE FROM projects",
         "DELETE FROM cycles",
         "DELETE FROM labels",
+        "DELETE FROM label_groups",
         "DELETE FROM pins",
         "DELETE FROM views",
         "DELETE FROM view_folders",
@@ -388,15 +389,32 @@ async fn restore_project_statuses(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn restore_labels(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
-    let labels: Vec<LabelRow> = read_yaml(&dir.join("labels.yaml"))?;
-    for l in labels {
-        sqlx::query("INSERT INTO labels (name, color, icon) VALUES (?, ?, ?)")
-            .bind(l.name)
-            .bind(l.color)
-            .bind(l.icon)
+async fn restore_label_groups(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    let groups: Vec<LabelGroupRow> = read_list(&dir.join("label_groups.yaml"))?;
+    for g in groups {
+        sqlx::query("INSERT INTO label_groups (name, exclusive) VALUES (?, ?)")
+            .bind(g.name)
+            .bind(g.exclusive)
             .execute(&mut **tx)
             .await?;
+    }
+    Ok(())
+}
+
+async fn restore_labels(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    restore_label_groups(tx, dir).await?;
+    let labels: Vec<LabelRow> = read_yaml(&dir.join("labels.yaml"))?;
+    for l in labels {
+        sqlx::query(
+            "INSERT INTO labels (name, color, icon, group_id)
+             VALUES (?, ?, ?, (SELECT id FROM label_groups WHERE name = ?))",
+        )
+        .bind(l.name)
+        .bind(l.color)
+        .bind(l.icon)
+        .bind(l.group)
+        .execute(&mut **tx)
+        .await?;
     }
     Ok(())
 }

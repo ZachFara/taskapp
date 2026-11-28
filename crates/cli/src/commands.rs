@@ -11,12 +11,12 @@ use taskapp_core::{
     IssueId, IssuePatch, LinkKind, Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId,
     PropertyDef, PropertyKind, Relation, RelationKind, Result, SelectOption, TemplateId, ViewDef,
     ViewId, ViewTemplateId, attachments, backup, comments, cycles, events, focus, history, import,
-    insights, issues, labels, links, metrics, pins, project_statuses, projects, properties,
-    quickadd, relations, search, statuses, templates, undo, view_templates, views,
+    insights, issues, label_groups, labels, links, metrics, pins, project_statuses, projects,
+    properties, quickadd, relations, search, statuses, templates, undo, view_templates, views,
 };
 
 use crate::{
-    AttachmentCmd, Cmd, CommentCmd, CycleCmd, EventCmd, FeaturesCmd, FocusCmd, ImportCmd,
+    AttachmentCmd, Cmd, CommentCmd, CycleCmd, EventCmd, FeaturesCmd, FocusCmd, GroupCmd, ImportCmd,
     InsightsCmd, IssueCmd, LabelCmd, OnOff, PinCmd, ProjectCmd, ProjectEdit, PropertyCmd,
     RelationCmd, ScopeArgs, StatusCmd, SyncCmd, TemplateCmd, ViewCmd, look,
 };
@@ -886,6 +886,57 @@ async fn label(db: &Db, cmd: LabelCmd) -> Result<Value> {
             let found = found.ok_or_else(|| Error::NotFound(format!("label {label}")))?;
             labels::add_label(db, issue_id(db, &key).await?, found.id, SRC).await?;
             val(issues::get_by_key(db, &key).await?)
+        }
+        LabelCmd::Group(cmd) => group(db, cmd).await,
+    }
+}
+
+async fn find_label(db: &Db, name: &str) -> Result<taskapp_core::Label> {
+    let all = labels::list(db).await?;
+    let found = all.into_iter().find(|l| l.name.eq_ignore_ascii_case(name));
+    found.ok_or_else(|| Error::NotFound(format!("label {name}")))
+}
+
+async fn find_group(db: &Db, name: &str) -> Result<taskapp_core::LabelGroup> {
+    let all = label_groups::list(db).await?;
+    let found = all.into_iter().find(|g| g.name.eq_ignore_ascii_case(name));
+    found.ok_or_else(|| Error::NotFound(format!("label group {name}")))
+}
+
+async fn move_label(
+    db: &Db,
+    name: &str,
+    group: Option<taskapp_core::LabelGroupId>,
+) -> Result<Value> {
+    let mut l = find_label(db, name).await?;
+    l.group_id = group;
+    val(labels::update(db, l, SRC).await?)
+}
+
+async fn group(db: &Db, cmd: GroupCmd) -> Result<Value> {
+    match cmd {
+        GroupCmd::List => val(label_groups::list(db).await?),
+        GroupCmd::Create { name, exclusive } => {
+            let g = label_groups::create(db, &name, SRC).await?;
+            val(if exclusive {
+                label_groups::set_exclusive(db, g.id, true, SRC).await?
+            } else {
+                g
+            })
+        }
+        GroupCmd::Add { group, label } => {
+            let g = find_group(db, &group).await?;
+            move_label(db, &label, Some(g.id)).await
+        }
+        GroupCmd::Remove { label } => move_label(db, &label, None).await,
+        GroupCmd::Exclusive { group, state } => {
+            let g = find_group(db, &group).await?;
+            val(label_groups::set_exclusive(db, g.id, matches!(state, OnOff::On), SRC).await?)
+        }
+        GroupCmd::Delete { group } => {
+            let g = find_group(db, &group).await?;
+            label_groups::delete(db, g.id, SRC).await?;
+            val(serde_json::json!({"deleted": g.name}))
         }
     }
 }

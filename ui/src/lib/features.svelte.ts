@@ -19,6 +19,7 @@ export const FEATURES = [
   { name: 'shutdown', key: 'feature_shutdown', label: 'Shutdown ritual', blurb: 'An end-of-day checklist from the Shutdown command: Inbox left, up to three deep issues for tomorrow, loose ends, and a streak. Off until switched on.' },
   { name: 'goals', key: 'feature_goals', label: 'Goals', blurb: 'Quarterly goals above your projects: the Goals page, progress from linked projects, and the goals on a project page.' },
   { name: 'waiting', key: 'feature_waiting', label: 'Waiting for', blurb: 'Who an issue waits on and a follow-up day: the Waiting page, the Follow-ups dashboard card, and the follow up marker.' },
+  { name: 'contexts', key: 'feature_contexts', label: 'Context filter', blurb: 'A Context button on the quick filter: one click filters an issue list to a label of the label group called Context.' },
 ] as const;
 export type Feature = (typeof FEATURES)[number]['name'];
 

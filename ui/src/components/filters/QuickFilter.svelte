@@ -11,14 +11,15 @@
   import FilterChip from './FilterChip.svelte';
   import { fieldKey, makeLookup, type Data } from './lookup';
   import { newChip, type Chip } from './model';
+  import { isOn } from '../../lib/features.svelte';
 
   let { text = $bindable(''), chips = $bindable([]), onclose, entity = 'issue' }: {
     text?: string; chips?: Chip[]; onclose: () => void; entity?: ViewEntity;
   } = $props();
 
   const project = entity === 'project';
-  const quick: FixedField[] = project ? ['Status', 'Priority', 'Label', 'TargetDate'] : ['Status', 'Priority', 'Project', 'Label', 'DueDate'];
-  let data = $state<Data>({ statuses: [], projects: [], defs: [], cycles: [], labels: [], relationKinds: [], projectStatuses: [] });
+  const quick: FixedField[] = project ? ['Status', 'Priority', 'Label', 'TargetDate'] : ['Status', 'Priority', 'Project', 'Label', 'LabelGroup', 'DueDate'];
+  let data = $state<Data>({ statuses: [], projects: [], defs: [], cycles: [], labels: [], relationKinds: [], projectStatuses: [], labelGroups: [] });
   let openId = $state<number | null>(null);
   let addOpen = $state(false);
   const lookup = $derived(makeLookup(data, entity));
@@ -28,11 +29,24 @@
   ]);
 
   onMount(async () => {
-    const [statuses, projects, defs, cycles, labels, projectStatuses] = await Promise.all([
-      api.statuses.list(), api.projects.list(), api.properties.listDefs(), api.cycles.list(), api.labels.list(), api.project.statusesList(),
+    const [statuses, projects, defs, cycles, labels, projectStatuses, labelGroups] = await Promise.all([
+      api.statuses.list(), api.projects.list(), api.properties.listDefs(), api.cycles.list(), api.labels.list(), api.project.statusesList(), api.label.groupsList(),
     ]);
-    data = { statuses, projects, defs: defs.filter((d) => (project ? d.applies_to !== 'Issues' : d.applies_to !== 'Projects')), cycles, labels, relationKinds: [], projectStatuses };
+    data = { statuses, projects, defs: defs.filter((d) => (project ? d.applies_to !== 'Issues' : d.applies_to !== 'Projects')), cycles, labels, relationKinds: [], projectStatuses, labelGroups };
   });
+
+  // One click on a label of the group called Context filters to it; picking another swaps the Context chip.
+  const contexts = $derived.by(() => {
+    const g = data.labelGroups?.find((x) => x.name.toLowerCase() === 'context');
+    return g && !project && isOn('contexts') ? data.labels.filter((l) => l.group_id === g.id) : [];
+  });
+  function pickContext(id: number) {
+    const ids = contexts.map((l) => l.id);
+    const at = chips.findIndex((c) => c.field.Fixed === 'Label' && ids.includes(([] as unknown[]).concat(c.value)[0] as number));
+    const c = newChip({ Fixed: 'Label' }, 'In', [id]);
+    if (at >= 0) chips[at] = c;
+    else chips.push(c);
+  }
 
   // Same chip rules as the saved filter: a pick-list field starts "any of", a text field "contains".
   function add(field: FieldRef) {
@@ -53,6 +67,12 @@
         onchange={(n) => (chips[chips.findIndex((x) => x.id === n.id)] = n)}
         onremove={() => (chips = chips.filter((x) => x.id !== c.id))} />
     {/each}
+    {#if contexts.length}
+      <Menu>
+        {#snippet trigger(props)}<span {...props} class="trig"><Button icon="tag">Context</Button></span>{/snippet}
+        {#each contexts as l (l.id)}<MenuItem label={l.name} onSelect={() => pickContext(l.id)} />{/each}
+      </Menu>
+    {/if}
     <Menu bind:open={addOpen}>
       {#snippet trigger(props)}<span {...props} class="trig"><Button icon="filter">Add quick filter</Button></span>{/snippet}
       {#each addable as a (fieldKey(a.field))}<MenuItem label={a.name} onSelect={() => add(a.field)} />{/each}

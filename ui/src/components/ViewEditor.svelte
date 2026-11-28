@@ -45,10 +45,10 @@
     return () => on.forEach(([n, f]) => removeEventListener(`command:${n}`, f));
   });
   onMount(async () => {
-    const [statuses, projects, defs, cycles, labels, relationKinds, projectStatuses] = await Promise.all([
-      api.statuses.list(), api.projects.list(), api.properties.listDefs(), api.cycles.list(), api.labels.list(), api.relation.kindsList(), api.project.statusesList(),
+    const [statuses, projects, defs, cycles, labels, relationKinds, projectStatuses, labelGroups] = await Promise.all([
+      api.statuses.list(), api.projects.list(), api.properties.listDefs(), api.cycles.list(), api.labels.list(), api.relation.kindsList(), api.project.statusesList(), api.label.groupsList(),
     ]);
-    data = { statuses, projects, defs: defs.filter((d) => (project ? d.applies_to !== 'Issues' : d.applies_to !== 'Projects')), cycles, labels, relationKinds, projectStatuses };
+    data = { statuses, projects, defs: defs.filter((d) => (project ? d.applies_to !== 'Issues' : d.applies_to !== 'Projects')), cycles, labels, relationKinds, projectStatuses, labelGroups };
   });
   const lookup = $derived(makeLookup(data, entity));
 
@@ -65,7 +65,7 @@
   // A project view's own field lists: the fields of a project, not of an issue.
   const quick: FixedField[] = project
     ? ['Status', 'StatusCategory', 'Priority', 'Label', 'StartDate', 'TargetDate', 'CreatedAt', 'UpdatedAt', 'Progress', 'IssueCount']
-    : ['Status', 'StatusCategory', 'Project', 'ProjectStatus', 'Label', 'Priority', 'DueDate', 'HiddenUntil', 'RelationKind'];
+    : ['Status', 'StatusCategory', 'Project', 'ProjectStatus', 'Label', 'LabelGroup', 'Priority', 'DueDate', 'HiddenUntil', 'RelationKind'];
   const addable = $derived<{ field: FieldRef; name: string }[]>([
     ...quick.filter(on).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
     ...data.defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name })),

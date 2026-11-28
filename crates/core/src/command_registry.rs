@@ -194,6 +194,16 @@ macro_rules! with_commands {
             }
             labels_update(s, label: Label) -> Label { labels::update(&s.db, label, $source).await }
             labels_delete(s, id: LabelId) -> () { labels::delete(&s.db, id, $source).await }
+            label_groups_list(s) -> Vec<LabelGroup> { label_groups::list(&s.db).await }
+            label_groups_create(s, name: String) -> LabelGroup {
+                label_groups::create(&s.db, &name, $source).await
+            }
+            label_groups_update(s, group: LabelGroup) -> LabelGroup {
+                label_groups::update(&s.db, group, $source).await
+            }
+            label_groups_delete(s, id: LabelGroupId) -> () {
+                label_groups::delete(&s.db, id, $source).await
+            }
             labels_add_label(s, issue: IssueId, label: LabelId) -> () {
                 labels::add_label(&s.db, issue, label, $source).await
             }

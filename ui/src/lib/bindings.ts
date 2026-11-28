@@ -606,6 +606,34 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	labelGroupsList: (options?: InvokeOptions) => __TAURI_INVOKE<LabelGroup[]>("label_groups_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	labelGroupsCreate: (name: string, options?: InvokeOptions) => __TAURI_INVOKE<LabelGroup>("label_groups_create", { name }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	labelGroupsUpdate: (group: LabelGroup, options?: InvokeOptions) => __TAURI_INVOKE<LabelGroup>("label_groups_update", { group }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	labelGroupsDelete: (id: LabelGroupId, options?: InvokeOptions) => __TAURI_INVOKE<null>("label_groups_delete", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	labelsAddLabel: (issue: IssueId, label: LabelId, options?: InvokeOptions) => __TAURI_INVOKE<null>("labels_add_label", { issue, label }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1486,6 +1514,8 @@ export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "P
 "Checklist" | 
 /**  Filter only: the issue has a relation of the given kind id(s), on either end. */
 "RelationKind" | 
+/**  Filter only: the issue has a label in the given label group id(s). */
+"LabelGroup" | 
 /**  An issue's project status; on a project view, use `Status`. */
 "ProjectStatus" | 
 /**  Project views only. */
@@ -1682,6 +1712,8 @@ export type Label = {
 	/**  The reference hex for `color`, for showing it without the palette. */
 	color_hex: string,
 	icon: string | null,
+	/**  The label group this label belongs to, if any. */
+	group_id: LabelGroupId | null,
 };
 
 export type LabelBreakdown = {
@@ -1690,6 +1722,15 @@ export type LabelBreakdown = {
 	completed: number,
 	points: number | null,
 };
+
+/**  A named set of labels; in an exclusive group an issue holds at most one of them. */
+export type LabelGroup = {
+	id: LabelGroupId,
+	name: string,
+	exclusive: boolean,
+};
+
+export type LabelGroupId = number;
 
 export type LabelId = number;
 

@@ -296,6 +296,8 @@ async fn record_created(tx: &mut SqliteConnection, src: ChangeSource, issue: &Is
 pub async fn create(db: &Db, new: NewIssue, src: ChangeSource) -> Result<Issue> {
     // IMMEDIATE takes the write lock up front, so two writers cannot read the same max(number).
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
+    // Copies (repeat, duplicate, template) keep the labels as they are; only a label set someone typed is checked.
+    crate::labels::check_exclusive(&mut tx, new.label_ids.as_deref().unwrap_or_default()).await?;
     let issue = create_in(&mut tx, new, src).await?;
     tx.commit().await?;
     Ok(issue)
@@ -719,6 +721,19 @@ async fn settle_repeat(
     Ok(Some(rule.parse()?))
 }
 
+async fn save_labels(
+    tx: &mut SqliteConnection,
+    id: IssueId,
+    labels: &[LabelId],
+    spawn: bool,
+) -> Result<()> {
+    // Undo and redo (`spawn` false) put back what was there, even two labels of a group made exclusive since.
+    if spawn {
+        crate::labels::check_exclusive(tx, labels).await?;
+    }
+    set_labels(tx, id, labels).await
+}
+
 async fn write_in(
     tx: &mut SqliteConnection,
     id: IssueId,
@@ -776,7 +791,7 @@ async fn write_in(
     .execute(&mut *tx)
     .await?;
     if new.label_ids != old.label_ids {
-        set_labels(tx, id, &new.label_ids).await?;
+        save_labels(tx, id, &new.label_ids, spawn).await?;
     }
     record_all(tx, src, id, &cs).await?;
     if let Some(rule) = finished {

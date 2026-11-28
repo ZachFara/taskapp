@@ -106,6 +106,7 @@ pub const FEATURES: &[(&str, &str)] = &[
     ("shutdown", "feature_shutdown"),
     ("goals", "feature_goals"),
     ("waiting", "feature_waiting"),
+    ("contexts", "feature_contexts"),
 ];
 
 /// Switches that start off; a never-written one is off.

@@ -97,6 +97,15 @@ pub struct LabelRow {
     pub color: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// The name of its label group.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
+pub struct LabelGroupRow {
+    pub name: String,
+    pub exclusive: bool,
 }
 
 /// A custom relation kind; the built-in ones come with the database.

@@ -673,6 +673,33 @@ fn a_label_is_put_on_an_issue_by_its_name() {
 }
 
 #[test]
+fn labels_go_into_an_exclusive_group_by_name() {
+    let (_d, db) = fresh();
+    run_json(&db, &["add", "Call back"]);
+    run_json(&db, &["label", "create", "@home", "blue"]);
+    run_json(&db, &["label", "create", "@phone", "blue"]);
+    let group = run_json(&db, &["label", "group", "create", "Context", "--exclusive"]);
+    assert_eq!(group["exclusive"], true);
+    let home = run_json(&db, &["label", "group", "add", "context", "@home"]);
+    assert_eq!(home["group_id"], group["id"]);
+    run_json(&db, &["label", "group", "add", "Context", "@phone"]);
+    run_json(&db, &["label", "add", "ABC-1", "@home"]);
+    let issue = run_json(&db, &["label", "add", "ABC-1", "@phone"]);
+    assert_eq!(issue["label_ids"].as_array().map(Vec::len), Some(1));
+    assert_eq!(
+        run_json(&db, &["label", "group", "list"])
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
+    assert!(
+        !run(&db, &["label", "group", "add", "Nope", "@home"])
+            .status
+            .success()
+    );
+}
+
+#[test]
 fn update_sets_the_start_date_and_estimate() {
     let (_d, db) = fresh();
     run_json(&db, &["add", "Plan it"]);

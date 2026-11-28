@@ -8,8 +8,8 @@ use taskapp_core::{Db, Result, attachments, settings};
 
 use crate::files::{
     AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, FocusRow, GoalFile,
-    ImportLogRow, IssueFront, IssueTemplateFile, LabelRow, LinkFile, MilestoneRow, PinRow,
-    ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow, ViewFile,
+    ImportLogRow, IssueFront, IssueTemplateFile, LabelGroupRow, LabelRow, LinkFile, MilestoneRow,
+    PinRow, ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow, ViewFile,
     ViewFolderFile, ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir, read_plain,
     render_issue, safe_name,
 };
@@ -144,7 +144,7 @@ async fn render(db: &Db) -> Result<BTreeMap<String, String>> {
     let mut files = BTreeMap::new();
     files.insert("settings.yaml".to_string(), yaml(&settings_map(db).await?)?);
     files.insert("statuses.yaml".to_string(), yaml(&statuses(db).await?)?);
-    files.insert("labels.yaml".to_string(), yaml(&labels(db).await?)?);
+    label_files(db, &mut files).await?;
     files.insert("cycles.yaml".to_string(), yaml(&cycles(db).await?)?);
     files.insert("properties.yaml".to_string(), yaml(&properties(db).await?)?);
     files.insert("views.yaml".to_string(), yaml(&views(db).await?)?);
@@ -265,8 +265,27 @@ async fn project_statuses(db: &Db) -> Result<Vec<ProjectStatusRow>> {
     Ok(rows)
 }
 
+async fn label_files(db: &Db, files: &mut BTreeMap<String, String>) -> Result<()> {
+    files.insert("labels.yaml".to_string(), yaml(&labels(db).await?)?);
+    files.insert(
+        "label_groups.yaml".to_string(),
+        yaml(&label_groups(db).await?)?,
+    );
+    Ok(())
+}
+
 async fn labels(db: &Db) -> Result<Vec<LabelRow>> {
-    let rows = sqlx::query_as("SELECT name, color, icon FROM labels ORDER BY name")
+    let rows = sqlx::query_as(
+        "SELECT l.name, l.color, l.icon, g.name AS \"group\" FROM labels l
+         LEFT JOIN label_groups g ON g.id = l.group_id ORDER BY l.name",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
+async fn label_groups(db: &Db) -> Result<Vec<LabelGroupRow>> {
+    let rows = sqlx::query_as("SELECT name, exclusive FROM label_groups ORDER BY name")
         .fetch_all(&db.pool)
         .await?;
     Ok(rows)

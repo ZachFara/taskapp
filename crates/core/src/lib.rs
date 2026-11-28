@@ -24,6 +24,7 @@ pub mod import;
 pub mod inbox;
 pub mod insights;
 pub mod issues;
+pub mod label_groups;
 pub mod labels;
 pub mod links;
 pub mod metrics;

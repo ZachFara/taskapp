@@ -2,7 +2,7 @@
   import { askDelete } from '../../lib/rowUi.svelte';
   import LabelPicker from './LabelPicker.svelte';
   import { api } from '../../lib/api';
-  import type { Cycle, Depth, Issue, IssuePatch, Label, Milestone, Project, PropertyDef, Status, Value } from '../../lib/bindings';
+  import type { Cycle, Depth, Issue, IssuePatch, Label, LabelGroup, Milestone, Project, PropertyDef, Status, Value } from '../../lib/bindings';
   import Button from '../../ui/Button.svelte';
   import Checkbox from '../../ui/Checkbox.svelte';
   import EntityIcon from '../../ui/EntityIcon.svelte';
@@ -32,13 +32,14 @@
   let projects = $state<Project[]>([]);
   let cycles = $state<Cycle[]>([]);
   let labels = $state<Label[]>([]);
+  let groups = $state<LabelGroup[]>([]);
   let milestones = $state<Milestone[]>([]);
   let defs = $state<PropertyDef[]>([]);
   let parent = $state<Issue | null>(null);
 
   $effect(() => {
-    Promise.all([api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.properties.listDefs()]).then(([s, p, c, l, d]) => {
-      [statuses, projects, cycles, labels, defs] = [s, p, c, l, d];
+    Promise.all([api.statuses.list(), api.projects.list(), api.cycles.list(), api.labels.list(), api.properties.listDefs(), api.label.groupsList()]).then(([s, p, c, l, d, g]) => {
+      [statuses, projects, cycles, labels, defs, groups] = [s, p, c, l, d, g];
     });
   });
   $effect(() => {
@@ -134,7 +135,7 @@
       {#each labels.filter((l) => issue.label_ids.includes(l.id)) as l (l.id)}<Pill color={l.color}>{l.name}</Pill>{:else}{@render none()}{/each}
     {/snippet}
     {#snippet editor()}
-      <LabelPicker {labels} selected={issue.label_ids} ontoggle={toggleLabel} oncreate={createLabel} ondelete={(l) => askDelete({ kind: 'label', id: l.id, name: l.name })} />
+      <LabelPicker {labels} {groups} selected={issue.label_ids} ontoggle={toggleLabel} oncreate={createLabel} ondelete={(l) => askDelete({ kind: 'label', id: l.id, name: l.name })} />
     {/snippet}
   </PropertyRow>
   {/snippet}

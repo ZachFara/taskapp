@@ -9,6 +9,7 @@ use crate::{ChangeSource, Error, Result, history, history::Edit, search};
 
 pub(crate) const TABLES: &[&str] = &[
     "statuses",
+    "label_groups",
     "labels",
     "projects",
     "project_statuses",

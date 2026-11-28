@@ -628,6 +628,19 @@ templates and imports. Unset, or if that status is deleted, new issues start in 
   `taskapp status update NAME --definition "..." --kind active|waiting|idle --nudge-days N`.
 - **Priority** shows as three bars of rising height: none faint, low one bar, medium two, high three, urgent three in red.
 - **Labels** (Settings > Labels): name, icon, colour. Add to issues with `l`, the panel, or `#name` in quick-add.
+- **Label groups** (Settings > Labels, below the list): a group is a named set of labels, such as Context with @home,
+  @computer, @errands and @phone, or Kind for Area and Collection labels. A label is in at most one group; pick the group
+  in the label's row ("No group" takes it out). Deleting a group keeps its labels. A group can be **exclusive**: an issue
+  then holds at most one of its labels. Adding another (the `l` picker, the panel, CLI, MCP) swaps it in for the old one,
+  and saving a set with two is refused as Invalid; issues that already held two stay as they are. New groups are not
+  exclusive. The label pickers list a group's labels under its name. In a view's filter, the field **Label group**
+  matches issues with a label from the chosen group (is any of / is none of). On an issue list, the quick filter bar
+  has a **Context** button (when a group named Context exists; switch it off in Settings > Features): one click on a
+  label filters the list to it, another click swaps it. Command menu: "New label group". Export writes
+  `label_groups.yaml` and each label's `group`; restore brings them back. Nothing is created for you. CLI:
+  `taskapp label group create Context [--exclusive]`, `label group add Context @home`, `label group remove @home`,
+  `label group exclusive Context on|off`, `label group list`, `label group delete Context`; API:
+  `label_groups_list/create/update/delete`, and `labels_update` carries a label's `group_id`.
 - **Colours** are a fixed palette of 12 keys: gray, red, orange, amber, yellow, green, teal, cyan, blue, indigo, purple,
   pink. A `#rrggbb` value sent by CLI or MCP maps to the nearest key.
 - **Icons**: `icon:<id>` from the built-in set or `emoji:<emoji>` (any 1 to 8 non-ASCII characters). Today the
@@ -764,7 +777,7 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 
 Settings > Features lists every optional feature with a switch, all on by default except the Shutdown ritual: Dashboard, Decisions, Cycles,
 Events, Progress charts (burn-ups and sparklines on projects and cycles), Stale nudges, Reminders capture, Google
-Calendar, Next actions, Process Inbox, Weekly review, Focus mode, Recurring issues, the Shutdown ritual, Time blocking, Goals and Waiting for. Switching one off hides its sidebar entries, its
+Calendar, Next actions, Process Inbox, Weekly review, Focus mode, Recurring issues, the Shutdown ritual, Time blocking, Goals, Waiting for and the Context filter. Switching one off hides its sidebar entries, its
 page (the address shows "is switched off"), its commands in the command menu, its Settings page where it has one
 (Cycles, Reminders, Calendar) and its dashboard card. Switching Cycles off also hides the cycle row in issue details and
 the cycle field in views. Switching Reminders capture or Google Calendar off stops their background sync too; Sync now
@@ -774,7 +787,7 @@ applies at once, has its own command ("Turn Cycles on or off"), and is stored as
 device and off by default, so it is a preference, not a workspace feature.
 
 From the terminal: `taskapp features` lists them; `taskapp features set cycles off` (names: dashboard, decisions,
-cycles, events, charts, stale, reminders, gcal, process_inbox, next_actions, focus).
+cycles, events, charts, stale, reminders, gcal, process_inbox, next_actions, focus, recurring, contexts).
 
 Sidebar and issue panel widths are remembered per device. Drag an edge to resize; double-click it to reset.
 
