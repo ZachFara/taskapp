@@ -1623,3 +1623,25 @@ fn shutdown_prints_the_checklist_as_json() {
     assert!(v["tomorrow"].as_array().is_some_and(Vec::is_empty));
     assert!(v["deep"].as_array().is_some_and(Vec::is_empty));
 }
+
+#[test]
+fn goal_create_list_and_link_by_slug() {
+    let (_d, db) = fresh();
+    run_json(&db, &["project", "create", "web", "Website"]);
+    let g = run_json(&db, &["goal", "create", "Launch", "--quarter", "2027-Q1"]);
+    assert_eq!(
+        (g["id"].as_i64(), g["status"].as_str()),
+        (Some(1), Some("active"))
+    );
+    assert!(
+        !run(&db, &["goal", "create", "Bad", "--quarter", "soon"])
+            .status
+            .success()
+    );
+    assert!(!run(&db, &["goal", "link", "web", "9"]).status.success());
+    run_json(&db, &["goal", "link", "web", "1"]);
+    let list = run_json(&db, &["goal", "list"]);
+    assert_eq!(list[0]["title"], "Launch");
+    assert_eq!(list[0]["project_ids"], serde_json::json!([1]));
+    assert_eq!(list[0]["progress"], serde_json::json!([0, 0]));
+}

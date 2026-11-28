@@ -180,6 +180,19 @@ pub struct DecisionFile {
     pub issues: Vec<String>,
 }
 
+/// One entry of `goals.yaml`; `projects` are slugs. Older exports have no such file.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct GoalFile {
+    pub id: i64,
+    pub title: String,
+    pub quarter: String,
+    pub description: String,
+    pub status: String,
+    pub created_at: String,
+    #[serde(default)]
+    pub projects: Vec<String>,
+}
+
 /// One entry of `links.yaml`; `issue` is a key. Older exports have no such file.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct LinkFile {

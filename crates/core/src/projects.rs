@@ -387,14 +387,17 @@ pub async fn delete(db: &Db, id: ProjectId, src: ChangeSource) -> Result<()> {
         )));
     }
     unlink_issues(&mut tx, src, id.0).await?;
-    let milestones = rows::snap(&mut tx, "milestones", "project_id = ?", id.0).await?;
-    let labels = rows::snap(&mut tx, "project_labels", "project_id = ?", id.0).await?;
+    let mut children = Vec::new();
+    for table in ["milestones", "project_labels", "goal_projects"] {
+        children.push(rows::snap(&mut tx, table, "project_id = ?", id.0).await?);
+    }
     let before = rows::by_key(&mut tx, "projects", id.0).await?;
     sqlx::query!("DELETE FROM projects WHERE id = ?", id.0)
         .execute(&mut *tx)
         .await?;
-    rows::changed(&mut tx, src, labels).await?;
-    rows::changed(&mut tx, src, milestones).await?;
+    for snap in children.into_iter().rev() {
+        rows::changed(&mut tx, src, snap).await?;
+    }
     rows::changed(&mut tx, src, before).await?;
     let deleted = json!(old.slug);
     let edit = Edit {

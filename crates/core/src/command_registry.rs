@@ -168,6 +168,20 @@ macro_rules! with_commands {
                 decisions::unlink(&s.db, decision, issue, $source).await
             }
 
+            goals_list(s) -> Vec<Goal> { goals::list(&s.db).await }
+            goals_create(s, title: String, quarter: String, description: Option<String>) -> Goal {
+                goals::create(&s.db, &title, &quarter, description, $source).await
+            }
+            goals_update(s, goal: Goal) -> Goal { goals::update(&s.db, goal, $source).await }
+            goals_delete(s, id: GoalId) -> () { goals::delete(&s.db, id, $source).await }
+            goals_progress(s, id: GoalId) -> (u32, u32) { goals::progress(&s.db, id).await }
+            goals_link(s, goal: GoalId, project: ProjectId) -> () {
+                goals::link(&s.db, goal, project, $source).await
+            }
+            goals_unlink(s, goal: GoalId, project: ProjectId) -> () {
+                goals::unlink(&s.db, goal, project, $source).await
+            }
+
             links_list(s, issue: IssueId) -> Vec<Link> { links::list(&s.db, issue).await }
             links_add(s, issue: IssueId, url: String, title: Option<String>, kind: Option<LinkKind>) -> Link {
                 links::add(&s.db, issue, &url, title, kind, $source).await

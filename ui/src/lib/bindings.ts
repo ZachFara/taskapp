@@ -508,6 +508,55 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	goalsList: (options?: InvokeOptions) => __TAURI_INVOKE<Goal[]>("goals_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	goalsCreate: (title: string, quarter: string, description: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Goal>("goals_create", { title, quarter, description }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	goalsUpdate: (goal: Goal, options?: InvokeOptions) => __TAURI_INVOKE<Goal>("goals_update", { goal }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	goalsDelete: (id: GoalId, options?: InvokeOptions) => __TAURI_INVOKE<null>("goals_delete", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	goalsProgress: (id: GoalId, options?: InvokeOptions) => __TAURI_INVOKE<[number, number]>("goals_progress", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	goalsLink: (goal: GoalId, project: ProjectId, options?: InvokeOptions) => __TAURI_INVOKE<null>("goals_link", { goal, project }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	goalsUnlink: (goal: GoalId, project: ProjectId, options?: InvokeOptions) => __TAURI_INVOKE<null>("goals_unlink", { goal, project }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	linksList: (issue: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<Link[]>("links_list", { issue }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1482,6 +1531,21 @@ export type ForecastQuery = {
 	filter: Filter | null,
 	cycle: CycleId | null,
 };
+
+/**  A goal for a quarter (`quarter` is like `2027-Q1`) with the projects that work towards it. */
+export type Goal = {
+	id: GoalId,
+	title: string,
+	quarter: string,
+	description: string,
+	status: GoalStatus,
+	created_at: string,
+	project_ids: ProjectId[],
+};
+
+export type GoalId = number;
+
+export type GoalStatus = "active" | "achieved" | "dropped";
 
 /**
  *  Everything an import would create. The lists of statuses, labels, projects, cycles and property

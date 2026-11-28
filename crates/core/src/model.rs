@@ -27,6 +27,7 @@ ids!(
     TemplateId,
     EventId,
     DecisionId,
+    GoalId,
     LinkId,
     AttachmentId
 );
@@ -1211,6 +1212,26 @@ pub struct DecisionInput {
     pub external_id: Option<String>,
     #[serde(default)]
     pub issue_ids: Vec<IssueId>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum GoalStatus {
+    Active,
+    Achieved,
+    Dropped,
+}
+
+/// A goal for a quarter (`quarter` is like `2027-Q1`) with the projects that work towards it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct Goal {
+    pub id: GoalId,
+    pub title: String,
+    pub quarter: String,
+    pub description: String,
+    pub status: GoalStatus,
+    pub created_at: String,
+    pub project_ids: Vec<ProjectId>,
 }
 
 /// One Process Inbox choice for one issue.

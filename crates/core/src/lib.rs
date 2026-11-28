@@ -18,6 +18,7 @@ pub mod delete;
 pub mod events;
 pub mod focus;
 pub mod forecast;
+pub mod goals;
 pub mod history;
 pub mod import;
 pub mod inbox;

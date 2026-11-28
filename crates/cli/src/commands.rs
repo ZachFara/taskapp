@@ -47,6 +47,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Inbox(_)
         | Cmd::Plan(_)
         | Cmd::Decision(_)
+        | Cmd::Goal(_)
         | Cmd::Icons
         | Cmd::Colors) => queues_and_lists(db, cmd).await,
         cmd => run_group(db, dir, cmd).await,
@@ -64,6 +65,7 @@ async fn queues_and_lists(db: &Db, cmd: Cmd) -> Result<Value> {
         Cmd::Inbox(args) => crate::inbox::run(db, args).await,
         Cmd::Plan(args) => crate::plan::run(db, args).await,
         Cmd::Decision(cmd) => crate::decision::run(db, cmd).await,
+        Cmd::Goal(cmd) => crate::goal::run(db, cmd).await,
         Cmd::Icons => Ok(json!(look::ICONS)),
         _ => Ok(json!(
             taskapp_core::palette::COLORS
@@ -104,6 +106,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Attachment(_)
         | Cmd::Event(_)
         | Cmd::Decision(_)
+        | Cmd::Goal(_)
         | Cmd::Icons
         | Cmd::Colors
         | Cmd::Sync(_) => handled_in_run(),

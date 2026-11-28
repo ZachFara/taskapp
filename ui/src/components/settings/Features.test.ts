@@ -50,6 +50,19 @@ describe('Features', () => {
     expect(onIssue()).not.toContain('issue.repeat.skip');
   });
 
+  it('goal commands follow the goals switch', async () => {
+    const at = (route: string) => listCommands({ ...ctx, route } as Ctx).map((c) => c.id);
+    const { target } = await mountSettings(Features);
+    expect(ids()).toContain('nav.goals');
+    expect(at('/goals')).toContain('goal.new');
+    expect(at('/goal/1')).toContain('goal.achieve');
+    await toggle(target, 'Goals');
+    expect(isOn('goals')).toBe(false);
+    expect(ids()).not.toContain('nav.goals');
+    expect(at('/goals')).not.toContain('goal.new');
+    expect(ids()).toContain('feature.goals.toggle');
+  });
+
   it('dashboard and charts keep their existing keys', async () => {
     const { target, api } = await mountSettings(Features);
     await toggle(target, 'Dashboard');

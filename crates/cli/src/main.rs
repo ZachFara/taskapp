@@ -5,6 +5,7 @@ mod archive;
 mod commands;
 mod decision;
 mod forecast;
+mod goal;
 mod inbox;
 mod list;
 mod look;
@@ -113,6 +114,9 @@ enum Cmd {
     /// Questions for the owner: raise one with options, read it, answer it.
     #[command(subcommand)]
     Decision(decision::DecisionCmd),
+    /// Quarterly goals that projects link to.
+    #[command(subcommand)]
+    Goal(goal::GoalCmd),
     /// Icon names for `project set --icon`.
     Icons,
     /// Palette colors for `project set --color`.

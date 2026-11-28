@@ -7,10 +7,11 @@ use sqlx::FromRow;
 use taskapp_core::{Db, Result, attachments, settings};
 
 use crate::files::{
-    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, FocusRow, ImportLogRow,
-    IssueFront, IssueTemplateFile, LabelRow, LinkFile, MilestoneRow, PinRow, ProjectFile,
-    ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewFolderFile,
-    ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir, read_plain, render_issue, safe_name,
+    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, FocusRow, GoalFile,
+    ImportLogRow, IssueFront, IssueTemplateFile, LabelRow, LinkFile, MilestoneRow, PinRow,
+    ProjectFile, ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow, ViewFile,
+    ViewFolderFile, ViewTemplateFile, WorkBlockRow, invalid, key, plain_dir, read_plain,
+    render_issue, safe_name,
 };
 
 pub struct ExportStats {
@@ -344,6 +345,34 @@ async fn decisions(db: &Db, prefix: &str) -> Result<Vec<DecisionFile>> {
         .collect()
 }
 
+async fn goals(db: &Db) -> Result<Vec<GoalFile>> {
+    let rows = sqlx::query_as::<_, (i64, String, String, String, String, String)>(
+        "SELECT id, title, quarter, description, status, created_at FROM goals ORDER BY id",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    let mut links = group(
+        sqlx::query_as::<_, (i64, String)>(
+            "SELECT g.goal_id, p.slug FROM goal_projects g JOIN projects p ON p.id = g.project_id
+             ORDER BY p.slug",
+        )
+        .fetch_all(&db.pool)
+        .await?,
+    );
+    Ok(rows
+        .into_iter()
+        .map(|r| GoalFile {
+            projects: links.remove(&r.0).unwrap_or_default(),
+            id: r.0,
+            title: r.1,
+            quarter: r.2,
+            description: r.3,
+            status: r.4,
+            created_at: r.5,
+        })
+        .collect())
+}
+
 async fn links(db: &Db, prefix: &str) -> Result<Vec<LinkFile>> {
     let rows = sqlx::query_as::<_, (i64, i64, String, String, String, String)>(
         "SELECT l.id, i.number, l.url, l.title, l.kind, l.created_at FROM links l
@@ -366,6 +395,7 @@ async fn links(db: &Db, prefix: &str) -> Result<Vec<LinkFile>> {
 
 async fn event_files(db: &Db, prefix: &str, files: &mut BTreeMap<String, String>) -> Result<()> {
     files.insert("links.yaml".to_string(), yaml(&links(db, prefix).await?)?);
+    files.insert("goals.yaml".to_string(), yaml(&goals(db).await?)?);
     files.insert(
         "decisions.yaml".to_string(),
         yaml(&decisions(db, prefix).await?)?,

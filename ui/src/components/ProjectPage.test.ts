@@ -262,4 +262,12 @@ describe('ProjectPage details', () => {
     await vi.waitFor(() => expect(plate.querySelector('button[aria-label="Sponsor"]')).not.toBeNull());
     expect(plate.querySelector('button[aria-label="Effort"]')).toBeNull();
   });
+
+  it('shows the goals the project is linked to', async () => {
+    const mock = createMockApi(seed());
+    const g = await mock.goals.create('Launch', '2027-Q1', null);
+    await mock.goals.link(g.id, base.id);
+    const target = await open('/project/website', mock);
+    await vi.waitFor(() => expect(target.querySelector('[aria-label="Goals"]')?.textContent).toContain('2027-Q1 · Launch'));
+  });
 });

@@ -31,6 +31,8 @@ pub(crate) const TABLES: &[&str] = &[
     "event_issues",
     "decisions",
     "decision_issues",
+    "goals",
+    "goal_projects",
     "links",
     "focus_sessions",
     "issues",

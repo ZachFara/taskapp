@@ -7,7 +7,7 @@ registry (`ui/src/lib/commands/defs/**`); `ui/src/lib/commands/guide.test.ts` ke
 
 Contents: [What it is](#what-cairn-is) - [First run](#first-run) - [The screen](#the-screen) - [Issues](#issues) -
 [Selection and bulk edit](#selection-and-bulk-edit) - [Undo and redo](#undo-and-redo) - [Views](#views) -
-[Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) - [Events](#events) - [Decisions](#decisions) - [Process Inbox](#process-the-inbox) -
+[Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) - [Events](#events) - [Decisions](#decisions) - [Goals](#goals) - [Process Inbox](#process-the-inbox) -
 [Points and insights](#points-and-insights) - [Custom properties](#custom-properties) -
 [Statuses, labels, icons, colours](#statuses-labels-icons-and-colours) - [Templates](#issue-templates) - [Images](#images) -
 [Import, export, backups](#import-export-and-backups) - [Restore](#restore) - [Reminders and Google Calendar](#reminders-and-google-calendar) -
@@ -409,6 +409,23 @@ with its recommendation until you answer). Decisions are Cairn's own; nothing ou
   `--source`, such as `agent:builder` or later `curia`), and `external_id` is the raiser's own id, unique per source, so a
   later integration can mirror a decision and not raise it twice. Nothing reads them yet.
 
+## Goals
+
+A goal is an outcome you want in a quarter, one level above projects (GTD's horizons of focus). It has a title, a
+quarter such as `2027-Q1`, an optional description and a status: active, achieved or dropped. Projects link to goals,
+many to many.
+
+- **Goals page** (sidebar "Goals", `g k`, command `Go to Goals`): goals grouped by quarter, newest first, each with a
+  progress bar: done over total issues of its linked projects (archived issues are not counted). "New goal" opens a
+  dialog; the command menu has "New goal" too.
+- **Goal page** (click a goal): status, description and the linked projects with their own progress. Edit, Achieved,
+  Drop, Reopen, Delete (asks first) and "Link a project" are buttons and commands. Unlink removes one project.
+- **Project page**: a "Goals" row lists the goals the project works towards; click one to open it.
+- Settings > Features has a Goals switch. Undo covers every goal write, including the links a deleted project loses. The
+  export writes `goals.yaml` (projects by slug) and a rebuild restores it.
+- CLI: `taskapp goal create "Launch the site" --quarter 2027-Q1`, `taskapp goal link website 1`, `taskapp goal list`.
+- Not built: points as the progress measure (issues only), goals on areas (labels), and a current-quarter filter.
+
 ## Process the Inbox
 
 Process Inbox (sidebar, `g o`, or the button on a view named Inbox) shows one Inbox issue at a time, oldest first, full
@@ -735,7 +752,7 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 
 Settings > Features lists every optional feature with a switch, all on by default except the Shutdown ritual: Dashboard, Decisions, Cycles,
 Events, Progress charts (burn-ups and sparklines on projects and cycles), Stale nudges, Reminders capture, Google
-Calendar, Next actions, Process Inbox, Weekly review, Focus mode, Recurring issues and the Shutdown ritual. Switching one off hides its sidebar entries, its
+Calendar, Next actions, Process Inbox, Weekly review, Focus mode, Recurring issues the Shutdown ritual, Time blocking and Goals. Switching one off hides its sidebar entries, its
 page (the address shows "is switched off"), its commands in the command menu, its Settings page where it has one
 (Cycles, Reminders, Calendar) and its dashboard card. Switching Cycles off also hides the cycle row in issue details and
 the cycle field in views. Switching Reminders capture or Google Calendar off stops their background sync too; Sync now
@@ -833,6 +850,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.process` | Process Inbox | `g o` | Go to Process Inbox (when it is switched on in Settings). |
 | `nav.review` | Go to Weekly review | `g r` | Go to the Weekly review (when it is switched on in Settings). |
 | `nav.decisions` | Go to Decisions | `g q` | Go to Decisions. |
+| `nav.goals` | Go to Goals | `g k` | Go to Goals (when it is switched on in Settings). |
 | `nav.views` | Go to Views | `g v` | Go to Views. |
 | `nav.timeline` | Go to Timeline | `g t` | Go to the all-projects timeline. |
 | `nav.settings` | Go to Settings | `g s` | Go to Settings. |
@@ -975,6 +993,11 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `cycle.copyLink` | Copy link to cycle | (none) | On the Cycles page: copy `taskapp://cycle/<number>` of the open or current cycle. Also in a cycle's right-click menu. |
 | `event.copyLink` | Copy link to event | (none) | On an event page, or the event right-clicked on the Events list: copy `taskapp://event/<id>`. |
 | `decision.copyLink` | Copy link to decision | (none) | On the Decisions page: copy `taskapp://decision/<id>` of the decision last clicked. |
+| `goal.new` | New goal | (none) | On the Goals page: open the New goal dialog. |
+| `goal.edit` | Edit goal | (none) | On a goal page: edit title, quarter and description. |
+| `goal.achieve` / `goal.drop` / `goal.reopen` | Mark goal achieved / Drop goal / Reopen goal | (none) | On a goal page: set its status. |
+| `goal.link` | Link a project to this goal | (none) | On a goal page: focus the project picker. |
+| `goal.delete` | Delete goal | (none) | On a goal page: delete it after a confirmation (undo brings it back). |
 | `issue.link.add` | Add a link to this issue | (none) | Focus the URL field of the Links section of the open issue. |
 | `cycle.move_unfinished` | Move unfinished issues to the next cycle | (none) | Move unfinished issues of the cycle to the next cycle (Cycles page). |
 | `cycle.new` | New cycle | (none) | New cycle. |
@@ -1095,6 +1118,10 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `event link <id> <key>` | Link an event to an issue. | `taskapp event link 1 ABC-1` |
 | `decision create <question> [--option KEY="label: trade-off" --recommend KEY --mode blocking\|assume --context --source --external-id --issue KEY]` | Raise a decision for the owner. | `taskapp decision create "Ship now?" --option y="Yes: fast" --option n="No: safe" --recommend n` |
 | `decision list [--status open]` / `decision get <id>` | Read decisions (`open`, `answered`, `withdrawn`, `all`). The table shows options as `a) Label; b) Label`; `get` and `--json` give the trade-offs. | `taskapp decision list --status all` |
+| `goal create <title> --quarter 2027-Q1 [--description]` | Add a goal for a quarter. | `taskapp goal create "Launch the site" --quarter 2027-Q1` |
+| `goal list` | Goals by quarter with `project_ids` and `progress` as `[done, total]` issues. | `taskapp goal list --json` |
+| `goal set <id> [--status active\|achieved\|dropped --title --quarter --description]` | Edit a goal. | `taskapp goal set 1 --status achieved` |
+| `goal link <project> <goal id>` / `goal unlink <project> <goal id>` | Link or unlink a project (slug or name). | `taskapp goal link website 1` |
 | `decision answer <id> (--option KEY \| --text TEXT) [--note]` / `decision withdraw <id>` | Answer or close an open decision. | `taskapp decision answer 1 --option n` |
 | `issue search <text> [--limit 20]` | Full-text search (archived issues are left out). | `taskapp issue search rent` |
 | `issue similar <text> [--project NAME] [--limit 5]` | Open issues whose words overlap the text (likely duplicates), best first. Agents run this before `issue create`. | `taskapp issue similar "Fix login crash" --project Cairn` |

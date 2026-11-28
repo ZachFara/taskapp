@@ -596,6 +596,7 @@ async fn dump(
         "relation_kinds",
         "events",
         "decisions",
+        "goals",
         "links",
         "work_blocks",
         "focus_sessions",
@@ -663,6 +664,8 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
         "INSERT INTO decisions (id, question, context, options, recommendation, mode, status, answer, note, source, external_id, answered_at)
            VALUES (6, 'Which?', '# ctx', '[{\"key\":\"a\",\"label\":\"A\",\"tradeoff\":\"x: y\"}]', 'a', 'blocking', 'answered', 'a', 'fine', 'curia', 'D-9', '2026-01-02 03:04:05')",
         "INSERT INTO decision_issues (decision_id, issue_id) VALUES (6, (SELECT id FROM issues WHERE number = 1))",
+        "INSERT INTO goals (id, title, quarter, description, status) VALUES (8, 'Launch', '2027-Q1', 'Why', 'achieved')",
+        "INSERT INTO goal_projects (goal_id, project_id) SELECT 8, id FROM projects WHERE slug = 'app'",
         "INSERT INTO links (id, issue_id, url, title, kind, created_at)
            VALUES (5, (SELECT id FROM issues WHERE number = 2), 'https://example.com/pr/3', 'The fix', 'pr', '2026-01-02 03:04:05')",
         "UPDATE import_log SET source_deleted = 1",
@@ -703,6 +706,10 @@ async fn links_and_next_point_at_the_right_issues(rebuilt: &Db) -> R {
         "SELECT i.number FROM projects p JOIN issues i ON i.id = p.next_issue_id WHERE p.slug = 'app'",
     );
     assert_eq!(next.await?, vec![1]);
+    let goal = sqlx::query_scalar::<_, String>(
+        "SELECT p.slug FROM goal_projects g JOIN projects p ON p.id = g.project_id WHERE g.goal_id = 8",
+    );
+    assert_eq!(goal.fetch_all(&rebuilt.pool).await?, vec!["app"]);
     Ok(())
 }
 

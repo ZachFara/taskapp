@@ -301,6 +301,7 @@
     {#if isOn('time_blocking')}<li>{@render navLink('/plan', 'clock', 'Today plan', 'nav.plan', route === '/plan')}</li>{/if}
     {#if isOn('next_actions')}<li>{@render navLink('/next', 'flag', 'Next actions', 'nav.next', route === '/next')}</li>{/if}
     {#if isOn('weekly_review')}<li>{@render navLink('/review', 'check', 'Weekly review', 'nav.review', route === '/review')}</li>{/if}
+    {#if isOn('goals')}<li>{@render navLink('/goals', 'target', 'Goals', 'nav.goals', route === '/goals' || route.startsWith('/goal/'))}</li>{/if}
     {#if isOn('events')}<li>{@render navLink('/events', 'calendar', 'Events', 'nav.events', route === '/events' || route.startsWith('/event/'))}</li>{/if}
     {#if isOn('decisions')}<li>{@render navLink('/decisions', 'help', 'Decisions', 'nav.decisions', route === '/decisions', waiting.length > 0 && !decisions.error ? { n: waiting.length, urgent: blocking } : undefined)}</li>{/if}
   </ul>

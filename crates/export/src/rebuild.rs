@@ -10,10 +10,10 @@ use sqlx::{Sqlite, Transaction};
 use taskapp_core::{Db, Error, IssueId, Result, ViewDef, attachments, search};
 
 use crate::files::{
-    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, FocusRow, ImportLogRow,
-    IssueFront, IssueTemplateFile, LabelRow, LinkFile, PinRow, ProjectFile, ProjectStatusRow,
-    PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewFolderFile, ViewTemplateFile, invalid,
-    parse_issue, plain_dir, read_plain,
+    AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, FocusRow, GoalFile,
+    ImportLogRow, IssueFront, IssueTemplateFile, LabelRow, LinkFile, PinRow, ProjectFile,
+    ProjectStatusRow, PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewFolderFile,
+    ViewTemplateFile, invalid, parse_issue, plain_dir, read_plain,
 };
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -82,6 +82,8 @@ async fn wipe(tx: &mut Tx<'_>) -> Result<()> {
         "DELETE FROM changes",
         "DELETE FROM attachments",
         "DELETE FROM links",
+        "DELETE FROM goal_projects",
+        "DELETE FROM goals",
         "DELETE FROM decision_issues",
         "DELETE FROM decisions",
         "DELETE FROM event_issues",
@@ -145,8 +147,37 @@ async fn restore_issues(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     }
     restore_events(tx, dir, &prefix).await?;
     restore_decisions(tx, dir, &prefix).await?;
+    restore_goals(tx, dir).await?;
     restore_links(tx, dir, &prefix).await?;
     restore_import_log(tx, dir).await
+}
+
+/// After the projects, which the links name by slug. An older export has no `goals.yaml`.
+async fn restore_goals(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    for g in read_list::<GoalFile>(&dir.join("goals.yaml"))? {
+        sqlx::query(
+            "INSERT INTO goals (id, title, quarter, description, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(g.id)
+        .bind(g.title)
+        .bind(g.quarter)
+        .bind(g.description)
+        .bind(g.status)
+        .bind(g.created_at)
+        .execute(&mut **tx)
+        .await?;
+        for slug in &g.projects {
+            sqlx::query(
+                "INSERT INTO goal_projects (goal_id, project_id)
+                 VALUES (?, (SELECT id FROM projects WHERE slug = ?))",
+            )
+            .bind(g.id)
+            .bind(slug)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+    Ok(())
 }
 
 /// After the issues, which the links name. An older export has no `links.yaml`.

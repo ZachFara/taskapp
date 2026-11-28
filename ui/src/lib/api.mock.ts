@@ -13,12 +13,13 @@ import { canonical, nextDue, parseRule, resetChecklist, ruleText } from './recur
 import { byStatusOrder, flowDefaults } from './statusOrder';
 import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
 import { decisionsApi } from './api.mock.decisions';
+import { goalsApi } from './api.mock.goals';
 import { linksApi } from './api.mock.links';
 import { attachmentsApi } from './api.mock.attachments';
 import { foldersApi } from './api.mock.folders';
 import { scrubDef, seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
-  AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, Decision, Event, EventInput, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Link, Milestone,
+  AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, Decision, Goal, Event, EventInput, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Link, Milestone,
   NewIssue, Pin, Placement, Project, ProjectRow, ProjectStatus, ProjectStatusCategory, PropertyAppliesTo, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
   Due, FocusSession, TemplateInput, Value, ViewDef, ViewEntity, ViewFolder, ViewTemplate, WorkBlock,
 } from './bindings';
@@ -32,6 +33,7 @@ export type MockSeed = {
   labels?: Label[];
   cycles?: Cycle[];
   decisions?: Decision[];
+  goals?: Goal[];
   views?: SavedView[];
   pins?: Pin[];
   milestones?: Milestone[];
@@ -109,6 +111,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const cycles = (s.cycles ?? []).map((c) => ({ ...retro, ...c }));
   const events: Event[] = [];
   const decisions: Decision[] = s.decisions ?? [];
+  const goals: Goal[] = s.goals ?? [];
   const links: Link[] = [];
   const views = s.views ?? [];
   const viewTemplates: ViewTemplate[] = s.viewTemplates ?? [];
@@ -130,7 +133,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, decisions, links, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog, nextFlags, focusSessions, blocks] as unknown[][];
+  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, decisions, goals, links, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog, nextFlags, focusSessions, blocks] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -935,6 +938,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         const flag = nextFlags.findIndex(([x]) => x === id);
         if (flag >= 0) nextFlags.splice(flag, 1);
         s.issues.forEach((i) => i.project_id === id && (i.project_id = null));
+        for (const g of goals) g.project_ids = g.project_ids.filter((x) => x !== id);
         return null;
       },
       progress: async (id) => progressOf(id),
@@ -1000,6 +1004,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       },
     },
     decisions: decisionsApi(decisions, (id) => void getIssue(id), fail),
+    goals: goalsApi(goals, (id) => void find(s.projects, id, 'project'), progressOf, fail),
     links: linksApi(links, (id) => void getIssue(id), fail),
     templates: {
       list: async () => [...templates],
@@ -1518,7 +1523,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     'inbox.process issues.create issues.update issues.bulkUpdate issues.duplicate issues.markDuplicate issues.delete issues.emptyArchive issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.setFlow statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
     'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
     'projects.create projects.update projects.setNext projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
-    'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink decisions.create decisions.answer decisions.withdraw decisions.link decisions.unlink links.add links.remove templates.create templates.update templates.delete templates.apply ' +
+    'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink decisions.create decisions.answer decisions.withdraw decisions.link decisions.unlink goals.create goals.update goals.delete goals.link goals.unlink links.add links.remove templates.create templates.update templates.delete templates.apply ' +
     'labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
     'relations.add relations.remove relation.kindsCreate relation.kindsUpdate relation.kindsDelete views.save views.saveProject views.delete views.reorder folders.create folders.rename folders.delete folders.place folders.placeItem views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +
     'view.templatesCreate view.templatesUpdate view.templatesDelete pins.pin pins.unpin pins.reorder pins.set import.apply focus.start focus.stop shutdown.setTomorrow shutdown.complete'

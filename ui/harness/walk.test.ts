@@ -489,6 +489,24 @@ describe('walk', { timeout: 20_000 }, () => {
     await go('/issue/ABC-1');
     await pw(page.getByRole('button', { name: 'Repeat', exact: true })).toHaveCount(0);
   });
+
+  it('GOALS the Goals page groups by quarter, a goal links a project, and the switch removes the entry', async () => {
+    await open('/goals');
+    await pw(page.getByRole('heading', { name: '2027-Q1' })).toBeVisible();
+    await page.getByRole('link', { name: /Launch the website/ }).click();
+    await pw(page.getByRole('heading', { name: 'Launch the website' })).toBeVisible();
+    await page.getByRole('combobox', { name: 'Link a project' }).click();
+    await page.getByRole('option').first().click();
+    await pw(page.getByRole('button', { name: 'Unlink' })).toHaveCount(3);
+    await page.getByRole('button', { name: 'Achieved' }).click();
+    await pw(page.getByRole('button', { name: 'Reopen' })).toBeVisible();
+    await page.keyboard.press('g');
+    await page.keyboard.press('l');
+    await pw(page.getByRole('button', { name: 'New goal' })).toBeVisible();
+    await open('/settings/features');
+    await page.getByRole('switch', { name: 'Goals' }).click();
+    await pw(page.getByRole('link', { name: 'Goals' })).toHaveCount(0);
+  });
 });
 
 describe('Shutdown ritual', () => {
