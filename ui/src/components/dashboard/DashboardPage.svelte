@@ -27,12 +27,14 @@
   let metrics = $state<Metrics | null>(null);
   let stale = $state<StaleIssue[]>([]);
   let stuck = $state<NextAction[]>([]);
+  let lastReview = $state<string | null>(null);
   let error = $state('');
   let ready = $state(false);
 
   onMount(async () => {
-    const [tz, w, c, p, l] = await Promise.all([workspaceZone(), api.settings.get('week_start').catch(() => null), api.cycles.list(), api.projects.list(), api.labels.list()]);
+    const [tz, w, c, p, l, r] = await Promise.all([workspaceZone(), api.settings.get('week_start').catch(() => null), api.cycles.list(), api.projects.list(), api.labels.list(), api.settings.get('last_review').catch(() => null)]);
     [today, weekStart, cycles, projects, labels] = [localDay(new Date(), tz), w === 'monday' ? 'monday' : 'sunday', c, p, l];
+    lastReview = typeof r === 'string' ? r : null;
     ready = true;
   });
 
@@ -105,7 +107,7 @@
       {#each shown as c (c.id)}
         <section class="card" class:wide={c.wide} aria-label={c.title}>
           <h2>{c.title}</h2>
-          <c.component {metrics} measure={dashboard.measure} filter={filterOf(dashboard.project, dashboard.label)} cycle={range && 'Cycle' in range.scope ? range.scope.Cycle : null} {stale} {stuck} />
+          <c.component {metrics} measure={dashboard.measure} filter={filterOf(dashboard.project, dashboard.label)} cycle={range && 'Cycle' in range.scope ? range.scope.Cycle : null} {stale} {stuck} {lastReview} {today} />
         </section>
       {/each}
     </div>

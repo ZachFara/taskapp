@@ -27,7 +27,7 @@ function save() {
 export const set = (patch: Partial<Saved> & { project?: number | null; label?: number | null }) => (Object.assign(dashboard, patch), save());
 
 /** Cards that belong to another feature disappear with it. */
-const CARD_FEATURE: Record<string, Feature> = { stale: 'stale', cycle: 'cycles', stuck: 'next_actions', deep: 'focus' };
+const CARD_FEATURE: Record<string, Feature> = { stale: 'stale', cycle: 'cycles', stuck: 'next_actions', deep: 'focus', review: 'weekly_review' };
 
 /** Saved order first, then any card the saved order has not heard of (a later ticket's) in registry order. */
 export const orderedCards = () => {

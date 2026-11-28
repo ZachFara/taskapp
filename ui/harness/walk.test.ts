@@ -404,6 +404,19 @@ describe('walk', { timeout: 20_000 }, () => {
     await pw(page.locator('tr[data-slug=office]')).toContainText('Stuck');
   });
 
+  it('REVIEW the weekly review walks its six steps, records the day, and the Dashboard card shows it', async () => {
+    await open('/my');
+    await page.getByRole('link', { name: 'Weekly review' }).click();
+    await pw(page.getByRole('heading', { name: 'Inbox to zero' })).toBeVisible();
+    for (let i = 0; i < 6; i++) {
+      await page.getByRole('button', { name: 'Done for this step' }).click();
+      if (i < 5) await page.getByRole('button', { name: 'Next', exact: true }).click();
+    }
+    await page.getByRole('button', { name: 'Finish', exact: true }).click();
+    await go('/dashboard');
+    await pw(page.getByRole('region', { name: 'Weekly review' })).toContainText('since your weekly review');
+  });
+
   it('ARCHIVE an archived issue is deleted for good only after the dialog, and Cancel keeps it', async () => {
     await open();
     await press('j');

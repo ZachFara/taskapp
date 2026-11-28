@@ -434,6 +434,15 @@ switch Process Inbox off; its page, sidebar entry and commands go, the data stay
 For agents: `taskapp inbox [--limit N]` lists the next Inbox items and the total; `taskapp inbox process ABC-1 --do`, `--next PROJECT --as-next-action` also flags it as the project's next action,
 `--delegate "Sam"`, `--defer 2026-12-24`, `--next <project>`, `--someday` or `--trash` clears one (exactly one flag).
 
+## Weekly review
+
+Weekly review (sidebar, `g r`, or "Weekly review: start" in the command menu) walks one step at a time: Inbox to zero,
+Waiting (issues in Delegated or Waiting), Stuck projects (no next action), Stale issues, Someday, and the next 7 days
+(due issues and events). Each step shows its count and its list. Back and Next move between steps; "Done for this step"
+ticks the step. Finish is on once every step is ticked. It records today's date as the last review, and the Dashboard's
+"Weekly review" card shows the days since. The ticks last until you finish or start again.
+Settings > Features can switch it off ("Weekly review"); its page, sidebar entry, commands and card go.
+
 ## Dashboard
 
 The Dashboard (sidebar, or `g b`) shows how work is going over a range. Pick the range at the top: Today, This week,
@@ -700,7 +709,7 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 
 Settings > Features lists every optional feature with a switch, all on by default: Dashboard, Decisions, Cycles,
 Events, Progress charts (burn-ups and sparklines on projects and cycles), Stale nudges, Reminders capture, Google
-Calendar, Next actions, Process Inbox, Focus mode and Recurring issues. Switching one off hides its sidebar entries, its
+Calendar, Next actions, Process Inbox, Weekly review, Focus mode and Recurring issues. Switching one off hides its sidebar entries, its
 page (the address shows "is switched off"), its commands in the command menu, its Settings page where it has one
 (Cycles, Reminders, Calendar) and its dashboard card. Switching Cycles off also hides the cycle row in issue details and
 the cycle field in views. Switching Reminders capture or Google Calendar off stops their background sync too; Sync now
@@ -795,6 +804,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.next` | Go to Next actions | `g n` | Go to the next action of each project (when it is switched on in Settings). |
 | `nav.dashboard` | Go to Dashboard | `g b` | Go to the Dashboard (when it is switched on in Settings). |
 | `nav.process` | Process Inbox | `g o` | Go to Process Inbox (when it is switched on in Settings). |
+| `nav.review` | Go to Weekly review | `g r` | Go to the Weekly review (when it is switched on in Settings). |
 | `nav.decisions` | Go to Decisions | `g q` | Go to Decisions. |
 | `nav.views` | Go to Views | `g v` | Go to Views. |
 | `nav.timeline` | Go to Timeline | `g t` | Go to the all-projects timeline. |

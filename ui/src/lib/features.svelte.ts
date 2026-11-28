@@ -11,6 +11,7 @@ export const FEATURES = [
   { name: 'reminders', key: 'feature_reminders', label: 'Reminders capture', blurb: 'Import from an Apple Reminders list, and its Settings page.' },
   { name: 'gcal', key: 'feature_gcal', label: 'Google Calendar', blurb: 'Calendar alerts for due dates, and its Settings page.' },
   { name: 'process_inbox', key: 'feature_process_inbox', label: 'Process Inbox', blurb: 'Go through the Inbox one issue at a time: do it, delegate, defer, plan, park or trash. The Process Inbox page and its commands.' },
+  { name: 'weekly_review', key: 'feature_weekly_review', label: 'Weekly review', blurb: 'The Weekly review page: a guided checklist over the Inbox, Waiting, stuck and stale issues, Someday and the next 7 days, and the Days since weekly review card.' },
   { name: 'next_actions', key: 'feature_next_actions', label: 'Next actions', blurb: 'One flagged next action per project, the Next page, and a Stuck marker and dashboard card for active projects without one.' },
   { name: 'focus', key: 'feature_focus', label: 'Focus mode', blurb: 'One issue at a time on a timer, with a focus log per issue and the Deep hours card.' },
   { name: 'recurring', key: 'feature_recurring', label: 'Recurring issues', blurb: 'A Repeat rule on an issue: finishing it creates the next one. The Repeat row and its commands.' },
@@ -44,6 +45,7 @@ const COMMANDS: [RegExp, Feature][] = [
   [/^(chart\.|view\.insights$)/, 'charts'],
   [/^(nav\.next|issue\.next|project\.next)$/, 'next_actions'],
   [/^(nav\.process|process\.)/, 'process_inbox'],
+  [/^(nav\.review|review\.)/, 'weekly_review'],
   [/^settings\.reminders$/, 'reminders'],
   [/^settings\.calendar$/, 'gcal'],
   [/^(issue\.focus$|focus\.)/, 'focus'],
@@ -51,5 +53,5 @@ const COMMANDS: [RegExp, Feature][] = [
 ];
 export const featureOfCommand = (id: string) => COMMANDS.find(([re]) => re.test(id))?.[1];
 
-export const ROUTES: Record<string, Feature> = { '/focus': 'focus', '/dashboard': 'dashboard', '/decisions': 'decisions', '/cycles': 'cycles', '/events': 'events', '/event': 'events', '/next': 'next_actions', '/process': 'process_inbox' };
+export const ROUTES: Record<string, Feature> = { '/focus': 'focus', '/dashboard': 'dashboard', '/decisions': 'decisions', '/cycles': 'cycles', '/events': 'events', '/event': 'events', '/next': 'next_actions', '/process': 'process_inbox', '/review': 'weekly_review' };
 export const SETTINGS_PAGES: Record<string, Feature> = { cycles: 'cycles', reminders: 'reminders', calendar: 'gcal' };

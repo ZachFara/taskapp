@@ -152,6 +152,7 @@ async fn settings_from_the_ui_are_checked_like_their_commands() -> R {
         ("default_view_template", json!("four")),
         ("workspace_name", json!("   ")),
         ("made_up_key", json!(1)),
+        ("last_review", json!("yesterday")),
     ];
     for (key, value) in &bad {
         let e = settings::set_from_user(&db, key, value).await;
@@ -160,6 +161,13 @@ async fn settings_from_the_ui_are_checked_like_their_commands() -> R {
     settings::set_from_user(&db, "theme", &json!("dark")).await?;
     settings::set_from_user(&db, "insights.view.3", &json!("{}")).await?;
     settings::set_from_user(&db, "default_view_template", &Value::Null).await?;
+    settings::set_from_user(&db, "last_review", &json!("2026-11-20")).await?;
+    assert_eq!(
+        settings::get::<String>(&db, "last_review")
+            .await?
+            .as_deref(),
+        Some("2026-11-20")
+    );
     Ok(())
 }
 

@@ -1387,6 +1387,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         if (key === 'default_status' && !(typeof value === 'number' && s.statuses.some((st) => st.id === value)))
           fail('Invalid', `setting default_status must be ${typeof value === 'number' ? 'an existing status' : 'a status id'}`);
         if ((key === 'dashboard' || key === 'insights_charts' || key.startsWith('feature_')) && typeof value !== 'boolean') fail('Invalid', `setting ${key} must be true or false`);
+        if (key === 'last_review' && !(typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value))) fail('Invalid', 'setting last_review must be a date (YYYY-MM-DD)');
         const allowed = choices[key];
         if (allowed && !(typeof value === 'string' && allowed.includes(value))) fail('Invalid', `setting ${key} must be one of ${allowed.join(', ')}`);
         return nothing(settings.set(key, value));
