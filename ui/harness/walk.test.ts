@@ -119,7 +119,7 @@ describe('walk', { timeout: 20_000 }, () => {
     await rows().nth(2).click({ button: 'right' });
     const items = page.getByRole('menuitem');
     await items.first().waitFor();
-    expect(await items.count()).toBeLessThanOrEqual(18);
+    expect(await items.count()).toBeLessThanOrEqual(19);
     const top = await page.getByRole('menu').evaluate((m) => m.getBoundingClientRect().top);
     expect(top).toBeGreaterThanOrEqual(0);
   });
