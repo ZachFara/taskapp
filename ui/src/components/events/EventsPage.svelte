@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { copyLink } from '../../lib/deepLink';
   import { navigate } from '../../app/routes';
   import { api } from '../../lib/api';
   import type { Event } from '../../lib/bindings';
@@ -50,6 +51,7 @@
       'event.open': () => target && navigate(`/event/${target.id}`),
       'event.edit': () => target && (editing = true),
       'event.delete': () => target && void remove(target),
+      'event.copyLink': () => target && void copyLink('event', target.id),
       // The event page focuses its issue picker when it hears this; it mounts after the navigation, so ask late.
       'event.link': () => {
         const e = target;
@@ -76,7 +78,7 @@
     target = hit;
   }
   // Event actions only, in the order the menu shows them. Each one runs its registry command, as the command menu does.
-  const ORDER = ['event.open', 'event.edit', 'event.delete', 'event.link'];
+  const ORDER = ['event.open', 'event.edit', 'event.delete', 'event.link', 'event.copyLink'];
   const ctx = (): Ctx => ({ route: '/events', layout: null, selection: [], focusedIssueId: null, openIssueId: null, api, navigate });
   const items = $derived.by(() => {
     if (!menuOpen || !target) return [];

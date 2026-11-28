@@ -268,6 +268,24 @@ enum IssueCmd {
         /// Project id, slug or exact name (case-insensitive).
         #[arg(long)]
         project: Option<String>,
+        /// URL of the fix (a pull request, commit or doc); recorded as a link of kind solution.
+        #[arg(long)]
+        solution: Option<String>,
+    },
+    /// Adds a link to an issue; adding the same URL again changes nothing.
+    Link {
+        key: String,
+        /// http, https, mailto, obsidian or taskapp URL.
+        url: String,
+        #[arg(long)]
+        title: Option<String>,
+        /// solution, reference, pr, commit, doc or other.
+        #[arg(long, default_value = "other")]
+        kind: String,
+    },
+    /// Lists the links of an issue.
+    Links {
+        key: String,
     },
     /// Issues filtered by project, status, priority and label names, most urgent first.
     List(list::ListArgs),

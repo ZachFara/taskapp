@@ -11,7 +11,7 @@ use taskapp_core::{Db, Error, IssueId, Result, ViewDef, attachments, search};
 
 use crate::files::{
     AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, ImportLogRow, IssueFront,
-    IssueTemplateFile, LabelRow, PinRow, ProjectFile, ProjectStatusRow, PropertyFile,
+    IssueTemplateFile, LabelRow, LinkFile, PinRow, ProjectFile, ProjectStatusRow, PropertyFile,
     RelationKindRow, StatusRow, ViewFile, ViewFolderFile, ViewTemplateFile, invalid, parse_issue,
     plain_dir, read_plain,
 };
@@ -80,6 +80,7 @@ async fn wipe(tx: &mut Tx<'_>) -> Result<()> {
     for sql in [
         "DELETE FROM changes",
         "DELETE FROM attachments",
+        "DELETE FROM links",
         "DELETE FROM decision_issues",
         "DELETE FROM decisions",
         "DELETE FROM event_issues",
@@ -142,7 +143,31 @@ async fn restore_issues(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     }
     restore_events(tx, dir, &prefix).await?;
     restore_decisions(tx, dir, &prefix).await?;
+    restore_links(tx, dir, &prefix).await?;
     restore_import_log(tx, dir).await
+}
+
+/// After the issues, which the links name. An older export has no `links.yaml`.
+async fn restore_links(tx: &mut Tx<'_>, dir: &Path, prefix: &str) -> Result<()> {
+    for l in read_list::<LinkFile>(&dir.join("links.yaml"))? {
+        sqlx::query(
+            "INSERT INTO links (id, issue_id, url, title, kind, created_at)
+             VALUES (?, (SELECT id FROM issues WHERE number = ?), ?, ?, ?, ?)",
+        )
+        .bind(l.id)
+        .bind(number_of(prefix, &l.issue)?)
+        .bind(l.url)
+        .bind(l.title)
+        .bind(l.kind)
+        .bind(if l.created_at.is_empty() {
+            "1970-01-01 00:00:00".to_owned()
+        } else {
+            l.created_at
+        })
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
 }
 
 /// After the issues, so the links can name them. An older export has no `decisions.yaml`.

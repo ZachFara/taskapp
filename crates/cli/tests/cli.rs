@@ -1356,3 +1356,56 @@ fn issue_similar_finds_open_look_alikes() {
         .collect();
     assert_eq!(titles, ["Login crash on Safari"]);
 }
+
+#[test]
+fn issue_link_and_solution_are_recorded() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Fix it"]);
+    let pr = "https://example.com/pr/7";
+    let l = run_json(
+        &db,
+        &[
+            "issue", "link", "ABC-1", pr, "--title", "PR", "--kind", "pr",
+        ],
+    );
+    assert_eq!(
+        (l["kind"].as_str(), l["title"].as_str()),
+        (Some("pr"), Some("PR"))
+    );
+    assert!(
+        !run(&db, &["issue", "link", "ABC-1", "javascript:x"])
+            .status
+            .success()
+    );
+    assert!(
+        !run(&db, &["issue", "link", "ABC-1", pr, "--kind", "nope"])
+            .status
+            .success()
+    );
+
+    let sol = "https://example.com/commit/abc";
+    run_json(&db, &["issue", "update", "ABC-1", "--solution", sol]);
+    let all = run_json(&db, &["issue", "links", "ABC-1"]);
+    let all = all.as_array().expect("array");
+    assert_eq!(all.len(), 2);
+    assert_eq!(
+        (all[1]["url"].as_str(), all[1]["kind"].as_str()),
+        (Some(sol), Some("solution"))
+    );
+
+    // A refused URL leaves the rest of the update undone.
+    let out = run(
+        &db,
+        &[
+            "issue",
+            "update",
+            "ABC-1",
+            "--priority",
+            "2",
+            "--solution",
+            "file:///x",
+        ],
+    );
+    assert!(!out.status.success());
+    assert_eq!(run_json(&db, &["issue", "get", "ABC-1"])["priority"], 0);
+}

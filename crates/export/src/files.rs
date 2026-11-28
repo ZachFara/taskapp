@@ -180,6 +180,24 @@ pub struct DecisionFile {
     pub issues: Vec<String>,
 }
 
+/// One entry of `links.yaml`; `issue` is a key. Older exports have no such file.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct LinkFile {
+    pub id: i64,
+    pub issue: String,
+    pub url: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default = "other")]
+    pub kind: String,
+    #[serde(default)]
+    pub created_at: String,
+}
+
+fn other() -> String {
+    "other".into()
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, FromRow)]
 pub struct PinRow {
     pub kind: String,

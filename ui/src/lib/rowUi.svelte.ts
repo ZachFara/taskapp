@@ -35,11 +35,11 @@ export function runRow(id: string, target: unknown) {
   else dispatchEvent(new CustomEvent('command:palette.open', { detail: { page: c.id } }));
 }
 
-const VERB: Record<string, string> = { rename: 'Rename', duplicate: 'Duplicate', pin: 'Pin', change: 'Change icon of', delete: 'Delete', unpin: 'Unpin', newInside: 'New folder inside' };
+const VERB: Record<string, string> = { rename: 'Rename', duplicate: 'Duplicate', pin: 'Pin', change: 'Change icon of', delete: 'Delete', unpin: 'Unpin', newInside: 'New folder inside', copyLink: 'Copy link to' };
 const ACTIONS: Record<Kind, string[]> = {
-  view: ['view.rename', 'view.duplicate', 'view.pin', 'icon.change', 'view.delete'],
-  project: ['project.rename', 'project.pin', 'icon.change', 'project.delete'],
-  cycle: ['cycle.rename', 'cycle.pin', 'icon.change', 'cycle.delete'],
+  view: ['view.rename', 'view.duplicate', 'view.pin', 'view.copyLink', 'icon.change', 'view.delete'],
+  project: ['project.rename', 'project.pin', 'project.copyLink', 'icon.change', 'project.delete'],
+  cycle: ['cycle.rename', 'cycle.pin', 'cycle.copyLink', 'icon.change', 'cycle.delete'],
   label: ['label.rename', 'icon.change', 'label.delete'],
   template: ['template.rename', 'icon.change', 'template.delete'],
   folder: ['folder.newInside', 'folder.rename', 'folder.pin', 'folder.delete'],

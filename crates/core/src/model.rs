@@ -27,6 +27,7 @@ ids!(
     TemplateId,
     EventId,
     DecisionId,
+    LinkId,
     AttachmentId
 );
 
@@ -1029,6 +1030,28 @@ pub struct FlowEfficiency {
     pub n: u32,
     pub distribution: Vec<u32>,
     pub waiting: Vec<WaitingStatus>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum LinkKind {
+    Solution,
+    Reference,
+    Pr,
+    Commit,
+    Doc,
+    Other,
+}
+
+/// Where something about an issue lives: a URL or a `taskapp://` link, with a title and what it is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct Link {
+    pub id: LinkId,
+    pub issue_id: IssueId,
+    pub url: String,
+    pub title: String,
+    pub kind: LinkKind,
+    pub created_at: String,
 }
 
 /// One choice of a [`Decision`]; `key` is what an answer and the recommendation name.

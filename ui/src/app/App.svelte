@@ -20,6 +20,7 @@
   import Sidebar from '../components/Sidebar.svelte';
   import ImageViewer from '../components/ImageViewer.svelte';
   import UndoToast from '../components/UndoToast.svelte';
+  import LinkSolution from '../components/LinkSolution.svelte';
   import { fresh } from '../lib/motion.svelte';
   import { dismiss, onWrote, say } from '../components/undoState.svelte';
 
@@ -232,6 +233,7 @@
   {/if}
   <CheatSheet bind:open={cheat} />
   <div class="toasts"><UndoToast /></div>
+  <LinkSolution />
   <ImageViewer />
 {/if}
 

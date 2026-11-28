@@ -546,6 +546,7 @@ async fn dump(
         "relation_kinds",
         "events",
         "decisions",
+        "links",
         "work_blocks",
     ] {
         let cols: Vec<String> = sqlx::query_scalar(
@@ -610,6 +611,8 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
         "INSERT INTO decisions (id, question, context, options, recommendation, mode, status, answer, note, source, external_id, answered_at)
            VALUES (6, 'Which?', '# ctx', '[{\"key\":\"a\",\"label\":\"A\",\"tradeoff\":\"x: y\"}]', 'a', 'blocking', 'answered', 'a', 'fine', 'curia', 'D-9', '2026-01-02 03:04:05')",
         "INSERT INTO decision_issues (decision_id, issue_id) VALUES (6, (SELECT id FROM issues WHERE number = 1))",
+        "INSERT INTO links (id, issue_id, url, title, kind, created_at)
+           VALUES (5, (SELECT id FROM issues WHERE number = 2), 'https://example.com/pr/3', 'The fix', 'pr', '2026-01-02 03:04:05')",
         "UPDATE import_log SET source_deleted = 1",
         "INSERT INTO work_blocks (issue_id, start_utc, end_utc)
            VALUES ((SELECT id FROM issues WHERE number = 2), '2026-01-05T09:00:00+00:00', '2026-01-05T10:30:00+00:00')",
@@ -635,6 +638,12 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
     .fetch_all(&rebuilt.pool)
     .await?;
     assert_eq!(dlinked, vec![1]);
+    let linked_issue = sqlx::query_scalar::<_, i64>(
+        "SELECT i.number FROM links l JOIN issues i ON i.id = l.issue_id WHERE l.id = 5",
+    )
+    .fetch_all(&rebuilt.pool)
+    .await?;
+    assert_eq!(linked_issue, vec![2]);
     Ok(())
 }
 

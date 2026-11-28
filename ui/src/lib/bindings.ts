@@ -431,6 +431,27 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	linksList: (issue: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<Link[]>("links_list", { issue }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	linksAdd: (issue: IssueId, url: string, title: string | null, kind: LinkKind | null, options?: InvokeOptions) => __TAURI_INVOKE<Link>("links_add", { issue, url, title, kind }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	linksRemove: (id: LinkId, options?: InvokeOptions) => __TAURI_INVOKE<null>("links_remove", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	labelsList: (options?: InvokeOptions) => __TAURI_INVOKE<Label[]>("labels_list", undefined, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1436,6 +1457,20 @@ export type LeadTime = {
 	p85_days: number | null,
 	n: number,
 };
+
+/**  Where something about an issue lives: a URL or a `taskapp://` link, with a title and what it is. */
+export type Link = {
+	id: LinkId,
+	issue_id: IssueId,
+	url: string,
+	title: string,
+	kind: LinkKind,
+	created_at: string,
+};
+
+export type LinkId = number;
+
+export type LinkKind = "solution" | "reference" | "pr" | "commit" | "doc" | "other";
 
 /**  What is summed: story points, issue count, or estimated time (minutes). */
 export type Measure = "points" | "count" | "time";

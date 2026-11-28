@@ -8,6 +8,7 @@
   import { SKINS, setSkin, setTheme, theme } from '../../lib/theme.svelte';
   import { interfaceSize, setInterfaceSize, SIZES } from '../../lib/interfaceSize.svelte';
   import { motion, setSpeed, type Speed } from '../../lib/motion.svelte';
+  import { linkPrompt, setLinkPrompt } from '../../lib/linkPrompt.svelte';
   import { setTooltips, tooltips } from '../../lib/tooltips.svelte';
   import Switch from '../../ui/Switch.svelte';
   import { estimationItems, scaleItems } from '../insights/estimation';
@@ -147,6 +148,11 @@
       <span>Show tooltips</span>
       <Switch label="Show tooltips" bind:checked={() => tooltips.show, setTooltips} />
       <span class="st-hint">Name and shortcut on hover, for this device only (the other optional features are on the Features page). Off by default; every shortcut is still listed in the command menu. Applies at once.</span>
+    </div>
+    <div class="st-field">
+      <span>Ask for the solution link</span>
+      <Switch label="Ask for the solution link" bind:checked={() => linkPrompt.on, setLinkPrompt} />
+      <span class="st-hint">When an issue moves to a Completed status, offer to link its pull request, commit or doc. Skippable, never blocks. On by default; applies at once.</span>
     </div>
     <div class="st-field">
       <span>Estimation</span>

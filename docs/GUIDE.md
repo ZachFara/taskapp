@@ -144,6 +144,26 @@ issue has items (the Checklist field, on by default). `taskapp issue get` report
 - Link previews (page title, summary, image) are not built: they need a network fetch from the app, and the setting
   to switch them on is left out until that fetch is decided. Links stay chips with no fetch.
 
+### Links on issues, and links to items
+
+- **Copy link.** Every item has a link: `taskapp://issue/ABC-1`, `taskapp://project/<slug>`, `taskapp://view/<id>`,
+  `taskapp://cycle/<number>`, `taskapp://milestone/<id>`, `taskapp://event/<id>`, `taskapp://decision/<id>`. "Copy link"
+  is in the command menu and the right-click menu (issues also `mod+shift+c`). Opening one
+  from outside the app (the Mac hands it to Cairn) or from an issue's Links section shows that item; a link to
+  something that no longer exists opens nothing.
+- **Links section.** The issue panel's Links section lists links with a title and a kind (Solution, Reference, PR,
+  Commit, Doc, Other). Add one with a URL (http, https, mailto, obsidian or a `taskapp://` link), an optional title and a
+  kind; remove one with its x. Clicking a web link opens it outside the app through the same guard as links in
+  descriptions; a `taskapp://` link opens inside the app. Adding a URL the issue already has changes nothing. Add and
+  remove are undoable. Links are in the export (`links.yaml`) and come back on restore.
+- **Link the solution.** Moving one issue to a Completed status offers a small panel: paste a PR, commit or doc URL
+  (kept as a Solution link) or find another issue. Skip, or Escape, closes it; nothing waits for it. It does not ask
+  when the issue already has a Solution link. "Don't ask again" or Settings > General > Ask for the solution link turns
+  it off (per device). Moving several issues at once never asks.
+- **CLI.** `taskapp issue link ABC-1 <url> [--title T] [--kind solution|reference|pr|commit|doc|other]`,
+  `taskapp issue links ABC-1`, and `taskapp issue update ABC-1 --status Done --solution <url>` (the URL is checked first,
+  so a refused URL changes nothing). MCP does not have these yet.
+
 ### Sub-issues, relations, comments, history
 
 - **Sub-issues.** In the issue panel, "Sub-issues" shows a progress bar and a field: type a title and press enter to
@@ -811,6 +831,10 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `motion.slower` | Slower animations | (none) | One animation speed step slower (Normal, then Slow). |
 | `tooltips.toggle` | Show or hide tooltips | (none) | Switch the Show tooltips setting. |
 | `feature.<name>.toggle` | Turn Cycles on or off (one per feature) | (none) | Switch that feature on Settings > Features. |
+| `cycle.copyLink` | Copy link to cycle | (none) | On the Cycles page: copy `taskapp://cycle/<number>` of the open or current cycle. Also in a cycle's right-click menu. |
+| `event.copyLink` | Copy link to event | (none) | On an event page, or the event right-clicked on the Events list: copy `taskapp://event/<id>`. |
+| `decision.copyLink` | Copy link to decision | (none) | On the Decisions page: copy `taskapp://decision/<id>` of the decision last clicked. |
+| `issue.link.add` | Add a link to this issue | (none) | Focus the URL field of the Links section of the open issue. |
 | `cycle.move_unfinished` | Move unfinished issues to the next cycle | (none) | Move unfinished issues of the cycle to the next cycle (Cycles page). |
 | `cycle.new` | New cycle | (none) | New cycle. |
 | `group.add` | Add issue to this group | (none) | Add an issue to this group. |
@@ -829,6 +853,8 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `project.description.edit` | Edit project description | (none) | Edit the project description. |
 | `project.new` | New project | (none) | New project. |
 | `project.pin` | Pin or unpin project | (none) | Pin or unpin the project. |
+| `project.copyLink` | Copy link to project | (none) | Copy `taskapp://project/<slug>`. Also in the project's right-click menu. |
+| `milestone.copyLink` | Copy link to milestone | (none) | On a project page: pick a milestone and copy `taskapp://milestone/<id>`. |
 | `project.rename` | Rename project | (none) | Rename the project. |
 | `settings.backups` | Backups | (none) | Open Settings, Backups. |
 | `settings.calendar` | Calendar | (none) | Open Settings, Calendar. |
@@ -848,6 +874,7 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `status.new` | New status | (none) | New status. |
 | `template.new` | New template | (none) | New issue template. |
 | `theme.cycle` | Switch theme (light, dark, system) | (none) | Switch theme (light, dark, system). |
+| `view.copyLink` | Copy link to view | (none) | Copy `taskapp://view/<id>`. Also in the view's right-click menu. |
 | `view.delete` | Delete view | (none) | Delete the view. |
 | `view.display.open` | Display options… | (none) | Open Display options. |
 | `view.duplicate` | Save as new view | (none) | Save as new view. |
@@ -909,7 +936,9 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 |---|---|---|
 | `add <text> [--tz]` | Create an issue from quick-add text. | `taskapp add "Pay rent friday p1"` |
 | `issue create <title> [...]` | Create with flags: `--description --priority --status --project --due --estimate --points --created-at --completed-at --property k=v --parent --cycle --label --migration`. | `taskapp issue create "Fix login" --priority 2 --due 2026-12-01` |
-| `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points`. | `taskapp issue update ABC-1 --status 3` |
+| `issue link <key> <url>` | Add a link (`--title`, `--kind solution\|reference\|pr\|commit\|doc\|other`); the same URL twice is one link. | `taskapp issue link ABC-1 https://example.com/pr/7 --kind pr` |
+| `issue links <key>` | List an issue's links. | `taskapp issue links ABC-1` |
+| `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --solution <url>`. | `taskapp issue update ABC-1 --status 3` |
 | `issue list [...]` | Issues by name filters, most urgent first, with status, priority, project and label names: `--project --status --not-status --priority --label` (repeat or comma-separate). | `taskapp issue list --project Cairn --not-status Done,Canceled,Someday` |
 | `issue get <key>` | Show one issue, with `status`, `project`, `labels` and `priority_name` as names next to the ids. | `taskapp issue get ABC-1` |
 | `issue archive <key>` | Archive an issue. | `taskapp issue archive ABC-1` |

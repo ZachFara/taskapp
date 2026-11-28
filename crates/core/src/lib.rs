@@ -21,6 +21,7 @@ pub mod import;
 pub mod insights;
 pub mod issues;
 pub mod labels;
+pub mod links;
 pub mod metrics;
 pub mod palette;
 pub mod pins;

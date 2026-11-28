@@ -33,6 +33,13 @@ it('db-changed reloads the stores and open-issue navigates', async () => {
   expect(location.pathname).toBe('/issue/ABC-7');
 });
 
+it('open-link navigates to the item a taskapp link names', async () => {
+  const { listenToBackend } = await import('./stores.svelte');
+  await listenToBackend();
+  handlers['open-link']({ payload: 'taskapp://event/9' });
+  await vi.waitFor(() => expect(location.pathname).toBe('/event/9'));
+});
+
 it('keeps the newest store refresh when an older query finishes later', async () => {
   const { refreshAll, issues } = await import('./stores.svelte');
   const { api } = await import('./api');

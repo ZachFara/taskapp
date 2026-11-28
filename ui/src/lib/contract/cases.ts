@@ -652,6 +652,22 @@ export const cases: Case[] = [
   call('decisions: undo the link', 'history_undo'),
   call('decisions: the link is gone again', 'decisions_get', { id: 1 }),
 
+  // Issue links
+  call('links: add a solution', 'links_add', { issue: 1, url: ' https://example.com/pr/1 ', title: ' Fix ', kind: 'solution' }),
+  call('links: the same URL again is the same link', 'links_add', { issue: 1, url: 'https://example.com/pr/1', title: null, kind: null }),
+  call('links: a Cairn link with defaults', 'links_add', { issue: 1, url: 'taskapp://issue/ABC-2', title: null, kind: null }),
+  call('links: javascript is Invalid', 'links_add', { issue: 1, url: 'javascript:alert(1)', title: null, kind: null }),
+  call('links: a bare word is Invalid', 'links_add', { issue: 1, url: 'example.com', title: null, kind: null }),
+  call('links: a URL with a space is Invalid', 'links_add', { issue: 1, url: 'https://a b', title: null, kind: null }),
+  call('links: an unknown issue is NotFound', 'links_add', { issue: 999, url: 'https://example.com', title: null, kind: null }),
+  call('links: list', 'links_list', { issue: 1 }),
+  call('links: another issue has none', 'links_list', { issue: 2 }),
+  call('links: remove', 'links_remove', { id: 1 }),
+  call('links: removing it again is fine', 'links_remove', { id: 1 }),
+  call('links: list after removing', 'links_list', { issue: 1 }),
+  call('links: undo the last remove', 'history_undo'),
+  call('links: the link is back', 'links_list', { issue: 1 }),
+
   // Project views: the same definition, project fields
   call('pviews: seeded project views have their entity', 'views_list'),
   call('pviews: a project view is saved with its entity', 'views_save_project', { id: null, name: 'Live projects', def: def({ layout: 'Board', group_by: fixed('Status'), filter: cond(fixed('StatusCategory'), 'NotIn', ['completed', 'cancelled']) }), icon: null, color: null }),

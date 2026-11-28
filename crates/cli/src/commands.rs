@@ -8,11 +8,11 @@ use serde::Serialize;
 use serde_json::{Map, Value, json};
 use taskapp_core::{
     AttachmentId, ChangeSource, CycleId, Db, Due, Error, EventId, EventInput, FlowKind, IssueId,
-    IssuePatch, Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef,
+    IssuePatch, LinkKind, Measure, NewIssue, PinId, PinKind, ProgressScope, ProjectId, PropertyDef,
     PropertyKind, Relation, RelationKind, Result, SelectOption, TemplateId, ViewDef, ViewId,
     ViewTemplateId, attachments, backup, comments, cycles, events, history, import, insights,
-    issues, labels, pins, project_statuses, projects, properties, quickadd, relations, search,
-    statuses, templates, undo, view_templates, views,
+    issues, labels, links, pins, project_statuses, projects, properties, quickadd, relations,
+    search, statuses, templates, undo, view_templates, views,
 };
 
 use crate::{
@@ -175,10 +175,8 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
         update @ IssueCmd::Update { .. } => issue_update(db, update).await,
         IssueCmd::List(args) => crate::list::run(db, &args).await,
         IssueCmd::Get { key } => crate::list::get(db, &key).await,
-        IssueCmd::Archive { key } => {
-            let id = issue_id(db, &key).await?;
-            issues::archive(db, id, SRC).await?;
-            Ok(json!({"archived": key}))
+        keyed @ (IssueCmd::Archive { .. } | IssueCmd::Link { .. } | IssueCmd::Links { .. }) => {
+            issue_keyed(db, keyed).await
         }
         find @ (IssueCmd::Search { .. } | IssueCmd::Similar { .. }) => issue_find(db, find).await,
     }
@@ -213,6 +211,7 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         start,
         estimate,
         project,
+        solution,
     } = cmd
     else {
         unreachable!("issue_update is only called with Update");
@@ -244,7 +243,43 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         project_id: project_id.map(Some),
         ..IssuePatch::default()
     };
+    // The link goes first: a URL that is refused must not leave the rest of the update applied.
+    if let Some(url) = solution {
+        links::add(db, id, &url, None, Some(LinkKind::Solution), SRC).await?;
+    }
+    if patch == IssuePatch::default() {
+        return val(issues::get(db, id).await?);
+    }
     val(issues::update(db, id, patch, SRC).await?)
+}
+
+async fn issue_keyed(db: &Db, cmd: IssueCmd) -> Result<Value> {
+    match cmd {
+        IssueCmd::Archive { key } => {
+            let id = issue_id(db, &key).await?;
+            issues::archive(db, id, SRC).await?;
+            Ok(json!({"archived": key}))
+        }
+        IssueCmd::Link {
+            key,
+            url,
+            title,
+            kind,
+        } => {
+            let id = issue_id(db, &key).await?;
+            val(links::add(db, id, &url, title, Some(link_kind(&kind)?), SRC).await?)
+        }
+        IssueCmd::Links { key } => val(links::list(db, issue_id(db, &key).await?).await?),
+        _ => unreachable!("issue_keyed is only called with Archive, Link or Links"),
+    }
+}
+
+fn link_kind(kind: &str) -> Result<LinkKind> {
+    serde_json::from_value(json!(kind)).map_err(|_| {
+        Error::Invalid(format!(
+            "kind {kind} must be solution, reference, pr, commit, doc or other"
+        ))
+    })
 }
 
 fn scope(a: &ScopeArgs) -> Result<(ProgressScope, Measure)> {

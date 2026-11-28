@@ -148,6 +148,12 @@ macro_rules! with_commands {
                 decisions::unlink(&s.db, decision, issue, $source).await
             }
 
+            links_list(s, issue: IssueId) -> Vec<Link> { links::list(&s.db, issue).await }
+            links_add(s, issue: IssueId, url: String, title: Option<String>, kind: Option<LinkKind>) -> Link {
+                links::add(&s.db, issue, &url, title, kind, $source).await
+            }
+            links_remove(s, id: LinkId) -> () { links::remove(&s.db, id, $source).await }
+
             labels_list(s) -> Vec<Label> { labels::list(&s.db).await }
             labels_create(s, name: String, color: String, icon: Option<String>) -> Label {
                 labels::create(&s.db, &name, &color, icon, $source).await

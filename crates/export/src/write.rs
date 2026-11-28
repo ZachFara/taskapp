@@ -8,9 +8,9 @@ use taskapp_core::{Db, Result, attachments, settings};
 
 use crate::files::{
     AttachmentFile, CommentText, CycleRow, DecisionFile, EventFile, ImportLogRow, IssueFront,
-    IssueTemplateFile, LabelRow, MilestoneRow, PinRow, ProjectFile, ProjectStatusRow, PropertyFile,
-    RelationKindRow, StatusRow, ViewFile, ViewFolderFile, ViewTemplateFile, WorkBlockRow, invalid,
-    key, plain_dir, read_plain, render_issue, safe_name,
+    IssueTemplateFile, LabelRow, LinkFile, MilestoneRow, PinRow, ProjectFile, ProjectStatusRow,
+    PropertyFile, RelationKindRow, StatusRow, ViewFile, ViewFolderFile, ViewTemplateFile,
+    WorkBlockRow, invalid, key, plain_dir, read_plain, render_issue, safe_name,
 };
 
 pub struct ExportStats {
@@ -344,7 +344,28 @@ async fn decisions(db: &Db, prefix: &str) -> Result<Vec<DecisionFile>> {
         .collect()
 }
 
+async fn links(db: &Db, prefix: &str) -> Result<Vec<LinkFile>> {
+    let rows = sqlx::query_as::<_, (i64, i64, String, String, String, String)>(
+        "SELECT l.id, i.number, l.url, l.title, l.kind, l.created_at FROM links l
+         JOIN issues i ON i.id = l.issue_id ORDER BY l.id",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| LinkFile {
+            id: r.0,
+            issue: key(prefix, r.1),
+            url: r.2,
+            title: r.3,
+            kind: r.4,
+            created_at: r.5,
+        })
+        .collect())
+}
+
 async fn event_files(db: &Db, prefix: &str, files: &mut BTreeMap<String, String>) -> Result<()> {
+    files.insert("links.yaml".to_string(), yaml(&links(db, prefix).await?)?);
     files.insert(
         "decisions.yaml".to_string(),
         yaml(&decisions(db, prefix).await?)?,
