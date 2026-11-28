@@ -96,6 +96,10 @@
   {#if issue.repeat}<span class="muted">{repeatWords(issue.repeat)}</span>{/if}
 {:else if field.Fixed === 'Depth'}
   {#if issue.depth}<span class="muted">{issue.depth}</span>{/if}
+{:else if field.Fixed === 'WaitingOn'}
+  {#if issue.waiting_on}<span class="muted">{issue.waiting_on}</span>{/if}
+{:else if field.Fixed === 'FollowUp'}
+  {#if issue.follow_up}<span class="num">{day(issue.follow_up)}</span>{/if}
 {:else if field.Fixed === 'CreatedAt'}
   <span class="num">{day(issue.created_at)}</span>
 {:else if field.Fixed === 'UpdatedAt'}

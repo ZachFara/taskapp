@@ -8,6 +8,7 @@ import { forecast, metrics } from './api.mock.metrics';
 import { stale } from './api.mock.stale';
 import { nextActions } from './api.mock.next';
 import { deepHours } from './api.mock.focus';
+import { waitingList } from './api.mock.waiting';
 import { stepLabel } from './api.mock.stepLabel';
 import { canonical, nextDue, parseRule, resetChecklist, ruleText } from './recur';
 import { byStatusOrder, flowDefaults } from './statusOrder';
@@ -53,7 +54,7 @@ export type MockApi = Api & {
 };
 
 const nullableIssueFields = [
-  'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until', 'depth', 'repeat',
+  'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until', 'depth', 'repeat', 'waiting_on', 'follow_up',
 ] as const;
 // The backend's error text is `<kind>: <detail>`; the UI shows it as is.
 const fail = (kind: string, message: string): never => {
@@ -257,7 +258,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       ProjectStatus: s.projects.find((x) => x.id === i.project_id)?.status_id ?? null,
       Title: i.title, Status: i.status_id, StatusCategory: category(i)?.toLowerCase() ?? null, Priority: i.priority,
       Project: i.project_id, Milestone: i.milestone_id, Cycle: i.cycle_id, Label: i.label_ids,
-      Parent: i.parent_id, StartDate: i.start_date, DueDate: dueDay(i), Estimate: i.estimate_minutes, Points: i.points, HiddenUntil: i.hidden_until, Repeat: i.repeat,
+      Parent: i.parent_id, StartDate: i.start_date, DueDate: dueDay(i), Estimate: i.estimate_minutes, Points: i.points, HiddenUntil: i.hidden_until, Repeat: i.repeat, WaitingOn: i.waiting_on, FollowUp: i.follow_up,
       CreatedAt: i.created_at, UpdatedAt: i.updated_at, CompletedAt: i.completed_at,
       Archived: i.archived_at !== null, Key: i.id,
       SubIssueProgress: s.issues.filter((c) => c.parent_id === i.id && !c.archived_at).length,
@@ -306,7 +307,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     d.setUTCDate(d.getUTCDate() + (m![1] ? Number(`${m![1]}${m![2]}`) : 0));
     return d.toISOString().slice(0, 10);
   };
-  const dateFixed = ['StartDate', 'DueDate', 'HiddenUntil', 'TargetDate', 'CreatedAt', 'UpdatedAt', 'CompletedAt'];
+  const dateFixed = ['StartDate', 'DueDate', 'HiddenUntil', 'FollowUp', 'TargetDate', 'CreatedAt', 'UpdatedAt', 'CompletedAt'];
   const withRelativeDays = (f: Filter, defs: PropertyDef[], today: string): Filter => {
     if (f.And) return { And: f.And.map((x) => withRelativeDays(x, defs, today)) };
     if (f.Or) return { Or: f.Or.map((x) => withRelativeDays(x, defs, today)) };
@@ -374,7 +375,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       priority: input.priority ?? 0, project_id: input.project_id ?? null, milestone_id: input.milestone_id ?? null,
       parent_id: input.parent_id ?? null, cycle_id: input.cycle_id ?? null, label_ids: [...new Set(input.label_ids ?? [])].sort((a, b) => a - b),
       start_date: input.start_date ?? null, due: input.due ?? null, estimate_minutes: input.estimate_minutes ?? null, points: input.points ?? null, hidden_until: null,
-      depth: null, repeat: input.repeat ? canonical(input.repeat) ?? fail('Invalid', `\`${input.repeat}\` is not a repeat rule`) : null, properties: input.properties ?? {}, created_at: input.created_at ?? at, updated_at: at,
+      depth: null, repeat: input.repeat ? canonical(input.repeat) ?? fail('Invalid', `\`${input.repeat}\` is not a repeat rule`) : null, waiting_on: null, follow_up: null, properties: input.properties ?? {}, created_at: input.created_at ?? at, updated_at: at,
       completed_at: input.completed_at ?? null, archived_at: null,
     };
     checkIssue(issue, issue.properties);
@@ -622,7 +623,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           Object.assign(i, old);
           throw e;
         }
-        const order = ['title', 'description', 'status_id', 'priority', 'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'label_ids', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until', 'repeat', 'properties'] as const;
+        const order = ['title', 'description', 'status_id', 'priority', 'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'label_ids', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until', 'repeat', 'waiting_on', 'follow_up', 'properties'] as const;
         for (const k of order) if (changed.includes(k)) rec(id, k, old[k] as Value, i[k] as Value);
         i.updated_at = now();
         if (i.status_id !== old.status_id) i.completed_at = done(i) ? (done({ ...old }) ? old.completed_at : i.updated_at) : null;
@@ -1301,6 +1302,9 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     stale: {
       list: async () => stale(s.issues, s.statuses, changes, new Date()),
     },
+    waiting: {
+      list: async () => waitingList(s.issues, s.statuses),
+    },
     search: {
       // shortcut: results come in id order; the backend ranks by bm25. Upgrade when a screen depends on relevance order.
       search: async (text, limit) => {
@@ -1640,7 +1644,7 @@ const issues: Issue[] = rows.map((r, k) => {
     project_id: r.project, milestone_id: r.milestone ?? null, parent_id: r.parent ?? null, cycle_id: r.cycle ?? null,
     label_ids: r.labels ?? [], start_date: r.start === undefined ? null : day(r.start),
     due: r.due === undefined ? null : { Date: day(r.due) }, estimate_minutes: r.hours === undefined ? null : r.hours * 60,
-    points: POINTS[n] ?? null, hidden_until: null, depth: null, repeat: null,
+    points: POINTS[n] ?? null, hidden_until: null, depth: null, repeat: null, waiting_on: null, follow_up: null,
     properties: { ...(r.area && { area: r.area }), ...(r.effort && { effort: r.effort }) } as Issue['properties'],
     created_at: created, updated_at: created, completed_at: finished ? created : null, archived_at: null,
   };

@@ -32,6 +32,8 @@ const ISSUE_FIELDS: &[&str] = &[
     "hidden_until",
     "depth",
     "repeat",
+    "waiting_on",
+    "follow_up",
     "properties",
 ];
 

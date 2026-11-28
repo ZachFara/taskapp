@@ -18,6 +18,7 @@ export const FEATURES = [
   { name: 'time_blocking', key: 'feature_time_blocking', label: 'Time blocking', blurb: 'Plan the day: drag issues onto time blocks for today and tomorrow, which become calendar events. The Today plan page and its commands.' },
   { name: 'shutdown', key: 'feature_shutdown', label: 'Shutdown ritual', blurb: 'An end-of-day checklist from the Shutdown command: Inbox left, up to three deep issues for tomorrow, loose ends, and a streak. Off until switched on.' },
   { name: 'goals', key: 'feature_goals', label: 'Goals', blurb: 'Quarterly goals above your projects: the Goals page, progress from linked projects, and the goals on a project page.' },
+  { name: 'waiting', key: 'feature_waiting', label: 'Waiting for', blurb: 'Who an issue waits on and a follow-up day: the Waiting page, the Follow-ups dashboard card, and the follow up marker.' },
 ] as const;
 export type Feature = (typeof FEATURES)[number]['name'];
 
@@ -59,8 +60,9 @@ const COMMANDS: [RegExp, Feature][] = [
   [/^(nav\.plan|plan\.)/, 'time_blocking'],
   [/^shutdown\./, 'shutdown'],
   [/^(nav\.goals|goal\.)/, 'goals'],
+  [/^(nav\.waiting|issue\.wait|issue\.followUp)/, 'waiting'],
 ];
 export const featureOfCommand = (id: string) => COMMANDS.find(([re]) => re.test(id))?.[1];
 
-export const ROUTES: Record<string, Feature> = { '/focus': 'focus', '/dashboard': 'dashboard', '/decisions': 'decisions', '/cycles': 'cycles', '/events': 'events', '/event': 'events', '/next': 'next_actions', '/process': 'process_inbox', '/plan': 'time_blocking', '/review': 'weekly_review', '/goals': 'goals', '/goal': 'goals' };
+export const ROUTES: Record<string, Feature> = { '/focus': 'focus', '/dashboard': 'dashboard', '/decisions': 'decisions', '/cycles': 'cycles', '/events': 'events', '/event': 'events', '/next': 'next_actions', '/process': 'process_inbox', '/plan': 'time_blocking', '/review': 'weekly_review', '/goals': 'goals', '/goal': 'goals', '/waiting': 'waiting' };
 export const SETTINGS_PAGES: Record<string, Feature> = { cycles: 'cycles', reminders: 'reminders', calendar: 'gcal' };

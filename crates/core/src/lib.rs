@@ -49,6 +49,7 @@ pub mod undo;
 pub mod view_folders;
 pub mod view_templates;
 pub mod views;
+pub mod waiting;
 pub mod workspace;
 
 pub use db::Db;

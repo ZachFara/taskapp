@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
-  import type { Cycle, Label, NextAction, Project, StaleIssue } from '../../lib/bindings';
+  import type { Cycle, Issue, Label, NextAction, Project, StaleIssue } from '../../lib/bindings';
+  import { isOn } from '../../lib/features.svelte';
   import { localDay } from '../../lib/gantt';
   import Button from '../../ui/Button.svelte';
   import Checkbox from '../../ui/Checkbox.svelte';
@@ -28,6 +29,7 @@
   let stale = $state<StaleIssue[]>([]);
   let stuck = $state<NextAction[]>([]);
   let lastReview = $state<string | null>(null);
+  let waiting = $state<Issue[]>([]);
   let error = $state('');
   let ready = $state(false);
 
@@ -42,7 +44,10 @@
   // A cycle chosen in Range links to its retrospective.
   const picked = $derived(range && 'Cycle' in range.scope ? cycles.find((c) => c.id === (range.scope as { Cycle: number }).Cycle) : undefined);
   const all = $derived([...PRESETS.filter((p) => p.id !== 'custom'), ...cycles.map((c) => ({ id: `cycle:${c.id}`, label: c.name ?? `Cycle ${c.number}` })), PRESETS.at(-1)!].map((p) => ({ value: p.id, label: p.label })));
-  const shown = $derived(orderedCards().filter((id) => !dashboard.hidden.includes(id)).map((id) => CARDS.find((c) => c.id === id)!));
+  // The follow-ups card is part of the Waiting for feature.
+  const cardOn = (id: string) => id !== 'followups' || isOn('waiting');
+  const shown = $derived(orderedCards().filter((id) => cardOn(id) && !dashboard.hidden.includes(id)).map((id) => CARDS.find((c) => c.id === id)!));
+  const followUps = $derived(waiting.filter((i) => i.follow_up !== null && i.follow_up <= today));
 
   // A stale answer (the range changed while it was loading) is dropped.
   let asked = 0;
@@ -52,9 +57,9 @@
     const q = { scope: range.scope, bucket: bucketFor(range.from, range.to), filter: filterOf(dashboard.project, dashboard.label), measure: dashboard.measure };
     error = '';
     metrics = null;
-    Promise.all([metricsFor(q), api.stale.list(), api.next.list()]).then(
-      ([m, st, nx]) => {
-        if (n === asked) [metrics, stale, stuck] = [m, st, nx.filter((x) => x.stuck)];
+    Promise.all([metricsFor(q), api.stale.list(), api.next.list(), api.waiting.list()]).then(
+      ([m, st, nx, wt]) => {
+        if (n === asked) [metrics, stale, stuck, waiting] = [m, st, nx.filter((x) => x.stuck), wt];
       },
       (e) => n === asked && (error = (e as { message?: string }).message ?? String(e)),
     );
@@ -79,7 +84,7 @@
     <Popover>
       {#snippet trigger(props)}<Button icon="eye" {...props}>Cards</Button>{/snippet}
       <ul class="cards" aria-label="Dashboard cards">
-        {#each orderedCards() as id, i (id)}
+        {#each orderedCards().filter(cardOn) as id, i (id)}
           <li>
             <Checkbox label={CARDS.find((c) => c.id === id)!.title} checked={!dashboard.hidden.includes(id)} onchange={() => toggleCard(id)} />
             <IconButton icon="arrow-up" label="Move earlier" disabled={i === 0} onclick={() => moveCard(id, -1)} />
@@ -107,7 +112,7 @@
       {#each shown as c (c.id)}
         <section class="card" class:wide={c.wide} aria-label={c.title}>
           <h2>{c.title}</h2>
-          <c.component {metrics} measure={dashboard.measure} filter={filterOf(dashboard.project, dashboard.label)} cycle={range && 'Cycle' in range.scope ? range.scope.Cycle : null} {stale} {stuck} {lastReview} {today} />
+          <c.component {metrics} measure={dashboard.measure} filter={filterOf(dashboard.project, dashboard.label)} cycle={range && 'Cycle' in range.scope ? range.scope.Cycle : null} {stale} {stuck} {lastReview} {today} waiting={followUps} />
         </section>
       {/each}
     </div>

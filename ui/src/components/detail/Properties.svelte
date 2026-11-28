@@ -198,6 +198,27 @@
   </PropertyRow>
   {/snippet}
 
+  {#snippet row_waiting()}
+  <PropertyRow id="waiting" name="Waiting on" cmd="issue.wait" bind:openRow>
+    {#snippet value()}{issue.waiting_on ?? ''}{#if issue.waiting_on === null}{@render none()}{/if}{/snippet}
+    {#snippet editor(close)}
+      <div class="stack">
+        <TextInput label="Waiting on" placeholder="Sam, the vendor, a reply" value={issue.waiting_on ?? ''} onchange={(v) => { if (v.trim()) { close(); save({ waiting_on: v.trim() }); } }} />
+        {#if issue.waiting_on !== null}<Button onclick={() => { close(); save({ waiting_on: null, follow_up: null }); }}>Stop waiting</Button>{/if}
+      </div>
+    {/snippet}
+  </PropertyRow>
+  <PropertyRow id="follow_up" name="Follow up" cmd="issue.followUp" bind:openRow>
+    {#snippet value()}{issue.follow_up ?? ''}{#if issue.follow_up === null}{@render none()}{/if}{/snippet}
+    {#snippet editor(close)}
+      <div class="stack">
+        <TextInput type="date" label="Follow up on" value={issue.follow_up ?? ''} onchange={(v) => { close(); save({ follow_up: v || null }); }} />
+        {#if issue.follow_up !== null}<Button onclick={() => { close(); save({ follow_up: null }); }}>No follow-up day</Button>{/if}
+      </div>
+    {/snippet}
+  </PropertyRow>
+  {/snippet}
+
   {#snippet row_repeat()}
   <PropertyRow id="repeat" name="Repeat" cmd="issue.repeat" bind:openRow>
     {#snippet value()}{repeatWords(issue.repeat) ?? ''}{#if issue.repeat === null}{@render none()}{/if}{/snippet}
@@ -219,6 +240,7 @@
   {/each}
 
   {#if isOn('recurring')}{@render row_repeat()}{/if}
+  {#if isOn('waiting')}{@render row_waiting()}{/if}
 
   <PropertyRows defs={visible} values={issue.properties} {setProp} bind:openRow />
 </section>

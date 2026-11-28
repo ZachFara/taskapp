@@ -20,6 +20,7 @@ export type DisplayDef = ViewDef & {
 export const BUILT_IN: { field: FieldRef; name: string }[] = [
   ['Key', 'Key'], ['Priority', 'Priority'], ['Status', 'Status'], ['Label', 'Labels'], ['Project', 'Project'],
   ['Milestone', 'Milestone'], ['Cycle', 'Cycle'], ['Parent', 'Parent'], ['StartDate', 'Start'], ['DueDate', 'Due'], ['Estimate', 'Estimate'], ['Points', 'Points'], ['Depth', 'Depth'], ['Repeat', 'Repeats'],
+  ['WaitingOn', 'Waiting on'], ['FollowUp', 'Follow up'],
   ['SubIssueProgress', 'Sub-issues'], ['Checklist', 'Checklist'], ['RelationCount', 'Relations'], ['CommentCount', 'Comments'], ['CreatedAt', 'Created'], ['UpdatedAt', 'Updated'],
 ].map(([f, name]) => ({ field: { Fixed: f as FixedField }, name }));
 

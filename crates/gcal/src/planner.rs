@@ -383,6 +383,8 @@ mod tests {
             hidden_until: None,
             depth: None,
             repeat: None,
+            waiting_on: None,
+            follow_up: None,
             properties: serde_json::Map::default(),
             created_at: now,
             updated_at: now,

@@ -501,11 +501,27 @@ describe('walk', { timeout: 20_000 }, () => {
     await page.getByRole('button', { name: 'Achieved' }).click();
     await pw(page.getByRole('button', { name: 'Reopen' })).toBeVisible();
     await page.keyboard.press('g');
-    await page.keyboard.press('l');
+    await page.keyboard.press('k');
     await pw(page.getByRole('button', { name: 'New goal' })).toBeVisible();
     await open('/settings/features');
     await page.getByRole('switch', { name: 'Goals' }).click();
     await pw(page.getByRole('link', { name: 'Goals' })).toHaveCount(0);
+  });
+
+  it('WAIT the Waiting on row sets who, the Waiting for page lists it, and the switch removes the page and the row', async () => {
+    await open('/issue/ABC-1');
+    await page.getByRole('button', { name: 'Waiting on', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Waiting on' }).fill('Sam');
+    await page.getByRole('textbox', { name: 'Waiting on' }).press('Enter');
+    await pw(page.getByRole('button', { name: 'Waiting on', exact: true })).toHaveText('Sam');
+    await press('g', 'w');
+    await pw(page.getByRole('heading', { name: 'Waiting for' })).toBeVisible();
+    await pw(page.locator('[data-key="ABC-1"]')).toContainText('waiting on Sam');
+    await open('/settings/features');
+    await page.getByRole('switch', { name: 'Waiting for' }).click();
+    await pw(page.getByRole('link', { name: 'Waiting for' })).toHaveCount(0);
+    await go('/issue/ABC-1');
+    await pw(page.getByRole('button', { name: 'Waiting on', exact: true })).toHaveCount(0);
   });
 });
 

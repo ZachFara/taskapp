@@ -544,6 +544,18 @@ the Add box. Finish shutdown records today; the panel then says "Shutdown comple
 in a row. The checklist keeps its data in settings, so undo takes back a finish or a saved plan. The CLI prints the same
 state as JSON with `taskapp shutdown`.
 
+### Waiting for
+
+Delegated work gets a Waiting on note (who or what you wait on) and a Follow up day (when to check back). Both are
+rows in the issue's Details, and the commands "Waiting on" (`issue.wait`) and "Follow-up day" (`issue.followUp`) set
+them from the command menu; "Stop waiting" clears both. The Waiting for page (`g w`, or the sidebar) lists the open
+issues in three groups: Due follow-up, Later and No date. The Dashboard card "Follow-ups due" lists the follow-ups
+that have come. Once the day has come the issue also shows in Next actions (a Follow-ups due list above the projects)
+and in every list with a "follow up" marker. The fields are views fields too: Waiting on and Follow up can be shown and
+filtered. CLI: `taskapp issue wait ABC-1 --on Sam --until 2026-12-04`, `--clear`; `taskapp waiting` lists them.
+Settings > Features > Waiting for hides the row, the page, the card and the commands. Not built: waiting in quick add,
+and the Process Inbox Delegate choice does not set the Waiting on field yet (it still adds a "Waiting on" comment).
+
 ## Points and insights
 
 - **Estimation setting** (Settings > General): None, Points, Time or Both. Points show only for Points or Both; time
@@ -752,7 +764,7 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 
 Settings > Features lists every optional feature with a switch, all on by default except the Shutdown ritual: Dashboard, Decisions, Cycles,
 Events, Progress charts (burn-ups and sparklines on projects and cycles), Stale nudges, Reminders capture, Google
-Calendar, Next actions, Process Inbox, Weekly review, Focus mode, Recurring issues the Shutdown ritual, Time blocking and Goals. Switching one off hides its sidebar entries, its
+Calendar, Next actions, Process Inbox, Weekly review, Focus mode, Recurring issues, the Shutdown ritual, Time blocking, Goals and Waiting for. Switching one off hides its sidebar entries, its
 page (the address shows "is switched off"), its commands in the command menu, its Settings page where it has one
 (Cycles, Reminders, Calendar) and its dashboard card. Switching Cycles off also hides the cycle row in issue details and
 the cycle field in views. Switching Reminders capture or Google Calendar off stops their background sync too; Sync now
@@ -849,6 +861,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.plan` | Go to Today plan | `g l` | Go to the Today plan page (when it is switched on in Settings). |
 | `nav.process` | Process Inbox | `g o` | Go to Process Inbox (when it is switched on in Settings). |
 | `nav.review` | Go to Weekly review | `g r` | Go to the Weekly review (when it is switched on in Settings). |
+| `nav.waiting` | Go to Waiting for | `g w` | Go to the open issues you are waiting on (when it is switched on in Settings). |
 | `nav.decisions` | Go to Decisions | `g q` | Go to Decisions. |
 | `nav.goals` | Go to Goals | `g k` | Go to Goals (when it is switched on in Settings). |
 | `nav.views` | Go to Views | `g v` | Go to Views. |
@@ -980,6 +993,8 @@ These appear in the command menu (when they apply) and have no shortcut.
 |---|---|---|---|
 | `issue.repeat` | Repeat | (none) | Pick a repeat preset or type a rule; "Stop repeating" clears it. |
 | `issue.repeat.skip` | Skip this occurrence | (none) | Move a repeating issue's due date to its next occurrence. |
+| `issue.wait` | Waiting on | (none) | Type who the issue waits on; "Stop waiting" clears it and the follow-up day. |
+| `issue.followUp` | Follow-up day | (none) | Tomorrow, in a week, a typed day, or no follow-up day. |
 | `issue.next` | Make next action | (none) | Flag the issue as its project's next action. |
 | `project.next` | Set next action | (none) | On a project page: pick the project's next action from its open issues, or clear it. |
 | `image.attach` | Attach image | (none) | Choose an image file for the description or comment box you used last. |
@@ -1104,6 +1119,8 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `issue links <key>` | List an issue's links. | `taskapp issue links ABC-1` |
 | `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --solution <url> --hide-until DATE\|clear`. | `taskapp issue update ABC-1 --status 3` |
 | `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --depth deep\|shallow\|none`. | `taskapp issue update ABC-1 --status 3` |
+| `issue wait <key> [--on NAME] [--until DATE] [--clear]` | Set who the issue waits on and the day to check back, or `--clear` both. | `taskapp issue wait ABC-1 --on Sam --until 2026-12-04` |
+| Open issues you are waiting on, due follow-ups first: `waiting` | List them. | `taskapp waiting` |
 | `issue repeat <key> [rule]` | Set a repeat rule ("every monday"), or `--clear` it, or `--skip` to the next occurrence. | `taskapp issue repeat ABC-1 "every 2 weeks"` |
 | `shutdown` checklist | The end-of-day checklist as it stands today: Inbox count, deep issues, tomorrow's picks, whether today is finished and the streak. | `taskapp shutdown` |
 | `focus start <key> [--deep]`, `focus stop`, `focus log [--key] [--range]` | Focus sessions: start one (ends a running one), end the running one, list sessions with their total minutes. | `taskapp focus start ABC-1 --deep` |

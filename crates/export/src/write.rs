@@ -672,6 +672,8 @@ struct IssueRow {
     hidden_until: Option<NaiveDate>,
     depth: Option<String>,
     repeat_rule: Option<String>,
+    waiting_on: Option<String>,
+    follow_up: Option<NaiveDate>,
     properties: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -681,7 +683,7 @@ struct IssueRow {
 
 const ISSUE_SQL: &str = "SELECT i.number, i.title, i.description, s.name AS status, i.priority,
         p.slug AS project, m.name AS milestone, par.number AS parent, c.number AS cycle,
-        i.start_date, i.due_date, i.due_time_utc, i.due_tz, i.estimate_minutes, i.points, i.hidden_until, i.depth, i.repeat_rule, i.properties,
+        i.start_date, i.due_date, i.due_time_utc, i.due_tz, i.estimate_minutes, i.points, i.hidden_until, i.depth, i.repeat_rule, i.waiting_on, i.follow_up, i.properties,
         i.created_at, i.updated_at, i.completed_at, i.archived_at
     FROM issues i
     JOIN statuses s ON s.id = i.status_id
@@ -825,6 +827,8 @@ fn front_of(
         hidden_until,
         depth,
         repeat_rule,
+        waiting_on,
+        follow_up,
         properties,
         created_at,
         updated_at,
@@ -850,6 +854,8 @@ fn front_of(
         hidden_until,
         depth,
         repeat: repeat_rule,
+        waiting_on,
+        follow_up,
         created_at,
         updated_at,
         completed_at,
@@ -859,8 +865,7 @@ fn front_of(
         duplicate: keys_of(rels, "duplicate", prefix),
         relations: other_kinds(rels, prefix),
         properties: serde_json::from_str(&properties).map_err(invalid)?,
-        work_blocks: vec![],
-        focus: vec![],
+        ..Default::default()
     };
     Ok((front, description))
 }

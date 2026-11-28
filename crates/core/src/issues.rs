@@ -39,7 +39,8 @@ pub(crate) async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Is
         r#"SELECT id AS "id!: i64", number, title, description, status_id, priority,
                   project_id, milestone_id, parent_id, cycle_id,
                   start_date AS "start_date: NaiveDate", due_date AS "due_date: NaiveDate",
-                  due_time_utc AS "due_time_utc: DateTime<Utc>", due_tz, estimate_minutes, points, depth, repeat_rule, properties,
+                  due_time_utc AS "due_time_utc: DateTime<Utc>", due_tz, estimate_minutes, points, depth, repeat_rule, waiting_on,
+                  follow_up AS "follow_up: NaiveDate", properties,
                   hidden_until AS "hidden_until: NaiveDate",
                   created_at AS "created_at: DateTime<Utc>", updated_at AS "updated_at: DateTime<Utc>",
                   completed_at AS "completed_at: DateTime<Utc>", archived_at AS "archived_at: DateTime<Utc>"
@@ -58,11 +59,7 @@ pub(crate) async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Is
     .into_iter()
     .map(LabelId)
     .collect();
-    let due = match (r.due_time_utc, r.due_tz, r.due_date) {
-        (Some(utc), Some(tz), _) => Some(Due::DateTime { utc, tz }),
-        (_, _, Some(d)) => Some(Due::Date(d)),
-        _ => None,
-    };
+    let due = stored_due(r.due_time_utc, r.due_tz, r.due_date);
     Ok(Issue {
         id,
         key: format!("{}-{}", prefix(conn).await?, r.number),
@@ -86,12 +83,27 @@ pub(crate) async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Is
         hidden_until: r.hidden_until,
         depth: r.depth.as_deref().map(parse_depth).transpose()?,
         repeat: r.repeat_rule,
+        waiting_on: r.waiting_on,
+        follow_up: r.follow_up,
         properties: serde_json::from_str(&r.properties).map_err(bad)?,
         created_at: r.created_at,
         updated_at: r.updated_at,
         completed_at: r.completed_at,
         archived_at: r.archived_at,
     })
+}
+
+/// The due value from its stored columns: a timed due wins over a date-only one.
+fn stored_due(
+    utc: Option<DateTime<Utc>>,
+    tz: Option<String>,
+    date: Option<NaiveDate>,
+) -> Option<Due> {
+    match (utc, tz, date) {
+        (Some(utc), Some(tz), _) => Some(Due::DateTime { utc, tz }),
+        (_, _, Some(d)) => Some(Due::Date(d)),
+        _ => None,
+    }
 }
 
 /// The stored word for a depth; anything else in the column is a bug in the writer.
@@ -153,6 +165,8 @@ pub(crate) fn issue_from_row(r: &SqliteRow, prefix: &str) -> Result<Issue> {
             .map(parse_depth)
             .transpose()?,
         repeat: r.try_get("repeat_rule")?,
+        waiting_on: r.try_get("waiting_on")?,
+        follow_up: r.try_get("follow_up")?,
         properties: serde_json::from_str::<Map<String, Value>>(&props)
             .map_err(|e| Error::Invalid(format!("issue properties: {e}")))?,
         created_at: r.try_get("created_at")?,
@@ -413,6 +427,8 @@ fn apply_patch(old: &Issue, p: IssuePatch) -> Issue {
     n.hidden_until = p.hidden_until.unwrap_or(n.hidden_until);
     n.depth = p.depth.unwrap_or(n.depth);
     n.repeat = p.repeat.unwrap_or(n.repeat);
+    n.waiting_on = p.waiting_on.unwrap_or(n.waiting_on);
+    n.follow_up = p.follow_up.unwrap_or(n.follow_up);
     if let Some(mut l) = p.label_ids {
         l.sort_by_key(|l| l.0);
         l.dedup();
@@ -494,6 +510,8 @@ fn changes(old: &Issue, n: &Issue) -> Vec<(&'static str, Value, Value)> {
     diff(&mut c, "hidden_until", &old.hidden_until, &n.hidden_until);
     diff(&mut c, "depth", &old.depth, &n.depth);
     diff(&mut c, "repeat", &old.repeat, &n.repeat);
+    diff(&mut c, "waiting_on", &old.waiting_on, &n.waiting_on);
+    diff(&mut c, "follow_up", &old.follow_up, &n.follow_up);
     diff(&mut c, "properties", &old.properties, &n.properties);
     c
 }
@@ -730,7 +748,7 @@ async fn write_in(
     sqlx::query!(
         "UPDATE issues SET title = ?, description = ?, status_id = ?, priority = ?, project_id = ?,
            milestone_id = ?, parent_id = ?, cycle_id = ?, start_date = ?, due_date = ?, due_time_utc = ?,
-           due_tz = ?, estimate_minutes = ?, points = ?, hidden_until = ?, depth = ?, repeat_rule = ?, properties = ?, updated_at = ?, completed_at = ? WHERE id = ?",
+           due_tz = ?, estimate_minutes = ?, points = ?, hidden_until = ?, depth = ?, repeat_rule = ?, waiting_on = ?, follow_up = ?, properties = ?, updated_at = ?, completed_at = ? WHERE id = ?",
         new.title,
         new.description,
         new.status_id.0,
@@ -748,6 +766,8 @@ async fn write_in(
         new.hidden_until,
         depth,
         new.repeat,
+        new.waiting_on,
+        new.follow_up,
         props,
         new.updated_at,
         new.completed_at,

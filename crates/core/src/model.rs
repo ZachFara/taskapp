@@ -134,6 +134,10 @@ pub struct Issue {
     pub depth: Option<Depth>,
     /// Canonical repeat rule (`every 1 week on mon from due`); completing the issue creates the next one.
     pub repeat: Option<String>,
+    /// Who the issue waits on; with `follow_up` it puts the issue on the Waiting page.
+    pub waiting_on: Option<String>,
+    /// The day to check back on the issue; once it has come, the issue is a due follow-up.
+    pub follow_up: Option<NaiveDate>,
     pub properties: Map<String, Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -216,6 +220,18 @@ pub struct IssuePatch {
     )]
     #[specta(type = Option<String>)]
     pub repeat: Clearable<String>,
+    #[serde(
+        deserialize_with = "double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[specta(type = Option<String>)]
+    pub waiting_on: Clearable<String>,
+    #[serde(
+        deserialize_with = "double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[specta(type = Option<NaiveDate>)]
+    pub follow_up: Clearable<NaiveDate>,
     #[serde(
         deserialize_with = "double_option",
         skip_serializing_if = "Option::is_none"
@@ -554,6 +570,10 @@ pub enum FixedField {
     Depth,
     /// Issues only: the repeat rule, empty when the issue does not repeat.
     Repeat,
+    /// Issues only: who the issue waits on.
+    WaitingOn,
+    /// Issues only: the day to check back on a waiting issue.
+    FollowUp,
     CreatedAt,
     UpdatedAt,
     CompletedAt,

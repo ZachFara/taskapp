@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", number, title, description, status_id, priority,\n                  project_id, milestone_id, parent_id, cycle_id,\n                  start_date AS \"start_date: NaiveDate\", due_date AS \"due_date: NaiveDate\",\n                  due_time_utc AS \"due_time_utc: DateTime<Utc>\", due_tz, estimate_minutes, points, depth, repeat_rule, properties,\n                  hidden_until AS \"hidden_until: NaiveDate\",\n                  created_at AS \"created_at: DateTime<Utc>\", updated_at AS \"updated_at: DateTime<Utc>\",\n                  completed_at AS \"completed_at: DateTime<Utc>\", archived_at AS \"archived_at: DateTime<Utc>\"\n           FROM issues WHERE id = ?",
+  "query": "SELECT id AS \"id!: i64\", number, title, description, status_id, priority,\n                  project_id, milestone_id, parent_id, cycle_id,\n                  start_date AS \"start_date: NaiveDate\", due_date AS \"due_date: NaiveDate\",\n                  due_time_utc AS \"due_time_utc: DateTime<Utc>\", due_tz, estimate_minutes, points, depth, repeat_rule, waiting_on,\n                  follow_up AS \"follow_up: NaiveDate\", properties,\n                  hidden_until AS \"hidden_until: NaiveDate\",\n                  created_at AS \"created_at: DateTime<Utc>\", updated_at AS \"updated_at: DateTime<Utc>\",\n                  completed_at AS \"completed_at: DateTime<Utc>\", archived_at AS \"archived_at: DateTime<Utc>\"\n           FROM issues WHERE id = ?",
   "describe": {
     "columns": [
       {
@@ -94,33 +94,43 @@
         "type_info": "Text"
       },
       {
-        "name": "properties",
+        "name": "waiting_on",
         "ordinal": 18,
         "type_info": "Text"
       },
       {
-        "name": "hidden_until: NaiveDate",
+        "name": "follow_up: NaiveDate",
         "ordinal": 19,
         "type_info": "Text"
       },
       {
-        "name": "created_at: DateTime<Utc>",
+        "name": "properties",
         "ordinal": 20,
         "type_info": "Text"
       },
       {
-        "name": "updated_at: DateTime<Utc>",
+        "name": "hidden_until: NaiveDate",
         "ordinal": 21,
         "type_info": "Text"
       },
       {
-        "name": "completed_at: DateTime<Utc>",
+        "name": "created_at: DateTime<Utc>",
         "ordinal": 22,
         "type_info": "Text"
       },
       {
-        "name": "archived_at: DateTime<Utc>",
+        "name": "updated_at: DateTime<Utc>",
         "ordinal": 23,
+        "type_info": "Text"
+      },
+      {
+        "name": "completed_at: DateTime<Utc>",
+        "ordinal": 24,
+        "type_info": "Text"
+      },
+      {
+        "name": "archived_at: DateTime<Utc>",
+        "ordinal": 25,
         "type_info": "Text"
       }
     ],
@@ -146,6 +156,8 @@
       true,
       true,
       true,
+      true,
+      true,
       false,
       true,
       false,
@@ -154,5 +166,5 @@
       true
     ]
   },
-  "hash": "b3a5846ccbbf2b314100c8fb33de268a1b4465151c3bc352155811c9496625a6"
+  "hash": "16f5cc54863afd2cbeda7baae350e7ab5cfb5310bd791db721996b7dacabce64"
 }

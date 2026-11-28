@@ -44,6 +44,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         cmd @ (Cmd::Stale
         | Cmd::Next
         | Cmd::Shutdown
+        | Cmd::Waiting
         | Cmd::Inbox(_)
         | Cmd::Plan(_)
         | Cmd::Decision(_)
@@ -62,6 +63,7 @@ async fn queues_and_lists(db: &Db, cmd: Cmd) -> Result<Value> {
         Cmd::Shutdown => {
             val(taskapp_core::shutdown::state(db, taskapp_core::metrics::today(db).await?).await?)
         }
+        Cmd::Waiting => val(taskapp_core::waiting::list(db).await?),
         Cmd::Inbox(args) => crate::inbox::run(db, args).await,
         Cmd::Plan(args) => crate::plan::run(db, args).await,
         Cmd::Decision(cmd) => crate::decision::run(db, cmd).await,
@@ -214,10 +216,38 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
         keyed @ (IssueCmd::Archive { .. }
         | IssueCmd::Delete { .. }
         | IssueCmd::Link { .. }
-        | IssueCmd::Links { .. }) => issue_keyed(db, keyed).await,
+        | IssueCmd::Links { .. }
+        | IssueCmd::Wait { .. }) => issue_keyed(db, keyed).await,
         repeat @ IssueCmd::Repeat { .. } => issue_repeat(db, repeat).await,
         find @ (IssueCmd::Search { .. } | IssueCmd::Similar { .. }) => issue_find(db, find).await,
     }
+}
+
+async fn issue_wait(
+    db: &Db,
+    key: String,
+    on: Option<String>,
+    until: Option<String>,
+    clear: bool,
+) -> Result<Value> {
+    if on.is_none() && until.is_none() && !clear {
+        return Err(Error::Invalid("give --on, --until or --clear".into()));
+    }
+    let id = issue_id(db, &key).await?;
+    let patch = if clear {
+        IssuePatch {
+            waiting_on: Some(None),
+            follow_up: Some(None),
+            ..IssuePatch::default()
+        }
+    } else {
+        IssuePatch {
+            waiting_on: on.map(|n| Some(n.trim().to_string())),
+            follow_up: until.as_deref().map(date).transpose()?.map(Some),
+            ..IssuePatch::default()
+        }
+    };
+    val(issues::update(db, id, patch, SRC).await?)
 }
 
 async fn issue_repeat(db: &Db, cmd: IssueCmd) -> Result<Value> {
@@ -325,6 +355,12 @@ fn due_arg(clear: bool, due: Option<&str>) -> Result<taskapp_core::Clearable<Due
 
 async fn issue_keyed(db: &Db, cmd: IssueCmd) -> Result<Value> {
     match cmd {
+        IssueCmd::Wait {
+            key,
+            on,
+            until,
+            clear,
+        } => issue_wait(db, key, on, until, clear).await,
         IssueCmd::Delete { key, yes } => crate::archive::delete_issue(db, &key, yes).await,
         IssueCmd::Archive { key } => {
             let id = issue_id(db, &key).await?;

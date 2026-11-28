@@ -435,6 +435,12 @@ pub struct IssueFront {
     /// The repeat rule text; missing when the issue does not repeat.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repeat: Option<String>,
+    /// Who the issue waits on; missing when not set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waiting_on: Option<String>,
+    /// The day to check back on the issue; missing when not set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follow_up: Option<NaiveDate>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub focus: Vec<FocusRow>,
 }

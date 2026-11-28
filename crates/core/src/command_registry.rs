@@ -315,6 +315,7 @@ macro_rules! with_commands {
             metrics_for(s, query: MetricsQuery) -> Metrics { metrics::metrics_for(&s.db, query).await }
 
             stale_list(s) -> Vec<StaleIssue> { stale::list(&s.db).await }
+            waiting_list(s) -> Vec<Issue> { waiting::list(&s.db).await }
 
             focus_start(s, issue: IssueId, deep: Option<bool>) -> FocusSession {
                 focus::start(&s.db, issue, deep, $source).await

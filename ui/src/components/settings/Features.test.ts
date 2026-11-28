@@ -63,6 +63,16 @@ describe('Features', () => {
     expect(ids()).toContain('feature.goals.toggle');
   });
 
+  it('waiting commands follow the Waiting for switch', async () => {
+    const onIssue = () => listCommands({ ...ctx, focusedIssueId: 1 } as Ctx).map((c) => c.id);
+    const { target } = await mountSettings(Features);
+    expect(onIssue()).toContain('issue.wait');
+    await toggle(target, 'Waiting for');
+    expect(isOn('waiting')).toBe(false);
+    expect(onIssue()).not.toContain('issue.wait');
+    expect(onIssue()).not.toContain('issue.followUp');
+  });
+
   it('dashboard and charts keep their existing keys', async () => {
     const { target, api } = await mountSettings(Features);
     await toggle(target, 'Dashboard');

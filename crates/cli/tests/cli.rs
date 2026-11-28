@@ -1645,3 +1645,37 @@ fn goal_create_list_and_link_by_slug() {
     assert_eq!(list[0]["project_ids"], serde_json::json!([1]));
     assert_eq!(list[0]["progress"], serde_json::json!([0, 0]));
 }
+
+#[test]
+fn issue_wait_sets_lists_and_clears_a_waiting_issue() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Send the contract"]);
+    run(&db, &["add", "Unrelated"]);
+    let set = run_json(
+        &db,
+        &[
+            "issue",
+            "wait",
+            "ABC-1",
+            "--on",
+            "Sam",
+            "--until",
+            "2999-01-01",
+        ],
+    );
+    assert_eq!(set["waiting_on"], "Sam");
+    assert_eq!(set["follow_up"], "2999-01-01");
+    let listed = run_json(&db, &["waiting"]);
+    let keys: Vec<&str> = listed
+        .as_array()
+        .expect("a list")
+        .iter()
+        .map(|i| i["title"].as_str().unwrap_or(""))
+        .collect();
+    assert_eq!(keys, ["Send the contract"]);
+    let cleared = run_json(&db, &["issue", "wait", "ABC-1", "--clear"]);
+    assert!(cleared["waiting_on"].is_null());
+    assert!(cleared["follow_up"].is_null());
+    let none = run_json(&db, &["waiting"]);
+    assert_eq!(none.as_array().map(Vec::len), Some(0));
+}

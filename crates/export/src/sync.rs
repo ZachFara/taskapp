@@ -185,6 +185,12 @@ fn patch_of(
     if f.repeat != old.repeat {
         p.repeat = Some(f.repeat.clone());
     }
+    if f.waiting_on != old.waiting_on {
+        p.waiting_on = Some(f.waiting_on.clone());
+    }
+    if f.follow_up != old.follow_up {
+        p.follow_up = Some(f.follow_up);
+    }
     patch_refs(&mut p, f, old, l)?;
     patch_props(&mut p, f, old);
     Ok(p)

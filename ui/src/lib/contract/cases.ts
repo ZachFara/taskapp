@@ -815,4 +815,10 @@ export const cases: Case[] = [
   call('repeat: set a rule on another issue', 'issues_update', { id: 7, patch: { repeat: 'every 3 days' } }),
   call('repeat: skip moves the due date', 'issues_skip_repeat', { id: 7 }),
   call('repeat: clear the rule', 'issues_update', { id: 7, patch: { repeat: null } }),
+  call('waiting: set who and a follow-up day', 'issues_update', { id: 2, patch: { waiting_on: 'Sam', follow_up: '2999-01-01' } }),
+  call('waiting: the waiting list has it', 'waiting_list'),
+  filter('waiting: the Follow up filter', cond(fixed('FollowUp'), 'IsNotEmpty')),
+  call('waiting: Stop waiting clears both', 'issues_update', { id: 2, patch: { waiting_on: null, follow_up: null } }),
+  call('waiting: the list is empty again', 'waiting_list'),
+  call('waiting: an unknown issue is NotFound', 'issues_update', { id: 999, patch: { waiting_on: 'Sam' } }),
 ];

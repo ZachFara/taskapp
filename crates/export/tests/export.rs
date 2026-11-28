@@ -1096,6 +1096,25 @@ async fn hidden_until_survives_export_and_rebuild() -> R {
 }
 
 #[tokio::test]
+async fn waiting_fields_survive_export_and_rebuild() -> R {
+    let db = seeded().await?;
+    let patch = taskapp_core::IssuePatch {
+        waiting_on: Some(Some("Sam".into())),
+        follow_up: Some(Some(day(2999, 1, 1))),
+        ..taskapp_core::IssuePatch::default()
+    };
+    issues::update(&db, IssueId(1), patch, SRC).await?;
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    let got = issues::get(&rebuilt, IssueId(1)).await?;
+    assert_eq!(got.waiting_on.as_deref(), Some("Sam"));
+    assert_eq!(got.follow_up, Some(day(2999, 1, 1)));
+    assert_eq!(issues::get(&rebuilt, IssueId(2)).await?.waiting_on, None);
+    Ok(())
+}
+
+#[tokio::test]
 async fn repeat_rule_and_series_link_survive_export_and_rebuild() -> R {
     let db = seeded().await?;
     issues::update(

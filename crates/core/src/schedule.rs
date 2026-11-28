@@ -195,6 +195,8 @@ mod tests {
             hidden_until: None,
             depth: None,
             repeat: None,
+            waiting_on: None,
+            follow_up: None,
             properties: Map::new(),
             created_at: Utc::now(),
             updated_at: Utc::now(),

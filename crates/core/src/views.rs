@@ -87,6 +87,7 @@ impl Ctx<'_> {
                 FixedField::StartDate
                     | FixedField::DueDate
                     | FixedField::HiddenUntil
+                    | FixedField::FollowUp
                     | FixedField::TargetDate
                     | FixedField::CreatedAt
                     | FixedField::UpdatedAt
@@ -332,6 +333,8 @@ fn fixed_col(entity: ViewEntity, x: FixedField) -> Result<Col> {
         FixedField::HiddenUntil => ("issues.hidden_until", false),
         FixedField::Depth => ("issues.depth", true),
         FixedField::Repeat => ("issues.repeat_rule", true),
+        FixedField::WaitingOn => ("issues.waiting_on", true),
+        FixedField::FollowUp => ("issues.follow_up", false),
         FixedField::CreatedAt => ("issues.created_at", false),
         FixedField::UpdatedAt => ("issues.updated_at", false),
         FixedField::CompletedAt => ("issues.completed_at", false),

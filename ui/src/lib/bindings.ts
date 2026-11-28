@@ -977,6 +977,13 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	waitingList: (options?: InvokeOptions) => __TAURI_INVOKE<Issue[]>("waiting_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	focusStart: (issue: IssueId, deep: boolean | null, options?: InvokeOptions) => __TAURI_INVOKE<FocusSession>("focus_start", { issue, deep }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1470,7 +1477,11 @@ export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "P
 /**  Issues only: the day a deferred issue comes back. */
 "HiddenUntil" | "Depth" | 
 /**  Issues only: the repeat rule, empty when the issue does not repeat. */
-"Repeat" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount" | 
+"Repeat" | 
+/**  Issues only: who the issue waits on. */
+"WaitingOn" | 
+/**  Issues only: the day to check back on a waiting issue. */
+"FollowUp" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount" | 
 /**  Shows `done/total` of the description's task lines; not sortable or filterable. */
 "Checklist" | 
 /**  Filter only: the issue has a relation of the given kind id(s), on either end. */
@@ -1609,6 +1620,10 @@ export type Issue = {
 	depth: Depth | null,
 	/**  Canonical repeat rule (`every 1 week on mon from due`); completing the issue creates the next one. */
 	repeat: string | null,
+	/**  Who the issue waits on; with `follow_up` it puts the issue on the Waiting page. */
+	waiting_on: string | null,
+	/**  The day to check back on the issue; once it has come, the issue is a due follow-up. */
+	follow_up: string | null,
 	properties: { [key in string]: Value },
 	created_at: string,
 	updated_at: string,
@@ -1632,6 +1647,8 @@ export type IssuePatch = {
 	start_date?: string | null,
 	depth?: Depth | null,
 	repeat?: string | null,
+	waiting_on?: string | null,
+	follow_up?: string | null,
 	due?: Due | null,
 	estimate_minutes?: number | null,
 	points?: number | null,

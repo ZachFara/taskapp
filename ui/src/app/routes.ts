@@ -9,6 +9,7 @@ import InboxPage from '../components/InboxPage.svelte';
 import FocusPage from '../components/FocusPage.svelte';
 import IssueDetail from '../components/IssueDetail.svelte';
 import NextPage from '../components/NextPage.svelte';
+import WaitingPage from '../components/WaitingPage.svelte';
 import MyIssuesPage from '../components/MyIssuesPage.svelte';
 import PlanPage from '../components/PlanPage.svelte';
 import ProcessPage from '../components/ProcessPage.svelte';
@@ -40,6 +41,7 @@ export const routes: { pattern: string; component: Component }[] = [
   { pattern: '/goals', component: GoalsPage },
   { pattern: '/goal/:id', component: GoalPage },
   { pattern: '/next', component: NextPage },
+  { pattern: '/waiting', component: WaitingPage },
   { pattern: '/events', component: EventsPage },
   { pattern: '/event/:id', component: EventPage },
   { pattern: '/settings/:section', component: Settings },

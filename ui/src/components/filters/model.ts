@@ -24,7 +24,7 @@ export const relativeLabel = (v: Value) => relativeDays.find((r) => r.value === 
 const fixedKinds: Record<FixedField, PropertyKind> = {
   Title: 'Text', Status: 'Select', StatusCategory: 'Select', Priority: 'Number', Project: 'Select',
   Milestone: 'Number', Cycle: 'Select', Label: 'MultiSelect', Parent: 'Number', StartDate: 'Date',
-  DueDate: 'Date', Estimate: 'Number', Points: 'Number', Depth: 'Text', Repeat: 'Text', HiddenUntil: 'Date', CreatedAt: 'Date', UpdatedAt: 'Date', CompletedAt: 'Date', Archived: 'Checkbox', RelationKind: 'Select',
+  DueDate: 'Date', Estimate: 'Number', Points: 'Number', Depth: 'Text', Repeat: 'Text', WaitingOn: 'Text', FollowUp: 'Date', HiddenUntil: 'Date', CreatedAt: 'Date', UpdatedAt: 'Date', CompletedAt: 'Date', Archived: 'Checkbox', RelationKind: 'Select',
   ProjectStatus: 'Select', TargetDate: 'Date', Progress: 'Number', ProgressChart: 'Number', IssueCount: 'Number',
 };
 export const fixedKind = (f: FixedField) => fixedKinds[f];
