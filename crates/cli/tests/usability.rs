@@ -120,3 +120,45 @@ fn ambiguous_project_name_requires_an_id() {
     );
     assert_eq!(issue["project_id"], first["id"]);
 }
+
+#[test]
+fn issue_search_prints_a_short_table_and_json_keeps_every_field() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db = dir.path().join("test.db");
+    run(&db, &["project", "create", "test-project", "Test project"]);
+    run(
+        &db,
+        &[
+            "issue",
+            "create",
+            "Findable table row",
+            "--project",
+            "Test project",
+        ],
+    );
+    let output = Command::cargo_bin("taskapp")
+        .expect("binary")
+        .args([
+            "--db",
+            db.to_str().expect("path"),
+            "issue",
+            "search",
+            "Findable",
+        ])
+        .output()
+        .expect("run CLI");
+    assert!(output.status.success());
+    let text = String::from_utf8_lossy(&output.stdout);
+    let header: Vec<&str> = text
+        .lines()
+        .next()
+        .expect("header")
+        .split_whitespace()
+        .collect();
+    // Columns are alphabetical, like every table the CLI prints (JSON maps are sorted).
+    assert_eq!(header, ["key", "project", "status", "title"]);
+    assert!(text.contains("Findable table row") && text.contains("Test project"));
+
+    let json = run(&db, &["issue", "search", "Findable"]);
+    assert!(json[0].get("description").is_some() && json[0].get("properties").is_some());
+}

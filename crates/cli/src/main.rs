@@ -721,6 +721,7 @@ async fn run(cli: Cli) -> Result<()> {
         }
     }
     let list = matches!(cli.cmd, Cmd::Decision(decision::DecisionCmd::List { .. }));
+    let search = matches!(cli.cmd, Cmd::Issue(IssueCmd::Search { .. })) && !cli.json;
     let label = match &cli.cmd {
         Cmd::Api(ApiCmd::Call { name, .. }) => format!("api call {name}"),
         _ => words.join(" "),
@@ -732,6 +733,7 @@ async fn run(cli: Cli) -> Result<()> {
         return metrics::print(&db, args, cli.json).await;
     }
     let value = history::step(&label, commands::run(&db, &dir.join("backups"), cli.cmd)).await?;
+    let value = list::search_view(&db, value, search).await?;
     print_value(&view(value, list, cli.json), cli.json);
     Ok(())
 }
