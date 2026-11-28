@@ -17,7 +17,7 @@
   const ORDER = [
     'list.title.edit',
     'issue.status', 'issue.priority', 'issue.labels', 'issue.project', 'issue.cycle', 'issue.start', 'issue.due', 'issue.estimate',
-    'issue.relation', 'issue.parent', 'issue.duplicate', 'issue.copyKey', 'issue.copyLink', 'issue.next', 'issue.pin', 'issue.archive', 'issue.deleteForever',
+    'issue.relation', 'issue.parent', 'issue.duplicate', 'issue.markDuplicate', 'issue.copyKey', 'issue.copyLink', 'issue.next', 'issue.pin', 'issue.archive', 'issue.deleteForever',
   ];
   const items = $derived.by(() => {
     if (!open || issueId === null) return [];

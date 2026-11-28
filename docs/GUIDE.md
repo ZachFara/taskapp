@@ -177,7 +177,8 @@ issue has items (the Checklist field, on by default). `taskapp issue get` report
   CLI: `relation add`. In the timeline, "blocks" relations draw as arrows and a critical path is highlighted.
 - **Similar issues.** The issue page lists up to three open issues whose titles overlap most with this one's (in the same
   project first). Click one to open it, or use its Mark duplicate action: this issue gets status Duplicate and a
-  duplicate relation to that one, as a single undo step. Needs a status called Duplicate.
+  duplicate relation to that one, as a single undo step. Needs a status called Duplicate. The command menu and the
+  right-click menu have "Mark as duplicate of…": similar issues are listed first, then every other issue.
 - **Comments.** Markdown. Panel "Comments" section: type and press the Comment button. CLI `comment add`; MCP `add_comment`.
 - **History.** The panel's History section lists every change with its source (UI, Agent, Cli, import, Undo, ...).
   CLI `history <key>`; MCP `get_history`.

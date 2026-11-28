@@ -100,6 +100,19 @@ describe('issue commands', () => {
     for (const [id, key] of Object.entries(keys)) expect(cmd(id)?.shortcut, id).toEqual(key);
   });
 
+  it('markDuplicate lists similar issues first, then the rest, and marks the pick', async () => {
+    const orig = await api.issues.create({ title: 'Fix login crash' });
+    const other = await api.issues.create({ title: 'Water the plants' });
+    const copy = await api.issues.create({ title: 'Fix login crash again' });
+    const items = await itemsOf(cmd('issue.markDuplicate'), ctx([copy.id]));
+    const keys = items.map((i) => i.id);
+    expect(keys).not.toContain(copy.key);
+    expect(keys.indexOf(orig.key)).toBeLessThan(keys.indexOf(other.key));
+    const mark = vi.spyOn(api.issues, 'markDuplicate').mockResolvedValue(copy);
+    await items.find((i) => i.id === orig.key)!.run();
+    expect(mark).toHaveBeenCalledWith(copy.id, orig.id);
+  });
+
   it('status page lists the statuses', async () => {
     const names = (await api.statuses.list()).map((s) => s.name);
     expect(await labelsOf(cmd('issue.status'), ctx([1]))).toEqual(names);
