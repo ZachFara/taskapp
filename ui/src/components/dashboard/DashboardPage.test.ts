@@ -1,5 +1,5 @@
 import { flushSync, mount, unmount } from 'svelte';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setApi, type Api } from '../../lib/api';
 import { createMockApi } from '../../lib/api.mock';
 import { listCommands, type Ctx } from '../../lib/commands';
@@ -94,6 +94,17 @@ describe('DashboardPage', () => {
     const saved = JSON.parse(localStorage.getItem('cairn.dashboard')!);
     expect(saved.order.slice(0, 2)).toEqual(['burnup', 'summary']);
     expect([...saved.hidden].sort()).toEqual(CARDS.map((c) => c.id).sort());
+  });
+
+  it('applies the saved project and label filter on load', async () => {
+    localStorage.setItem('cairn.dashboard.project', '7');
+    localStorage.setItem('cairn.dashboard.label', '3');
+    vi.resetModules();
+    const fresh = await import('./dashboard.svelte');
+    expect([fresh.dashboard.project, fresh.dashboard.label]).toEqual([7, 3]);
+    fresh.set({ project: null });
+    expect(localStorage.getItem('cairn.dashboard.project')).toBeNull();
+    localStorage.removeItem('cairn.dashboard.label');
   });
 
   it('a cycle chosen in Range links to its retrospective', async () => {

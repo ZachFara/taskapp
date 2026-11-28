@@ -3,7 +3,7 @@
 
   // Lead time: created to finished, for the issues that finished in the range.
   let { metrics: m }: CardProps = $props();
-  const days = (n: number | null) => (n === null ? '–' : `${Math.round(n * 10) / 10} days`);
+  const days = (n: number | null) => (n === null ? '–' : `${Math.round(n * 10) / 10} ${n === 1 ? 'day' : 'days'}`);
   const stats = $derived([
     { k: 'Median', v: days(m.lead_time.p50_days) },
     { k: '85th percentile', v: days(m.lead_time.p85_days) },

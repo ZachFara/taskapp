@@ -13,8 +13,17 @@ function read(): Saved {
   }
 }
 
-/** Per-device choices (range, measure, cards). The workspace switch is the `dashboard` feature. Filters live on the page. */
-export const dashboard = $state({ ...read(), project: null as number | null, label: null as number | null });
+/** Per-device choices (range, measure, cards, project and label filter). The workspace switch is the `dashboard` feature. */
+const FILTERS = ['project', 'label'] as const;
+const readId = (k: string) => {
+  try {
+    const n = Number(localStorage.getItem(`${KEY}.${k}`));
+    return Number.isInteger(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+};
+export const dashboard = $state({ ...read(), project: readId('project'), label: readId('label') });
 
 function save() {
   const { range, from, to, measure, order, hidden } = dashboard;
@@ -24,7 +33,14 @@ function save() {
     /* private window: the choice applies, it is just not remembered */
   }
 }
-export const set = (patch: Partial<Saved> & { project?: number | null; label?: number | null }) => (Object.assign(dashboard, patch), save());
+function saveFilters() {
+  try {
+    for (const k of FILTERS) dashboard[k] === null ? localStorage.removeItem(`${KEY}.${k}`) : localStorage.setItem(`${KEY}.${k}`, String(dashboard[k]));
+  } catch {
+    /* as above */
+  }
+}
+export const set = (patch: Partial<Saved> & { project?: number | null; label?: number | null }) => (Object.assign(dashboard, patch), save(), saveFilters());
 
 /** Cards that belong to another feature disappear with it. */
 const CARD_FEATURE: Record<string, Feature> = { stale: 'stale', cycle: 'cycles', stuck: 'next_actions', deep: 'focus', review: 'weekly_review' };
