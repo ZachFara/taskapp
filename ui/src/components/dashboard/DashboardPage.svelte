@@ -13,6 +13,7 @@
   import Skeleton from '../../ui/Skeleton.svelte';
   import Tabs from '../../ui/Tabs.svelte';
   import TextInput from '../../ui/TextInput.svelte';
+  import { navigate } from '../../app/routes';
   import { workspaceZone } from '../views/dates';
   import { CARDS } from './cards';
   import { dashboard, moveCard, orderedCards, set, toggleCard } from './dashboard.svelte';
@@ -35,6 +36,8 @@
   });
 
   const range = $derived(ready ? rangeOf(dashboard.range, { today, weekStart, cycles }, dashboard.from, dashboard.to) : null);
+  // A cycle chosen in Range links to its retrospective.
+  const picked = $derived(range && 'Cycle' in range.scope ? cycles.find((c) => c.id === (range.scope as { Cycle: number }).Cycle) : undefined);
   const all = $derived([...PRESETS.filter((p) => p.id !== 'custom'), ...cycles.map((c) => ({ id: `cycle:${c.id}`, label: c.name ?? `Cycle ${c.number}` })), PRESETS.at(-1)!].map((p) => ({ value: p.id, label: p.label })));
   const shown = $derived(orderedCards().filter((id) => !dashboard.hidden.includes(id)).map((id) => CARDS.find((c) => c.id === id)!));
 
@@ -69,6 +72,7 @@
     <Tabs segmented label="Measure" tabs={[{ id: 'Count', label: 'Count' }, { id: 'Points', label: 'Points' }]} bind:value={() => dashboard.measure, (v) => set({ measure: v as 'Count' | 'Points' })} />
   {/snippet}
   {#snippet actions()}
+    {#if picked}<Button icon="cycle" onclick={() => navigate(`/cycles#${picked.number}`)}>Retrospective</Button>{/if}
     <Popover>
       {#snippet trigger(props)}<Button icon="eye" {...props}>Cards</Button>{/snippet}
       <ul class="cards" aria-label="Dashboard cards">

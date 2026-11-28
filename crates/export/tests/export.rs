@@ -591,7 +591,7 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
         "UPDATE statuses SET definition = 'Work is shipped', flow_kind = 'waiting', nudge_days = 9 WHERE name = 'Todo'",
         "UPDATE labels SET icon = 'icon:bug', color = 'red' WHERE name = 'bug'",
         "UPDATE projects SET icon = 'emoji:🚀', color = 'teal'",
-        "UPDATE cycles SET icon = 'icon:repeat', color = 'blue'",
+        "UPDATE cycles SET icon = 'icon:repeat', color = 'blue', goal = 'Ship it', goal_met = 0, rating = 3, notes = 'Slow: **review**'",
         "INSERT INTO view_templates (id, name, definition, position, icon, color)
            VALUES (7, 'Board', '{\"filter\":null,\"sorts\":[],\"group_by\":null,\"layout\":\"Board\",\"columns\":[],\"include_archived\":false}', 0, 'icon:kanban', 'indigo')",
         "INSERT INTO view_folders (id, name, position) VALUES (3, 'Work', 0)",
@@ -973,6 +973,29 @@ async fn images_in_use_are_exported_and_rebuilt() -> R {
         rebuild::rebuild(src.path(), &dst.path().join("again.db"))
             .await
             .is_err()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_older_cycles_file_without_retrospective_fields_loads() -> R {
+    let db = seeded().await?;
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    fs::write(
+        src.path().join("cycles.yaml"),
+        "- {number: 1, name: Sprint, start_date: 2026-01-01, end_date: 2026-01-14}\n",
+    )?;
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    let cycle = cycles::list(&rebuilt).await?.remove(0);
+    assert_eq!(
+        (
+            cycle.goal,
+            cycle.goal_met,
+            cycle.rating,
+            cycle.notes.as_str()
+        ),
+        (None, None, None, "")
     );
     Ok(())
 }

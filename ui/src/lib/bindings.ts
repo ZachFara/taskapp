@@ -1122,6 +1122,11 @@ export type Cycle = {
 	end_date: string,
 	icon: string | null,
 	color: string | null,
+	/**  The retrospective: a one-sentence goal, whether it was met (`None` until decided), a 1 to 5 rating, notes. */
+	goal?: string | null,
+	goal_met?: boolean | null,
+	rating?: number | null,
+	notes?: string,
 };
 
 /**

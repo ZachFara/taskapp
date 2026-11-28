@@ -366,7 +366,7 @@ async fn restore_cycles(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
     let cycles: Vec<CycleRow> = read_yaml(&dir.join("cycles.yaml"))?;
     for c in cycles {
         sqlx::query(
-            "INSERT INTO cycles (number, name, start_date, end_date, icon, color, folder_id, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO cycles (number, name, start_date, end_date, icon, color, folder_id, position, goal, goal_met, rating, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(c.number)
         .bind(c.name)
@@ -376,6 +376,10 @@ async fn restore_cycles(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         .bind(c.color)
         .bind(c.folder_id)
         .bind(c.position)
+        .bind(c.goal)
+        .bind(c.goal_met)
+        .bind(c.rating)
+        .bind(c.notes)
             .execute(&mut **tx)
             .await?;
     }

@@ -81,7 +81,7 @@ pub async fn list(db: &Db) -> Result<Vec<Cycle>> {
     let rows = sqlx::query!(
         r#"SELECT id AS "id!: i64", number AS "number!: i64", name,
                   start_date AS "start_date!: NaiveDate", end_date AS "end_date!: NaiveDate",
-                  icon, color
+                  icon, color, goal, goal_met AS "goal_met: bool", rating, notes
            FROM cycles ORDER BY number"#
     )
     .fetch_all(&db.pool)
@@ -96,6 +96,14 @@ pub async fn list(db: &Db) -> Result<Vec<Cycle>> {
                 end_date: r.end_date,
                 icon: r.icon,
                 color: r.color,
+                goal: r.goal,
+                goal_met: r.goal_met,
+                rating: r
+                    .rating
+                    .map(u8::try_from)
+                    .transpose()
+                    .map_err(|e| Error::Invalid(e.to_string()))?,
+                notes: r.notes,
             })
         })
         .collect()
@@ -153,6 +161,10 @@ pub async fn create(
         end_date,
         icon,
         color,
+        goal: None,
+        goal_met: None,
+        rating: None,
+        notes: String::new(),
     })
 }
 
@@ -161,55 +173,48 @@ pub async fn create(
 /// Fails on a database error or invalid arguments.
 pub async fn update(db: &Db, mut cycle: Cycle, src: ChangeSource) -> Result<Cycle> {
     check_dates(cycle.start_date, cycle.end_date)?;
+    if cycle.rating.is_some_and(|r| !(1..=5).contains(&r)) {
+        return Err(Error::Invalid("a rating is 1 to 5".into()));
+    }
     cycle.color = check_look(cycle.icon.as_deref(), cycle.color.as_deref())?;
     let id = cycle.id.0;
     let mut tx = db.pool.begin_with("BEGIN IMMEDIATE").await?;
     let before = rows::by_key(&mut tx, "cycles", id).await?;
     let old = sqlx::query!(
         r#"SELECT name, start_date AS "start_date!: NaiveDate", end_date AS "end_date!: NaiveDate",
-                  icon, color
+                  icon, color, goal, goal_met AS "goal_met: bool", rating, notes
            FROM cycles WHERE id = ?"#,
         id
     )
     .fetch_optional(&mut *tx)
     .await?
     .ok_or_else(|| Error::NotFound(format!("cycle {id}")))?;
-    edit(&mut tx, src, id, "name", json!(old.name), json!(cycle.name)).await?;
-    edit(&mut tx, src, id, "icon", json!(old.icon), json!(cycle.icon)).await?;
-    edit(
-        &mut tx,
-        src,
-        id,
-        "color",
-        json!(old.color),
-        json!(cycle.color),
-    )
-    .await?;
-    edit(
-        &mut tx,
-        src,
-        id,
-        "start_date",
-        json!(old.start_date),
-        json!(cycle.start_date),
-    )
-    .await?;
-    edit(
-        &mut tx,
-        src,
-        id,
-        "end_date",
-        json!(old.end_date),
-        json!(cycle.end_date),
-    )
-    .await?;
+    let changes = [
+        ("name", json!(old.name), json!(cycle.name)),
+        ("icon", json!(old.icon), json!(cycle.icon)),
+        ("color", json!(old.color), json!(cycle.color)),
+        ("start_date", json!(old.start_date), json!(cycle.start_date)),
+        ("end_date", json!(old.end_date), json!(cycle.end_date)),
+        ("goal", json!(old.goal), json!(cycle.goal)),
+        ("goal_met", json!(old.goal_met), json!(cycle.goal_met)),
+        ("rating", json!(old.rating), json!(cycle.rating)),
+        ("notes", json!(old.notes), json!(cycle.notes)),
+    ];
+    for (field, was, now) in changes {
+        edit(&mut tx, src, id, field, was, now).await?;
+    }
     sqlx::query!(
-        "UPDATE cycles SET name = ?, start_date = ?, end_date = ?, icon = ?, color = ? WHERE id = ?",
+        "UPDATE cycles SET name = ?, start_date = ?, end_date = ?, icon = ?, color = ?,
+           goal = ?, goal_met = ?, rating = ?, notes = ? WHERE id = ?",
         cycle.name,
         cycle.start_date,
         cycle.end_date,
         cycle.icon,
         cycle.color,
+        cycle.goal,
+        cycle.goal_met,
+        cycle.rating,
+        cycle.notes,
         id
     )
     .execute(&mut *tx)

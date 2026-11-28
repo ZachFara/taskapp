@@ -536,6 +536,34 @@ async fn cycle(db: &Db, cmd: CycleCmd) -> Result<Value> {
             )
             .await?)
         }
+        CycleCmd::Set {
+            cycle,
+            goal,
+            goal_met,
+            rating,
+            notes,
+        } => {
+            let id = crate::references::cycle(db, Some(&cycle)).await?;
+            let mut c = cycles::list(db)
+                .await?
+                .into_iter()
+                .find(|c| Some(c.id) == id)
+                .ok_or_else(|| Error::NotFound(format!("cycle {cycle}")))?;
+            c.goal = goal.or(c.goal);
+            c.rating = rating.or(c.rating);
+            c.notes = notes.unwrap_or(c.notes);
+            c.goal_met = match goal_met.as_deref() {
+                None => c.goal_met,
+                Some("yes") => Some(true),
+                Some("no") => Some(false),
+                Some(other) => {
+                    return Err(Error::Invalid(format!(
+                        "goal-met is yes or no, not {other}"
+                    )));
+                }
+            };
+            val(cycles::update(db, c, SRC).await?)
+        }
     }
 }
 

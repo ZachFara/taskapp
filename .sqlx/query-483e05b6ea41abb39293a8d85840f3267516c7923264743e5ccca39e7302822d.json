@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", number AS \"number!: i64\", name,\n                  start_date AS \"start_date!: NaiveDate\", end_date AS \"end_date!: NaiveDate\",\n                  icon, color\n           FROM cycles ORDER BY number",
+  "query": "SELECT id AS \"id!: i64\", number AS \"number!: i64\", name,\n                  start_date AS \"start_date!: NaiveDate\", end_date AS \"end_date!: NaiveDate\",\n                  icon, color, goal, goal_met AS \"goal_met: bool\", rating, notes\n           FROM cycles ORDER BY number",
   "describe": {
     "columns": [
       {
@@ -37,6 +37,26 @@
         "name": "color",
         "ordinal": 6,
         "type_info": "Text"
+      },
+      {
+        "name": "goal",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "goal_met: bool",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "rating",
+        "ordinal": 9,
+        "type_info": "Integer"
+      },
+      {
+        "name": "notes",
+        "ordinal": 10,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -49,8 +69,12 @@
       false,
       false,
       true,
-      true
+      true,
+      true,
+      true,
+      true,
+      false
     ]
   },
-  "hash": "c1c28d30bca842b4505ead1ade512aa6489d0ff4edc87ccd614a26e9e0dde120"
+  "hash": "483e05b6ea41abb39293a8d85840f3267516c7923264743e5ccca39e7302822d"
 }

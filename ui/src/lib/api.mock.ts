@@ -100,7 +100,9 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   let workspace: Workspace = s.workspace ?? { setup_done: false, name: null, key: 'ABC', timezone: tz };
   const labels = s.labels ?? [];
   const projectStatuses = (s.projectStatuses ??= structuredClone(projectStatusSeed));
-  const cycles = s.cycles ?? [];
+  // A cycle always carries its retrospective fields, as the backend sends them.
+  const retro = { goal: null, goal_met: null, rating: null, notes: '' };
+  const cycles = (s.cycles ?? []).map((c) => ({ ...retro, ...c }));
   const events: Event[] = [];
   const decisions: Decision[] = s.decisions ?? [];
   const views = s.views ?? [];
@@ -849,11 +851,14 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       create: async (name, startDate, endDate, icon, color) => {
         if (endDate < startDate) fail('Invalid', `cycle ends ${endDate} before it starts ${startDate}`);
         checkIcon(icon);
-        const c = { id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name, start_date: startDate, end_date: endDate, icon: icon ?? null, color: colorKey(color) };
+        const c = { id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name, start_date: startDate, end_date: endDate, icon: icon ?? null, color: colorKey(color), ...retro };
         cycles.push(c);
         return c;
       },
-      update: async (c) => upsert(cycles, c, 'cycle'),
+      update: async (c) => {
+        if (c.rating != null && !(c.rating >= 1 && c.rating <= 5)) fail('Invalid', 'a rating is 1 to 5');
+        return upsert(cycles, { ...retro, ...c }, 'cycle');
+      },
       delete: async (id) => {
         remove(cycles, id, 'cycle');
         s.issues.forEach((i) => i.cycle_id === id && (i.cycle_id = null));
@@ -1239,7 +1244,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           s.projects.push({ id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, created_at: now(), updated_at: now(), icon: null, color: null, ...projectDefaults() });
         }
         for (const c of plan.cycles ?? []) {
-          if (!cycles.some((x) => x.start_date === c.start_date)) cycles.push({ id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name: c.name, start_date: c.start_date, end_date: c.end_date, icon: null, color: null });
+          if (!cycles.some((x) => x.start_date === c.start_date)) cycles.push({ id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name: c.name, start_date: c.start_date, end_date: c.end_date, icon: null, color: null, ...retro });
         }
         for (const d of plan.property_defs ?? []) if (!s.propertyDefs.some((x) => x.key === d.key)) s.propertyDefs.push({ ...d, position: Math.max(-1, ...s.propertyDefs.map((x) => x.position)) + 1 });
         const [ids, mark] = [new Map<string, number>(), changes.length];

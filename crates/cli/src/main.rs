@@ -491,6 +491,23 @@ enum CycleCmd {
         #[arg(long)]
         icon: Option<String>,
     },
+    /// Set a cycle's retrospective; fields not given stay as they are.
+    Set {
+        /// Cycle id or exact name.
+        cycle: String,
+        /// One sentence, set at planning.
+        #[arg(long)]
+        goal: Option<String>,
+        /// Was the goal met: yes or no.
+        #[arg(long)]
+        goal_met: Option<String>,
+        /// How it went, 1 to 5.
+        #[arg(long)]
+        rating: Option<u8>,
+        /// Markdown.
+        #[arg(long)]
+        notes: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]

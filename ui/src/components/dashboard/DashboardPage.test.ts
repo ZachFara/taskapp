@@ -94,6 +94,18 @@ describe('DashboardPage', () => {
     expect([...saved.hidden].sort()).toEqual(CARDS.map((c) => c.id).sort());
   });
 
+  it('a cycle chosen in Range links to its retrospective', async () => {
+    await open(() => metrics());
+    expect([...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Retrospective')).toBe(false);
+    const id = (await createMockApi().cycles.list())[0].id;
+    dashboard.range = `cycle:${id}`;
+    await settle();
+    const link = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Retrospective')!;
+    link.click();
+    expect(location.pathname + location.hash).toMatch(/^\/cycles#\d+$/);
+    history.replaceState(null, '', '/');
+  });
+
   it('the Points switch asks again with Points', async () => {
     await open(() => metrics());
     dashboard.measure = 'Points';

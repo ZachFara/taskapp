@@ -300,6 +300,12 @@ filter chips, Group, Sort and Display.
   Settings > Cycles. The current cycle shows a burn-up chart, past cycles a spark line and the page a "Completed per
   cycle" bar chart, when Progress charts is on. "Move unfinished to next cycle" (button, or the command) moves unfinished issues
   to the next cycle. Set an issue's cycle with `shift+c`.
+- **Cycle retrospective.** Click a cycle on the Cycles page to open its retrospective above its issues: a one-sentence
+  goal (set at planning), Goal met yes or no, a 1 to 5 rating, notes, and the cycle's own numbers (throughput, say/do and
+  scope change, AI vs me, flow efficiency, blocked work). In the command menu: "Set cycle goal...", "Was the cycle goal
+  met...", "Rate the cycle..." (they act on the open cycle, else the running one) and "Open cycle retrospective...". On the
+  Dashboard, a cycle chosen in Range shows a Retrospective button. For AI: `taskapp cycle set NAME --goal ... --goal-met
+  yes|no --rating N --notes ...`, and `taskapp metrics --cycle NAME` for the numbers.
 - **Pins.** Pin issues, projects, views and cycles (CLI also notes and URLs). The Pinned page lists them; `g h`.
 
 ## Events

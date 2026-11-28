@@ -303,6 +303,15 @@ pub struct Cycle {
     pub end_date: NaiveDate,
     pub icon: Option<String>,
     pub color: Option<String>,
+    /// The retrospective: a one-sentence goal, whether it was met (`None` until decided), a 1 to 5 rating, notes.
+    #[serde(default)]
+    pub goal: Option<String>,
+    #[serde(default)]
+    pub goal_met: Option<bool>,
+    #[serde(default)]
+    pub rating: Option<u8>,
+    #[serde(default)]
+    pub notes: String,
 }
 
 /// Times are local wall-clock (no zone); an all-day event keeps midnight and the UI ignores the time.

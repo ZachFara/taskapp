@@ -1249,3 +1249,57 @@ fn stale_prints_an_empty_list_until_a_nudged_issue_waits() {
     run(&db, &["add", "Fresh idea"]);
     assert_eq!(run_json(&db, &["stale"]), serde_json::json!([]));
 }
+
+#[test]
+fn cycle_set_writes_the_retrospective() {
+    let (_d, db) = fresh();
+    run_json(
+        &db,
+        &[
+            "cycle",
+            "create",
+            "--start",
+            "2024-01-01",
+            "--end",
+            "2024-01-14",
+            "--name",
+            "Sprint",
+        ],
+    );
+    let set = run_json(
+        &db,
+        &[
+            "cycle",
+            "set",
+            "sprint",
+            "--goal",
+            "Ship it",
+            "--goal-met",
+            "yes",
+            "--rating",
+            "4",
+            "--notes",
+            "ok",
+        ],
+    );
+    assert_eq!(
+        (
+            &set["goal"],
+            &set["goal_met"],
+            &set["rating"],
+            &set["notes"]
+        ),
+        (&"Ship it".into(), &true.into(), &4.into(), &"ok".into())
+    );
+    // Unmentioned fields stay; a bad rating is refused.
+    let again = run_json(&db, &["cycle", "set", "1", "--goal-met", "no"]);
+    assert_eq!(
+        (&again["goal"], &again["goal_met"]),
+        (&"Ship it".into(), &false.into())
+    );
+    assert!(
+        !run(&db, &["cycle", "set", "1", "--rating", "9"])
+            .status
+            .success()
+    );
+}
