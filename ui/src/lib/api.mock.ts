@@ -1222,7 +1222,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       velocity: async (scope, measure, periods) => {
         const { tls } = scoped(scope, measure);
         const now = zoneToday();
-        const started = [...cycles].sort((a, b) => Number(a.key.slice(a.key.lastIndexOf("-") + 1)) - Number(b.key.slice(b.key.lastIndexOf("-") + 1))).filter((c) => c.start_date <= now);
+        const started = [...cycles].sort((a, b) => a.number - b.number).filter((c) => c.start_date <= now);
         const spans = cycles.length
           ? started.slice(Math.max(0, started.length - periods)).map((c) => ({ start: c.start_date, end: c.end_date, label: c.name ?? `Cycle ${c.number}` }))
           : insights.weekSpans(now, periods);

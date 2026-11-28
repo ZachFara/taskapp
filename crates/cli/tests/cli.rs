@@ -1345,7 +1345,7 @@ fn features_default_on_and_switch() {
         all.as_array()
             .expect("list")
             .iter()
-            .all(|f| f["on"] == true)
+            .all(|f| f["on"] == (f["name"] != "shutdown"))
     );
     let after = run_json(&db, &["features", "set", "cycles", "off"]);
     let on = |name: &str| {
