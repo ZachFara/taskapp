@@ -310,3 +310,21 @@ async fn nightly_copies_pasted_images_beside_it() -> R {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn restore_copies_the_backups_attachments_beside_the_database() -> R {
+    let (live, backups, fresh) = (TempDir::new()?, TempDir::new()?, TempDir::new()?);
+    let db = open_with_three_issues(live.path()).await?;
+    let a = taskapp_core::attachments::add(&db, b"\x89PNG\r\n\x1a\nx", "image/png").await?;
+    let snap = backup::snapshot(&db, backups.path(), "before").await?;
+    db.pool.close().await;
+
+    let to = fresh.path().join("live.db");
+    backup::restore(&snap, &to).await?;
+
+    let kept = fresh.path().join(format!("attachments/{}.png", a.sha256));
+    assert!(kept.is_file(), "attachment missing after restore");
+    let db = Db::open(&to).await?;
+    assert_eq!(issue_count(&db).await?, 3);
+    Ok(())
+}

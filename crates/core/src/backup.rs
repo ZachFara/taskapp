@@ -100,7 +100,8 @@ pub fn list(dir: &Path) -> Result<Vec<PathBuf>> {
 }
 
 /// Replaces `to` with the backup `from`, but only after `from` passes `PRAGMA integrity_check` and is a taskapp
-/// database. The replaced file is first copied to `<to>.pre-restore-<UTC timestamp>`.
+/// database. The replaced file is first copied to `<to>.pre-restore-<UTC timestamp>`. The backup's pasted images
+/// are copied into `<to>`'s attachments folder.
 ///
 /// # Errors
 ///
@@ -119,6 +120,7 @@ pub async fn restore(from: &Path, to: &Path) -> Result<()> {
     }
     check_backup(from).await?;
     ensure_unused(to).await?;
+    restore_images(from, to)?;
     if to.exists() {
         // Kept under another name, not deleted, so a mistaken restore can be undone.
         let mut kept = to.as_os_str().to_owned();
@@ -144,6 +146,35 @@ pub async fn restore(from: &Path, to: &Path) -> Result<()> {
         }
     }
     fs::rename(&staging, to)?;
+    Ok(())
+}
+
+/// Copies the backup's pasted images (see `copy_images`) into the live attachments folder, skipping any already there.
+/// Named by content, so nothing is overwritten and nothing is deleted.
+fn restore_images(from: &Path, to: &Path) -> Result<()> {
+    // `from` sits in `<backup>/snapshots/` or `<backup>/nightly/`, and the images in `<backup>/attachments/`.
+    let Some(backup_root) = from.parent().and_then(Path::parent) else {
+        return Ok(());
+    };
+    let Ok(entries) = fs::read_dir(backup_root.join("attachments")) else {
+        return Ok(());
+    };
+    let live = to
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."))
+        .join("attachments");
+    for e in entries {
+        let e = e?;
+        let target = live.join(e.file_name());
+        if e.file_type()?.is_file()
+            && !target.exists()
+            && e.path().extension() != Some("partial".as_ref())
+        {
+            fs::create_dir_all(&live)?;
+            fs::copy(e.path(), target)?;
+        }
+    }
     Ok(())
 }
 
