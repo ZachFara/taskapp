@@ -3,6 +3,7 @@
 mod api;
 mod commands;
 mod decision;
+mod forecast;
 mod list;
 mod look;
 mod metrics;
@@ -70,6 +71,8 @@ enum Cmd {
     Template(TemplateCmd),
     /// Throughput, lead and cycle time, work in progress and breakdowns, rebuilt from history.
     Metrics(metrics::MetricsArgs),
+    /// When a project's or cycle's open issues are likely done, from the last eight weeks of throughput.
+    Forecast(forecast::ForecastArgs),
     /// Progress and velocity over time, rebuilt from history.
     #[command(subcommand)]
     Insights(InsightsCmd),
@@ -703,6 +706,9 @@ async fn run(cli: Cli) -> Result<()> {
         Cmd::Api(ApiCmd::Call { name, .. }) => format!("api call {name}"),
         _ => words.join(" "),
     };
+    if let Cmd::Forecast(args) = &cli.cmd {
+        return forecast::print(&db, args, cli.json).await;
+    }
     if let Cmd::Metrics(args) = &cli.cmd {
         return metrics::print(&db, args, cli.json).await;
     }

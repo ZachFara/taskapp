@@ -18,6 +18,7 @@
   import ProjectIssues from './project/ProjectIssues.svelte';
   import { shortcutFor } from '../lib/commands/registry';
   import Milestones from './project/Milestones.svelte';
+  import ForecastLine from './dashboard/ForecastLine.svelte';
   import InsightsPanel from './insights/InsightsPanel.svelte';
 
   let { params }: { params: { slug?: string } } = $props();
@@ -145,6 +146,7 @@
     <div class="cols">
     <div class="scroll">
       <ProjectHeader {project} {progress} bind:renaming onsaved={(p) => (project = p)} />
+      <div class="details" data-testid="forecast">{#key rows}<ForecastLine filter={{ Cond: { field: { Fixed: 'Project' }, op: 'Eq', value: project.id } }} />{/key}</div>
       <div class="details"><ProjectDetails {project} onsaved={(p) => (project = p)} /></div>
       <div class="ms">
         <Milestones projectId={project.id} {milestones} issues={rows} {statuses} onchange={() => reload(slug)} />

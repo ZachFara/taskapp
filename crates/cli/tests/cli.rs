@@ -1220,3 +1220,20 @@ fn metrics_reads_ranges_cycles_and_filters() {
     let cycle = run_json(&db, &["metrics", "--cycle", "Sprint"]);
     assert_eq!(cycle["from"], "2026-01-01");
 }
+
+#[test]
+fn forecast_says_when_history_is_too_thin_and_checks_names() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Write report"]);
+    let f = run_json(&db, &["forecast"]);
+    assert_eq!(
+        (&f["open"], &f["enough"], &f["p50"]),
+        (&Value::from(1), &Value::from(false), &Value::Null)
+    );
+    let text = String::from_utf8_lossy(&run(&db, &["forecast"]).stdout).into_owned();
+    assert!(text.contains("Not enough history"), "{text}");
+    assert_ne!(
+        run(&db, &["forecast", "--project", "Nope"]).status.code(),
+        Some(0)
+    );
+}

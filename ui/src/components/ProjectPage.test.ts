@@ -52,6 +52,11 @@ describe('ProjectPage', () => {
     });
   });
 
+  it('shows_a_forecast_line_for_the_project', async () => {
+    const target = await open('/project/website');
+    await vi.waitFor(() => expect(target.querySelector('[data-testid="forecast"]')?.textContent).toMatch(/Not enough history|Nothing is open|At the current pace/));
+  });
+
   it('doc_link_button_shown_only_when_set', async () => {
     const without = await open('/project/website');
     expect(without.querySelector('[data-testid="open-obsidian"]')).toBeNull();

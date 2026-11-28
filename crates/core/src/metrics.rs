@@ -21,21 +21,21 @@ const THIN: usize = 5;
 const VELOCITY_CYCLES: usize = 6;
 
 /// One issue's story: when it was made and by whom, where its status went, and when it finished.
-struct Facts {
-    issue: Issue,
+pub(crate) struct Facts {
+    pub(crate) issue: Issue,
     made: NaiveDate,
     made_by: String,
     cat0: StatusCategory,
     /// (local day, category entered), oldest first.
     moves: Vec<(NaiveDate, StatusCategory)>,
     started: Option<NaiveDate>,
-    done: Option<NaiveDate>,
+    pub(crate) done: Option<NaiveDate>,
     done_by: String,
 }
 
 impl Facts {
     /// The category at the end of `day` and the day it was entered; `None` before the issue existed.
-    fn at(&self, day: NaiveDate) -> Option<(StatusCategory, NaiveDate)> {
+    pub(crate) fn at(&self, day: NaiveDate) -> Option<(StatusCategory, NaiveDate)> {
         if self.made > day {
             return None;
         }
@@ -348,6 +348,26 @@ fn times(done: &[&Facts]) -> (LeadTime, CycleTime) {
     )
 }
 
+/// The story of every issue the filter lets through.
+pub(crate) async fn facts(db: &Db, filter: Option<crate::Filter>) -> Result<Vec<Facts>> {
+    let tz = zone(db).await?;
+    let cats: HashMap<i64, StatusCategory> = statuses::list(db)
+        .await?
+        .into_iter()
+        .map(|s| (s.id.0, s.category))
+        .collect();
+    let log = log(db).await?;
+    let def = ViewDef {
+        filter,
+        ..ViewDef::default()
+    };
+    Ok(views::query(db, &def)
+        .await?
+        .into_iter()
+        .map(|i| story(i, &log, &cats, tz))
+        .collect())
+}
+
 fn span(q: &MetricsQuery, all_cycles: &[Cycle]) -> Result<Span> {
     let (from, to, cycle) = match q.scope {
         MetricsScope::Range { from, to } => (from, to, None),
@@ -382,24 +402,9 @@ pub async fn metrics_on(db: &Db, q: MetricsQuery, today: NaiveDate) -> Result<Me
             "metrics count issues or points, not time".into(),
         ));
     }
-    let tz = zone(db).await?;
     let all_cycles = cycles::list(db).await?;
     let (from, to, cycle) = span(&q, &all_cycles)?;
-    let cats: HashMap<i64, StatusCategory> = statuses::list(db)
-        .await?
-        .into_iter()
-        .map(|s| (s.id.0, s.category))
-        .collect();
-    let log = log(db).await?;
-    let def = ViewDef {
-        filter: q.filter,
-        ..ViewDef::default()
-    };
-    let all: Vec<Facts> = views::query(db, &def)
-        .await?
-        .into_iter()
-        .map(|i| story(i, &log, &cats, tz))
-        .collect();
+    let all = facts(db, q.filter).await?;
     // Velocity looks across cycles, so it keeps every filtered issue; the rest is the cycle's members.
     let mine: Vec<&Facts> = all
         .iter()

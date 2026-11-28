@@ -97,7 +97,7 @@
       {#each shown as c (c.id)}
         <section class="card" class:wide={c.wide} aria-label={c.title}>
           <h2>{c.title}</h2>
-          <c.component {metrics} measure={dashboard.measure} />
+          <c.component {metrics} measure={dashboard.measure} filter={filterOf(dashboard.project, dashboard.label)} cycle={range && 'Cycle' in range.scope ? range.scope.Cycle : null} />
         </section>
       {/each}
     </div>

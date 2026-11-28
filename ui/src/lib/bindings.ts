@@ -809,6 +809,13 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	forecastFor: (query: ForecastQuery, options?: InvokeOptions) => __TAURI_INVOKE<Forecast>("forecast_for", { query }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	metricsFor: (query: MetricsQuery, options?: InvokeOptions) => __TAURI_INVOKE<Metrics>("metrics_for", { query }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1222,6 +1229,26 @@ export type FlowKind = "Active" | "Waiting" | "Idle";
 
 /**  The sidebar section a folder belongs to; its items live in the table of the same name. */
 export type FolderSection = "pin" | "view" | "project" | "cycle";
+
+/**
+ *  When the open issues are likely done at the recent pace. `p50` and `p85` are the days by which half and
+ *  85 in 100 simulated futures are finished; both are `None` when `enough` is false (too little history) or
+ *  nothing is open. `completions` is what finished in the `window_days` before today.
+ */
+export type Forecast = {
+	open: number,
+	completions: number,
+	window_days: number,
+	enough: boolean,
+	p50: string | null,
+	p85: string | null,
+};
+
+/**  What to forecast: the issues the filter lets through, or one cycle's own members. */
+export type ForecastQuery = {
+	filter: Filter | null,
+	cycle: CycleId | null,
+};
 
 /**
  *  Everything an import would create. The lists of statuses, labels, projects, cycles and property

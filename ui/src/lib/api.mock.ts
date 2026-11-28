@@ -4,7 +4,7 @@ import { planCsv, projectSlug } from './api.mock.import';
 import { FIELDS } from './issueFields';
 import { parseQuickadd } from './api.mock.quickadd';
 import * as insights from './api.mock.insights';
-import { metrics } from './api.mock.metrics';
+import { forecast, metrics } from './api.mock.metrics';
 import { stepLabel } from './api.mock.stepLabel';
 import { byStatusOrder, flowDefaults } from './statusOrder';
 import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
@@ -1076,6 +1076,9 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           : insights.weekSpans(now, periods);
         return insights.velocity(tls, spans);
       },
+    },
+    forecast: {
+      for: async (q) => forecast(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, tz: workspace.timezone, today: zoneToday() }, fail),
     },
     metrics: {
       for: async (q) => metrics(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, tz: workspace.timezone, today: zoneToday() }, fail),

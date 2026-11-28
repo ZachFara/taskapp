@@ -391,6 +391,16 @@ a Started move (including Linear imports, which have no history) have a lead tim
 when fewer than five issues finished in the range: read the numbers as anecdotes. With a cycle, only its members are
 counted; velocity always looks across cycles.
 
+### Forecast
+When will the open issues be done? The registry command is `forecast_for` (query: optional filter, optional cycle);
+the CLI is `taskapp forecast [--project NAME | --cycle NAME]`. It replays the last 56 days of completions for the
+filtered issues, then simulates the open issues (a cycle's members, when a cycle is given) 1000 times, each day
+finishing as many as a randomly drawn past day did. The answer is the day by which half (`p50`, "likely by") and 85 in
+100 (`p85`) of the runs are done. Fewer than 10 finishes in the window gives `enough: false` and no dates, and
+nothing open gives no dates either. The same data always gives the same answer. The Dashboard has a Forecast card (for
+its project and label filters, or the cycle when the range is a cycle), and each project page shows one line:
+"At the current pace: likely by Jan 12, 85% by Jan 20."
+
 ## Custom properties
 
 Your own fields on issues, on projects, or on both (or, for issues, just one project's). Kinds: Text, Number, Date, Select, MultiSelect, Checkbox, Url,
@@ -896,6 +906,7 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `insights progress (--project N \| --cycle N \| --view N) [--measure points\|count\|time --from --to]` | Per-day scope, started, completed. | `taskapp insights progress --project 1 --measure count` |
 | `insights velocity (--project N \| --cycle N \| --view N) [--measure --periods 6]` | Completed per cycle or week. | `taskapp insights velocity --cycle 1` |
 | `metrics [--range today\|week\|month\|quarter\|year\|FROM..TO \| --cycle NAME] [--project NAME --label NAME --points --json]` | Throughput, lead and cycle time, WIP, by label and source, velocity. Ranges end today; buckets are days up to 31 days, weeks up to about six months, then months. | `taskapp metrics --range month --label bug` |
+| `forecast [--project NAME \| --cycle NAME]` | When the open issues are likely done at the recent pace (p50 and p85 dates). | `taskapp forecast --project Website` |
 | `history <key>` | Change history of an issue. | `taskapp history ABC-1` |
 | `undo` / `redo` | Undo or redo the newest step. | `taskapp undo` |
 | `backup list --dir <dir>` | List backups in a folder. | `taskapp backup list --dir ~/Backups/cairn` |

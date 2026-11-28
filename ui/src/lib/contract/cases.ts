@@ -330,6 +330,10 @@ export const cases: Case[] = [
   metrics('metrics: backwards range is Invalid', { scope: { Range: { from: ago(0), to: ago(5) } } }),
   metrics('metrics: time measure is Invalid', { measure: 'time' }),
   metrics('metrics: unknown cycle is NotFound', { scope: { Cycle: 99 } }),
+  call('forecast: whole workspace', 'forecast_for', { query: { filter: null, cycle: null } }),
+  call('forecast: project filter', 'forecast_for', { query: { filter: cond(fixed('Project'), 'In', [2]), cycle: null } }),
+  call('forecast: a cycle', 'forecast_for', { query: { filter: null, cycle: 1 } }),
+  call('forecast: unknown cycle is NotFound', 'forecast_for', { query: { filter: null, cycle: 99 } }),
 
   // Writes and their validation
   call('issues: empty title is Invalid', 'issues_create', { input: { title: '  ' } }),

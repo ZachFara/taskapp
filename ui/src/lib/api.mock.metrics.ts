@@ -1,5 +1,5 @@
 // Port of crates/core/src/metrics.rs: delivery numbers replayed from the change history.
-import type { Bucket, Change, Cycle, Issue, Label, Measure, Metrics, MetricsBucket, MetricsQuery, Status } from './bindings';
+import type { Bucket, Change, Cycle, Forecast, ForecastQuery, Issue, Label, Measure, Metrics, MetricsBucket, MetricsQuery, Status } from './bindings';
 import { MAX_DAYS, addDays, localDay } from './api.mock.insights';
 
 type Cat = Status['category'];
@@ -121,4 +121,42 @@ export function metrics(q: MetricsQuery, filtered: Issue[], inp: Inputs, fail: (
     wip_now: mine.filter((f) => at(f, inp.today)?.[0] === 'Started').length,
     by_label, by_source, velocity, thin: done.length < 5,
   };
+}
+
+// Port of crates/core/src/forecast.rs, mulberry32 and all, so the contract cases agree with the engine.
+const WINDOW = 56;
+const RUNS = 1000;
+function mulberry(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), a | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return (t ^ (t >>> 14)) >>> 0;
+  };
+}
+
+export function forecast(q: ForecastQuery, filtered: Issue[], inp: Inputs, fail: (kind: string, message: string) => never): Forecast {
+  if (q.cycle !== null && !inp.cycles.some((c) => c.id === q.cycle)) fail('NotFound', `cycle ${q.cycle}`);
+  const all = filtered.map((i) => story(i, inp));
+  const perDay = new Array<number>(WINDOW).fill(0);
+  for (const f of all) {
+    const age = f.done === null ? -1 : gap(f.done, inp.today);
+    if (f.done !== null && f.done <= inp.today && age < WINDOW) perDay[age]++;
+  }
+  const completions = perDay.reduce((a, b) => a + b, 0);
+  const open = all.filter((f) => (q.cycle === null || f.issue.cycle_id === q.cycle) && ['Backlog', 'Unstarted', 'Started'].includes(at(f, inp.today)?.[0] ?? '')).length;
+  const enough = completions >= 10;
+  const runs: number[] = [];
+  if (enough && open > 0) {
+    const next = mulberry(0x00c0ffee);
+    for (let r = 0; r < RUNS; r++) {
+      let [left, days] = [open, 0];
+      while (left > 0 && days < 3650) { left = Math.max(0, left - perDay[Math.floor((next() * WINDOW) / 2 ** 32)]); days++; }
+      runs.push(days);
+    }
+    runs.sort((a, b) => a - b);
+  }
+  const on = (pct: number) => (runs.length ? addDays(inp.today, runs[Math.max(1, Math.ceil((runs.length * pct) / 100)) - 1]) : null);
+  return { open, completions, window_days: WINDOW, enough, p50: on(50), p85: on(85) };
 }

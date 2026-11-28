@@ -840,6 +840,26 @@ pub struct MetricsQuery {
     pub measure: Measure,
 }
 
+/// What to forecast: the issues the filter lets through, or one cycle's own members.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct ForecastQuery {
+    pub filter: Option<Filter>,
+    pub cycle: Option<CycleId>,
+}
+
+/// When the open issues are likely done at the recent pace. `p50` and `p85` are the days by which half and
+/// 85 in 100 simulated futures are finished; both are `None` when `enough` is false (too little history) or
+/// nothing is open. `completions` is what finished in the `window_days` before today.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct Forecast {
+    pub open: u32,
+    pub completions: u32,
+    pub window_days: u32,
+    pub enough: bool,
+    pub p50: Option<NaiveDate>,
+    pub p85: Option<NaiveDate>,
+}
+
 /// One bucket; `scope` is open plus finished-in-range work at the bucket's end, `done_total` the finished part.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct MetricsBucket {
