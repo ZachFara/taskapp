@@ -16,7 +16,8 @@ function bulk(ids: unknown, patch: Obj): string {
   const n = len(ids);
   if (typeof patch.archive === 'boolean') return `${patch.archive ? 'Archived' : 'Restored'} ${count(n, 'issue')}`;
   const set = Object.entries((patch.patch ?? {}) as Obj).filter(([, v]) => v !== null && v !== undefined).map(([k]) => k);
-  return set.length === 1 ? `Set ${set[0].replace(/_id$/, '')} on ${count(n, 'issue')}` : `Edited ${count(n, 'issue')}`;
+  if (set.length === 1 && set[0] === 'hidden_until') return `Deferred ${count(n, 'issue')}`;
+  return set.length === 1 ? `Set ${set[0].replace(/_id$/, '').replaceAll('_', ' ')} on ${count(n, 'issue')}` : `Edited ${count(n, 'issue')}`;
 }
 
 /** `name` is the wire command (`labels_update`), `args` the call's arguments in order, `out` its result. */
