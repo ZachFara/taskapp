@@ -4,6 +4,7 @@ import { setApi, type Api } from '../../lib/api';
 import { createMockApi } from '../../lib/api.mock';
 import { listCommands, type Ctx } from '../../lib/commands';
 import Sidebar from '../Sidebar.svelte';
+import { CARDS } from './cards';
 import DashboardPage from './DashboardPage.svelte';
 import { dashboard, moveCard, orderedCards, setDashboard, toggleCard } from './dashboard.svelte';
 import type { Metrics, MetricsQuery } from './metrics';
@@ -56,7 +57,7 @@ describe('DashboardPage', () => {
     expect(s.textContent).toContain('Completed');
     expect(s.textContent).toContain('5.5 d');
     expect(document.querySelector('section[aria-label="Burn-up"]')).not.toBeNull();
-    expect(text()).not.toContain('rough');
+    expect(text()).not.toContain('so the times are rough');
   });
 
   it('says so when the data is thin', async () => {
@@ -79,15 +80,16 @@ describe('DashboardPage', () => {
   });
 
   it('hidden cards stay hidden and the order is kept', async () => {
-    toggleCard('burnup');
+    const ids = CARDS.map((c) => c.id);
+    ids.slice(1).forEach(toggleCard);
     await open(() => metrics());
     expect(document.querySelector('section[aria-label="Burn-up"]')).toBeNull();
     toggleCard('summary');
     await settle();
     expect(text()).toContain('All cards are hidden');
     moveCard('summary', 1);
-    expect(orderedCards()).toEqual(['burnup', 'summary']);
-    expect(JSON.parse(localStorage.getItem('cairn.dashboard')!)).toMatchObject({ order: ['burnup', 'summary'], hidden: ['burnup', 'summary'] });
+    expect(orderedCards()).toEqual([ids[1], ids[0], ...ids.slice(2)]);
+    expect(JSON.parse(localStorage.getItem('cairn.dashboard')!)).toMatchObject({ order: [ids[1], ids[0], ...ids.slice(2)], hidden: expect.arrayContaining(ids) });
   });
 
   it('the Points switch asks again with Points', async () => {

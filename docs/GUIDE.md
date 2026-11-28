@@ -354,8 +354,11 @@ with its recommendation until you answer). Decisions are Cairn's own; nothing ou
 The Dashboard (sidebar, or `g b`) shows how work is going over a range. Pick the range at the top: Today, This week,
 This cycle, any other cycle, Month, Quarter, Year, or Custom with two dates. The chart steps by day up to 31 days, by
 week up to about six months, and by month beyond. Limit it to a project or a label, and switch Count or Points.
-Two cards so far: Summary (completed, created, in progress now, lead time and cycle time as median and 85th percentile;
-a note appears when fewer than 5 issues finished) and Burn-up (scope against done). The Cards button shows, hides and
+Cards: Summary (completed, created, in progress now, lead time and cycle time as median and 85th percentile;
+a note appears when fewer than 5 issues finished), Burn-up (scope against done), Cycle time (one dot per finished issue,
+by the day it finished against its days; the lines mark the median and the 85th percentile, and "85% finish within N
+days"; click a dot to open the issue), Lead time (created to finished), and Work in progress (now, and per period with
+Little's Law: average cycle time = WIP / throughput). The Cards button shows, hides and
 reorders cards, kept on this device. Every choice is also in the command menu ("Dashboard range", "Dashboard: show or
 hide cards"). Settings > General > Dashboard turns the whole page off; it is on by default.
 
