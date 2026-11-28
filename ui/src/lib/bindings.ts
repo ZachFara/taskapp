@@ -46,6 +46,20 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	issuesDelete: (ids: IssueId[], options?: InvokeOptions) => __TAURI_INVOKE<number>("issues_delete", { ids }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	issuesEmptyArchive: (options?: InvokeOptions) => __TAURI_INVOKE<number>("issues_empty_archive", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	issuesGet: (id: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<Issue>("issues_get", { id }, options),
 	/**
 	 * Forwards to the command of the same name.

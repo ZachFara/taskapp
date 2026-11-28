@@ -63,6 +63,14 @@ async fn undo_steps_carry_human_labels_with_counts() -> R {
         "Duplicated 2 issues"
     );
     assert_eq!(
+        l("issues_delete", json!({"ids": [3, 4]})).await?,
+        "Deleted 2 issues"
+    );
+    assert_eq!(
+        l("issues_empty_archive", json!({})).await?,
+        "Emptied archive"
+    );
+    assert_eq!(
         l("import_apply", json!({"plan": plan(3)})).await?,
         "Imported 3 issues"
     );

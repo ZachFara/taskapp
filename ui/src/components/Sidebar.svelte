@@ -304,6 +304,7 @@
   </ul>
 
   <ul class="bottom">
+    <li>{@render navLink('/archive', 'archive', 'Archive', 'nav.archive', route === '/archive')}</li>
     <li>{@render navLink('/settings/general', 'settings', 'Settings', 'nav.settings', route.startsWith('/settings'))}</li>
   </ul>
 </nav>

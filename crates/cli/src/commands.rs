@@ -73,6 +73,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Features { cmd } => features(db, cmd).await,
         Cmd::Add { text, tz } => add(db, &text, tz.as_deref()).await,
         Cmd::Issue(cmd) => issue(db, cmd).await,
+        Cmd::Archive(cmd) => crate::archive::run(db, cmd).await,
         Cmd::View(cmd) => view(db, cmd).await,
         Cmd::Property(cmd) => property(db, dir, cmd).await,
         Cmd::Project(cmd) => project(db, cmd).await,
@@ -199,6 +200,7 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
         update @ IssueCmd::Update { .. } => issue_update(db, update).await,
         IssueCmd::List(args) => crate::list::run(db, &args).await,
         IssueCmd::Get { key } => crate::list::get(db, &key).await,
+        IssueCmd::Delete { key, yes } => crate::archive::delete_issue(db, &key, yes).await,
         keyed @ (IssueCmd::Archive { .. } | IssueCmd::Link { .. } | IssueCmd::Links { .. }) => {
             issue_keyed(db, keyed).await
         }

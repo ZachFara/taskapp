@@ -9,8 +9,8 @@ use chrono::{NaiveDate, TimeZone, Utc};
 use serde_json::json;
 use taskapp_core::{
     ChangeSource, Db, Depth, Due, IssueId, IssuePatch, Layout, NewIssue, PinKind, PropertyDef,
-    PropertyKind, Relation, RelationKind, StatusCategory, ViewDef, comments, cycles, focus, issues,
-    labels, pins, projects, properties, relation_kinds, relations, settings, views,
+    PropertyKind, Relation, RelationKind, StatusCategory, ViewDef, comments, cycles, delete, focus,
+    issues, labels, pins, projects, properties, relation_kinds, relations, settings, views,
 };
 use taskapp_export::{git, rebuild, write};
 
@@ -245,6 +245,20 @@ async fn export_is_deterministic() -> R {
         again.files_written, 0,
         "unchanged data must not rewrite files"
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_deleted_issue_leaves_the_export_and_the_export_still_rebuilds() -> R {
+    let db = seeded().await?;
+    let dir = tempfile::tempdir()?;
+    write::write_snapshot(&db, dir.path()).await?;
+    assert!(tree(dir.path()).contains_key("issues/ABC-2.md"));
+    delete::remove(&db, &[IssueId(2)], SRC).await?;
+    write::write_snapshot(&db, dir.path()).await?;
+    assert!(!tree(dir.path()).contains_key("issues/ABC-2.md"));
+    let rebuilt = rebuild::rebuild(dir.path(), &dir.path().join("rebuilt.db")).await?;
+    assert!(issues::get(&rebuilt, IssueId(2)).await.is_err());
     Ok(())
 }
 

@@ -28,6 +28,8 @@ export function stepLabel(name: string, args: unknown[], out: unknown): string {
     case 'inbox_process': return `Processed ${key}`;
     case 'issues_mark_duplicate': return `Marked ${key} duplicate`;
     case 'issues_bulk_update': return bulk(args[0], (args[1] ?? {}) as Obj);
+    case 'issues_delete': return `Deleted ${count(len(args[0]), 'issue')}`;
+    case 'issues_empty_archive': return 'Emptied archive';
     case 'issues_duplicate': return `Duplicated ${count(len(args[0]), 'issue')}`;
     case 'import_apply': return `Imported ${count(Number((out as Obj).created ?? 0), 'issue')}`;
     case 'pins_set': return `${args[2] === false ? 'Unpinned' : 'Pinned'} ${count(len(args[1]), 'item')}`;

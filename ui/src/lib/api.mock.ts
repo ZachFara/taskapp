@@ -129,7 +129,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, decisions, links, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog, nextFlags, focusSessions] as unknown[][];
+  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, decisions, links, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog, nextFlags, focusSessions, blocks] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -163,13 +163,20 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       // A created issue is undone by archiving it and redone by restoring it.
       const next = target ? structuredClone(target) : { ...was, archived_at: undo ? now() : null };
       if (target && JSON.stringify(target) === JSON.stringify(was)) continue;
+      // Redo of a delete: the later state lacks the issue.
+      if (!target && !undo) {
+        if (at >= 0) s.issues.splice(at, 1);
+        continue;
+      }
       next.updated_at = now();
       if (at >= 0) s.issues[at] = next;
     }
     // Redo brings back an issue the step created: it is only in the later state, so the loop above never met it.
     for (const t of to) {
       const at = s.issues.findIndex((x) => x.id === t.id);
-      if (!from_.some((x) => x.id === t.id) && at >= 0) s.issues[at] = { ...structuredClone(t), updated_at: now() };
+      if (from_.some((x) => x.id === t.id)) continue;
+      if (at >= 0) s.issues[at] = { ...structuredClone(t), updated_at: now() };
+      else s.issues.splice(s.issues.findIndex((x) => x.id > t.id) < 0 ? s.issues.length : s.issues.findIndex((x) => x.id > t.id), 0, structuredClone(t)); // undo of a delete
     }
     // Undo replays the step's rows newest first with old and new swapped; a create row pair becomes an archive.
     const src = undo ? 'Undo' : 'Redo';
@@ -606,6 +613,28 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         }
         return null;
       },
+      // Port of delete.rs: everything that points at an issue goes with it; undo restores the collections whole.
+      delete: async (ids) => {
+        const gone = [...new Set(ids)];
+        gone.forEach(getIssue);
+        for (const id of gone) {
+          s.issues.splice(s.issues.findIndex((i) => i.id === id), 1);
+          for (const c of s.issues) if (c.parent_id === id) c.parent_id = null;
+          const drop = <T>(rows: T[], dead: (r: T) => boolean) => rows.splice(0, rows.length, ...rows.filter((r) => !dead(r)));
+          drop(comments, (r) => r.issue_id === id);
+          drop(links, (r) => r.issue_id === id);
+          drop(blocks, (r) => r.issue_id === id);
+          drop(focusSessions, (r) => r.issue_id === id);
+          drop(relations, (r) => r.from === id || r.to === id);
+          drop(importLog, (r) => r.issue_id === id);
+          drop(nextFlags, (r) => r[1] === id);
+          drop(pins, (r) => r.kind === 'Issue' && r.target.endsWith(`-${id}`));
+          for (const d of decisions) d.issue_ids = d.issue_ids.filter((x) => x !== id);
+          for (const e of events) e.issue_ids = e.issue_ids.filter((x) => x !== id);
+        }
+        return gone.length;
+      },
+      emptyArchive: async () => api.issues.delete(s.issues.filter((i) => i.archived_at !== null).map((i) => i.id)),
       children: async (id) => s.issues.filter((i) => i.parent_id === id),
       // Port of bulk::duplicate: every id must exist before any copy is made.
       duplicate: async (ids) => {
@@ -1407,7 +1436,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   };
   const commandOf = (mod: string, fn: string) => `${mod}_${fn.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}`;
   const mutating = (
-    'inbox.process issues.create issues.update issues.bulkUpdate issues.duplicate issues.markDuplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.setFlow statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
+    'inbox.process issues.create issues.update issues.bulkUpdate issues.duplicate issues.markDuplicate issues.delete issues.emptyArchive issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.setFlow statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
     'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
     'projects.create projects.update projects.setNext projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink decisions.create decisions.answer decisions.withdraw decisions.link decisions.unlink links.add links.remove templates.create templates.update templates.delete templates.apply ' +

@@ -1520,3 +1520,33 @@ fn issue_depth_rejects_unknown_words() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("deep, shallow or none"));
 }
+
+#[test]
+fn delete_and_empty_archive_need_yes() {
+    let (_d, db) = fresh();
+    for t in ["One", "Two", "Three"] {
+        run(&db, &["add", t]);
+    }
+    let refused = run(&db, &["issue", "delete", "ABC-1"]);
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("--yes"));
+    assert_eq!(run_json(&db, &["issue", "get", "ABC-1"])["key"], "ABC-1");
+
+    assert_eq!(
+        run_json(&db, &["issue", "delete", "ABC-1", "--yes"])["deleted"],
+        "ABC-1"
+    );
+    assert!(!run(&db, &["issue", "get", "ABC-1"]).status.success());
+
+    run(&db, &["issue", "archive", "ABC-2"]);
+    let listed = run_json(&db, &["archive", "list"]);
+    assert_eq!(listed[0]["key"], "ABC-2");
+    assert!(!run(&db, &["archive", "empty"]).status.success());
+    assert_eq!(run_json(&db, &["issue", "get", "ABC-2"])["key"], "ABC-2");
+    assert_eq!(run_json(&db, &["archive", "empty", "--yes"])["deleted"], 1);
+    assert_eq!(run_json(&db, &["archive", "list"]), Value::Array(vec![]));
+    assert_eq!(run_json(&db, &["issue", "get", "ABC-3"])["key"], "ABC-3");
+
+    run(&db, &["undo"]);
+    assert_eq!(run_json(&db, &["issue", "get", "ABC-2"])["key"], "ABC-2");
+}

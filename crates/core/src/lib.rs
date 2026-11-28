@@ -14,6 +14,7 @@ pub mod checklist;
 pub mod comments;
 pub mod cycles;
 pub mod decisions;
+pub mod delete;
 pub mod events;
 pub mod focus;
 pub mod forecast;

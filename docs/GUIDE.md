@@ -206,6 +206,17 @@ toast "Nothing to undo" shows when the stack is empty.
 Undo refuses when something changed since. Inside a text field `mod+z` is the field's own undo. CLI: `taskapp undo`,
 `taskapp redo`; MCP: `undo`, `redo`, `undo_status`. An import is one step ("Undo import" button after it).
 
+## Archive and deleting issues
+
+Archiving hides an issue and keeps everything; the Archive page (sidebar, `g a`) lists the archived issues, with a
+search box. Tick issues, then Restore from archive, or Delete permanently. "Empty archive" deletes every archived issue.
+Delete permanently is also in the right-click menu and command menu of any issue. It removes the issue with its
+comments, relations, links, labels, focus sessions, event and decision links, next-action flag and pins; sub-issues stay
+and lose their parent. It always asks first, naming how many issues go, and it is one undo step: Undo (right after, or
+any time until another change) brings it all back. A deleted issue is gone from the next export. CLI:
+`taskapp issue delete ABC-1 --yes`, `taskapp archive list`, `taskapp archive empty --yes` (all refuse without `--yes`).
+Pasted images are shared by the whole workspace and stay.
+
 ## Views
 
 A saved view is a definition: filter, sort, group, layout, displayed fields, and display options. Edits to a view are
@@ -762,6 +773,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.projects` | Go to Projects | `g p` | Go to the project list. |
 | `nav.cycles` | Go to Cycles | `g c` | Go to Cycles. |
 | `nav.events` | Go to Events | `g e` | Go to Events. |
+| `nav.archive` | Go to Archive | `g a` | Go to the Archive page: archived issues, restore, delete for good. |
 | `nav.next` | Go to Next actions | `g n` | Go to the next action of each project (when it is switched on in Settings). |
 | `nav.dashboard` | Go to Dashboard | `g b` | Go to the Dashboard (when it is switched on in Settings). |
 | `nav.process` | Process Inbox | `g o` | Go to Process Inbox (when it is switched on in Settings). |

@@ -404,6 +404,26 @@ describe('walk', { timeout: 20_000 }, () => {
     await pw(page.locator('tr[data-slug=office]')).toContainText('Stuck');
   });
 
+  it('ARCHIVE an archived issue is deleted for good only after the dialog, and Cancel keeps it', async () => {
+    await open();
+    await press('j');
+    const key = (await focusedKey())!;
+    await press('#');
+    await page.getByRole('link', { name: 'Archive' }).click();
+    const row = page.locator('li.row', { hasText: key });
+    await pw(row).toBeVisible();
+    await row.getByRole('checkbox').click();
+    await page.getByRole('button', { name: 'Delete selected permanently…' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Delete 1 issue permanently?' });
+    await pw(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await pw(dialog).toHaveCount(0);
+    await pw(row).toBeVisible();
+    await page.getByRole('button', { name: 'Delete selected permanently…' }).click();
+    await dialog.getByRole('button', { name: 'Delete 1 issue' }).click();
+    await pw(row).toHaveCount(0);
+  });
+
   it('PROCESS the Inbox page opens from the sidebar, a key and a button clear issues, typing never fires a key, and the switch removes it', async () => {
     await open('/my');
     await page.getByRole('link', { name: 'Process Inbox' }).click();

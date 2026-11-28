@@ -17,10 +17,10 @@ use taskapp_core::{
     StaleIssue, Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId, TemplateInput,
     UndoStatus, VelocityPeriod, ViewDef, ViewEntity, ViewFolder, ViewFolderId, ViewId,
     ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, attachments, backup,
-    blocks, bulk, comments, cycles, decisions, events, focus, forecast, history, import, inbox,
-    insights, issues, labels, links, metrics, next_actions, pins, project_statuses, projects,
-    properties, quickadd, relation_kinds, relations, schedule, search, settings, stale, statuses,
-    templates, undo, view_folders, view_templates, views, workspace,
+    blocks, bulk, comments, cycles, decisions, delete, events, focus, forecast, history, import,
+    inbox, insights, issues, labels, links, metrics, next_actions, pins, project_statuses,
+    projects, properties, quickadd, relation_kinds, relations, schedule, search, settings, stale,
+    statuses, templates, undo, view_folders, view_templates, views, workspace,
 };
 
 struct State<'a> {
@@ -72,6 +72,7 @@ macro_rules! define_api {
                 match stringify!($name) {
                     "properties_delete_def" => crate::commands::snapshot($s.db, $s.backup_dir, "delete-property").await?,
                     "properties_change_kind" => crate::commands::snapshot($s.db, $s.backup_dir, "change-kind").await?,
+                    "issues_delete" | "issues_empty_archive" => crate::commands::snapshot($s.db, $s.backup_dir, "delete-issues").await?,
                     "issues_bulk_update" if large_bulk => crate::commands::snapshot($s.db, $s.backup_dir, "bulk-update").await?,
                     _ => {}
                 }

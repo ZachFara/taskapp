@@ -1,6 +1,7 @@
 //! Command-line adapter over `taskapp-core`. Every write uses `ChangeSource::Cli`.
 
 mod api;
+mod archive;
 mod commands;
 mod decision;
 mod forecast;
@@ -46,6 +47,9 @@ enum Cmd {
     },
     #[command(subcommand)]
     Issue(IssueCmd),
+    /// Archived issues: list them, or delete them all for good.
+    #[command(subcommand)]
+    Archive(archive::ArchiveCmd),
     #[command(subcommand)]
     View(ViewCmd),
     #[command(subcommand)]
@@ -307,6 +311,12 @@ enum IssueCmd {
     },
     Archive {
         key: String,
+    },
+    /// Delete an issue for good, with its comments, relations, links and the rest. Needs --yes.
+    Delete {
+        key: String,
+        #[arg(long)]
+        yes: bool,
     },
     Search {
         text: String,
