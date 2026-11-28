@@ -1109,6 +1109,19 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
             }).slice(0, limit)
           : [];
       },
+      // Same rule as the backend: whole-word Jaccard overlap with the title, at least 0.3, open issues only.
+      similar: async (text, project_id, limit) => {
+        const words = (t: string) => new Set(t.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => [...w].length >= 2));
+        const want = words(text);
+        const scored = s.issues.flatMap((i) => {
+          if (i.archived_at || i.completed_at || (project_id != null && i.project_id !== project_id)) return [];
+          const have = words(i.title);
+          const both = [...want].filter((w) => have.has(w)).length;
+          const score = want.size ? both / (want.size + have.size - both) : 0;
+          return score >= 0.3 ? [{ score, i }] : [];
+        });
+        return scored.sort((a, b) => b.score - a.score || a.i.id - b.i.id).slice(0, limit).map((x) => x.i);
+      },
     },
     pins: {
       pin: async (kind, target, title) => {

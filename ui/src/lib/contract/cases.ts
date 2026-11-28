@@ -138,6 +138,10 @@ export const cases: Case[] = [
   call('search: no match', 'search_search', { text: 'zzzz', limit: 5 }),
   call('search: start of a word', 'search_search', { text: 'migr', limit: 10 }),
   call('search: not inside a word', 'search_search', { text: 'rate', limit: 10 }),
+  call('similar: close title', 'search_similar', { text: 'Migrate the blog', project_id: null, limit: 5 }),
+  call('similar: limit', 'search_similar', { text: 'Migrate the blog', project_id: null, limit: 1 }),
+  call('similar: no match', 'search_similar', { text: 'zzzz', project_id: null, limit: 5 }),
+  call('similar: other project', 'search_similar', { text: 'Migrate the blog', project_id: 999, limit: 5 }),
 
   // Pins
   call('pins: pin an issue', 'pins_pin', { kind: 'Issue', target: 'ABC-1', title: null }),

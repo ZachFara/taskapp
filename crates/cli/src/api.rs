@@ -124,6 +124,7 @@ pub fn guide() -> Value {
         "start": "Use taskapp --help and taskapp <command> --help to explore common commands.",
         "api": "Use taskapp api list, taskapp api describe <name>, and taskapp api call <name> --args '<JSON object>' for all core-backed app operations.",
         "output": "Use --json for structured output and errors; pass --db PATH for a different database.",
+        "before_filing": "Run taskapp issue similar 'title' [--project NAME] first; if an open issue matches, update it instead of filing a duplicate.",
         "examples": ["taskapp issue list --project Cairn --not-status Done,Someday", "taskapp issue create 'A task'", "taskapp --json api describe labels_update"]
     })
 }

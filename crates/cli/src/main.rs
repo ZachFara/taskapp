@@ -282,6 +282,15 @@ enum IssueCmd {
         #[arg(long, default_value_t = 20)]
         limit: u32,
     },
+    /// Open issues that look like this text (title, optionally plus description): run before filing.
+    Similar {
+        text: String,
+        /// Project id, slug or exact name (case-insensitive).
+        #[arg(long)]
+        project: Option<String>,
+        #[arg(long, default_value_t = 5)]
+        limit: u32,
+    },
 }
 
 /// What a chart covers: exactly one of the three ids.

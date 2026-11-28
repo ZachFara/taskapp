@@ -837,6 +837,13 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	searchSimilar: (text: string, projectId: ProjectId | null, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<Issue[]>("search_similar", { text, projectId, limit }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	pinsPin: (kind: PinKind, target: string, title: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Pin>("pins_pin", { kind, target, title }, options),
 	/**
 	 * Forwards to the command of the same name.

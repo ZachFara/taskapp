@@ -180,7 +180,22 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
             issues::archive(db, id, SRC).await?;
             Ok(json!({"archived": key}))
         }
+        find @ (IssueCmd::Search { .. } | IssueCmd::Similar { .. }) => issue_find(db, find).await,
+    }
+}
+
+async fn issue_find(db: &Db, cmd: IssueCmd) -> Result<Value> {
+    match cmd {
         IssueCmd::Search { text, limit } => val(search::search(db, &text, limit).await?),
+        IssueCmd::Similar {
+            text,
+            project,
+            limit,
+        } => {
+            let project = crate::references::project(db, project.as_deref()).await?;
+            val(search::similar(db, &text, project, limit).await?)
+        }
+        _ => unreachable!("issue() sends only search and similar here"),
     }
 }
 

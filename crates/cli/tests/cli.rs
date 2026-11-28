@@ -1341,3 +1341,18 @@ fn features_default_on_and_switch() {
     assert_ne!(bad.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&bad.stderr).contains("unknown feature"));
 }
+
+#[test]
+fn issue_similar_finds_open_look_alikes() {
+    let (_d, db) = fresh();
+    run_json(&db, &["issue", "create", "Login crash on Safari"]);
+    run_json(&db, &["issue", "create", "Update billing template"]);
+    let got = run_json(&db, &["issue", "similar", "Fix login crash"]);
+    let titles: Vec<_> = got
+        .as_array()
+        .expect("array")
+        .iter()
+        .map(|i| i["title"].as_str().expect("title"))
+        .collect();
+    assert_eq!(titles, ["Login crash on Safari"]);
+}

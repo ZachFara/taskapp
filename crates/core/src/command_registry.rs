@@ -277,6 +277,9 @@ macro_rules! with_commands {
             stale_list(s) -> Vec<StaleIssue> { stale::list(&s.db).await }
 
             search_search(s, text: String, limit: u32) -> Vec<Issue> { search::search(&s.db, &text, limit).await }
+            search_similar(s, text: String, project_id: Option<ProjectId>, limit: u32) -> Vec<Issue> {
+                search::similar(&s.db, &text, project_id, limit).await
+            }
 
             pins_pin(s, kind: PinKind, target: String, title: Option<String>) -> Pin {
                 pins::pin(&s.db, kind, &target, title).await

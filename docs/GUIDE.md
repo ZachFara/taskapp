@@ -106,6 +106,10 @@ case). Dates are relative to today in the workspace time zone.
 
 Quick-add has no token for status, parent, cycle or milestone. Example: `Pay rent friday p1 +home #bills ~30m 3pt`.
 
+**Possible duplicates.** While you type a title, quick-add quietly lists up to three open issues whose words overlap it
+("Possible duplicates", under the chips). Click one to open it instead; ignore the list and `enter` still creates. The same
+check is `taskapp issue similar "text"` for agents to run before filing.
+
 ### Edit
 
 - Rename in place in a list: `f2`. Everything else: focus the issue and press the key (see the keyboard tables):
@@ -916,6 +920,7 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `decision list [--status open]` / `decision get <id>` | Read decisions (`open`, `answered`, `withdrawn`, `all`). The table shows options as `a) Label; b) Label`; `get` and `--json` give the trade-offs. | `taskapp decision list --status all` |
 | `decision answer <id> (--option KEY \| --text TEXT) [--note]` / `decision withdraw <id>` | Answer or close an open decision. | `taskapp decision answer 1 --option n` |
 | `issue search <text> [--limit 20]` | Full-text search (archived issues are left out). | `taskapp issue search rent` |
+| `issue similar <text> [--project NAME] [--limit 5]` | Open issues whose words overlap the text (likely duplicates), best first. Agents run this before `issue create`. | `taskapp issue similar "Fix login crash" --project Cairn` |
 | `view query [--def JSON \| --id N]` | Run an ad hoc view definition or a saved view. | `taskapp view query --id 1` |
 | `view templates` | List view templates. | `taskapp view templates` |
 | `view save-as-template <view_id> [--name]` | Make a template from a view. | `taskapp view save-as-template 1 --name Sprint` |
