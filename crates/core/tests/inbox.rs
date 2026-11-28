@@ -1,7 +1,7 @@
 use chrono::NaiveDate;
 use taskapp_core::{
     ChangeSource::Ui, Db, Deferred, InboxChoice, IssueId, IssuePatch, NewIssue, StatusCategory,
-    ViewDef, comments, inbox, issues, statuses, views,
+    ViewDef, comments, inbox, issues, next_actions, projects, statuses, views,
 };
 
 type R = Result<(), Box<dyn std::error::Error>>;
@@ -85,7 +85,13 @@ async fn each_choice_sets_status() -> R {
     for (i, (choice, want)) in [
         (InboxChoice::Done, "Done"),
         (InboxChoice::Someday, "Someday"),
-        (InboxChoice::Next { project: None }, "Next"),
+        (
+            InboxChoice::Next {
+                project: None,
+                as_next_action: false,
+            },
+            "Next",
+        ),
     ]
     .into_iter()
     .enumerate()
@@ -105,6 +111,61 @@ async fn each_choice_sets_status() -> R {
     .await?;
     assert_eq!(status_name(&db, d.id).await?, "Delegated");
     assert_eq!(comments::list(&db, d.id).await?[0].body, "Waiting on: Sam");
+    Ok(())
+}
+
+#[tokio::test]
+async fn next_can_also_flag_the_project_next_action() -> R {
+    let (db, ids) = setup().await?;
+    let today = day("2026-12-01");
+    let p = projects::create(&db, "alpha", "Alpha", None, None, Ui).await?;
+    let flagged = inbox::process(
+        &db,
+        ids[0],
+        InboxChoice::Next {
+            project: Some(p.id),
+            as_next_action: true,
+        },
+        today,
+        Ui,
+    )
+    .await?;
+    assert_eq!(flagged.project_id, Some(p.id));
+    let flag = |list: Vec<taskapp_core::NextAction>| {
+        list.into_iter()
+            .find(|n| n.project.id == p.id)
+            .and_then(|n| n.issue)
+            .map(|i| i.id)
+    };
+    assert_eq!(flag(next_actions::list(&db).await?), Some(ids[0]));
+    // A next action needs a project.
+    assert!(
+        inbox::process(
+            &db,
+            ids[1],
+            InboxChoice::Next {
+                project: None,
+                as_next_action: true
+            },
+            today,
+            Ui
+        )
+        .await
+        .is_err()
+    );
+    // Without the flag the project keeps its next action.
+    inbox::process(
+        &db,
+        ids[2],
+        InboxChoice::Next {
+            project: Some(p.id),
+            as_next_action: false,
+        },
+        today,
+        Ui,
+    )
+    .await?;
+    assert_eq!(flag(next_actions::list(&db).await?), Some(ids[0]));
     Ok(())
 }
 

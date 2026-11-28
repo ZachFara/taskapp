@@ -995,7 +995,13 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           if (choice.Defer.until <= zoneToday()) fail('Invalid', 'the hide-until date must be after today');
           return api.issues.update(id, { hidden_until: choice.Defer.until });
         }
-        if (choice.Next) return api.issues.update(id, { status_id: status('Next', 'Unstarted'), project_id: choice.Next.project ?? undefined });
+        if (choice.Next) {
+          if (choice.Next.as_next_action && choice.Next.project == null) fail('Invalid', 'a next action needs a project');
+          const issue = await api.issues.update(id, { status_id: status('Next', 'Unstarted'), project_id: choice.Next.project ?? undefined });
+          if (!choice.Next.as_next_action) return issue;
+          await api.projects.setNext(choice.Next.project!, id);
+          return getIssue(id);
+        }
         const note = choice.Delegate!.note.trim();
         if (!note) fail('Invalid', 'say who you are waiting on');
         const issue = await api.issues.update(id, { status_id: status('Delegated', 'Started') });

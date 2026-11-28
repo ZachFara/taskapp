@@ -5,6 +5,7 @@ import { createMockApi, fixtures } from '../lib/api.mock';
 import { features } from '../lib/features.svelte';
 import { listCommands, type Ctx } from '../lib/commands';
 import ProcessPage from './ProcessPage.svelte';
+import { pick } from './settings/testing';
 
 let live: ReturnType<typeof mount> | null = null;
 afterEach(() => {
@@ -89,6 +90,31 @@ describe('ProcessPage', () => {
     await submit();
     expect((await api.issues.get(first.id)).hidden_until).toMatch(/^\d{4}-\d\d-\d\d$/);
     expect((await inbox(api)).map((i) => i.id)).not.toContain(first.id);
+  });
+
+  it('Next can also make the project its next action, on by default only when the project has none', async () => {
+    const api = createMockApi(seed());
+    const [first] = await inbox(api);
+    // Project 1 already has an open next action; project 2 has none.
+    const busy = fixtures.issues.find((i) => i.project_id === 1 && i.id !== first.id && !i.archived_at && !['Completed', 'Canceled'].includes(fixtures.statuses.find((x) => x.id === i.status_id)?.category ?? ''));
+    if (!busy) throw new Error('fixture needs an open issue in project 1');
+    await api.projects.setNext(1, busy.id);
+    await open(api);
+    await press('Next');
+    const box = () => document.querySelector<HTMLElement>('[role=checkbox][aria-label="Also make it the project\'s next action"]')!;
+    expect(box().getAttribute('aria-checked')).toBe('false');
+    await pick(document.body, 'Project', 'Website relaunch');
+    expect(box().getAttribute('aria-checked')).toBe('false');
+    await pick(document.body, 'Project', 'Mobile app');
+    expect(box().getAttribute('aria-checked')).toBe('true');
+    box().click();
+    await settle();
+    expect(box().getAttribute('aria-checked')).toBe('false');
+    box().click();
+    await settle();
+    await submit();
+    expect((await api.issues.get(first.id)).project_id).toBe(2);
+    expect((await api.next.list()).find((n) => n.project.id === 2)?.issue?.id).toBe(first.id);
   });
 
   it('a refused choice shows the error and stays on the issue', async () => {

@@ -1469,6 +1469,33 @@ fn inbox_lists_and_processes_and_hide_until_hides() {
 }
 
 #[test]
+fn inbox_next_as_next_action_flags_the_project() {
+    let (_d, db) = fresh();
+    run(&db, &["project", "create", "alpha", "Alpha"]);
+    run(&db, &["add", "Call the bank"]);
+    run_json(
+        &db,
+        &[
+            "inbox",
+            "process",
+            "ABC-1",
+            "--next",
+            "alpha",
+            "--as-next-action",
+        ],
+    );
+    let flagged = run_json(&db, &["next"]);
+    assert_eq!(flagged[0]["issue"]["key"], "ABC-1");
+    // The flag needs --next.
+    run(&db, &["add", "Another"]);
+    assert!(
+        !run(&db, &["inbox", "process", "ABC-2", "--as-next-action"])
+            .status
+            .success()
+    );
+}
+
+#[test]
 fn focus_start_stop_and_log_write_sessions() {
     let (_d, db) = fresh();
     run(&db, &["add", "Draft the spec"]);

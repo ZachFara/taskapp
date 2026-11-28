@@ -417,7 +417,7 @@ day. A view's Display panel has "Show deferred" to list them anyway, and "Hidden
 it from the terminal with `taskapp issue update ABC-1 --hide-until 2026-12-24` (or `clear`). Settings > Features can
 switch Process Inbox off; its page, sidebar entry and commands go, the data stays.
 
-For agents: `taskapp inbox [--limit N]` lists the next Inbox items and the total; `taskapp inbox process ABC-1 --do`,
+For agents: `taskapp inbox [--limit N]` lists the next Inbox items and the total; `taskapp inbox process ABC-1 --do`, `--next PROJECT --as-next-action` also flags it as the project's next action,
 `--delegate "Sam"`, `--defer 2026-12-24`, `--next <project>`, `--someday` or `--trash` clears one (exactly one flag).
 
 ## Dashboard
@@ -775,7 +775,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `process.do` | Process: do it now (Done) | `o` | Set the issue to Done and show the next one. |
 | `process.delegate` | Process: delegate (waiting on) | `y` | Ask who you are waiting on, then set Delegated with a comment. |
 | `process.defer` | Process: defer (hide until a day) | `z` | Ask for a day and hide the issue until then. |
-| `process.next` | Process: next action (pick a project) | `n` | Pick a project and set status Next. |
+| `process.next` | Process: next action (pick a project) | `n` | Pick a project and set status Next. A checkbox also makes it the project's next action; it is on by default when the project has none. |
 | `process.someday` | Process: someday | `b` | Set status Someday. |
 | `process.trash` | Process: trash (archive) | `q` | Archive the issue. |
 | `process.skip` | Process: skip to the next issue | `shift+arrowright` | Show the next issue without changing this one. |
@@ -1013,7 +1013,7 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `issue list [...]` | Issues by name filters, most urgent first, with status, priority, project and label names: `--project --status --not-status --priority --label` (repeat or comma-separate). | `taskapp issue list --project Cairn --not-status Done,Canceled,Someday` |
 | `issue get <key>` | Show one issue, with `status`, `project`, `labels` and `priority_name` as names next to the ids. | `taskapp issue get ABC-1` |
 | `inbox [--limit N]` | The next Inbox items, oldest first, and how many there are (deferred ones left out). | `taskapp inbox --limit 3` |
-| `inbox process <key> (--do \| --delegate NOTE \| --defer DATE \| --next PROJECT \| --someday \| --trash)` | Clear one Inbox issue, as the Process Inbox page does; one undo step. | `taskapp inbox process ABC-1 --defer 2026-12-24` |
+| `inbox process <key> (--do \| --delegate NOTE \| --defer DATE \| --next PROJECT [--as-next-action] \| --someday \| --trash)` | Clear one Inbox issue, as the Process Inbox page does; one undo step. | `taskapp inbox process ABC-1 --defer 2026-12-24` |
 | `issue archive <key>` | Archive an issue. | `taskapp issue archive ABC-1` |
 | `event list [--from --to]` | Events overlapping a date range. | `taskapp event list --from 2026-12-01` |
 | `event create <title> --start T [--end T --all-day --place --notes]` | Create an event (`T` is `YYYY-MM-DDTHH:MM` or a date). | `taskapp event create Demo --start 2026-12-10T09:30` |

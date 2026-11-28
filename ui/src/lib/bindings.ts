@@ -1463,9 +1463,10 @@ export type InboxChoice =
 ({ Defer: {
 	until: string,
 } }) & { Delegate?: never; Next?: never } | 
-/**  Status Next, in `project` when given. */
+/**  Status Next, in `project` when given; `as_next_action` also flags it as the project's next action. */
 ({ Next: {
 	project: ProjectId | null,
+	as_next_action?: boolean,
 } }) & { Defer?: never; Delegate?: never } | "Someday" | 
 /**  Archive. */
 "Trash";

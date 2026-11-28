@@ -1212,9 +1212,11 @@ pub enum InboxChoice {
     Defer {
         until: NaiveDate,
     },
-    /// Status Next, in `project` when given.
+    /// Status Next, in `project` when given; `as_next_action` also flags it as the project's next action.
     Next {
         project: Option<ProjectId>,
+        #[serde(default)]
+        as_next_action: bool,
     },
     Someday,
     /// Archive.
