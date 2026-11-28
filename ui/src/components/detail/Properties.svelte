@@ -14,6 +14,7 @@
   import IssuePicker from './IssuePicker.svelte';
   import OptionList from './OptionList.svelte';
   import { fieldList, fieldOn } from '../../lib/fields.svelte';
+  import { isOn } from '../../lib/features.svelte';
   import PointsRow from '../insights/PointsRow.svelte';
   import PropertyRow from './PropertyRow.svelte';
   import PropertyRows from './PropertyRows.svelte';
@@ -196,7 +197,7 @@
   {/snippet}
 
   {#each fieldList() as f (f.field)}
-    {#if fieldOn(f.field)}
+    {#if fieldOn(f.field) && (f.field !== 'cycle' || isOn('cycles'))}
       {@const rows = { priority: row_priority, project: row_project, milestone: row_milestone, cycle: row_cycle, labels: row_labels, start: row_start, due: row_due, estimate: row_estimate, points: row_points, depth: row_depth, parent: row_parent }}
       {@render rows[f.field]()}
     {/if}

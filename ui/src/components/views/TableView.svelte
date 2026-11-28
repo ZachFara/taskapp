@@ -28,6 +28,7 @@
   import { onRowsChanged } from './onRowsChanged';
   import { sortable } from '../../lib/viewSort';
   import SortHeading from './SortHeading.svelte';
+  import { isOn } from '../../lib/features.svelte';
 
   let { view, onsort }: { view: SavedView; onsort?: (field: FieldRef) => void } = $props();
 
@@ -75,7 +76,7 @@
   const groupBy = $derived(def.group_by?.Fixed === 'Points' && !ctx.points ? null : def.group_by);
   const cols = $derived(
     base
-      .filter((ref) => ctx.points || ref.Fixed !== 'Points')
+      .filter((ref) => (ctx.points || ref.Fixed !== 'Points') && (ref.Fixed !== 'Cycle' || isOn('cycles')))
       .map((ref, index) => ({ ref, index, id: colId(ref), kind: kindOf(ref), label: label(ref) }))
       .filter((c): c is typeof c & { kind: EditKind } => c.kind !== null && fixedOn(c.ref.Fixed)),
   );

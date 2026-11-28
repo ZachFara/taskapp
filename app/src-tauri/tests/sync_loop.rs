@@ -337,3 +337,35 @@ async fn sync_status_saved_before_backup_existed_still_reads() -> R {
     assert_eq!(status.backup, SyncState::Off);
     Ok(())
 }
+
+#[tokio::test]
+async fn switched_off_features_are_skipped() -> R {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir()?;
+    let db = Db::open(&dir.path().join("t.db")).await?;
+    settings::set(&db, "feature_reminders", &false).await?;
+    settings::set(&db, "feature_gcal", &false).await?;
+    settings::set(&db, "reminders_list_id", &"list-1").await?;
+    settings::set(&db, "gcal_enabled", &true).await?;
+    // A missing helper and no Google token would both error if the steps ran.
+    let real = Real {
+        db: db.clone(),
+        helper: PathBuf::from("/nonexistent/helper"),
+        tz: "UTC".into(),
+        backup_dir: dir.path().join("backups"),
+    };
+    let status = Syncer::new(real, db.clone()).sync_all().await?;
+    assert_eq!(status.reminders, SyncState::Skipped);
+    assert_eq!(status.gcal, SyncState::Skipped);
+
+    // The Reminders watch does not start the helper while its feature is off.
+    let helper = dir.path().join("helper");
+    std::fs::write(&helper, "#!/bin/sh\necho '{\"changed\":true}'\n")?;
+    std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o755))?;
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let task = tokio::spawn(watch_reminders(db, helper, tx));
+    let heard = tokio::time::timeout(Duration::from_millis(500), rx.recv()).await;
+    task.abort();
+    assert!(heard.is_err(), "no watch while switched off");
+    Ok(())
+}

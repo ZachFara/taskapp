@@ -670,7 +670,9 @@ Settings > Features lists every optional feature with a switch, all on by defaul
 Events, Progress charts (burn-ups and sparklines on projects and cycles), Stale nudges, Reminders capture, Google
 Calendar, Next actions, Process Inbox, and the coming Focus mode. Switching one off hides its sidebar entries, its
 page (the address shows "is switched off"), its commands in the command menu, its Settings page where it has one
-(Cycles, Reminders, Calendar) and its dashboard card. Your data stays and comes back when you switch it on. Each switch
+(Cycles, Reminders, Calendar) and its dashboard card. Switching Cycles off also hides the cycle row in issue details and
+the cycle field in views. Switching Reminders capture or Google Calendar off stops their background sync too; Sync now
+skips them and says so. Your data stays and comes back when you switch it on. Each switch
 applies at once, has its own command ("Turn Cycles on or off"), and is stored as a setting (`dashboard`,
 `insights_charts`, `feature_<name>`; `taskapp api call settings_get`). Show tooltips stays in General: it is per
 device and off by default, so it is a preference, not a workspace feature.

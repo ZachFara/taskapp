@@ -1001,9 +1001,11 @@ async fn comment(db: &Db, cmd: CommentCmd) -> Result<Value> {
 const APP_HELPER: &str = "/Applications/taskapp.app/Contents/MacOS/reminders-helper";
 
 /// The app's own sync steps for Reminders and Google Calendar, once. The CLI cannot reach a running app,
-/// so it does the work itself; both steps do nothing when their setting is off.
+/// so it does the work itself; a step whose feature is switched off is skipped and says so.
 async fn sync_now(db: &Db, helper: Option<std::path::PathBuf>) -> Result<Value> {
     let helper = helper.unwrap_or_else(|| APP_HELPER.into());
+    let reminders_on = taskapp_core::settings::feature_on(db, "feature_reminders").await?;
+    let gcal_on = taskapp_core::settings::feature_on(db, "feature_gcal").await?;
     let tz: String = taskapp_core::settings::get(db, "timezone")
         .await?
         .unwrap_or_else(|| "UTC".into());
@@ -1013,17 +1015,24 @@ async fn sync_now(db: &Db, helper: Option<std::path::PathBuf>) -> Result<Value> 
     let configured = taskapp_core::settings::get::<String>(db, "reminders_list_id")
         .await?
         .is_some_and(|l| !l.is_empty());
-    if configured && !helper.exists() {
+    if reminders_on && configured && !helper.exists() {
         return Err(Error::Invalid(format!(
             "reminders helper not found at {}; pass --helper <path>",
             helper.display()
         )));
     }
     let today = Utc::now().with_timezone(&zone).date_naive();
-    let r = taskapp_reminders::import::import(db, &helper, today, &tz).await?;
-    let g = taskapp_gcal::reconcile::reconcile(db).await?;
-    Ok(json!({
-        "reminders": {"imported": r.imported, "skipped_duplicates": r.skipped_duplicates, "failed": r.failed},
-        "gcal": {"created": g.created, "updated": g.updated, "deleted": g.deleted},
-    }))
+    let reminders = if reminders_on {
+        let r = taskapp_reminders::import::import(db, &helper, today, &tz).await?;
+        json!({"imported": r.imported, "skipped_duplicates": r.skipped_duplicates, "failed": r.failed})
+    } else {
+        json!({"skipped": "Reminders capture is switched off"})
+    };
+    let gcal = if gcal_on {
+        let g = taskapp_gcal::reconcile::reconcile(db).await?;
+        json!({"created": g.created, "updated": g.updated, "deleted": g.deleted})
+    } else {
+        json!({"skipped": "Google Calendar is switched off"})
+    };
+    Ok(json!({"reminders": reminders, "gcal": gcal}))
 }

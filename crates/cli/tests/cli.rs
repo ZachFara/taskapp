@@ -902,6 +902,23 @@ fn sync_now_with_nothing_configured_does_nothing() {
     assert_eq!(v["gcal"]["created"], 0);
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn sync_now_skips_a_switched_off_feature_and_says_so() {
+    let (_d, db) = fresh();
+    {
+        let conn = taskapp_core::Db::open(&db).await.expect("open");
+        taskapp_core::settings::set(&conn, "feature_reminders", &false)
+            .await
+            .expect("set");
+        taskapp_core::settings::set(&conn, "feature_gcal", &false)
+            .await
+            .expect("set");
+    }
+    let v = run_json(&db, &["sync", "now"]);
+    assert!(v["reminders"]["skipped"].is_string(), "{v}");
+    assert!(v["gcal"]["skipped"].is_string(), "{v}");
+}
+
 fn raise(db: &Path) -> Value {
     run(db, &["add", "Pick a database"]);
     let args = [

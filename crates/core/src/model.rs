@@ -815,6 +815,8 @@ pub struct ParsedQuickAdd {
 pub enum SyncState {
     #[default]
     Off,
+    /// The step's feature is switched off in Settings > Features, so it did not run.
+    Skipped,
     Ok {
         at: DateTime<Utc>,
     },

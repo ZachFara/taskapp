@@ -119,6 +119,9 @@ impl Steps for Real {
                 set_state(&self.db, Step::Backup, SyncState::Ok { at: Utc::now() }).await?;
             }
             Step::Reminders => {
+                if !settings::feature_on(&self.db, "feature_reminders").await? {
+                    return set_state(&self.db, Step::Reminders, SyncState::Skipped).await;
+                }
                 let tz: chrono_tz::Tz = self
                     .tz
                     .parse()
@@ -127,6 +130,9 @@ impl Steps for Real {
                 taskapp_reminders::import::import(&self.db, &self.helper, today, &self.tz).await?;
             }
             Step::Gcal => {
+                if !settings::feature_on(&self.db, "feature_gcal").await? {
+                    return set_state(&self.db, Step::Gcal, SyncState::Skipped).await;
+                }
                 taskapp_gcal::reconcile::reconcile(&self.db).await?;
             }
             Step::Export => export(&self.db).await?,
@@ -213,7 +219,11 @@ pub async fn watch_reminders(db: Db, helper: PathBuf, tx: UnboundedSender<()>) {
             .ok()
             .flatten()
             .unwrap_or_default();
-        if !list.is_empty()
+        let on = settings::feature_on(&db, "feature_reminders")
+            .await
+            .unwrap_or(false);
+        if on
+            && !list.is_empty()
             && let Err(e) = watch_once(&helper, &list, &tx).await
         {
             eprintln!("reminders watch failed: {e}");

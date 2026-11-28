@@ -35,6 +35,7 @@
   import { LEADING, LIST_DEFAULT, density, emptyCtx, fieldName, loadCtx, pointsName, pointsTotal, shown, showEmptyGroups, subIssues, type Ctx } from '../display/types';
   import { onRowsChanged } from './onRowsChanged';
   import { statusRank } from '../../lib/statusOrder';
+  import { isOn } from '../../lib/features.svelte';
 
   // shortcut: row and band heights default to the token values when the CSS is not loaded (tests), upgrade if rows vary in height
   const BAND = 30;
@@ -81,7 +82,7 @@
   // Wrapped rows differ in height, so the list drops its fixed-height windowing and lets the rows flow.
   const wrap = $derived(view.def.wrap === 'on');
   // Key, priority and status have their own leading columns, so they are not repeated.
-  const allFields = $derived(shown(view.def, LIST_DEFAULT).filter((f) => !LEADING.includes(f.Fixed!) && (ctx.points || f.Fixed !== 'Points')));
+  const allFields = $derived(shown(view.def, LIST_DEFAULT).filter((f) => !LEADING.includes(f.Fixed!) && (ctx.points || f.Fixed !== 'Points') && (f.Fixed !== 'Cycle' || isOn('cycles'))));
   let closedParents = $state<number[]>([]);
   const WIDTH: Record<string, string> = { Label: '150px', Project: '140px', DueDate: '56px', Estimate: '72px', Key: '64px', Priority: 'var(--s-8)', Status: '120px', Cycle: '100px', StartDate: '56px', CreatedAt: '56px', UpdatedAt: '56px' };
   const widthOf = (f: FieldRef) => (f.Property === undefined ? (WIDTH[f.Fixed!] ?? '100px') : ({ Select: '120px', MultiSelect: '150px', Checkbox: '56px', Url: '56px', Number: '72px', Date: '72px' } as Record<string, string>)[ctx.defs.find((d) => d.key === f.Property)?.kind ?? ''] ?? '140px');

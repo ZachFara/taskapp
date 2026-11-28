@@ -13,6 +13,7 @@
   import Switch from '../../ui/Switch.svelte';
   import TextInput from '../../ui/TextInput.svelte';
   import { fixedOn } from '../../lib/fields.svelte';
+  import { isOn } from '../../lib/features.svelte';
   import { BUILT_IN, KIND_ICON, defaultFor, density, sameField, showEmptyGroups, showWeekends, shown, stored, subIssues, type DisplayDef, type SubIssues } from './types';
 
   let { def, onchange, entity = 'issue' }: { def: ViewDef; onchange: (patch: Partial<DisplayDef>) => void; entity?: ViewEntity } = $props();
@@ -36,7 +37,7 @@
     const kept = reset ? list : [...list, ...stored(def, card).filter((f) => !on_(f.Fixed))];
     return card ? { card_fields: kept } : { columns: kept };
   };
-  const universe = $derived<Entry[]>([...(project ? PROJECT_BUILT_IN : BUILT_IN).filter((b) => on_(b.field.Fixed)), ...defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name, kind: p.kind }))]);
+  const universe = $derived<Entry[]>([...(project ? PROJECT_BUILT_IN : BUILT_IN).filter((b) => on_(b.field.Fixed) && (b.field.Fixed !== 'Cycle' || isOn('cycles'))), ...defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name, kind: p.kind }))]);
   const on = $derived(project ? (stored(def, card).length ? stored(def, card) : PROJECT_DEFAULT[def.layout]) : shown(def, defaultFor(def.layout), card));
   const match = (e: Entry) => e.name && e.name.toLowerCase().includes(query.trim().toLowerCase());
   const entryOf = (f: FieldRef) => universe.find((u) => sameField(u.field, f));

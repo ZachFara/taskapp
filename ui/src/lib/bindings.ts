@@ -1927,7 +1927,9 @@ export type SubIssue = {
 
 export type SubIssues = "nest" | "flat" | "hide";
 
-export type SyncState = "Off" | ({ Ok: {
+export type SyncState = "Off" | 
+/**  The step's feature is switched off in Settings > Features, so it did not run. */
+"Skipped" | ({ Ok: {
 	at: string,
 } }) & { Error?: never } | ({ Error: {
 	at: string,
