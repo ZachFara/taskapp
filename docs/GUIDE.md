@@ -247,8 +247,9 @@ saved automatically (after a short pause), except temporary sorting changes. Fil
 - **Timeline (Gantt).** Bars from start to due date; an issue with only an estimate shows an estimated bar. Zoom: Day,
   Week, Month, Quarter (tabs, or `=` and `-`); `t` or the Today button scrolls to today. Drag a bar to move it, drag
   its handles to change start or end; if blocked issues must move too, a toast "Also moves ..." with Apply and Cancel
-  appears. Drag an issue from the Unscheduled band onto a day. Milestones show as markers. There is also an
-  all-projects timeline (`g t`).
+  appears. Drag an issue from the Unscheduled band onto a day. Milestones show as a diamond with its name on the
+  project's row, at its target date; undated milestones are not drawn. Click a diamond to open the project at its
+  Milestones. There is also an all-projects timeline (`g t`).
 - **Calendar.** Week or Month (tabs, or `w` and `m`), previous and next (`[` and `]`), today (`t`). Issues appear on
   their due date. Drag an issue from the "Issues to schedule" side list onto a day to set its due date, or onto a time
   slot to create a one-hour work block. Drag items to move or resize them.

@@ -53,7 +53,7 @@
   const days = $derived(dayDiff(span.start, span.end) + 1);
   const xOf = (date: string) => dayDiff(span.start, date) * dw;
   // A milestone alone is not a schedule: the empty state still shows when no project or issue has a bar.
-  const hasBars = $derived(rows.some((r) => r.start && r.kind !== 'milestone'));
+  const hasBars = $derived(rows.some((r) => r.start));
   const scale = $derived(axis(span.start, days, zoom));
   const weekends = $derived(zoom === 'Day' || zoom === 'Week' ? saturdays(span.start, days) : []);
   const statusOf = (i: Issue) => statusList.find((s) => s.id === i.status_id);
@@ -144,8 +144,11 @@
     await load();
   }
 
+  // A milestone opens its project page at the milestones section (Milestones.svelte, #milestones).
+  const openMilestone = (m: Milestone) => navigate(`/project/${projectList.find((p) => p.id === m.project_id)?.slug}#milestones`);
+
   function down(e: MouseEvent, r: Row, mode: 'move' | 'start' | 'end' = 'move') {
-    if (r.kind === 'group' || r.kind === 'milestone' || r.kind === 'rollup' || r.undated) return;
+    if (r.kind === 'group' || r.kind === 'rollup' || r.undated) return;
     // A project bar with a guessed end has no real dates to move; its project page sets them.
     if (r.projectId !== undefined && r.estimated) return;
     e.stopPropagation();
@@ -277,7 +280,7 @@
                 {:else if r.category}
                   {#if iss(r)}<span class="prio"><PriorityGlyph level={priorityGlyph(iss(r)!.priority)} size={14} /></span>{/if}
                   <StatusGlyph category={r.category} icon={r.icon} color={r.color} size={14} />
-                {:else if r.kind === 'milestone'}<span class="stone" aria-hidden="true"></span>{/if}
+                {/if}
                 {#if r.key}<span class="k">{r.key}</span>{/if}
                 <span class="text">{r.title ?? r.label}</span>
                 {#if iss(r)}
@@ -296,7 +299,7 @@
                     class:dragging={drag?.id === r.id}
                     data-row={r.id}
                     data-category={r.category}
-                    style="{r.kind === 'milestone' ? `left:${xOf(r.start)}px` : barStyle(r)};--bc:{tint(r)}"
+                    style="{barStyle(r)};--bc:{tint(r)}"
                     onpointerdown={(e) => down(e, r)}
                   >
                     {#if r.kind === 'bar'}
@@ -306,6 +309,11 @@
                     {#if r.kind === 'bar' && (dw >= ZOOMS.Week || inside(r))}<span class="name" class:out={!inside(r)}>{r.title ?? r.label}</span>{/if}
                   </div>
                 {/if}
+                {#each r.milestones ?? [] as m (m.id)}
+                  <button class="ms-mark" type="button" style="left:{xOf(m.target_date!)}px" aria-label="Milestone {m.name}, {m.target_date}" onclick={() => openMilestone(m)}>
+                    <span class="stone" aria-hidden="true"></span><span class="ms-name">{m.name}</span>
+                  </button>
+                {/each}
               </div>
             </div>
           {/each}
@@ -389,11 +397,13 @@
   .label .fv { flex: none; max-width: 96px; display: inline-flex; color: var(--muted); font-size: var(--fs-sm); }
   .label .prio { flex: none; display: inline-flex; }
   .label .k { flex: none; color: var(--muted); font-weight: 600; font-size: var(--fs-sm); }
-  .label[data-kind='milestone'] { color: var(--muted); }
   .label[data-kind='rollup'] { font-weight: 600; }
   .count { color: var(--band-count); }
   .stone { width: var(--s-5); height: var(--s-5); background: var(--stone); transform: rotate(45deg); flex: none; }
   .cell { position: relative; }
+  /* Diamond on the row at its date, name always shown beside it (no hover). Centred on the date by half a diamond. */
+  .ms-mark { position: absolute; top: 0; bottom: 0; z-index: 3; display: flex; align-items: center; gap: var(--s-3); padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-size: var(--fs-xs); font-weight: 600; white-space: nowrap; cursor: pointer; transform: translateX(calc(var(--s-5) / -2)); }
+  .ms-mark .stone { margin-left: var(--s-2); }
   .slot { position: absolute; left: var(--s-6); top: var(--s-2); bottom: var(--s-2); display: flex; align-items: center; padding: 0 var(--s-5); border: 1.5px dashed var(--control); border-radius: var(--r-sm); background: none; color: var(--muted); font: inherit; font-size: var(--fs-xs); white-space: nowrap; cursor: pointer; pointer-events: auto; }
   .cell .slot:hover { color: var(--ink); }
 
@@ -423,7 +433,6 @@
   .bar.critical { border-color: var(--signal); border-left-color: var(--signal); box-shadow: 0 0 0 1px color-mix(in srgb, var(--signal) 45%, transparent); }
   .bar.rollup { height: var(--s-4); top: var(--s-6); background: var(--ink); border: 0; cursor: default; border-radius: 0; }
   .bar.group { height: var(--s-2); top: calc(var(--row-h-compact) - var(--s-4)); background: var(--band-count); border: 0; cursor: default; border-radius: 0; }
-  .bar.milestone { width: var(--s-6); height: var(--s-6); top: var(--s-4); margin-left: calc(var(--s-6) / -2); background: var(--stone); border: 0; transform: rotate(45deg); cursor: default; border-radius: var(--r-sm); }
   .handle { position: absolute; top: 0; bottom: 0; width: var(--s-3); cursor: ew-resize; }
   .handle.start { left: 0; }
   .handle.end { right: 0; }

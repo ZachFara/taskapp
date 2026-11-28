@@ -3,6 +3,7 @@
   import type { FieldRef, Issue, Layout, Milestone, Project, ResolvedPin, Status, ViewDef } from '../lib/bindings';
   import { nextSort } from '../lib/viewSort';
   import { navigate } from '../app/routes';
+  import { tick } from 'svelte';
   import { openExternal } from '../lib/openExternal';
   import Button from '../ui/Button.svelte';
   import Dialog from '../ui/Dialog.svelte';
@@ -66,6 +67,12 @@
       all,
       api.statuses.list(),
     ]);
+    // A timeline milestone links here with #milestones: scroll to the section once, then drop the hash.
+    if (location.hash === '#milestones') {
+      history.replaceState(null, '', location.pathname);
+      await tick();
+      document.getElementById('milestones')?.scrollIntoView();
+    }
   }
 
   async function togglePin() {
@@ -148,7 +155,7 @@
       <ProjectHeader {project} {progress} bind:renaming onsaved={(p) => (project = p)} />
       <div class="details" data-testid="forecast">{#key rows}<ForecastLine filter={{ Cond: { field: { Fixed: 'Project' }, op: 'Eq', value: project.id } }} />{/key}</div>
       <div class="details"><ProjectDetails {project} onsaved={(p) => (project = p)} /></div>
-      <div class="ms">
+      <div class="ms" id="milestones">
         <Milestones projectId={project.id} {milestones} issues={rows} {statuses} onchange={() => reload(slug)} />
       </div>
       <div class="toolbar" data-testid="issues-toolbar">
