@@ -121,6 +121,10 @@ export const cases: Case[] = [
   call('quickadd: tokens only keeps the text', 'issues_parse_quickadd', { input: 'p2 ~1d' }),
   call('quickadd: unknown project and label stay in the title', 'issues_create_from_quickadd', { input: 'fix thing +nope #Nolabel p3' }),
   call('quickadd: known project and label', 'issues_create_from_quickadd', { input: 'write copy +mobile #design @Bug p2 ~30m' }),
+  call('quickadd: every phrase parses to a repeat rule', 'issues_parse_quickadd', { input: 'water plants every monday p1' }),
+  call('quickadd: longest valid repeat phrase', 'issues_parse_quickadd', { input: 'backup every 2 weeks from done tomorrow' }),
+  call('quickadd: every without a rule stays in the title', 'issues_parse_quickadd', { input: 'clean up every thing' }),
+  call('quickadd: every phrase sets repeat on create', 'issues_create_from_quickadd', { input: 'water plants every monday' }),
   call('quickadd: unknown template is Invalid', 'issues_create_from_quickadd', { input: '/nosuch hello' }),
   call('templates: create', 'templates_create', {
     input: tpl('Incident', 'incident', { title_prefix: 'Bug: ', fields: { priority: 2, label_ids: [1], project_id: 1, status_id: 2, estimate_minutes: null, description: 'Steps:', properties: {} }, sub_issues: [{ title: 'Reproduce', fields: { priority: 1 } }] }),

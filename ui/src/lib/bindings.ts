@@ -1687,6 +1687,8 @@ export type NewIssue = {
 	due?: Due | null,
 	estimate_minutes?: number | null,
 	points?: number | null,
+	/**  A repeat rule in any accepted form; stored canonical. */
+	repeat?: string | null,
 	properties?: { [key in string]: Value } | null,
 	created_at?: string | null,
 	completed_at?: string | null,
@@ -1710,6 +1712,8 @@ export type ParsedQuickAdd = {
 	label_names: string[],
 	estimate_minutes: number | null,
 	points: number | null,
+	/**  A canonical repeat rule from an `every <rule>` phrase. */
+	repeat: string | null,
 };
 
 export type Pin = {

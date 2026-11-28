@@ -311,6 +311,7 @@ pub async fn create_in(
     let priority = new.priority.unwrap_or(0);
     check_fields(&new.title, priority, new.points)?;
     check_props(tx, None, new.properties.as_ref()).await?;
+    let repeat = canonical_repeat(new.repeat.as_deref())?;
     let status = match new.status_id {
         Some(s) => s,
         None => starting_status(tx).await?,
@@ -355,10 +356,28 @@ pub async fn create_in(
     .await?
     .last_insert_rowid();
     let id = IssueId(id);
+    set_repeat(tx, id, repeat).await?;
     set_labels(tx, id, &new.label_ids.unwrap_or_default()).await?;
     let issue = fetch(tx, id).await?;
     record_created(tx, src, &issue).await?;
     Ok(issue)
+}
+
+fn canonical_repeat(rule: Option<&str>) -> Result<Option<String>> {
+    rule.map(|r| r.parse::<Rule>().map(|r| r.to_string()))
+        .transpose()
+}
+
+/// A new issue's repeat rule (already canonical), written after the insert.
+async fn set_repeat(tx: &mut SqliteConnection, id: IssueId, rule: Option<String>) -> Result<()> {
+    if rule.is_some() {
+        sqlx::query("UPDATE issues SET repeat_rule = ? WHERE id = ?")
+            .bind(rule)
+            .bind(id.0)
+            .execute(&mut *tx)
+            .await?;
+    }
+    Ok(())
 }
 
 /// Collects `(field, old, new)` when the two values differ.

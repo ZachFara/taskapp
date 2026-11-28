@@ -371,7 +371,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       priority: input.priority ?? 0, project_id: input.project_id ?? null, milestone_id: input.milestone_id ?? null,
       parent_id: input.parent_id ?? null, cycle_id: input.cycle_id ?? null, label_ids: [...new Set(input.label_ids ?? [])].sort((a, b) => a - b),
       start_date: input.start_date ?? null, due: input.due ?? null, estimate_minutes: input.estimate_minutes ?? null, points: input.points ?? null, hidden_until: null,
-      depth: null, repeat: null, properties: input.properties ?? {}, created_at: input.created_at ?? at, updated_at: at,
+      depth: null, repeat: input.repeat ? canonical(input.repeat) ?? fail('Invalid', `\`${input.repeat}\` is not a repeat rule`) : null, properties: input.properties ?? {}, created_at: input.created_at ?? at, updated_at: at,
       completed_at: input.completed_at ?? null, archived_at: null,
     };
     checkIssue(issue, issue.properties);
@@ -435,7 +435,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       title, description: o.description ?? f.description, status_id: o.status_id ?? f.status_id,
       priority: o.priority ?? f.priority, project_id: o.project_id ?? f.project_id,
       label_ids: o.label_ids ?? f.label_ids, estimate_minutes: o.estimate_minutes ?? f.estimate_minutes, points: o.points ?? f.points,
-      properties: { ...f.properties, ...o.properties }, start_date: o.start_date, due: o.due,
+      properties: { ...f.properties, ...o.properties }, start_date: o.start_date, due: o.due, repeat: o.repeat,
     });
     const sub_issues = (t.body.sub_issues ?? []).map((sub) => {
       const sf = liveRefs(sub.fields ?? {}, skipped);
@@ -730,7 +730,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         }
         const overrides: NewIssue = {
           title, priority: p.priority, project_id: project?.id, label_ids: ids.length ? ids : undefined,
-          start_date: p.start_date, due: p.due, estimate_minutes: p.estimate_minutes, points: p.points,
+          start_date: p.start_date, due: p.due, estimate_minutes: p.estimate_minutes, points: p.points, repeat: p.repeat,
         };
         if (!m) return create(overrides);
         const t = templates.find((x) => x.slug === m[1]) ?? fail('Invalid', `no template /${m[1]} (known: ${templates.map((x) => `/${x.slug}`).join(', ') || 'none'})`);

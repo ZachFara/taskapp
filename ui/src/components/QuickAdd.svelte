@@ -18,6 +18,7 @@
   import { mergeIssueDefaults, type IssueDefaults } from './filters/defaults';
   import { pointsOn, readEstimation, SCALES, type Estimation, type ScaleName } from './insights/estimation';
   import { byStatusOrder } from '../lib/statusOrder';
+  import { parseRule, ruleWords } from '../lib/recur';
 
   // `project_slug`, `status_id` and `defaults` prefill from the screen that opened the dialog (a view, a column, a project).
   // `oncreated` hands the owner the new issue and an undo for the whole create, so it can show the toast.
@@ -111,6 +112,7 @@
       defaultStatus && defaultStatus.id !== startingStatusId && { key: 'status', label: defaultStatus.name },
       effectiveDue && { key: 'due', label: `Due ${humanDate(effectiveDue.Date ?? effectiveDue.DateTime!.utc.slice(0, 10))}` },
       effectiveStart && { key: 'start', label: `Start ${humanDate(effectiveStart)}` },
+      parsed?.repeat && { key: 'repeat', label: ruleWords(parseRule(parsed.repeat)!) },
       effectivePriority != null && { key: 'priority', label: PRIORITIES[effectivePriority] ?? `P${effectivePriority}` },
       effectiveProjectSlug && { key: 'project', label: `+${effectiveProjectSlug}` },
       ...effectiveLabelNames.map((l) => ({ key: 'labels', label: `#${l}` })),
@@ -119,6 +121,20 @@
       ...propEntries.map(([k, v]) => ({ key: `prop:${k}`, label: `${k}: ${Array.isArray(v) ? v.join(', ') : String(v)}` })),
     ].filter((c): c is { key: string; label: string } => !!c),
   );
+
+  // Drops the longest run starting at the first "every" that is a valid rule, the one the parser took.
+  function removeRepeat() {
+    const toks = text.split(/\s+/).filter(Boolean);
+    const at = toks.findIndex((t) => t.toLowerCase() === 'every');
+    for (let n = Math.min(8, toks.length - at); at >= 0 && n >= 2; n--) {
+      if (parseRule(toks.slice(at, at + n).join(' '))) {
+        text = [...toks.slice(0, at), ...toks.slice(at + n)].join(' ') + ' ';
+        break;
+      }
+    }
+    void oninput();
+    field?.focus();
+  }
 
   function dropDefault(key: keyof IssueDefaults) {
     const next = { ...activeDefaults };
@@ -195,6 +211,7 @@
           priority: p.priority ?? activeDefaults.priority ?? null,
           estimate_minutes: p.estimate_minutes ?? activeDefaults.estimate_minutes ?? null,
           ...(pts != null ? { points: pts } : {}),
+          ...(p.repeat ? { repeat: p.repeat } : {}),
           project_id: parsedProject?.id ?? activeDefaults.project_id ?? null,
           label_ids: label_ids.length ? label_ids : null,
           status_id: activeDefaults.status_id ?? null,
@@ -353,6 +370,8 @@
               <MenuItem label={`${s.label} pts`} onSelect={() => setToken(POINTS_TOKEN, `${s.value}pt`, 'points')} />
             {/each}
             <MenuItem label="No points" onSelect={() => setToken(POINTS_TOKEN, '', 'points')} />
+          {:else if c.key === 'repeat'}
+            <MenuItem label="Don't repeat" onSelect={removeRepeat} />
           {:else if c.key === 'template'}
             {#each templates as t (t.id)}
               <MenuItem label={t.name} icon="layers" onSelect={() => pickTemplate(t)} />

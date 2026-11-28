@@ -102,6 +102,7 @@ case). Dates are relative to today in the workspace time zone.
 | `by <date>`, `due <date>` | Due date with an explicit word. Without a valid date after it, the words stay in the title. | `by friday` |
 | `start <date>` | Start date. | `start monday` |
 | `at 3pm`, `at 9:15am`, `at 15:30` | Time of day on the due date (today if no date). A bare hour needs am or pm. | `fri at 3pm` |
+| `every <rule>` | Repeat rule: the longest valid phrase after `every` is taken and left out of the title; shown as a chip. | `water plants every monday` |
 | `/slug` first | Create from an issue template; the rest of the line fills in or overrides fields. Typing `/` opens the template list. | `/bug login fails p2` |
 
 Quick-add has no token for status, parent, cycle or milestone. Example: `Pay rent friday p1 +home #bills ~30m 3pt`.
@@ -499,8 +500,8 @@ issue stops repeating. Cancelling does not create one. "Skip this occurrence" mo
 without creating anything; "Does not repeat" stops the series. The Repeats field can be shown in views and filtered
 (Repeats is set). Google Calendar needs nothing extra: the next occurrence has a due date and appears like any issue
 (no recurring-event series yet). CLI: `taskapp issue repeat ABC-1 "every monday"`, `--clear`, `--skip`; `issue get`
-shows `repeat` and `repeat_words`. Settings > Features > Recurring issues hides the row and commands. Not built:
-repeat in quick add.
+shows `repeat` and `repeat_words`. Settings > Features > Recurring issues hides the row and commands. Quick add
+accepts `every <rule>`.
 
 ### Time blocking: the Today plan page
 

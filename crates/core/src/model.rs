@@ -157,6 +157,8 @@ pub struct NewIssue {
     pub due: Option<Due>,
     pub estimate_minutes: Option<u32>,
     pub points: Option<f64>,
+    /// A repeat rule in any accepted form; stored canonical.
+    pub repeat: Option<String>,
     pub properties: Option<Map<String, Value>>,
     pub created_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
@@ -819,6 +821,8 @@ pub struct ParsedQuickAdd {
     pub label_names: Vec<String>,
     pub estimate_minutes: Option<u32>,
     pub points: Option<f64>,
+    /// A canonical repeat rule from an `every <rule>` phrase.
+    pub repeat: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, specta::Type)]
