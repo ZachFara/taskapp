@@ -217,7 +217,8 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
         | IssueCmd::Delete { .. }
         | IssueCmd::Link { .. }
         | IssueCmd::Links { .. }
-        | IssueCmd::Wait { .. }) => issue_keyed(db, keyed).await,
+        | IssueCmd::Wait { .. }
+        | IssueCmd::Defer { .. }) => issue_keyed(db, keyed).await,
         repeat @ IssueCmd::Repeat { .. } => issue_repeat(db, repeat).await,
         find @ (IssueCmd::Search { .. } | IssueCmd::Similar { .. }) => issue_find(db, find).await,
     }
@@ -361,6 +362,16 @@ async fn issue_keyed(db: &Db, cmd: IssueCmd) -> Result<Value> {
             until,
             clear,
         } => issue_wait(db, key, on, until, clear).await,
+        IssueCmd::Defer { key, until, clear } => {
+            let until = match (until, clear) {
+                (Some(d), false) => Some(date(&d)?),
+                (None, true) => None,
+                _ => return Err(Error::Invalid("give --until DATE or --clear".into())),
+            };
+            let id = issue_id(db, &key).await?;
+            let today = crate::inbox::today(db).await?;
+            val(taskapp_core::tickler::defer(db, id, until, today, SRC).await?)
+        }
         IssueCmd::Delete { key, yes } => crate::archive::delete_issue(db, &key, yes).await,
         IssueCmd::Archive { key } => {
             let id = issue_id(db, &key).await?;

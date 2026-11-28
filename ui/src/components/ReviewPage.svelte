@@ -18,6 +18,7 @@
   let stuck = $state<Project[]>([]);
   let stale = $state<StaleIssue[]>([]);
   let someday = $state<Issue[]>([]);
+  let back7 = $state<Issue[]>([]);
   let due = $state<Issue[]>([]);
   let events = $state<Event[]>([]);
 
@@ -31,12 +32,13 @@
   onMount(async () => {
     try {
       const today = localDay(new Date(), await workspaceZone());
-      const [i, w, nx, st, s, d, ev] = await Promise.all([
+      const [i, w, nx, st, s, tk, d, ev] = await Promise.all([
         api.inbox.list(),
         named(['delegated', 'waiting']),
         api.next.list(),
         api.stale.list(),
         named(['someday']),
+        api.tickler.list(),
         api.views.query({ filter: { And: [{ Cond: { field: { Fixed: 'DueDate' }, op: 'Gte', value: 'today' } }, { Cond: { field: { Fixed: 'DueDate' }, op: 'Lte', value: 'today+7' } }] }, sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false }),
         api.events.list(today, addDays(today, 7)),
       ]);
@@ -45,6 +47,7 @@
       stuck = (nx as NextAction[]).filter((r) => r.stuck).map((r) => r.project);
       stale = st;
       someday = s;
+      back7 = tk.filter((x) => x.hidden_until! <= addDays(today, 7));
       due = (d as Issue[]).filter((x) => x.completed_at === null);
       events = ev;
     } catch (e) {
@@ -59,6 +62,7 @@
     `${stuck.length} ${stuck.length === 1 ? 'project' : 'projects'} without a next action`,
     `${stale.length} stale`,
     `${someday.length} in Someday`,
+    `${back7.length} coming back`,
     `${due.length} due, ${events.length} ${events.length === 1 ? 'event' : 'events'}`,
   ]);
   const go = (e: MouseEvent, to: string) => (e.preventDefault(), navigate(to));
@@ -95,6 +99,8 @@
         {@render issues(stale.map((s) => s.issue))}
       {:else if review.at === 4}
         {@render issues(someday)}
+      {:else if review.at === 5}
+        {@render issues(back7)}
       {:else}
         <h3>Due</h3>
         {@render issues(due)}

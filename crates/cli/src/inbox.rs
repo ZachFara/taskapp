@@ -36,6 +36,12 @@ pub enum InboxCmd {
         as_next_action: bool,
         #[arg(long, group = "choice")]
         someday: bool,
+        /// Due on this day, YYYY-MM-DD; status Reminder (or the first unstarted status), so it reaches the calendar.
+        #[arg(long, group = "choice", value_name = "DATE")]
+        schedule: Option<String>,
+        /// With --schedule: the time of day, HH:MM in the workspace zone.
+        #[arg(long, requires = "schedule", value_name = "HH:MM")]
+        at: Option<String>,
         /// Archive it.
         #[arg(long, group = "choice")]
         trash: bool,
@@ -62,6 +68,8 @@ pub async fn run(db: &Db, args: InboxArgs) -> Result<Value> {
         next,
         as_next_action,
         someday,
+        schedule,
+        at,
         trash,
     }) = args.cmd
     else {
@@ -69,23 +77,34 @@ pub async fn run(db: &Db, args: InboxArgs) -> Result<Value> {
         let shown: Vec<_> = all.iter().take(args.limit).collect();
         return Ok(json!({ "total": all.len(), "items": shown }));
     };
-    let choice = match (done, delegate, defer, next, someday, trash) {
-        (true, None, None, None, false, false) => InboxChoice::Done,
-        (false, Some(note), None, None, false, false) => InboxChoice::Delegate { note },
-        (false, None, Some(d), None, false, false) => InboxChoice::Defer {
+    // clap's `choice` group already allows at most one; none at all is refused below.
+    let choice = if done {
+        InboxChoice::Done
+    } else if let Some(note) = delegate {
+        InboxChoice::Delegate { note }
+    } else if let Some(d) = defer {
+        InboxChoice::Defer {
             until: crate::commands::date(&d)?,
-        },
-        (false, None, None, Some(p), false, false) => InboxChoice::Next {
+        }
+    } else if let Some(p) = next {
+        InboxChoice::Next {
             project: crate::references::project(db, Some(&p)).await?,
             as_next_action,
-        },
-        (false, None, None, None, true, false) => InboxChoice::Someday,
-        (false, None, None, None, false, true) => InboxChoice::Trash,
-        _ => {
-            return Err(Error::Invalid(
-                "pass exactly one of --do, --delegate, --defer, --next, --someday, --trash".into(),
-            ));
         }
+    } else if someday {
+        InboxChoice::Someday
+    } else if let Some(d) = schedule {
+        InboxChoice::Schedule {
+            date: crate::commands::date(&d)?,
+            time: at,
+        }
+    } else if trash {
+        InboxChoice::Trash
+    } else {
+        return Err(Error::Invalid(
+            "pass exactly one of --do, --delegate, --defer, --next, --someday, --schedule, --trash"
+                .into(),
+        ));
     };
     let id = issues::get_by_key(db, &key).await?.id;
     let issue = inbox::process(db, id, choice, today, ChangeSource::Cli).await?;

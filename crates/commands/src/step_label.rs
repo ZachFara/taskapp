@@ -46,9 +46,10 @@ fn bulk(args: &Value) -> String {
         .map(|(k, _)| k.as_str())
         .collect();
     match set.as_slice() {
+        ["hidden_until"] => format!("Deferred {}", count(n, "issue")),
         [one] => format!(
             "Set {} on {}",
-            one.trim_end_matches("_id"),
+            one.trim_end_matches("_id").replace('_', " "),
             count(n, "issue")
         ),
         _ => format!("Edited {}", count(n, "issue")),

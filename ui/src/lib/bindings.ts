@@ -1012,6 +1012,13 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	ticklerList: (options?: InvokeOptions) => __TAURI_INVOKE<Issue[]>("tickler_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	focusStart: (issue: IssueId, deep: boolean | null, options?: InvokeOptions) => __TAURI_INVOKE<FocusSession>("focus_start", { issue, deep }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1614,18 +1621,26 @@ export type InboxChoice =
 /**  Status Delegated, and a comment "Waiting on: <note>". */
 ({ Delegate: {
 	note: string,
-} }) & { Defer?: never; Next?: never } | 
+} }) & { Defer?: never; Next?: never; Schedule?: never } | 
 /**  Hide the issue until a later day. */
 ({ Defer: {
 	until: string,
-} }) & { Delegate?: never; Next?: never } | 
+} }) & { Delegate?: never; Next?: never; Schedule?: never } | 
 /**  Status Next, in `project` when given; `as_next_action` also flags it as the project's next action. */
 ({ Next: {
 	project: ProjectId | null,
 	as_next_action?: boolean,
-} }) & { Defer?: never; Delegate?: never } | "Someday" | 
+} }) & { Defer?: never; Delegate?: never; Schedule?: never } | "Someday" | 
 /**  Archive. */
-"Trash";
+"Trash" | 
+/**
+ *  A day-specific action: due on `date` (at `time`, HH:MM in the workspace zone, when given), status Reminder
+ *  or else the first unstarted one.
+ */
+({ Schedule: {
+	date: string,
+	time: string | null,
+} }) & { Defer?: never; Delegate?: never; Next?: never };
 
 export type Issue = {
 	id: IssueId,

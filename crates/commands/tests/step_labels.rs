@@ -49,6 +49,22 @@ async fn undo_steps_carry_human_labels_with_counts() -> R {
     assert_eq!(
         l(
             "issues_bulk_update",
+            json!({"ids": [1], "patch": {"patch": {"hidden_until": "2030-01-01"}}})
+        )
+        .await?,
+        "Deferred 1 issue"
+    );
+    assert_eq!(
+        l(
+            "issues_bulk_update",
+            json!({"ids": [1, 2], "patch": {"patch": {"estimate_minutes": 30}}})
+        )
+        .await?,
+        "Set estimate minutes on 2 issues"
+    );
+    assert_eq!(
+        l(
+            "issues_bulk_update",
             json!({"ids": [1], "patch": {"archive": true}})
         )
         .await?,

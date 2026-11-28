@@ -3,7 +3,7 @@ import { localDay } from '../../lib/gantt';
 import { workspaceZone } from '../views/dates';
 
 /** The Weekly review steps in order. Progress lives here, so the page and its commands share it. */
-export const STEPS = ['Inbox to zero', 'Waiting', 'Stuck projects', 'Stale issues', 'Someday', 'Next 7 days'] as const;
+export const STEPS = ['Inbox to zero', 'Waiting', 'Stuck projects', 'Stale issues', 'Someday', 'Coming back this week', 'Next 7 days'] as const;
 
 export const review = $state({ at: 0, done: [] as number[] });
 

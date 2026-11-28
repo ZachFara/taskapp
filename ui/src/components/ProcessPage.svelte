@@ -12,7 +12,7 @@
   import TextInput from '../ui/TextInput.svelte';
   import Description from './detail/Description.svelte';
 
-  type Mode = 'delegate' | 'defer' | 'next' | null;
+  type Mode = 'delegate' | 'defer' | 'schedule' | 'next' | null;
   // The Inbox as it was when the page opened, oldest first. A processed issue stays in the list (as `gone`) so
   // "12 of 74" keeps its meaning and Back and Skip walk the same order.
   let order = $state<Issue[]>([]);
@@ -23,6 +23,7 @@
   let mode = $state<Mode>(null);
   let note = $state('');
   let until = $state('');
+  let time = $state('');
   let projectId = $state('');
   let asNext = $state(false);
   // Projects that already have an open next action; a Next pick there leaves the flag off by default.
@@ -80,12 +81,13 @@
   const open = (m: Exclude<Mode, null>) => {
     if (!current) return;
     mode = mode === m ? null : m;
-    if (m === 'defer' && !until) until = iso(1);
+    if ((m === 'defer' || m === 'schedule') && !until) until = iso(1);
   };
   const confirm = (e: Event) => {
     e.preventDefault();
     if (mode === 'delegate') void run({ Delegate: { note } }).then(() => (note = ''));
     else if (mode === 'defer') void run({ Defer: { until } });
+    else if (mode === 'schedule') void run({ Schedule: { date: until, time: time || null } }).then(() => (time = ''));
     else if (mode === 'next') void run({ Next: { project: projectId ? Number(projectId) : null, as_next_action: asNext && !!projectId } });
   };
 
@@ -113,6 +115,7 @@
       'process.do': () => void run('Done'),
       'process.delegate': () => open('delegate'),
       'process.defer': () => open('defer'),
+      'process.schedule': () => open('schedule'),
       'process.next': () => open('next'),
       'process.someday': () => void run('Someday'),
       'process.trash': () => void run('Trash'),
@@ -152,6 +155,7 @@
         <Button variant="primary" icon="check" kbd="o" onclick={() => run('Done')}>Do it now</Button>
         <Button icon="user" kbd="y" aria-pressed={mode === 'delegate'} onclick={() => open('delegate')}>Delegate</Button>
         <Button icon="clock" kbd="z" aria-pressed={mode === 'defer'} onclick={() => open('defer')}>Defer</Button>
+        <Button icon="calendar" kbd="v" aria-pressed={mode === 'schedule'} onclick={() => open('schedule')}>Schedule</Button>
         <Button icon="arrow-right" kbd="n" aria-pressed={mode === 'next'} onclick={() => open('next')}>Next</Button>
         <Button icon="star" kbd="b" onclick={() => run('Someday')}>Someday</Button>
         <Button variant="danger" icon="trash" kbd="q" onclick={() => run('Trash')}>Trash</Button>
@@ -168,6 +172,10 @@
             <Button onclick={() => (until = iso(7))}>Next week</Button>
             <Button onclick={() => (until = iso(30))}>Next month</Button>
             <Button type="submit" variant="primary" disabled={!until}>Defer</Button>
+          {:else if mode === 'schedule'}
+            <TextInput label="Due on" type="date" bind:value={until} />
+            <TextInput label="At (optional)" type="time" bind:value={time} />
+            <Button type="submit" variant="primary" disabled={!until}>Schedule</Button>
           {:else}
             <Select label="Project" placeholder="No project" bind:value={projectId} items={[{ value: '', label: 'No project' }, ...projects.map((p) => ({ value: String(p.id), label: p.name }))]} />
             <label class="also"><Checkbox label="Also make it the project's next action" disabled={!projectId} bind:checked={asNext} /><span>Also make it the project's next action</span></label>

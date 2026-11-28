@@ -326,6 +326,7 @@ macro_rules! with_commands {
 
             stale_list(s) -> Vec<StaleIssue> { stale::list(&s.db).await }
             waiting_list(s) -> Vec<Issue> { waiting::list(&s.db).await }
+            tickler_list(s) -> Vec<Issue> { tickler::list(&s.db, today(s)?).await }
 
             focus_start(s, issue: IssueId, deep: Option<bool>) -> FocusSession {
                 focus::start(&s.db, issue, deep, $source).await

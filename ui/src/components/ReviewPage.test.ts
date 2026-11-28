@@ -43,14 +43,28 @@ describe('ReviewPage', () => {
     expect(document.querySelector('h2')?.textContent).toBe('Inbox to zero');
   });
 
+  it('Coming back this week lists items deferred to the next 7 days, not later ones', async () => {
+    const api = createMockApi(fixtures);
+    const [a, b] = await api.inbox.list();
+    const day = (n: number) => new Date(Date.now() + n * 86_400_000).toLocaleDateString('sv');
+    await api.issues.update(a.id, { hidden_until: day(3) });
+    await api.issues.update(b.id, { hidden_until: day(20) });
+    await open(api);
+    for (let i = 0; i < 5; i++) await press('Next');
+    expect(document.querySelector('h2')?.textContent).toBe('Coming back this week');
+    expect(document.querySelector('.count')?.textContent).toBe('1 coming back');
+    expect(document.querySelector('.plain')?.textContent).toContain(a.key);
+    expect(document.querySelector('.plain')?.textContent).not.toContain(b.key);
+  });
+
   it('Finish stays off until every step is ticked, then records last_review as a day', async () => {
     const api = createMockApi(fixtures);
     const set = vi.spyOn(api.settings, 'set');
     await open(api);
     expect(button('Finish').disabled).toBe(true);
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 7; i++) {
       await press('Done for this step');
-      if (i < 5) await press('Next');
+      if (i < 6) await press('Next');
     }
     expect(button('Finish').disabled).toBe(false);
     await press('Finish');

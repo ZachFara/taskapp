@@ -1289,4 +1289,10 @@ pub enum InboxChoice {
     Someday,
     /// Archive.
     Trash,
+    /// A day-specific action: due on `date` (at `time`, HH:MM in the workspace zone, when given), status Reminder
+    /// or else the first unstarted one.
+    Schedule {
+        date: NaiveDate,
+        time: Option<String>,
+    },
 }
