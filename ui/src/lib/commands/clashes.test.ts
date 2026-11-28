@@ -8,7 +8,7 @@ const base: Ctx = { layout: null, route: '/', selection: [], focusedIssueId: nul
 const layouts: Layout[] = ['list', 'table', 'board', 'calendar', 'timeline'];
 
 const states: [string, Ctx, { editing?: boolean; timeline?: boolean }][] = [
-  ...['/', '/my', '/inbox', '/pinned', '/projects', '/cycles', '/views', '/settings/general', '/project/website'].map(
+  ...['/', '/my', '/inbox', '/pinned', '/projects', '/cycles', '/views', '/settings/general', '/project/website', '/process'].map(
     (route): [string, Ctx, object] => [route, { ...base, route }, {}],
   ),
   ['issue page', { ...base, route: '/issue/ABC-1', openIssueId: 1, focusedIssueId: 1, selection: [1] }, {}],

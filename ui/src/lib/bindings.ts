@@ -88,6 +88,20 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	inboxList: (options?: InvokeOptions) => __TAURI_INVOKE<Issue[]>("inbox_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	inboxProcess: (id: IssueId, choice: InboxChoice, options?: InvokeOptions) => __TAURI_INVOKE<Issue>("inbox_process", { id, choice }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	workspaceStatus: (options?: InvokeOptions) => __TAURI_INVOKE<WorkspaceStatus>("workspace_status", undefined, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1257,6 +1271,8 @@ export type DecisionOption = {
 
 export type DecisionStatus = "open" | "answered" | "withdrawn";
 
+export type Deferred = "hide" | "show";
+
 export type Density = "comfortable" | "compact";
 
 export type Due = ({ Date: string }) & { DateTime?: never } | 
@@ -1310,7 +1326,9 @@ export type Filter = ({ And: Filter[] }) & { Cond?: never; Not?: never; Or?: nev
 	value: Value,
 } }) & { And?: never; Not?: never; Or?: never };
 
-export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "Points" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount" | 
+export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "Points" | 
+/**  Issues only: the day a deferred issue comes back. */
+"HiddenUntil" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount" | 
 /**  Shows `done/total` of the description's task lines; not sortable or filterable. */
 "Checklist" | 
 /**  Filter only: the issue has a relation of the given kind id(s), on either end. */
@@ -1382,6 +1400,25 @@ export type ImportPlan = {
 	unmapped?: string[],
 };
 
+/**  One Process Inbox choice for one issue. */
+export type InboxChoice = 
+/**  The two-minute rule: status Done. */
+"Done" | 
+/**  Status Delegated, and a comment "Waiting on: <note>". */
+({ Delegate: {
+	note: string,
+} }) & { Defer?: never; Next?: never } | 
+/**  Hide the issue until a later day. */
+({ Defer: {
+	until: string,
+} }) & { Delegate?: never; Next?: never } | 
+/**  Status Next, in `project` when given. */
+({ Next: {
+	project: ProjectId | null,
+} }) & { Defer?: never; Delegate?: never } | "Someday" | 
+/**  Archive. */
+"Trash";
+
 export type Issue = {
 	id: IssueId,
 	key: string,
@@ -1399,6 +1436,8 @@ export type Issue = {
 	estimate_minutes: number | null,
 	/**  At least 0, one decimal at most (checked on write). */
 	points: number | null,
+	/**  Deferred: views hide the issue until this day (the Process Inbox "Defer" choice). */
+	hidden_until: string | null,
 	properties: { [key in string]: Value },
 	created_at: string,
 	updated_at: string,
@@ -1423,6 +1462,7 @@ export type IssuePatch = {
 	due?: Due | null,
 	estimate_minutes?: number | null,
 	points?: number | null,
+	hidden_until?: string | null,
 	properties?: { [key in string]: Value } | null,
 };
 
@@ -1911,6 +1951,8 @@ export type ViewDef = {
 	layout: Layout,
 	columns: FieldRef[],
 	include_archived: boolean,
+	/**  Whether issues deferred to a later day (`hidden_until`) are listed. */
+	deferred?: Deferred,
 	density?: Density,
 	show_empty_groups?: boolean,
 	show_sub_issues?: SubIssues,

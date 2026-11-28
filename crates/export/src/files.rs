@@ -387,6 +387,8 @@ pub struct IssueFront {
     pub estimate_minutes: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub points: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden_until: Option<NaiveDate>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,

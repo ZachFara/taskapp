@@ -403,4 +403,31 @@ describe('walk', { timeout: 20_000 }, () => {
     await pw(page.locator('tr[data-slug=mobile]')).toContainText('ABC-');
     await pw(page.locator('tr[data-slug=office]')).toContainText('Stuck');
   });
+
+  it('PROCESS the Inbox page opens from the sidebar, a key and a button clear issues, typing never fires a key, and the switch removes it', async () => {
+    await open('/my');
+    await page.getByRole('link', { name: 'Process Inbox' }).click();
+    const title = page.getByRole('textbox', { name: 'Title' });
+    await pw(title).toBeVisible();
+    const first = await title.inputValue();
+    await pw(page.locator('.progress')).toHaveText(/^1 of \d+$/);
+    // Typing "o" in the title is text, not "Do it now".
+    await title.click();
+    await page.keyboard.type('o');
+    expect(await title.inputValue()).toBe(first + 'o');
+    await title.fill(first);
+    await page.locator('.key').click();
+    await press('Shift+ArrowRight');
+    await pw(page.locator('.progress')).toHaveText(/^2 of \d+$/);
+    await press('Shift+ArrowLeft');
+    await press('o');
+    await pw(title).not.toHaveValue(first);
+    await page.getByRole('button', { name: /^Defer/ }).click();
+    await page.getByRole('button', { name: 'Next week' }).click();
+    await page.locator('form button[type=submit]').click();
+    await pw(page.getByRole('alert')).toHaveCount(0);
+    await open('/settings/features');
+    await page.getByRole('switch', { name: 'Process Inbox' }).click();
+    await pw(page.getByRole('link', { name: 'Process Inbox' })).toHaveCount(0);
+  });
 });

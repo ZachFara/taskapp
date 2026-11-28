@@ -10,7 +10,7 @@ export const FEATURES = [
   { name: 'stale', key: 'feature_stale', label: 'Stale nudges', blurb: 'A marker on issues that sat in a status too long, and the Stale dashboard card.' },
   { name: 'reminders', key: 'feature_reminders', label: 'Reminders capture', blurb: 'Import from an Apple Reminders list, and its Settings page.' },
   { name: 'gcal', key: 'feature_gcal', label: 'Google Calendar', blurb: 'Calendar alerts for due dates, and its Settings page.' },
-  { name: 'process_inbox', key: 'feature_process_inbox', label: 'Process Inbox', blurb: 'Coming: a guided pass that clears the inbox.' },
+  { name: 'process_inbox', key: 'feature_process_inbox', label: 'Process Inbox', blurb: 'Go through the Inbox one issue at a time: do it, delegate, defer, plan, park or trash. The Process Inbox page and its commands.' },
   { name: 'next_actions', key: 'feature_next_actions', label: 'Next actions', blurb: 'One flagged next action per project, the Next page, and a Stuck marker and dashboard card for active projects without one.' },
   { name: 'focus', key: 'feature_focus', label: 'Focus mode', blurb: 'Coming: one issue at a time, nothing else on screen.' },
 ] as const;
@@ -42,10 +42,11 @@ const COMMANDS: [RegExp, Feature][] = [
   [/^(nav\.events|event\.|issue\.event\.)/, 'events'],
   [/^(chart\.|view\.insights$)/, 'charts'],
   [/^(nav\.next|issue\.next|project\.next)$/, 'next_actions'],
+  [/^(nav\.process|process\.)/, 'process_inbox'],
   [/^settings\.reminders$/, 'reminders'],
   [/^settings\.calendar$/, 'gcal'],
 ];
 export const featureOfCommand = (id: string) => COMMANDS.find(([re]) => re.test(id))?.[1];
 
-export const ROUTES: Record<string, Feature> = { '/dashboard': 'dashboard', '/decisions': 'decisions', '/cycles': 'cycles', '/events': 'events', '/event': 'events', '/next': 'next_actions' };
+export const ROUTES: Record<string, Feature> = { '/dashboard': 'dashboard', '/decisions': 'decisions', '/cycles': 'cycles', '/events': 'events', '/event': 'events', '/next': 'next_actions', '/process': 'process_inbox' };
 export const SETTINGS_PAGES: Record<string, Feature> = { cycles: 'cycles', reminders: 'reminders', calendar: 'gcal' };

@@ -127,6 +127,8 @@ pub struct Issue {
     pub estimate_minutes: Option<u32>,
     /// At least 0, one decimal at most (checked on write).
     pub points: Option<f64>,
+    /// Deferred: views hide the issue until this day (the Process Inbox "Defer" choice).
+    pub hidden_until: Option<NaiveDate>,
     pub properties: Map<String, Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -213,6 +215,12 @@ pub struct IssuePatch {
     )]
     #[specta(type = Option<f64>)]
     pub points: Clearable<f64>,
+    #[serde(
+        deserialize_with = "double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[specta(type = Option<NaiveDate>)]
+    pub hidden_until: Clearable<NaiveDate>,
     pub properties: Option<Map<String, Value>>,
 }
 
@@ -481,6 +489,8 @@ pub enum FixedField {
     DueDate,
     Estimate,
     Points,
+    /// Issues only: the day a deferred issue comes back.
+    HiddenUntil,
     CreatedAt,
     UpdatedAt,
     CompletedAt,
@@ -574,6 +584,14 @@ pub enum Wrap {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
+pub enum Deferred {
+    #[default]
+    Hide,
+    Show,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
 pub enum SubIssues {
     #[default]
     Nest,
@@ -595,6 +613,9 @@ pub struct ViewDef {
     pub layout: Layout,
     pub columns: Vec<FieldRef>,
     pub include_archived: bool,
+    /// Whether issues deferred to a later day (`hidden_until`) are listed.
+    #[serde(default)]
+    pub deferred: Deferred,
     #[serde(default)]
     pub density: Density,
     #[serde(default)]
@@ -620,6 +641,7 @@ impl Default for ViewDef {
             layout: Layout::default(),
             columns: vec![],
             include_archived: false,
+            deferred: Deferred::default(),
             density: Density::default(),
             show_empty_groups: false,
             show_sub_issues: SubIssues::default(),
@@ -1121,4 +1143,26 @@ pub struct DecisionInput {
     pub external_id: Option<String>,
     #[serde(default)]
     pub issue_ids: Vec<IssueId>,
+}
+
+/// One Process Inbox choice for one issue.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub enum InboxChoice {
+    /// The two-minute rule: status Done.
+    Done,
+    /// Status Delegated, and a comment "Waiting on: <note>".
+    Delegate {
+        note: String,
+    },
+    /// Hide the issue until a later day.
+    Defer {
+        until: NaiveDate,
+    },
+    /// Status Next, in `project` when given.
+    Next {
+        project: Option<ProjectId>,
+    },
+    Someday,
+    /// Archive.
+    Trash,
 }

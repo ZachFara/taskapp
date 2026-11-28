@@ -128,6 +128,9 @@
       <div class="opt"><span>Show empty groups</span><Switch label="Show empty groups" bind:checked={() => showEmptyGroups(def), (v) => onchange({ show_empty_groups: v })} /></div>
     {/if}
     <div class="opt"><span>Show archived</span><Switch label="Show archived" bind:checked={() => def.include_archived, (v) => onchange({ include_archived: v })} /></div>
+    {#if !project}
+      <div class="opt"><span>Show deferred</span><Switch label="Show deferred" bind:checked={() => def.deferred === 'show', (v) => onchange({ deferred: v ? 'show' : 'hide' })} /></div>
+    {/if}
     {#if L === 'List' && !project}
       <div class="opt"><span>Sub-issues</span><Select label="Sub-issues" items={[{ value: 'nest', label: 'Nested' }, { value: 'flat', label: 'Flat' }, { value: 'hide', label: 'Hidden' }]} bind:value={() => subIssues(def), (v) => onchange({ show_sub_issues: v as SubIssues })} /></div>
     {/if}

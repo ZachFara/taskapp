@@ -6,6 +6,7 @@ import InboxPage from '../components/InboxPage.svelte';
 import IssueDetail from '../components/IssueDetail.svelte';
 import NextPage from '../components/NextPage.svelte';
 import MyIssuesPage from '../components/MyIssuesPage.svelte';
+import ProcessPage from '../components/ProcessPage.svelte';
 import PinnedPage from '../components/PinnedPage.svelte';
 import ProjectPage from '../components/ProjectPage.svelte';
 import ProjectsPage from '../components/ProjectsPage.svelte';
@@ -34,6 +35,7 @@ export const routes: { pattern: string; component: Component }[] = [
   { pattern: '/settings/:section', component: Settings },
   { pattern: '/design', component: DesignGallery },
   { pattern: '/inbox', component: InboxPage },
+  { pattern: '/process', component: ProcessPage },
   { pattern: '/my', component: MyIssuesPage },
   { pattern: '/projects', component: ProjectsPage },
   { pattern: '/views', component: ViewsPage },

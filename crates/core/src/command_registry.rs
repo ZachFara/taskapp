@@ -28,6 +28,11 @@ macro_rules! with_commands {
                 quickadd::create_from(&s.db, &input, today(s)?, &s.tz, $source).await
             }
 
+            inbox_list(s) -> Vec<Issue> { inbox::list(&s.db, today(s)?).await }
+            inbox_process(s, id: IssueId, choice: InboxChoice) -> Issue {
+                inbox::process(&s.db, id, choice, today(s)?, $source).await
+            }
+
             workspace_status(s) -> WorkspaceStatus { workspace::status(&s.db).await }
             workspace_setup(s, name: String, key: String, timezone: Option<String>) -> WorkspaceStatus {
                 workspace::setup(&s.db, &name, &key, timezone.as_deref()).await

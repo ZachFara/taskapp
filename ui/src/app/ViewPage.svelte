@@ -304,6 +304,7 @@
             <div class="row"><Button variant="primary" type="submit">Rename</Button></div>
           </form>
         </Popover>
+        {#if !isProject && name.trim().toLowerCase() === 'inbox'}<CommandButton command="nav.process" />{/if}
         {#if dirty}
           <Button icon="undo" onclick={resetToSaved}>Reset to saved</Button>
           <Button variant="primary" icon="check" onclick={saveToView}>Save to view</Button>

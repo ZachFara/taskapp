@@ -380,6 +380,7 @@ mod tests {
             due,
             estimate_minutes: None,
             points: None,
+            hidden_until: None,
             properties: serde_json::Map::default(),
             created_at: now,
             updated_at: now,

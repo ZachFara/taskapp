@@ -31,7 +31,6 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
             crate::api::call(db, dir, &name, args).await
         }
         Cmd::Undo => val(undo::undo(db).await?),
-        Cmd::Stale | Cmd::Next => lists(db, cmd).await,
         Cmd::Setup { name, key, tz } => {
             val(taskapp_core::workspace::setup(db, &name, &key, tz.as_deref()).await?)
         }
@@ -42,15 +41,30 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Status(cmd) => status(db, cmd).await,
         Cmd::Attachment(cmd) => attachment(db, cmd).await,
         Cmd::Sync(SyncCmd::Now { helper }) => sync_now(db, helper).await,
+        cmd @ (Cmd::Stale
+        | Cmd::Next
+        | Cmd::Inbox(_)
+        | Cmd::Decision(_)
+        | Cmd::Icons
+        | Cmd::Colors) => queues_and_lists(db, cmd).await,
+        cmd => run_group(db, dir, cmd).await,
+    }
+}
+
+/// Stale, the Inbox, decisions and the icon and colour names.
+async fn queues_and_lists(db: &Db, cmd: Cmd) -> Result<Value> {
+    match cmd {
+        Cmd::Stale => val(taskapp_core::stale::list(db).await?),
+        Cmd::Next => val(taskapp_core::next_actions::list(db).await?),
+        Cmd::Inbox(args) => crate::inbox::run(db, args).await,
         Cmd::Decision(cmd) => crate::decision::run(db, cmd).await,
         Cmd::Icons => Ok(json!(look::ICONS)),
-        Cmd::Colors => Ok(json!(
+        _ => Ok(json!(
             taskapp_core::palette::COLORS
                 .iter()
                 .map(|(key, _)| *key)
                 .collect::<Vec<_>>()
         )),
-        cmd => run_group(db, dir, cmd).await,
     }
 }
 
@@ -80,6 +94,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Forecast(_)
         | Cmd::Stale
         | Cmd::Next
+        | Cmd::Inbox(_)
         | Cmd::Status(_)
         | Cmd::Attachment(_)
         | Cmd::Event(_)
@@ -213,6 +228,7 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         estimate,
         project,
         solution,
+        hide_until,
     } = cmd
     else {
         unreachable!("issue_update is only called with Update");
@@ -242,6 +258,11 @@ async fn issue_update(db: &Db, cmd: IssueCmd) -> Result<Value> {
         start_date: start.as_deref().map(date).transpose()?.map(Some),
         estimate_minutes: estimate.map(Some),
         project_id: project_id.map(Some),
+        hidden_until: match hide_until.as_deref() {
+            None => None,
+            Some("clear") => Some(None),
+            Some(d) => Some(Some(date(d)?)),
+        },
         ..IssuePatch::default()
     };
     // The link goes first: a URL that is refused must not leave the rest of the update applied.
@@ -563,13 +584,6 @@ async fn project_set(db: &Db, slug: &str, edit: ProjectEdit) -> Result<Value> {
 }
 
 /// `stale` or `next`: the two read-only lists.
-async fn lists(db: &Db, cmd: Cmd) -> Result<Value> {
-    match cmd {
-        Cmd::Next => val(taskapp_core::next_actions::list(db).await?),
-        _ => val(taskapp_core::stale::list(db).await?),
-    }
-}
-
 async fn project(db: &Db, cmd: ProjectCmd) -> Result<Value> {
     match cmd {
         ProjectCmd::List => val(projects::list(db).await?),
@@ -800,7 +814,7 @@ fn val<T: Serialize>(value: T) -> Result<Value> {
     serde_json::to_value(value).map_err(|e| Error::Invalid(e.to_string()))
 }
 
-fn date(text: &str) -> Result<NaiveDate> {
+pub fn date(text: &str) -> Result<NaiveDate> {
     NaiveDate::parse_from_str(text, "%Y-%m-%d")
         .map_err(|_| Error::Invalid(format!("not a date (YYYY-MM-DD): {text}")))
 }

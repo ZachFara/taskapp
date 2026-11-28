@@ -115,3 +115,30 @@ async fn quick_add_is_labelled_like_a_plain_create() -> R {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn processing_an_inbox_issue_is_one_undoable_step() -> R {
+    let s = state().await;
+    dispatch(&s, "issues_create", json!({"input": {"title": "One"}})).await?;
+    dispatch(
+        &s,
+        "statuses_create",
+        json!({"name": "Delegated", "category": "Started", "color": "gray", "icon": null}),
+    )
+    .await?;
+    let l = label(
+        &s,
+        "inbox_process",
+        json!({"id": 1, "choice": {"Delegate": {"note": "Sam"}}}),
+    )
+    .await?;
+    assert_eq!(l, "Processed ABC-1");
+    dispatch(&s, "history_undo", json!({})).await?;
+    let i = dispatch(&s, "issues_get", json!({"id": 1})).await?;
+    assert_eq!(i["status_id"], 1);
+    assert_eq!(
+        dispatch(&s, "comments_list", json!({"issue": 1})).await?,
+        json!([])
+    );
+    Ok(())
+}

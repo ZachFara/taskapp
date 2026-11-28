@@ -49,7 +49,7 @@ export type MockApi = Api & {
 };
 
 const nullableIssueFields = [
-  'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'start_date', 'due', 'estimate_minutes', 'points',
+  'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until',
 ] as const;
 // The backend's error text is `<kind>: <detail>`; the UI shows it as is.
 const fail = (kind: string, message: string): never => {
@@ -244,7 +244,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       ProjectStatus: s.projects.find((x) => x.id === i.project_id)?.status_id ?? null,
       Title: i.title, Status: i.status_id, StatusCategory: category(i)?.toLowerCase() ?? null, Priority: i.priority,
       Project: i.project_id, Milestone: i.milestone_id, Cycle: i.cycle_id, Label: i.label_ids,
-      Parent: i.parent_id, StartDate: i.start_date, DueDate: dueDay(i), Estimate: i.estimate_minutes, Points: i.points,
+      Parent: i.parent_id, StartDate: i.start_date, DueDate: dueDay(i), Estimate: i.estimate_minutes, Points: i.points, HiddenUntil: i.hidden_until,
       CreatedAt: i.created_at, UpdatedAt: i.updated_at, CompletedAt: i.completed_at,
       Archived: i.archived_at !== null, Key: i.id,
       SubIssueProgress: s.issues.filter((c) => c.parent_id === i.id && !c.archived_at).length,
@@ -293,7 +293,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     d.setUTCDate(d.getUTCDate() + (m![1] ? Number(`${m![1]}${m![2]}`) : 0));
     return d.toISOString().slice(0, 10);
   };
-  const dateFixed = ['StartDate', 'DueDate', 'TargetDate', 'CreatedAt', 'UpdatedAt', 'CompletedAt'];
+  const dateFixed = ['StartDate', 'DueDate', 'HiddenUntil', 'TargetDate', 'CreatedAt', 'UpdatedAt', 'CompletedAt'];
   const withRelativeDays = (f: Filter, defs: PropertyDef[], today: string): Filter => {
     if (f.And) return { And: f.And.map((x) => withRelativeDays(x, defs, today)) };
     if (f.Or) return { Or: f.Or.map((x) => withRelativeDays(x, defs, today)) };
@@ -303,11 +303,11 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     return { Cond: { field, op, value: isDate ? relativeDay(value, today) : value } };
   };
   // Filter, then sort (nulls last in either direction), like core's compiled query; `get` reads a field of a row.
-  function arrange<T extends { id: number; archived_at: string | null }>(all: T[], stored: ViewDef, defs: PropertyDef[], get: (r: T, f: FieldRef) => Value) {
+  function arrange<T extends { id: number; archived_at: string | null }>(all: T[], stored: ViewDef, defs: PropertyDef[], get: (r: T, f: FieldRef) => Value, deferred: (r: T) => boolean = () => false) {
     // A reference to a property that no longer exists is dropped, like core does.
     const def = scrubDef(stored, (k) => !defs.some((d) => d.key === k));
     const filter = def.filter && withRelativeDays(def.filter, defs, zoneToday());
-    const rows = all.filter((i) => (def.include_archived || !i.archived_at) && (!filter || holds(i, filter, get)));
+    const rows = all.filter((i) => (def.include_archived || !i.archived_at) && (def.deferred === 'show' || !deferred(i)) && (!filter || holds(i, filter, get)));
     for (const { field, descending } of [...def.sorts].reverse()) {
       rows.sort((a, b) => {
         const [x, y] = [get(a, field), get(b, field)];
@@ -319,7 +319,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     }
     return rows;
   }
-  const query = (stored: ViewDef) => arrange(s.issues, stored, s.propertyDefs, fieldValue);
+  const query = (stored: ViewDef) => arrange(s.issues, stored, s.propertyDefs, fieldValue, (i) => i.hidden_until !== null && i.hidden_until > zoneToday());
   const queryProjects = (stored: ViewDef): ProjectRow[] =>
     arrange(s.projects, stored, s.propertyDefs.filter((d) => d.applies_to !== 'Issues'), projectValue).map((project) => {
       const [issue_done, issue_total] = progressOf(project.id);
@@ -360,7 +360,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       status_id: input.status_id ?? (s.statuses.find((st) => st.id === settings.get('default_status')) ?? [...s.statuses].sort((a, b) => a.position - b.position)[0]).id,
       priority: input.priority ?? 0, project_id: input.project_id ?? null, milestone_id: input.milestone_id ?? null,
       parent_id: input.parent_id ?? null, cycle_id: input.cycle_id ?? null, label_ids: [...new Set(input.label_ids ?? [])].sort((a, b) => a - b),
-      start_date: input.start_date ?? null, due: input.due ?? null, estimate_minutes: input.estimate_minutes ?? null, points: input.points ?? null,
+      start_date: input.start_date ?? null, due: input.due ?? null, estimate_minutes: input.estimate_minutes ?? null, points: input.points ?? null, hidden_until: null,
       properties: input.properties ?? {}, created_at: input.created_at ?? at, updated_at: at,
       completed_at: input.completed_at ?? null, archived_at: null,
     };
@@ -569,7 +569,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           Object.assign(i, old);
           throw e;
         }
-        const order = ['title', 'description', 'status_id', 'priority', 'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'label_ids', 'start_date', 'due', 'estimate_minutes', 'points', 'properties'] as const;
+        const order = ['title', 'description', 'status_id', 'priority', 'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'label_ids', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until', 'properties'] as const;
         for (const k of order) if (changed.includes(k)) rec(id, k, old[k] as Value, i[k] as Value);
         i.updated_at = now();
         if (i.status_id !== old.status_id) i.completed_at = done(i) ? (done({ ...old }) ? old.completed_at : i.updated_at) : null;
@@ -969,6 +969,32 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       },
     },
     attachments: attachmentsApi(fail),
+    inbox: {
+      // Port of inbox.rs: the Inbox status (any case), else the Backlog category; oldest first, deferred ones left out.
+      list: async () => {
+        const inbox = s.statuses.filter((x) => x.name.toLowerCase() === 'inbox');
+        const ids = (inbox.length ? inbox : s.statuses.filter((x) => x.category === 'Backlog')).map((x) => x.id);
+        return s.issues.filter((i) => !i.archived_at && ids.includes(i.status_id) && !(i.hidden_until && i.hidden_until > zoneToday())).sort((a, b) => a.id - b.id);
+      },
+      process: async (id, choice) => {
+        const status = (name: string, category?: Status['category']) =>
+          (s.statuses.find((x) => x.name.toLowerCase() === name.toLowerCase()) ?? s.statuses.find((x) => x.category === category))?.id ?? fail('Invalid', `no status called ${name}; add one in Settings`);
+        getIssue(id);
+        if (choice === 'Done') return api.issues.update(id, { status_id: status('Done', 'Completed') });
+        if (choice === 'Someday') return api.issues.update(id, { status_id: status('Someday') });
+        if (choice === 'Trash') return (await api.issues.archive(id), getIssue(id));
+        if (choice.Defer) {
+          if (choice.Defer.until <= zoneToday()) fail('Invalid', 'the hide-until date must be after today');
+          return api.issues.update(id, { hidden_until: choice.Defer.until });
+        }
+        if (choice.Next) return api.issues.update(id, { status_id: status('Next', 'Unstarted'), project_id: choice.Next.project ?? undefined });
+        const note = choice.Delegate!.note.trim();
+        if (!note) fail('Invalid', 'say who you are waiting on');
+        const issue = await api.issues.update(id, { status_id: status('Delegated', 'Started') });
+        await api.comments.addComment(id, `Waiting on: ${note}`);
+        return issue;
+      },
+    },
     comments: {
       list: async (issue) => comments.filter((c) => c.issue_id === issue),
       addComment: async (issue, body) => {
@@ -1335,7 +1361,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   };
   const commandOf = (mod: string, fn: string) => `${mod}_${fn.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}`;
   const mutating = (
-    'issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.setFlow statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
+    'inbox.process issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.setFlow statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
     'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
     'projects.create projects.update projects.setNext projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink decisions.create decisions.answer decisions.withdraw decisions.link decisions.unlink links.add links.remove templates.create templates.update templates.delete templates.apply ' +
@@ -1455,7 +1481,7 @@ const issues: Issue[] = rows.map((r, k) => {
     project_id: r.project, milestone_id: r.milestone ?? null, parent_id: r.parent ?? null, cycle_id: r.cycle ?? null,
     label_ids: r.labels ?? [], start_date: r.start === undefined ? null : day(r.start),
     due: r.due === undefined ? null : { Date: day(r.due) }, estimate_minutes: r.hours === undefined ? null : r.hours * 60,
-    points: POINTS[n] ?? null,
+    points: POINTS[n] ?? null, hidden_until: null,
     properties: { ...(r.area && { area: r.area }), ...(r.effort && { effort: r.effort }) } as Issue['properties'],
     created_at: created, updated_at: created, completed_at: finished ? created : null, archived_at: null,
   };

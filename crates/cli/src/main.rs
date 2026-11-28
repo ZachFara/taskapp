@@ -4,6 +4,7 @@ mod api;
 mod commands;
 mod decision;
 mod forecast;
+mod inbox;
 mod list;
 mod look;
 mod metrics;
@@ -82,6 +83,8 @@ enum Cmd {
     Stale,
     /// Every project's next action, and which active projects are stuck without one.
     Next,
+    /// The next Inbox items, oldest first; `inbox process KEY --do|--delegate NOTE|--defer DATE|--next PROJECT|--someday|--trash` clears one.
+    Inbox(inbox::InboxArgs),
     /// Optional features and whether each is on; `features set NAME on|off` switches one (data stays).
     Features {
         #[command(subcommand)]
@@ -270,6 +273,9 @@ enum IssueCmd {
         /// Project id, slug or exact name (case-insensitive).
         #[arg(long)]
         project: Option<String>,
+        /// Hide the issue from views until this day, YYYY-MM-DD, or `clear`.
+        #[arg(long, value_name = "DATE|clear")]
+        hide_until: Option<String>,
         /// URL of the fix (a pull request, commit or doc); recorded as a link of kind solution.
         #[arg(long)]
         solution: Option<String>,

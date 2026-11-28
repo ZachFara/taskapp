@@ -170,6 +170,9 @@ fn patch_of(
     if f.points != old.points {
         p.points = Some(f.points);
     }
+    if f.hidden_until != old.hidden_until {
+        p.hidden_until = Some(f.hidden_until);
+    }
     patch_refs(&mut p, f, old, l)?;
     patch_props(&mut p, f, old);
     Ok(p)

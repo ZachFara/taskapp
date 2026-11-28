@@ -1016,3 +1016,23 @@ async fn an_older_cycles_file_without_retrospective_fields_loads() -> R {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn hidden_until_survives_export_and_rebuild() -> R {
+    let db = seeded().await?;
+    let until = day(2999, 1, 1);
+    let patch = taskapp_core::IssuePatch {
+        hidden_until: Some(Some(until)),
+        ..taskapp_core::IssuePatch::default()
+    };
+    issues::update(&db, IssueId(1), patch, SRC).await?;
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    assert_eq!(
+        issues::get(&rebuilt, IssueId(1)).await?.hidden_until,
+        Some(until)
+    );
+    assert_eq!(issues::get(&rebuilt, IssueId(2)).await?.hidden_until, None);
+    Ok(())
+}

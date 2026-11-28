@@ -192,6 +192,7 @@ mod tests {
             due: due.map(|x| Due::Date(d(x))),
             estimate_minutes: est,
             points: None,
+            hidden_until: None,
             properties: Map::new(),
             created_at: Utc::now(),
             updated_at: Utc::now(),

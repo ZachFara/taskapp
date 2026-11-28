@@ -18,6 +18,7 @@ pub mod events;
 pub mod forecast;
 pub mod history;
 pub mod import;
+pub mod inbox;
 pub mod insights;
 pub mod issues;
 pub mod labels;

@@ -7,7 +7,7 @@ registry (`ui/src/lib/commands/defs/**`); `ui/src/lib/commands/guide.test.ts` ke
 
 Contents: [What it is](#what-cairn-is) - [First run](#first-run) - [The screen](#the-screen) - [Issues](#issues) -
 [Selection and bulk edit](#selection-and-bulk-edit) - [Undo and redo](#undo-and-redo) - [Views](#views) -
-[Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) - [Events](#events) - [Decisions](#decisions) -
+[Layouts](#the-five-layouts) - [Projects, milestones, cycles](#projects-milestones-cycles) - [Events](#events) - [Decisions](#decisions) - [Process Inbox](#process-the-inbox) -
 [Points and insights](#points-and-insights) - [Custom properties](#custom-properties) -
 [Statuses, labels, icons, colours](#statuses-labels-icons-and-colours) - [Templates](#issue-templates) - [Images](#images) -
 [Import, export, backups](#import-export-and-backups) - [Restore](#restore) - [Reminders and Google Calendar](#reminders-and-google-calendar) -
@@ -393,6 +393,33 @@ with its recommendation until you answer). Decisions are Cairn's own; nothing ou
   `--source`, such as `agent:builder` or later `curia`), and `external_id` is the raiser's own id, unique per source, so a
   later integration can mirror a decision and not raise it twice. Nothing reads them yet.
 
+## Process the Inbox
+
+Process Inbox (sidebar, `g o`, or the button on a view named Inbox) shows one Inbox issue at a time, oldest first, full
+width, with "12 of 74" at the top. The Inbox is the status named Inbox (or, in a workspace without one, the Backlog
+category). The title and description are editable in place. Choose with a button or its key (keys never fire while you
+type in a field):
+
+- **Do it now** (`o`): status Done (the two-minute rule).
+- **Delegate** (`y`): asks "waiting on whom?", sets Delegated and adds the comment "Waiting on: <name>".
+- **Defer** (`z`): asks for a day (Tomorrow, Next week, Next month, or a date) and hides the issue until then.
+- **Next** (`n`): pick a project (or none) and set status Next.
+- **Someday** (`b`): status Someday. Needs a status called Someday (Settings > Statuses), else it says so.
+- **Trash** (`q`): archives it.
+- **Skip** (`shift+arrowright`) and **Back** (`shift+arrowleft`) walk the list without changing anything. At the end,
+  skipped issues are offered again; with none left the page says "Inbox zero".
+
+Done, Delegated and Next use the status of that name, else the first status of the Completed, Started or Unstarted
+category. Every choice is one undo step and a command ("Process: do it now" and so on, in the command menu).
+
+Defer sets the issue's **hidden until** day. Views do not list an issue whose day is still ahead, and it returns on that
+day. A view's Display panel has "Show deferred" to list them anyway, and "Hidden until" is a filter field. Set or clear
+it from the terminal with `taskapp issue update ABC-1 --hide-until 2026-12-24` (or `clear`). Settings > Features can
+switch Process Inbox off; its page, sidebar entry and commands go, the data stays.
+
+For agents: `taskapp inbox [--limit N]` lists the next Inbox items and the total; `taskapp inbox process ABC-1 --do`,
+`--delegate "Sam"`, `--defer 2026-12-24`, `--next <project>`, `--someday` or `--trash` clears one (exactly one flag).
+
 ## Dashboard
 
 The Dashboard (sidebar, or `g b`) shows how work is going over a range. Pick the range at the top: Today, This week,
@@ -628,7 +655,7 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 
 Settings > Features lists every optional feature with a switch, all on by default: Dashboard, Decisions, Cycles,
 Events, Progress charts (burn-ups and sparklines on projects and cycles), Stale nudges, Reminders capture, Google
-Calendar, Next actions, and the coming Process Inbox and Focus mode. Switching one off hides its sidebar entries, its
+Calendar, Next actions, Process Inbox, and the coming Focus mode. Switching one off hides its sidebar entries, its
 page (the address shows "is switched off"), its commands in the command menu, its Settings page where it has one
 (Cycles, Reminders, Calendar) and its dashboard card. Your data stays and comes back when you switch it on. Each switch
 applies at once, has its own command ("Turn Cycles on or off"), and is stored as a setting (`dashboard`,
@@ -719,11 +746,25 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.events` | Go to Events | `g e` | Go to Events. |
 | `nav.next` | Go to Next actions | `g n` | Go to the next action of each project (when it is switched on in Settings). |
 | `nav.dashboard` | Go to Dashboard | `g b` | Go to the Dashboard (when it is switched on in Settings). |
+| `nav.process` | Process Inbox | `g o` | Go to Process Inbox (when it is switched on in Settings). |
 | `nav.decisions` | Go to Decisions | `g q` | Go to Decisions. |
 | `nav.views` | Go to Views | `g v` | Go to Views. |
 | `nav.timeline` | Go to Timeline | `g t` | Go to the all-projects timeline. |
 | `nav.settings` | Go to Settings | `g s` | Go to Settings. |
 | `nav.design` | Go to Design gallery | `g d` | Go to the design gallery (a developer page). |
+
+### Process Inbox page
+
+| Command id | Name | Keys | What it does |
+|---|---|---|---|
+| `process.do` | Process: do it now (Done) | `o` | Set the issue to Done and show the next one. |
+| `process.delegate` | Process: delegate (waiting on) | `y` | Ask who you are waiting on, then set Delegated with a comment. |
+| `process.defer` | Process: defer (hide until a day) | `z` | Ask for a day and hide the issue until then. |
+| `process.next` | Process: next action (pick a project) | `n` | Pick a project and set status Next. |
+| `process.someday` | Process: someday | `b` | Set status Someday. |
+| `process.trash` | Process: trash (archive) | `q` | Archive the issue. |
+| `process.skip` | Process: skip to the next issue | `shift+arrowright` | Show the next issue without changing this one. |
+| `process.back` | Process: back to the previous issue | `shift+arrowleft` | Show the previous issue you have not processed. |
 
 ### List, board and table: moving and selecting
 
@@ -951,9 +992,11 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `issue create <title> [...]` | Create with flags: `--description --priority --status --project --due --estimate --points --created-at --completed-at --property k=v --parent --cycle --label --migration`. | `taskapp issue create "Fix login" --priority 2 --due 2026-12-01` |
 | `issue link <key> <url>` | Add a link (`--title`, `--kind solution\|reference\|pr\|commit\|doc\|other`); the same URL twice is one link. | `taskapp issue link ABC-1 https://example.com/pr/7 --kind pr` |
 | `issue links <key>` | List an issue's links. | `taskapp issue links ABC-1` |
-| `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --solution <url>`. | `taskapp issue update ABC-1 --status 3` |
+| `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --solution <url> --hide-until DATE\|clear`. | `taskapp issue update ABC-1 --status 3` |
 | `issue list [...]` | Issues by name filters, most urgent first, with status, priority, project and label names: `--project --status --not-status --priority --label` (repeat or comma-separate). | `taskapp issue list --project Cairn --not-status Done,Canceled,Someday` |
 | `issue get <key>` | Show one issue, with `status`, `project`, `labels` and `priority_name` as names next to the ids. | `taskapp issue get ABC-1` |
+| `inbox [--limit N]` | The next Inbox items, oldest first, and how many there are (deferred ones left out). | `taskapp inbox --limit 3` |
+| `inbox process <key> (--do \| --delegate NOTE \| --defer DATE \| --next PROJECT \| --someday \| --trash)` | Clear one Inbox issue, as the Process Inbox page does; one undo step. | `taskapp inbox process ABC-1 --defer 2026-12-24` |
 | `issue archive <key>` | Archive an issue. | `taskapp issue archive ABC-1` |
 | `event list [--from --to]` | Events overlapping a date range. | `taskapp event list --from 2026-12-01` |
 | `event create <title> --start T [--end T --all-day --place --notes]` | Create an event (`T` is `YYYY-MM-DDTHH:MM` or a date). | `taskapp event create Demo --start 2026-12-10T09:30` |

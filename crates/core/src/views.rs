@@ -3,9 +3,9 @@ use serde_json::{Value, json};
 use sqlx::{Row, SqliteConnection, query::Query, sqlite::SqliteArguments, sqlite::SqliteRow};
 
 use crate::{
-    ChangeSource, Db, Error, FieldRef, Filter, FixedField, Issue, IssueId, IssueStats, Op,
-    ProjectId, ProjectRow, PropertyAppliesTo, PropertyDef, PropertyKind, Result, SavedView, Sort,
-    ViewDef, ViewEntity, ViewFolderId, ViewId, ViewTemplateId,
+    ChangeSource, Db, Deferred, Error, FieldRef, Filter, FixedField, Issue, IssueId, IssueStats,
+    Op, ProjectId, ProjectRow, PropertyAppliesTo, PropertyDef, PropertyKind, Result, SavedView,
+    Sort, ViewDef, ViewEntity, ViewFolderId, ViewId, ViewTemplateId,
     history::{self, Edit},
     insights, issues,
     palette::{self, Look},
@@ -86,6 +86,7 @@ impl Ctx<'_> {
                 x,
                 FixedField::StartDate
                     | FixedField::DueDate
+                    | FixedField::HiddenUntil
                     | FixedField::TargetDate
                     | FixedField::CreatedAt
                     | FixedField::UpdatedAt
@@ -328,6 +329,7 @@ fn fixed_col(entity: ViewEntity, x: FixedField) -> Result<Col> {
         FixedField::DueDate => ("issues.due_date", false),
         FixedField::Estimate => ("issues.estimate_minutes", false),
         FixedField::Points => ("issues.points", false),
+        FixedField::HiddenUntil => ("issues.hidden_until", false),
         FixedField::CreatedAt => ("issues.created_at", false),
         FixedField::UpdatedAt => ("issues.updated_at", false),
         FixedField::CompletedAt => ("issues.completed_at", false),
@@ -476,6 +478,12 @@ fn compile_for(
     let mut wheres = vec![];
     if !def.include_archived {
         wheres.push(format!("{table}.archived_at IS NULL"));
+    }
+    if def.deferred == Deferred::Hide && entity == ViewEntity::Issue {
+        // A NaiveDate prints as YYYY-MM-DD only, so inlining it is safe and keeps the binds for the filter.
+        wheres.push(format!(
+            "(issues.hidden_until IS NULL OR issues.hidden_until <= '{today}')"
+        ));
     }
     if let Some(f) = &def.filter {
         wheres.push(ctx.filter(f, 0)?);

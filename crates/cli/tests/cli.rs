@@ -1425,3 +1425,28 @@ fn issue_link_and_solution_are_recorded() {
     assert!(!out.status.success());
     assert_eq!(run_json(&db, &["issue", "get", "ABC-1"])["priority"], 0);
 }
+
+#[test]
+fn inbox_lists_and_processes_and_hide_until_hides() {
+    let (_d, db) = fresh();
+    run_json(&db, &["add", "First"]);
+    run_json(&db, &["add", "Second"]);
+    let list = run_json(&db, &["inbox"]);
+    assert_eq!(list["total"], 2);
+    assert_eq!(list["items"][0]["key"], "ABC-1");
+    run_json(&db, &["inbox", "process", "ABC-1", "--defer", "2999-01-01"]);
+    assert_eq!(run_json(&db, &["inbox"])["total"], 1);
+    let first = run_json(&db, &["issue", "get", "ABC-1"]);
+    assert_eq!(first["hidden_until"], "2999-01-01");
+    run_json(&db, &["issue", "update", "ABC-1", "--hide-until", "clear"]);
+    assert_eq!(run_json(&db, &["inbox"])["total"], 2);
+    run_json(&db, &["inbox", "process", "ABC-2", "--do"]);
+    assert_eq!(run_json(&db, &["inbox"])["total"], 1);
+    // Exactly one choice, and a past date is refused.
+    assert!(!run(&db, &["inbox", "process", "ABC-1"]).status.success());
+    assert!(
+        !run(&db, &["inbox", "process", "ABC-1", "--defer", "2000-01-01"])
+            .status
+            .success()
+    );
+}

@@ -16,6 +16,7 @@ const IDS: [string, string][] = [
   ['project.rename', '/project/web'], ['project.description.edit', '/project/web'], ['milestone.new', '/project/web'],
   ['decision.answer', '/decisions'], ['decision.withdraw', '/decisions'], ['decision.copyLink', '/decisions'], ['event.copyLink', '/events'],
   ['issue.link.add', '/issue/ABC-1'],
+  ...['do', 'delegate', 'defer', 'next', 'someday', 'trash', 'skip', 'back'].map((k): [string, string] => [`process.${k}`, '/process']),
   ['icon.change', '/view/1'], ['icon.change', '/project/web'], ['cycle.move_unfinished', '/cycles'], ['settings.save', '/settings/general'],
 ];
 

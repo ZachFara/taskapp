@@ -2,7 +2,7 @@ import type { FieldRef, Filter, ViewDef, ViewTemplate } from './bindings';
 
 /** The display settings a stored view may lack; the backend fills them in the same way. */
 export const withDisplay = (d: Partial<ViewDef> & Pick<ViewDef, 'layout'>): ViewDef => ({
-  filter: null, sorts: [], group_by: null, columns: [], include_archived: false,
+  filter: null, sorts: [], group_by: null, columns: [], include_archived: false, deferred: 'hide',
   density: 'comfortable', show_empty_groups: false, show_sub_issues: 'nest', card_fields: [], show_weekends: true, wrap: 'off',
   // JSON, not structuredClone: a def from a Svelte state proxy cannot be structured-cloned.
   ...JSON.parse(JSON.stringify(d)),

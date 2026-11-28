@@ -38,6 +38,7 @@ pub(crate) async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Is
                   project_id, milestone_id, parent_id, cycle_id,
                   start_date AS "start_date: NaiveDate", due_date AS "due_date: NaiveDate",
                   due_time_utc AS "due_time_utc: DateTime<Utc>", due_tz, estimate_minutes, points, properties,
+                  hidden_until AS "hidden_until: NaiveDate",
                   created_at AS "created_at: DateTime<Utc>", updated_at AS "updated_at: DateTime<Utc>",
                   completed_at AS "completed_at: DateTime<Utc>", archived_at AS "archived_at: DateTime<Utc>"
            FROM issues WHERE id = ?"#,
@@ -80,6 +81,7 @@ pub(crate) async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Is
             .transpose()
             .map_err(bad)?,
         points: r.points,
+        hidden_until: r.hidden_until,
         properties: serde_json::from_str(&r.properties).map_err(bad)?,
         created_at: r.created_at,
         updated_at: r.updated_at,
@@ -129,6 +131,7 @@ pub(crate) fn issue_from_row(r: &SqliteRow, prefix: &str) -> Result<Issue> {
             .map(|m| u32::try_from(m).map_err(|e| Error::Invalid(e.to_string())))
             .transpose()?,
         points: r.try_get("points")?,
+        hidden_until: r.try_get("hidden_until")?,
         properties: serde_json::from_str::<Map<String, Value>>(&props)
             .map_err(|e| Error::Invalid(format!("issue properties: {e}")))?,
         created_at: r.try_get("created_at")?,
@@ -367,6 +370,7 @@ fn apply_patch(old: &Issue, p: IssuePatch) -> Issue {
     n.due = p.due.unwrap_or(n.due);
     n.estimate_minutes = p.estimate_minutes.unwrap_or(n.estimate_minutes);
     n.points = p.points.unwrap_or(n.points);
+    n.hidden_until = p.hidden_until.unwrap_or(n.hidden_until);
     if let Some(mut l) = p.label_ids {
         l.sort_by_key(|l| l.0);
         l.dedup();
@@ -445,6 +449,7 @@ fn changes(old: &Issue, n: &Issue) -> Vec<(&'static str, Value, Value)> {
         &n.estimate_minutes,
     );
     diff(&mut c, "points", &old.points, &n.points);
+    diff(&mut c, "hidden_until", &old.hidden_until, &n.hidden_until);
     diff(&mut c, "properties", &old.properties, &n.properties);
     c
 }
@@ -522,7 +527,7 @@ pub async fn update_in(
     sqlx::query!(
         "UPDATE issues SET title = ?, description = ?, status_id = ?, priority = ?, project_id = ?,
            milestone_id = ?, parent_id = ?, cycle_id = ?, start_date = ?, due_date = ?, due_time_utc = ?,
-           due_tz = ?, estimate_minutes = ?, points = ?, properties = ?, updated_at = ?, completed_at = ? WHERE id = ?",
+           due_tz = ?, estimate_minutes = ?, points = ?, hidden_until = ?, properties = ?, updated_at = ?, completed_at = ? WHERE id = ?",
         new.title,
         new.description,
         new.status_id.0,
@@ -537,6 +542,7 @@ pub async fn update_in(
         due.tz,
         new.estimate_minutes,
         new.points,
+        new.hidden_until,
         props,
         new.updated_at,
         new.completed_at,
