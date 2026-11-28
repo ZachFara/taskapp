@@ -9,6 +9,8 @@ If you connect Google Calendar, Cairn asks for two permissions:
 - `calendar.calendarlist.readonly`, to show the names of your calendars so you can pick one;
 - `calendar.events`, to create, update and remove the events Cairn makes for your own tasks (due times and a daily
   "due today" summary), work blocks, and the events you add on Cairn's Events page in the one calendar you picked.
+  An event's Google description also lists the issues linked to it: each line has the issue key, its title and a
+  `taskapp://issue/` link, so the issue titles of linked issues go to Google.
 
 Cairn does not read, change or delete any other event, and does not read any other calendar. Events it makes are
 marked as Cairn's own.

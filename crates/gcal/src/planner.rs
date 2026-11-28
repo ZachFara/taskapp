@@ -77,10 +77,11 @@ pub fn desired(
 }
 
 /// Cairn events (not archived: `events::list` leaves those out). Naive local times become UTC in `tz`.
+/// Linked issues come from `issues`; a link to an issue not in it is left out.
 /// An event has no reminder in Cairn, so none is written; no end means one hour; "shortcut: a time
 /// skipped by a clock change takes the zone's later reading.
 #[must_use]
-pub fn event_events(events: &[Event], tz: &str) -> Vec<DesiredEvent> {
+pub fn event_events(events: &[Event], issues: &[Issue], tz: &str) -> Vec<DesiredEvent> {
     let zone: Tz = tz.parse().unwrap_or(chrono_tz::UTC);
     let utc = |t| {
         zone.from_local_datetime(&t)
@@ -102,6 +103,12 @@ pub fn event_events(events: &[Event], tz: &str) -> Vec<DesiredEvent> {
                     EventTiming::Timed { start, end }
                 }
             };
+            let linked = e.issue_ids.iter().filter_map(|id| {
+                issues
+                    .iter()
+                    .find(|i| i.id == *id)
+                    .map(|i| format!("{} {}: taskapp://issue/{}", i.key, i.title, i.key))
+            });
             let description = [
                 e.place.as_ref().map(|p| format!("Place: {p}")),
                 Some(e.notes.clone()),
@@ -109,6 +116,7 @@ pub fn event_events(events: &[Event], tz: &str) -> Vec<DesiredEvent> {
             .into_iter()
             .flatten()
             .filter(|t| !t.is_empty())
+            .chain(linked)
             .collect::<Vec<_>>()
             .join("\n");
             DesiredEvent {
@@ -613,7 +621,7 @@ mod tests {
 
     #[test]
     fn timed_event_keeps_start_end_in_utc_without_popup() {
-        let e = &event_events(&[cairn_event(false, (21, 10), Some((21, 11)))], NY)[0];
+        let e = &event_events(&[cairn_event(false, (21, 10), Some((21, 11)))], &[], NY)[0];
         assert_eq!(e.managed_key, "event:4");
         assert_eq!(
             e.timing,
@@ -628,7 +636,7 @@ mod tests {
 
     #[test]
     fn timed_event_without_end_lasts_an_hour() {
-        let e = &event_events(&[cairn_event(false, (21, 10), None)], NY)[0];
+        let e = &event_events(&[cairn_event(false, (21, 10), None)], &[], NY)[0];
         assert_eq!(
             e.timing,
             EventTiming::Timed {
@@ -641,21 +649,21 @@ mod tests {
     #[test]
     fn all_day_event_stays_all_day_single_or_span() {
         let d = |n| NaiveDate::from_ymd_opt(2026, 11, n).expect("valid date");
-        let one = event_events(&[cairn_event(true, (21, 0), None)], NY);
+        let one = event_events(&[cairn_event(true, (21, 0), None)], &[], NY);
         assert_eq!(one[0].timing, EventTiming::AllDay(d(21)));
-        let span = event_events(&[cairn_event(true, (21, 0), Some((23, 0)))], NY);
+        let span = event_events(&[cairn_event(true, (21, 0), Some((23, 0)))], &[], NY);
         assert_eq!(span[0].timing, EventTiming::AllDaySpan(d(21), d(24)));
     }
 
     #[test]
     fn edited_event_updates_and_removed_event_deletes() {
-        let before = event_events(&[cairn_event(false, (21, 10), None)], NY);
+        let before = event_events(&[cairn_event(false, (21, 10), None)], &[], NY);
         let existing = [ManagedEvent {
             google_event_id: "g1".into(),
             managed_key: "event:4".into(),
             last_synced_hash: hash(&before[0]),
         }];
-        let moved = event_events(&[cairn_event(false, (22, 10), None)], NY);
+        let moved = event_events(&[cairn_event(false, (22, 10), None)], &[], NY);
         assert!(matches!(plan(&moved, &existing)[0], EventOp::Update { .. }));
         assert_eq!(
             plan(&[], &existing),
@@ -663,6 +671,31 @@ mod tests {
                 google_event_id: "g1".into()
             }]
         );
+    }
+
+    #[test]
+    fn event_description_lists_linked_issues_with_links() {
+        let mut e = cairn_event(false, (21, 10), None);
+        e.issue_ids = vec![IssueId(1), IssueId(9)];
+        // Issue 9 is not in the list (archived or outside the view): left out, not an error.
+        let d = event_events(&[e], &[issue(1, None)], NY)[0]
+            .description
+            .clone();
+        assert_eq!(
+            d,
+            "Place: Main St\nBring card\nABC-1 Task 1: taskapp://issue/ABC-1"
+        );
+    }
+
+    #[test]
+    fn linking_and_unlinking_an_issue_changes_the_event_hash() {
+        let issues = [issue(1, None)];
+        let plain = cairn_event(false, (21, 10), None);
+        let mut linked = plain.clone();
+        linked.issue_ids = vec![IssueId(1)];
+        let before = event_events(&[plain], &issues, NY);
+        let after = event_events(&[linked], &issues, NY);
+        assert_ne!(hash(&before[0]), hash(&after[0]));
     }
 
     #[test]
