@@ -92,6 +92,26 @@ describe('ProcessPage', () => {
     expect((await inbox(api)).map((i) => i.id)).not.toContain(first.id);
   });
 
+  it('Schedule sets the due day, and the time when given, and moves the issue out of the Inbox', async () => {
+    const api = createMockApi(seed());
+    const [first, second] = await inbox(api);
+    await open(api);
+    await press('Schedule');
+    document.querySelector<HTMLInputElement>('input[type=date]')!.value = '2999-01-05';
+    document.querySelector<HTMLInputElement>('input[type=date]')!.dispatchEvent(new Event('input', { bubbles: true }));
+    await submit();
+    const done = await api.issues.get(first.id);
+    expect(done.due).toEqual({ Date: '2999-01-05' });
+    expect((await inbox(api)).map((i) => i.id)).not.toContain(first.id);
+    expect(document.querySelector('.card')!.getAttribute('aria-label')).toBe(second.key);
+    await press('Schedule');
+    const time = document.querySelector<HTMLInputElement>('input[type=time]')!;
+    time.value = '09:30';
+    time.dispatchEvent(new Event('input', { bubbles: true }));
+    await submit();
+    expect((await api.issues.get(second.id)).due?.DateTime?.utc).toMatch(/^\d{4}-\d\d-\d\dT\d\d:30:00Z$/);
+  });
+
   it('Next can also make the project its next action, on by default only when the project has none', async () => {
     const api = createMockApi(seed());
     const [first] = await inbox(api);

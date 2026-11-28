@@ -1,11 +1,12 @@
 //! Process the Inbox: the issues waiting in the Inbox status, oldest first, and the one-step choices that
 //! empty it. Every choice is built from ordinary issue writes, so one command call is one undo step.
 
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
+use chrono_tz::Tz;
 
 use crate::{
-    ChangeSource, Db, Error, InboxChoice, Issue, IssueId, IssuePatch, Result, StatusCategory,
-    StatusId, comments, issues, next_actions, statuses::category_str,
+    ChangeSource, Db, Due, Error, InboxChoice, Issue, IssueId, IssuePatch, Result, StatusCategory,
+    StatusId, comments, issues, next_actions, settings, statuses::category_str, tickler,
 };
 
 /// Issues in the status named Inbox (any case), or in the Backlog category when the workspace has none.
@@ -57,12 +58,36 @@ async fn status(db: &Db, name: &str, fallback: Option<StatusCategory>) -> Result
         .ok_or_else(|| Error::Invalid(format!("no status called {name}; add one in Settings")))
 }
 
+/// The due value for a day, with a time of day (HH:MM) read in the workspace zone.
+async fn due(db: &Db, date: NaiveDate, time: Option<&str>) -> Result<Due> {
+    let Some(time) = time else {
+        return Ok(Due::Date(date));
+    };
+    let time = NaiveTime::parse_from_str(time, "%H:%M")
+        .map_err(|_| Error::Invalid(format!("not a time (HH:MM): {time}")))?;
+    let tz: String = settings::get(db, "timezone")
+        .await?
+        .unwrap_or_else(|| "UTC".into());
+    let zone: Tz = tz
+        .parse()
+        .map_err(|_| Error::Invalid(format!("unknown time zone {tz}")))?;
+    let local = zone
+        .from_local_datetime(&date.and_time(time))
+        .earliest()
+        .ok_or_else(|| Error::Invalid(format!("no such time in {tz}: {date} {time}")))?;
+    Ok(Due::DateTime {
+        utc: local.with_timezone(&Utc),
+        tz,
+    })
+}
+
 /// Applies one Inbox choice. Done, Delegated and Next fall back to the first status of their category;
 /// Someday needs a status of that name.
 ///
 /// # Errors
 ///
-/// `Invalid` for a blank delegate note, a defer date that is not after `today`, or a missing status;
+/// `Invalid` for a blank delegate note, a defer date that is not after `today`, a bad schedule time, or a missing
+/// status;
 /// `NotFound` for an unknown issue or project.
 pub async fn process(
     db: &Db,
@@ -86,12 +111,11 @@ pub async fn process(
             note = Some(format!("Waiting on: {}", n.trim()));
         }
         InboxChoice::Defer { until } => {
-            if until <= today {
-                return Err(Error::Invalid(
-                    "the hide-until date must be after today".into(),
-                ));
-            }
-            patch.hidden_until = Some(Some(until));
+            return tickler::defer(db, id, Some(until), today, src).await;
+        }
+        InboxChoice::Schedule { date, time } => {
+            patch.due = Some(Some(due(db, date, time.as_deref()).await?));
+            patch.status_id = Some(status(db, "Reminder", Some(StatusCategory::Unstarted)).await?);
         }
         InboxChoice::Next {
             project,

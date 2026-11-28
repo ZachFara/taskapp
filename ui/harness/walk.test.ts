@@ -404,13 +404,13 @@ describe('walk', { timeout: 20_000 }, () => {
     await pw(page.locator('tr[data-slug=office]')).toContainText('Stuck');
   });
 
-  it('REVIEW the weekly review walks its six steps, records the day, and the Dashboard card shows it', async () => {
+  it('REVIEW the weekly review walks its seven steps, records the day, and the Dashboard card shows it', async () => {
     await open('/my');
     await page.getByRole('link', { name: 'Weekly review' }).click();
     await pw(page.getByRole('heading', { name: 'Inbox to zero' })).toBeVisible();
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 7; i++) {
       await page.getByRole('button', { name: 'Done for this step' }).click();
-      if (i < 5) await page.getByRole('button', { name: 'Next', exact: true }).click();
+      if (i < 6) await page.getByRole('button', { name: 'Next', exact: true }).click();
     }
     await page.getByRole('button', { name: 'Finish', exact: true }).click();
     await go('/dashboard');
@@ -522,6 +522,21 @@ describe('walk', { timeout: 20_000 }, () => {
     await pw(page.getByRole('link', { name: 'Waiting for' })).toHaveCount(0);
     await go('/issue/ABC-1');
     await pw(page.getByRole('button', { name: 'Waiting on', exact: true })).toHaveCount(0);
+  });
+
+  it('TICKLER Defer on an issue page shows Comes back, the Tickler page lists it, and Clear removes it', async () => {
+    await open('/issue/ABC-1');
+    await page.getByRole('button', { name: 'Defer', exact: true }).click();
+    await palette().getByText('In a week').click();
+    const row = page.getByRole('button', { name: 'Comes back', exact: true });
+    await pw(row).toHaveText(/^\w{3}, \w{3} \d+$/);
+    await press('g', 'f');
+    await pw(page.getByRole('heading', { name: 'Tickler' })).toBeVisible();
+    await pw(page.locator('[data-key="ABC-1"]')).toContainText('ABC-1');
+    await page.locator('[data-key="ABC-1"] a').click();
+    await row.click();
+    await page.getByRole('button', { name: 'Clear', exact: true }).click();
+    await pw(row).toHaveCount(0);
   });
 });
 

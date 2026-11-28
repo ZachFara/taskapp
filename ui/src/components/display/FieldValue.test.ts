@@ -31,3 +31,16 @@ it('checklist shows done of total only when the description has items', () => {
   app = mount(FieldValue, { target: document.body, props: { field: { Fixed: 'Checklist' }, issue: { ...issue, description: 'no list' } as unknown as Issue, ctx: emptyCtx } });
   expect(document.body.textContent).toBe('');
 });
+
+it('a title shows a quiet back marker only while the issue is still deferred', () => {
+  const show = (hidden_until: string | null) => {
+    document.body.innerHTML = '';
+    app = mount(FieldValue, { target: document.body, props: { field: { Fixed: 'Title' }, issue: { ...issue, title: 'Car sticker', hidden_until } as unknown as Issue, ctx: emptyCtx } });
+    const text = document.body.textContent;
+    unmount(app);
+    return text;
+  };
+  expect(show('2999-11-30')).toContain('back Nov 30');
+  expect(show('2000-01-01')).not.toContain('back');
+  expect(show(null)).not.toContain('back');
+});

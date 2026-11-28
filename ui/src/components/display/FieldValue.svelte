@@ -8,6 +8,7 @@
   import { priorityGlyph } from '../../lib/priority';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import { dayText, dueDay } from '../views/dates';
+  import { localDay } from '../../lib/gantt';
   import { issues } from '../../lib/stores.svelte';
   import { repeatWords } from '../../lib/repeatPresets';
   import { paletteKey, type Ctx } from './types';
@@ -44,6 +45,7 @@
   {/if}
 {:else if field.Fixed === 'Title'}
   <span class="text">{issue.title}</span>
+  {#if issue.hidden_until && issue.hidden_until > localDay(new Date(), ctx.tz)}<span class="muted back">back {day(issue.hidden_until)}</span>{/if}
 {:else if field.Fixed === 'Key'}
   <span class="text muted">{issue.key}</span>
 {:else if field.Fixed === 'Priority'}
@@ -111,6 +113,7 @@
   .text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .lbl { margin-right: var(--s-2); }
   .muted { color: var(--muted); }
+  .back { flex: none; font-size: var(--fs-sm); margin-left: var(--s-3); }
   .with, .chips { display: flex; align-items: center; gap: var(--s-3); min-width: 0; overflow: hidden; }
   .chips.all { flex-wrap: wrap; overflow: visible; }
   .with { color: var(--muted); }

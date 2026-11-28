@@ -436,6 +436,9 @@ type in a field):
 - **Do it now** (`o`): status Done (the two-minute rule).
 - **Delegate** (`y`): asks "waiting on whom?", sets Delegated and adds the comment "Waiting on: <name>".
 - **Defer** (`z`): asks for a day (Tomorrow, Next week, Next month, or a date) and hides the issue until then.
+- **Schedule** (`v`): for a day-specific action. Pick a day (and optionally a time of day, in the workspace zone). It
+  sets the due date, so the Google Calendar sync shows it, and moves the issue to the status Reminder (else the first
+  Unstarted status), out of the Inbox.
 - **Next** (`n`): pick a project (or none) and set status Next.
 - **Someday** (`b`): status Someday. Needs a status called Someday (Settings > Statuses), else it says so.
 - **Trash** (`q`): archives it.
@@ -450,13 +453,31 @@ day. A view's Display panel has "Show deferred" to list them anyway, and "Hidden
 it from the terminal with `taskapp issue update ABC-1 --hide-until 2026-12-24` (or `clear`). Settings > Features can
 switch Process Inbox off; its page, sidebar entry and commands go, the data stays.
 
+### Tickler
+
+Defer is a tickler: the issue waits out of sight and returns to the Inbox on its day. It never gets a due date, a
+calendar event or a status change. Use Schedule (above) for things that belong on a day of the calendar.
+
+- **Defer any issue**: the Defer button on the issue page, right-click > Defer, or the command menu ("Defer (comes
+  back on a day)", `issue.defer`): Tomorrow, In a week, In a month, a typed day (`fri`, `dec 24`, `+3d`), or "Bring it
+  back now".
+- **Comes back** row on a deferred issue's page shows the day as `Mon, Nov 30`. Click it to pick another day or Clear.
+  Lists and tables show a quiet "back Nov 30" after the title of an issue that is still deferred (visible in a view with
+  "Show deferred").
+- **Tickler page** (sidebar, `g f`, `nav.tickler`): every deferred issue, grouped This week (next 7 days) and Later,
+  with its return day; click one to open it. It is part of the Process Inbox feature switch.
+- The Weekly review has a "Coming back this week" step.
+
+For agents: `taskapp issue defer ABC-1 --until 2026-12-24` (must be after today) or `--clear` brings it back now.
+
 For agents: `taskapp inbox [--limit N]` lists the next Inbox items and the total; `taskapp inbox process ABC-1 --do`, `--next PROJECT --as-next-action` also flags it as the project's next action,
-`--delegate "Sam"`, `--defer 2026-12-24`, `--next <project>`, `--someday` or `--trash` clears one (exactly one flag).
+`--delegate "Sam"`, `--defer 2026-12-24`, `--next <project>`, `--someday`, `--schedule 2026-12-24 [--at 09:30]` (due on a day, status Reminder) or `--trash` clears one (exactly one flag).
 
 ## Weekly review
 
 Weekly review (sidebar, `g r`, or "Weekly review: start" in the command menu) walks one step at a time: Inbox to zero,
-Waiting (issues in Delegated or Waiting), Stuck projects (no next action), Stale issues, Someday, and the next 7 days
+Waiting (issues in Delegated or Waiting), Stuck projects (no next action), Stale issues, Someday, Coming back this week
+(deferred issues returning in the next 7 days), and the next 7 days
 (due issues and events). Each step shows its count and its list. Back and Next move between steps; "Done for this step"
 ticks the step. Finish is on once every step is ticked. It records today's date as the last review, and the Dashboard's
 "Weekly review" card shows the days since. The ticks last until you finish or start again.
@@ -873,6 +894,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.dashboard` | Go to Dashboard | `g b` | Go to the Dashboard (when it is switched on in Settings). |
 | `nav.plan` | Go to Today plan | `g l` | Go to the Today plan page (when it is switched on in Settings). |
 | `nav.process` | Process Inbox | `g o` | Go to Process Inbox (when it is switched on in Settings). |
+| `nav.tickler` | Go to Tickler | `g f` | Go to the deferred issues and their return days (when Process Inbox is switched on in Settings). |
 | `nav.review` | Go to Weekly review | `g r` | Go to the Weekly review (when it is switched on in Settings). |
 | `nav.waiting` | Go to Waiting for | `g w` | Go to the open issues you are waiting on (when it is switched on in Settings). |
 | `nav.decisions` | Go to Decisions | `g q` | Go to Decisions. |
@@ -889,6 +911,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `process.do` | Process: do it now (Done) | `o` | Set the issue to Done and show the next one. |
 | `process.delegate` | Process: delegate (waiting on) | `y` | Ask who you are waiting on, then set Delegated with a comment. |
 | `process.defer` | Process: defer (hide until a day) | `z` | Ask for a day and hide the issue until then. |
+| `process.schedule` | Process: schedule (due on a day) | `v` | Ask for a day and optional time, set the due date and move the issue to Reminder. |
 | `process.next` | Process: next action (pick a project) | `n` | Pick a project and set status Next. A checkbox also makes it the project's next action; it is on by default when the project has none. |
 | `process.someday` | Process: someday | `b` | Set status Someday. |
 | `process.trash` | Process: trash (archive) | `q` | Archive the issue. |
@@ -1008,6 +1031,7 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `issue.repeat.skip` | Skip this occurrence | (none) | Move a repeating issue's due date to its next occurrence. |
 | `issue.wait` | Waiting on | (none) | Type who the issue waits on; "Stop waiting" clears it and the follow-up day. |
 | `issue.followUp` | Follow-up day | (none) | Tomorrow, in a week, a typed day, or no follow-up day. |
+| `issue.defer` | Defer (comes back on a day) | (none) | Hide the issue until Tomorrow, In a week, In a month, a typed day, or bring it back now. |
 | `issue.next` | Make next action | (none) | Flag the issue as its project's next action. |
 | `project.next` | Set next action | (none) | On a project page: pick the project's next action from its open issues, or clear it. |
 | `image.attach` | Attach image | (none) | Choose an image file for the description or comment box you used last. |
@@ -1141,7 +1165,8 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `issue get <key>` | Show one issue, with `status`, `project`, `labels` and `priority_name` as names next to the ids. | `taskapp issue get ABC-1` |
 | `plan [--date D]`, `plan add <key> --at HH:MM --for 90m [--date D]` | The day's time blocks (events linked to issues) with planned and done minutes; or block time for an issue. | `taskapp plan add ABC-1 --at 14:00 --for 90m` |
 | `inbox [--limit N]` | The next Inbox items, oldest first, and how many there are (deferred ones left out). | `taskapp inbox --limit 3` |
-| `inbox process <key> (--do \| --delegate NOTE \| --defer DATE \| --next PROJECT [--as-next-action] \| --someday \| --trash)` | Clear one Inbox issue, as the Process Inbox page does; one undo step. | `taskapp inbox process ABC-1 --defer 2026-12-24` |
+| `issue defer <key> (--until DATE \| --clear)` | Hide an issue until a later day (the tickler), or bring it back now; one undo step. | `taskapp issue defer ABC-1 --until 2026-12-24` |
+| `inbox process <key> (--do \| --delegate NOTE \| --defer DATE \| --next PROJECT [--as-next-action] \| --someday \| --schedule DATE [--at HH:MM] \| --trash)` | Clear one Inbox issue, as the Process Inbox page does; one undo step. | `taskapp inbox process ABC-1 --defer 2026-12-24` |
 | `issue archive <key>` | Archive an issue. | `taskapp issue archive ABC-1` |
 | `event list [--from --to]` | Events overlapping a date range. | `taskapp event list --from 2026-12-01` |
 | `event create <title> --start T [--end T --all-day --place --notes]` | Create an event (`T` is `YYYY-MM-DDTHH:MM` or a date). | `taskapp event create Demo --start 2026-12-10T09:30` |

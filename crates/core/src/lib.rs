@@ -46,6 +46,7 @@ pub mod shutdown;
 pub mod stale;
 pub mod statuses;
 pub mod templates;
+pub mod tickler;
 pub mod undo;
 pub mod view_folders;
 pub mod view_templates;

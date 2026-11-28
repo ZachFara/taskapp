@@ -52,7 +52,7 @@ const COMMANDS: [RegExp, Feature][] = [
   [/^(nav\.events|event\.|issue\.event\.)/, 'events'],
   [/^(chart\.|view\.insights$)/, 'charts'],
   [/^(nav\.next|issue\.next|project\.next)$/, 'next_actions'],
-  [/^(nav\.process|process\.)/, 'process_inbox'],
+  [/^(nav\.process|nav\.tickler|issue\.defer|process\.)/, 'process_inbox'],
   [/^(nav\.review|review\.)/, 'weekly_review'],
   [/^settings\.reminders$/, 'reminders'],
   [/^settings\.calendar$/, 'gcal'],
@@ -65,5 +65,5 @@ const COMMANDS: [RegExp, Feature][] = [
 ];
 export const featureOfCommand = (id: string) => COMMANDS.find(([re]) => re.test(id))?.[1];
 
-export const ROUTES: Record<string, Feature> = { '/focus': 'focus', '/dashboard': 'dashboard', '/decisions': 'decisions', '/cycles': 'cycles', '/events': 'events', '/event': 'events', '/next': 'next_actions', '/process': 'process_inbox', '/plan': 'time_blocking', '/review': 'weekly_review', '/goals': 'goals', '/goal': 'goals', '/waiting': 'waiting' };
+export const ROUTES: Record<string, Feature> = { '/focus': 'focus', '/dashboard': 'dashboard', '/decisions': 'decisions', '/cycles': 'cycles', '/events': 'events', '/event': 'events', '/next': 'next_actions', '/process': 'process_inbox', '/tickler': 'process_inbox', '/plan': 'time_blocking', '/review': 'weekly_review', '/goals': 'goals', '/goal': 'goals', '/waiting': 'waiting' };
 export const SETTINGS_PAGES: Record<string, Feature> = { cycles: 'cycles', reminders: 'reminders', calendar: 'gcal' };

@@ -1122,6 +1122,16 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           if (choice.Defer.until <= zoneToday()) fail('Invalid', 'the hide-until date must be after today');
           return api.issues.update(id, { hidden_until: choice.Defer.until });
         }
+        if (choice.Schedule) {
+          const { date, time } = choice.Schedule;
+          if (time !== null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) fail('Invalid', `not a time (HH:MM): ${time}`);
+          const tz = workspace.timezone;
+          // The instant whose wall clock in `tz` reads date+time (one offset correction).
+          const wall = (ms: number) => Date.parse(`${new Date(ms).toLocaleString('sv', { timeZone: tz }).replace(' ', 'T')}Z`) - ms;
+          const asUtc = time === null ? 0 : Date.parse(`${date}T${time}:00Z`);
+          const utc = new Date(asUtc - wall(asUtc - wall(asUtc))).toISOString().replace('.000Z', 'Z');
+          return api.issues.update(id, { due: time === null ? { Date: date } : { DateTime: { utc, tz } }, status_id: status('Reminder', 'Unstarted') });
+        }
         if (choice.Next) {
           if (choice.Next.as_next_action && choice.Next.project == null) fail('Invalid', 'a next action needs a project');
           const issue = await api.issues.update(id, { status_id: status('Next', 'Unstarted'), project_id: choice.Next.project ?? undefined });
@@ -1346,6 +1356,10 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     },
     waiting: {
       list: async () => waitingList(s.issues, s.statuses),
+    },
+    tickler: {
+      // Port of tickler::list: still hidden after today, earliest return day first.
+      list: async () => s.issues.filter((i) => !i.archived_at && i.hidden_until !== null && i.hidden_until > zoneToday()).sort((a, b) => a.hidden_until!.localeCompare(b.hidden_until!) || a.id - b.id),
     },
     search: {
       // shortcut: results come in id order; the backend ranks by bm25. Upgrade when a screen depends on relevance order.

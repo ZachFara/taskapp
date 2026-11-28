@@ -326,6 +326,16 @@ enum IssueCmd {
         #[arg(long)]
         clear: bool,
     },
+    /// Defers an issue to the tickler: hidden until a later day, then back in the Inbox. Or brings it back now.
+    Defer {
+        key: String,
+        /// The day it comes back, YYYY-MM-DD, after today.
+        #[arg(long, value_name = "DATE", conflicts_with = "clear")]
+        until: Option<String>,
+        /// Bring it back now.
+        #[arg(long)]
+        clear: bool,
+    },
     /// Adds a link to an issue; adding the same URL again changes nothing.
     Link {
         key: String,

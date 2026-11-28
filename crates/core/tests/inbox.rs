@@ -1,7 +1,8 @@
 use chrono::NaiveDate;
 use taskapp_core::{
-    ChangeSource::Ui, Db, Deferred, InboxChoice, IssueId, IssuePatch, NewIssue, StatusCategory,
-    ViewDef, comments, inbox, issues, next_actions, projects, statuses, views,
+    ChangeSource::Ui, Db, Deferred, Due, InboxChoice, IssueId, IssuePatch, NewIssue,
+    StatusCategory, ViewDef, comments, inbox, issues, next_actions, projects, statuses, tickler,
+    views,
 };
 
 type R = Result<(), Box<dyn std::error::Error>>;
@@ -219,5 +220,81 @@ async fn hidden_issues_leave_views_until_cleared() -> R {
     )
     .await?;
     assert_eq!(views::query(&db, &ViewDef::default()).await?.len(), 3);
+    Ok(())
+}
+
+#[tokio::test]
+async fn tickler_lists_deferred_issues_and_defer_clears() -> R {
+    let (db, ids) = setup().await?;
+    let today = day("2026-12-01");
+    assert_eq!(tickler::list(&db, today).await?.len(), 0);
+    tickler::defer(&db, ids[1], Some(day("2026-12-09")), today, Ui).await?;
+    tickler::defer(&db, ids[0], Some(day("2026-12-03")), today, Ui).await?;
+    let keys: Vec<_> = tickler::list(&db, today)
+        .await?
+        .iter()
+        .map(|i| i.id)
+        .collect();
+    assert_eq!(keys, vec![ids[0], ids[1]], "earliest return day first");
+    // On its day an issue is back in the Inbox, not on the tickler.
+    assert_eq!(tickler::list(&db, day("2026-12-03")).await?.len(), 1);
+    assert!(
+        tickler::defer(&db, ids[2], Some(today), today, Ui)
+            .await
+            .is_err()
+    );
+    let cleared = tickler::defer(&db, ids[0], None, today, Ui).await?;
+    assert_eq!(cleared.hidden_until, None);
+    assert_eq!(tickler::list(&db, today).await?.len(), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn schedule_sets_due_and_moves_to_reminder_or_first_unstarted() -> R {
+    let (db, ids) = setup().await?;
+    let today = day("2026-12-01");
+    let i = inbox::process(
+        &db,
+        ids[0],
+        InboxChoice::Schedule {
+            date: day("2026-12-04"),
+            time: None,
+        },
+        today,
+        Ui,
+    )
+    .await?;
+    assert_eq!(i.due, Some(Due::Date(day("2026-12-04"))));
+    assert_eq!(
+        status_name(&db, ids[0]).await?,
+        "Todo",
+        "no Reminder status: first unstarted"
+    );
+    statuses::create(&db, "Reminder", StatusCategory::Unstarted, "gray", None, Ui).await?;
+    taskapp_core::settings::set(&db, "timezone", &"Asia/Tokyo").await?;
+    let i = inbox::process(
+        &db,
+        ids[1],
+        InboxChoice::Schedule {
+            date: day("2026-12-04"),
+            time: Some("09:30".into()),
+        },
+        today,
+        Ui,
+    )
+    .await?;
+    assert_eq!(status_name(&db, ids[1]).await?, "Reminder");
+    let Some(Due::DateTime { utc, tz }) = i.due else {
+        panic!("a timed due");
+    };
+    assert_eq!(
+        (utc.to_rfc3339(), tz.as_str()),
+        ("2026-12-04T00:30:00+00:00".into(), "Asia/Tokyo")
+    );
+    let bad = InboxChoice::Schedule {
+        date: today,
+        time: Some("25:00".into()),
+    };
+    assert!(inbox::process(&db, ids[2], bad, today, Ui).await.is_err());
     Ok(())
 }

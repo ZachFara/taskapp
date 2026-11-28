@@ -10,7 +10,7 @@
   import PriorityGlyph from '../../ui/PriorityGlyph.svelte';
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import TextInput from '../../ui/TextInput.svelte';
-  import { dueFrom, dueParts, humanDate, isDate, isTime, minutes, PRIORITIES, priorityGlyph } from './format';
+  import { comesBackText, dueFrom, dueParts, humanDate, isDate, isTime, minutes, PRIORITIES, priorityGlyph } from './format';
   import IssuePicker from './IssuePicker.svelte';
   import OptionList from './OptionList.svelte';
   import { fieldList, fieldOn } from '../../lib/fields.svelte';
@@ -220,6 +220,18 @@
   </PropertyRow>
   {/snippet}
 
+  {#snippet row_comes_back()}
+  <PropertyRow id="comes_back" name="Comes back" cmd="issue.defer" bind:openRow>
+    {#snippet value()}{comesBackText(issue.hidden_until!)}{/snippet}
+    {#snippet editor(close)}
+      <div class="stack">
+        <TextInput type="date" label="Comes back on" value={issue.hidden_until ?? ''} onchange={(v) => { if (v) { close(); save({ hidden_until: v }); } }} />
+        <Button onclick={() => { close(); save({ hidden_until: null }); }}>Clear</Button>
+      </div>
+    {/snippet}
+  </PropertyRow>
+  {/snippet}
+
   {#snippet row_repeat()}
   <PropertyRow id="repeat" name="Repeat" cmd="issue.repeat" bind:openRow>
     {#snippet value()}{repeatWords(issue.repeat) ?? ''}{#if issue.repeat === null}{@render none()}{/if}{/snippet}
@@ -242,6 +254,7 @@
 
   {#if isOn('recurring')}{@render row_repeat()}{/if}
   {#if isOn('waiting')}{@render row_waiting()}{/if}
+  {#if issue.hidden_until !== null}{@render row_comes_back()}{/if}
 
   <PropertyRows defs={visible} values={issue.properties} {setProp} bind:openRow />
 </section>

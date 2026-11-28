@@ -39,3 +39,7 @@ export function humanDate(day: string | null, now = new Date(), empty = 'None'):
   const year = y === now.getFullYear() ? {} : { year: 'numeric' as const };
   return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', ...year }).format(new Date(Date.UTC(y, m - 1, d)));
 }
+
+/** "Mon, Nov 30": the weekday and day of a YYYY-MM-DD day, read from the string so no zone shifts it. */
+export const comesBackText = (day: string) =>
+  new Date(`${day}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });

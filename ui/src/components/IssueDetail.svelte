@@ -192,6 +192,7 @@
           <h2><button type="button" aria-label="Title" onclick={startTitle}>{issue.title}</button></h2>
         {/if}
         {#if issue.archived_at}<p class="arch">Archived {humanDate(dateOf(issue.archived_at))}</p>{/if}
+        {#if isOn('process_inbox') && issue.hidden_until === null}<p class="focus-entry"><Button variant="quiet" icon="clock" onclick={() => dispatchEvent(new CustomEvent('command:palette.open', { detail: { page: 'issue.defer' } }))}>Defer</Button></p>{/if}
         {#if isOn('focus')}<p class="focus-entry"><Button variant="quiet" onclick={() => navigate(`/focus/${issue!.key}`)}>Focus on this issue</Button></p>{/if}
       </div>
       {#if error}<p role="alert" class="error">{error}</p>{/if}

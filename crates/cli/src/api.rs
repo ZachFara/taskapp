@@ -21,7 +21,7 @@ use taskapp_core::{
     delete, events, focus, forecast, goals, history, import, inbox, insights, issues, label_groups,
     labels, links, metrics, next_actions, pins, project_statuses, projects, properties, quickadd,
     relation_kinds, relations, schedule, search, settings, shutdown, stale, statuses, templates,
-    undo, view_folders, view_templates, views, waiting, workspace,
+    tickler, undo, view_folders, view_templates, views, waiting, workspace,
 };
 
 struct State<'a> {

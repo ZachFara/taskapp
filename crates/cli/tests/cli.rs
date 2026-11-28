@@ -1496,6 +1496,54 @@ fn inbox_lists_and_processes_and_hide_until_hides() {
 }
 
 #[test]
+fn issue_defer_hides_until_a_later_day_and_clears() {
+    let (_d, db) = fresh();
+    run_json(&db, &["add", "First"]);
+    let i = run_json(&db, &["issue", "defer", "ABC-1", "--until", "2999-01-01"]);
+    assert_eq!(i["hidden_until"], "2999-01-01");
+    assert_eq!(run_json(&db, &["inbox"])["total"], 0);
+    assert!(
+        !run(&db, &["issue", "defer", "ABC-1", "--until", "2000-01-01"])
+            .status
+            .success()
+    );
+    assert!(!run(&db, &["issue", "defer", "ABC-1"]).status.success());
+    let i = run_json(&db, &["issue", "defer", "ABC-1", "--clear"]);
+    assert!(i["hidden_until"].is_null());
+    assert_eq!(run_json(&db, &["inbox"])["total"], 1);
+}
+
+#[test]
+fn inbox_schedule_sets_the_due_day_and_time() {
+    let (_d, db) = fresh();
+    run_json(&db, &["add", "First"]);
+    run_json(&db, &["add", "Second"]);
+    let i = run_json(
+        &db,
+        &["inbox", "process", "ABC-1", "--schedule", "2999-01-01"],
+    );
+    assert_eq!(i["due"]["Date"], "2999-01-01");
+    let i = run_json(
+        &db,
+        &[
+            "inbox",
+            "process",
+            "ABC-2",
+            "--schedule",
+            "2999-01-01",
+            "--at",
+            "09:30",
+        ],
+    );
+    assert!(i["due"]["DateTime"]["utc"].is_string());
+    assert!(
+        !run(&db, &["inbox", "process", "ABC-2", "--at", "09:30"])
+            .status
+            .success()
+    );
+}
+
+#[test]
 fn inbox_next_as_next_action_flags_the_project() {
     let (_d, db) = fresh();
     run(&db, &["project", "create", "alpha", "Alpha"]);
