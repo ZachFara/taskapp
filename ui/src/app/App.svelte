@@ -20,6 +20,7 @@
   import Sidebar from '../components/Sidebar.svelte';
   import ImageViewer from '../components/ImageViewer.svelte';
   import UndoToast from '../components/UndoToast.svelte';
+  import DeleteIssues from '../components/DeleteIssues.svelte';
   import LinkSolution from '../components/LinkSolution.svelte';
   import NextPrompt from '../components/NextPrompt.svelte';
   import { fresh } from '../lib/motion.svelte';
@@ -237,6 +238,7 @@
   <CheatSheet bind:open={cheat} />
   {#if !focusing}<div class="toasts"><UndoToast /></div>{/if}
   <LinkSolution />
+  <DeleteIssues />
   <NextPrompt />
   <ImageViewer />
 {/if}

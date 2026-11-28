@@ -73,6 +73,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         Cmd::Features { cmd } => features(db, cmd).await,
         Cmd::Add { text, tz } => add(db, &text, tz.as_deref()).await,
         Cmd::Issue(cmd) => issue(db, cmd).await,
+        Cmd::Archive(cmd) => crate::archive::run(db, cmd).await,
         Cmd::View(cmd) => view(db, cmd).await,
         Cmd::Property(cmd) => property(db, dir, cmd).await,
         Cmd::Project(cmd) => project(db, cmd).await,
@@ -199,11 +200,37 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
         update @ IssueCmd::Update { .. } => issue_update(db, update).await,
         IssueCmd::List(args) => crate::list::run(db, &args).await,
         IssueCmd::Get { key } => crate::list::get(db, &key).await,
-        keyed @ (IssueCmd::Archive { .. } | IssueCmd::Link { .. } | IssueCmd::Links { .. }) => {
-            issue_keyed(db, keyed).await
-        }
+        keyed @ (IssueCmd::Archive { .. }
+        | IssueCmd::Delete { .. }
+        | IssueCmd::Link { .. }
+        | IssueCmd::Links { .. }) => issue_keyed(db, keyed).await,
+        repeat @ IssueCmd::Repeat { .. } => issue_repeat(db, repeat).await,
         find @ (IssueCmd::Search { .. } | IssueCmd::Similar { .. }) => issue_find(db, find).await,
     }
+}
+
+async fn issue_repeat(db: &Db, cmd: IssueCmd) -> Result<Value> {
+    let IssueCmd::Repeat {
+        key,
+        rule,
+        clear,
+        skip,
+    } = cmd
+    else {
+        unreachable!("issue_repeat is only called with Repeat");
+    };
+    let id = issue_id(db, &key).await?;
+    if skip {
+        return val(issues::skip_repeat(db, id, SRC).await?);
+    }
+    if rule.is_none() && !clear {
+        return Err(Error::Invalid("give a rule, --clear or --skip".into()));
+    }
+    let patch = IssuePatch {
+        repeat: Some(rule),
+        ..IssuePatch::default()
+    };
+    val(issues::update(db, id, patch, SRC).await?)
 }
 
 async fn issue_find(db: &Db, cmd: IssueCmd) -> Result<Value> {
@@ -287,6 +314,7 @@ fn due_arg(clear: bool, due: Option<&str>) -> Result<taskapp_core::Clearable<Due
 
 async fn issue_keyed(db: &Db, cmd: IssueCmd) -> Result<Value> {
     match cmd {
+        IssueCmd::Delete { key, yes } => crate::archive::delete_issue(db, &key, yes).await,
         IssueCmd::Archive { key } => {
             let id = issue_id(db, &key).await?;
             issues::archive(db, id, SRC).await?;
@@ -1001,9 +1029,11 @@ async fn comment(db: &Db, cmd: CommentCmd) -> Result<Value> {
 const APP_HELPER: &str = "/Applications/taskapp.app/Contents/MacOS/reminders-helper";
 
 /// The app's own sync steps for Reminders and Google Calendar, once. The CLI cannot reach a running app,
-/// so it does the work itself; both steps do nothing when their setting is off.
+/// so it does the work itself; a step whose feature is switched off is skipped and says so.
 async fn sync_now(db: &Db, helper: Option<std::path::PathBuf>) -> Result<Value> {
     let helper = helper.unwrap_or_else(|| APP_HELPER.into());
+    let reminders_on = taskapp_core::settings::feature_on(db, "feature_reminders").await?;
+    let gcal_on = taskapp_core::settings::feature_on(db, "feature_gcal").await?;
     let tz: String = taskapp_core::settings::get(db, "timezone")
         .await?
         .unwrap_or_else(|| "UTC".into());
@@ -1013,17 +1043,24 @@ async fn sync_now(db: &Db, helper: Option<std::path::PathBuf>) -> Result<Value> 
     let configured = taskapp_core::settings::get::<String>(db, "reminders_list_id")
         .await?
         .is_some_and(|l| !l.is_empty());
-    if configured && !helper.exists() {
+    if reminders_on && configured && !helper.exists() {
         return Err(Error::Invalid(format!(
             "reminders helper not found at {}; pass --helper <path>",
             helper.display()
         )));
     }
     let today = Utc::now().with_timezone(&zone).date_naive();
-    let r = taskapp_reminders::import::import(db, &helper, today, &tz).await?;
-    let g = taskapp_gcal::reconcile::reconcile(db).await?;
-    Ok(json!({
-        "reminders": {"imported": r.imported, "skipped_duplicates": r.skipped_duplicates, "failed": r.failed},
-        "gcal": {"created": g.created, "updated": g.updated, "deleted": g.deleted},
-    }))
+    let reminders = if reminders_on {
+        let r = taskapp_reminders::import::import(db, &helper, today, &tz).await?;
+        json!({"imported": r.imported, "skipped_duplicates": r.skipped_duplicates, "failed": r.failed})
+    } else {
+        json!({"skipped": "Reminders capture is switched off"})
+    };
+    let gcal = if gcal_on {
+        let g = taskapp_gcal::reconcile::reconcile(db).await?;
+        json!({"created": g.created, "updated": g.updated, "deleted": g.deleted})
+    } else {
+        json!({"skipped": "Google Calendar is switched off"})
+    };
+    Ok(json!({"reminders": reminders, "gcal": gcal}))
 }

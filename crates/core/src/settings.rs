@@ -98,6 +98,7 @@ pub const FEATURES: &[(&str, &str)] = &[
     ("process_inbox", "feature_process_inbox"),
     ("next_actions", "feature_next_actions"),
     ("focus", "feature_focus"),
+    ("recurring", "feature_recurring"),
 ];
 
 /// Every feature with whether it is on (a never-written switch is on).
@@ -107,9 +108,17 @@ pub const FEATURES: &[(&str, &str)] = &[
 pub async fn features(db: &Db) -> Result<Vec<(&'static str, bool)>> {
     let mut out = Vec::new();
     for (name, key) in FEATURES {
-        out.push((*name, get::<bool>(db, key).await?.unwrap_or(true)));
+        out.push((*name, feature_on(db, key).await?));
     }
     Ok(out)
+}
+
+/// Whether one feature switch (its setting key) is on; a never-written switch is on.
+///
+/// # Errors
+/// Fails when the stored value is not true or false.
+pub async fn feature_on(db: &Db, key: &str) -> Result<bool> {
+    Ok(get::<bool>(db, key).await?.unwrap_or(true))
 }
 
 /// # Errors

@@ -207,6 +207,13 @@ pub async fn get(db: &Db, key: &str) -> Result<Value> {
     out["priority_name"] = json!(priority_name(issue.priority));
     let (done, total) = taskapp_core::checklist::counts(&issue.description);
     out["checklist"] = json!({ "done": done, "total": total });
+    if let Some(rule) = issue
+        .repeat
+        .as_deref()
+        .and_then(|r| r.parse::<taskapp_core::recur::Rule>().ok())
+    {
+        out["repeat_words"] = json!(rule.words());
+    }
     Ok(out)
 }
 

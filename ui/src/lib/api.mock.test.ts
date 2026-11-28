@@ -317,3 +317,32 @@ describe('mock metrics', () => {
     await expect(mock.metrics.for(query({ scope: { Cycle: 99 } }))).rejects.toMatchObject({ kind: 'NotFound' });
   });
 });
+
+describe('recurring issues', () => {
+  const setup = async () => {
+    const mock = createMockApi();
+    const done = (await mock.statuses.list()).find((st) => st.category === 'Completed')!.id;
+    const a = await mock.issues.create({ title: 'Water plants', description: '- [x] front\n- [ ] back', due: { Date: '2999-01-01' } });
+    await mock.issues.update(a.id, { repeat: 'every 3 days' });
+    return { mock, done, a };
+  };
+  it('stores the canonical rule and refuses a bad one', async () => {
+    const { mock, a } = await setup();
+    expect((await mock.issues.get(a.id)).repeat).toBe('every 3 day from due');
+    await expect(mock.issues.update(a.id, { repeat: 'whenever' })).rejects.toMatchObject({ kind: 'Invalid' });
+    expect((await mock.issues.get(a.id)).repeat).toBe('every 3 day from due');
+  });
+  it('completing makes the next occurrence, linked, in one undo step', async () => {
+    const { mock, done, a } = await setup();
+    await mock.issues.update(a.id, { status_id: done });
+    const next = (await mock.issues.get(a.id + 1));
+    expect([next.title, next.description, next.due, next.repeat]).toEqual(['Water plants', '- [ ] front\n- [ ] back', { Date: '2999-01-04' }, 'every 3 day from due']);
+    expect((await mock.issues.get(a.id)).repeat).toBeNull();
+    expect(await mock.relations.forIssue(next.id)).toContainEqual({ from: next.id, to: a.id, kind: 'follows' });
+  });
+  it('skipping moves the due date and creates nothing', async () => {
+    const { mock, a } = await setup();
+    expect((await mock.issues.skipRepeat(a.id)).due).toEqual({ Date: '2999-01-04' });
+    await expect(mock.issues.get(a.id + 1)).rejects.toMatchObject({ kind: 'NotFound' });
+  });
+});

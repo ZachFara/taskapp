@@ -9,6 +9,7 @@ import { stale } from './api.mock.stale';
 import { nextActions } from './api.mock.next';
 import { deepHours } from './api.mock.focus';
 import { stepLabel } from './api.mock.stepLabel';
+import { canonical, nextDue, parseRule, resetChecklist, ruleText } from './recur';
 import { byStatusOrder, flowDefaults } from './statusOrder';
 import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
 import { decisionsApi } from './api.mock.decisions';
@@ -19,7 +20,7 @@ import { scrubDef, seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
   AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, Decision, Event, EventInput, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Link, Milestone,
   NewIssue, Pin, Placement, Project, ProjectRow, ProjectStatus, ProjectStatusCategory, PropertyAppliesTo, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
-  FocusSession, TemplateInput, Value, ViewDef, ViewEntity, ViewFolder, ViewTemplate, WorkBlock,
+  Due, FocusSession, TemplateInput, Value, ViewDef, ViewEntity, ViewFolder, ViewTemplate, WorkBlock,
 } from './bindings';
 
 export type MockSeed = {
@@ -50,7 +51,7 @@ export type MockApi = Api & {
 };
 
 const nullableIssueFields = [
-  'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until', 'depth',
+  'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until', 'depth', 'repeat',
 ] as const;
 // The backend's error text is `<kind>: <detail>`; the UI shows it as is.
 const fail = (kind: string, message: string): never => {
@@ -129,7 +130,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, decisions, links, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog, nextFlags, focusSessions] as unknown[][];
+  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, decisions, links, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog, nextFlags, focusSessions, blocks] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -163,13 +164,20 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       // A created issue is undone by archiving it and redone by restoring it.
       const next = target ? structuredClone(target) : { ...was, archived_at: undo ? now() : null };
       if (target && JSON.stringify(target) === JSON.stringify(was)) continue;
+      // Redo of a delete: the later state lacks the issue.
+      if (!target && !undo) {
+        if (at >= 0) s.issues.splice(at, 1);
+        continue;
+      }
       next.updated_at = now();
       if (at >= 0) s.issues[at] = next;
     }
     // Redo brings back an issue the step created: it is only in the later state, so the loop above never met it.
     for (const t of to) {
       const at = s.issues.findIndex((x) => x.id === t.id);
-      if (!from_.some((x) => x.id === t.id) && at >= 0) s.issues[at] = { ...structuredClone(t), updated_at: now() };
+      if (from_.some((x) => x.id === t.id)) continue;
+      if (at >= 0) s.issues[at] = { ...structuredClone(t), updated_at: now() };
+      else s.issues.splice(s.issues.findIndex((x) => x.id > t.id) < 0 ? s.issues.length : s.issues.findIndex((x) => x.id > t.id), 0, structuredClone(t)); // undo of a delete
     }
     // Undo replays the step's rows newest first with old and new swapped; a create row pair becomes an archive.
     const src = undo ? 'Undo' : 'Redo';
@@ -246,7 +254,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       ProjectStatus: s.projects.find((x) => x.id === i.project_id)?.status_id ?? null,
       Title: i.title, Status: i.status_id, StatusCategory: category(i)?.toLowerCase() ?? null, Priority: i.priority,
       Project: i.project_id, Milestone: i.milestone_id, Cycle: i.cycle_id, Label: i.label_ids,
-      Parent: i.parent_id, StartDate: i.start_date, DueDate: dueDay(i), Estimate: i.estimate_minutes, Points: i.points, HiddenUntil: i.hidden_until,
+      Parent: i.parent_id, StartDate: i.start_date, DueDate: dueDay(i), Estimate: i.estimate_minutes, Points: i.points, HiddenUntil: i.hidden_until, Repeat: i.repeat,
       CreatedAt: i.created_at, UpdatedAt: i.updated_at, CompletedAt: i.completed_at,
       Archived: i.archived_at !== null, Key: i.id,
       SubIssueProgress: s.issues.filter((c) => c.parent_id === i.id && !c.archived_at).length,
@@ -363,7 +371,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       priority: input.priority ?? 0, project_id: input.project_id ?? null, milestone_id: input.milestone_id ?? null,
       parent_id: input.parent_id ?? null, cycle_id: input.cycle_id ?? null, label_ids: [...new Set(input.label_ids ?? [])].sort((a, b) => a - b),
       start_date: input.start_date ?? null, due: input.due ?? null, estimate_minutes: input.estimate_minutes ?? null, points: input.points ?? null, hidden_until: null,
-      depth: null, properties: input.properties ?? {}, created_at: input.created_at ?? at, updated_at: at,
+      depth: null, repeat: null, properties: input.properties ?? {}, created_at: input.created_at ?? at, updated_at: at,
       completed_at: input.completed_at ?? null, archived_at: null,
     };
     checkIssue(issue, issue.properties);
@@ -374,6 +382,29 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     return issue;
   };
   const getIssue = (id: number) => find(s.issues, id, 'issue');
+  // `i`'s due on the day `next`; a timed due keeps its time of day (shortcut: shifted by whole days, so a DST change moves it an hour).
+  const dueMoved = (i: Issue, next: string): Due => {
+    const base = dueDay(i);
+    if (!i.due?.DateTime || base === null) return { Date: next };
+    const utc = new Date(Date.parse(i.due.DateTime.utc) + dayDiff(base, next) * 86_400_000).toISOString();
+    return { DateTime: { ...i.due.DateTime, utc: utc.replace('.000Z', 'Z') } };
+  };
+  // Port of issues::spawn_next: the copy gets the next due date, the same rule and a `follows` link to the finished issue.
+  const spawnNext = async (done: Issue, text: string) => {
+    const rule = parseRule(text)!;
+    const today = zoneToday();
+    const base = dueDay(done) ?? today;
+    const next = nextDue(rule, base, today);
+    const copy = create({
+      title: done.title, description: resetChecklist(done.description), priority: done.priority, project_id: done.project_id,
+      milestone_id: done.milestone_id, parent_id: done.parent_id, label_ids: done.label_ids, due: dueMoved(done, next),
+      start_date: done.start_date === null ? null : addDays(done.start_date, dayDiff(base, next)), estimate_minutes: done.estimate_minutes,
+      points: done.points, properties: structuredClone(done.properties),
+    });
+    copy.depth = done.depth;
+    copy.repeat = ruleText(rule);
+    await api.relations.add({ from: copy.id, to: done.id, kind: 'follows' });
+  };
   // Only one session runs: a start ends the open one.
   const endOpen = (at: string) => {
     const open = focusSessions.find((f) => f.ended_at === null);
@@ -566,6 +597,17 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           if (v === null) delete i.properties[k];
           else i.properties[k] = v;
         }
+        if (i.repeat !== old.repeat && i.repeat !== null) {
+          const text = canonical(i.repeat);
+          if (!text) {
+            Object.assign(i, old);
+            fail('Invalid', `\`${patch.repeat}\` is not a repeat rule (try: every monday, every 2 weeks, monthly on 15, weekdays)`);
+          }
+          i.repeat = text;
+        }
+        // Finishing (not cancelling) a repeating issue hands the rule to the next occurrence.
+        const finished = old.repeat !== null && i.repeat === old.repeat && i.status_id !== old.status_id && category(i) === 'Completed' && !done(old);
+        if (finished) i.repeat = null;
         const changed = (Object.keys(i) as (keyof Issue)[]).filter((k) => JSON.stringify(i[k]) !== JSON.stringify(old[k]));
         if (!changed.length) return old;
         try {
@@ -577,11 +619,19 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           Object.assign(i, old);
           throw e;
         }
-        const order = ['title', 'description', 'status_id', 'priority', 'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'label_ids', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until', 'properties'] as const;
+        const order = ['title', 'description', 'status_id', 'priority', 'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'label_ids', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until', 'repeat', 'properties'] as const;
         for (const k of order) if (changed.includes(k)) rec(id, k, old[k] as Value, i[k] as Value);
         i.updated_at = now();
         if (i.status_id !== old.status_id) i.completed_at = done(i) ? (done({ ...old }) ? old.completed_at : i.updated_at) : null;
+        if (finished) await spawnNext(i, old.repeat!);
         return i;
+      },
+      skipRepeat: async (id) => {
+        const i = getIssue(id);
+        const rule = i.repeat === null ? null : parseRule(i.repeat);
+        if (!rule) fail('Invalid', `${i.key} does not repeat`);
+        const today = zoneToday();
+        return api.issues.update(id, { due: dueMoved(i, nextDue(rule!, dueDay(i) ?? today, today)) });
       },
       get: async (id) => getIssue(id),
       // The prefix is display-only: the number alone identifies the issue.
@@ -606,11 +656,40 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         }
         return null;
       },
+      // Port of delete.rs: everything that points at an issue goes with it; undo restores the collections whole.
+      delete: async (ids) => {
+        const gone = [...new Set(ids)];
+        gone.forEach(getIssue);
+        for (const id of gone) {
+          s.issues.splice(s.issues.findIndex((i) => i.id === id), 1);
+          for (const c of s.issues) if (c.parent_id === id) c.parent_id = null;
+          const drop = <T>(rows: T[], dead: (r: T) => boolean) => rows.splice(0, rows.length, ...rows.filter((r) => !dead(r)));
+          drop(comments, (r) => r.issue_id === id);
+          drop(links, (r) => r.issue_id === id);
+          drop(blocks, (r) => r.issue_id === id);
+          drop(focusSessions, (r) => r.issue_id === id);
+          drop(relations, (r) => r.from === id || r.to === id);
+          drop(importLog, (r) => r.issue_id === id);
+          drop(nextFlags, (r) => r[1] === id);
+          drop(pins, (r) => r.kind === 'Issue' && r.target.endsWith(`-${id}`));
+          for (const d of decisions) d.issue_ids = d.issue_ids.filter((x) => x !== id);
+          for (const e of events) e.issue_ids = e.issue_ids.filter((x) => x !== id);
+        }
+        return gone.length;
+      },
+      emptyArchive: async () => api.issues.delete(s.issues.filter((i) => i.archived_at !== null).map((i) => i.id)),
       children: async (id) => s.issues.filter((i) => i.parent_id === id),
       // Port of bulk::duplicate: every id must exist before any copy is made.
       duplicate: async (ids) => {
         const from = ids.map(getIssue);
         return from.map((i) => create({ ...structuredClone(i), created_at: undefined, completed_at: undefined }));
+      },
+      markDuplicate: async (id, of) => {
+        const st = s.statuses.find((x) => x.name.toLowerCase() === 'duplicate');
+        if (!st) fail('Invalid', 'no status called Duplicate; add one in Settings');
+        if (id === of) fail('Invalid', 'an issue cannot relate to itself');
+        await api.relations.add({ from: id, to: of, kind: 'duplicate' });
+        return api.issues.update(id, { status_id: st.id });
       },
       // Port of bulk.rs: per issue the patch (labels merged from add/remove), then archive, then the relation; any failure undoes all.
       bulkUpdate: async (ids, b) => {
@@ -995,7 +1074,13 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           if (choice.Defer.until <= zoneToday()) fail('Invalid', 'the hide-until date must be after today');
           return api.issues.update(id, { hidden_until: choice.Defer.until });
         }
-        if (choice.Next) return api.issues.update(id, { status_id: status('Next', 'Unstarted'), project_id: choice.Next.project ?? undefined });
+        if (choice.Next) {
+          if (choice.Next.as_next_action && choice.Next.project == null) fail('Invalid', 'a next action needs a project');
+          const issue = await api.issues.update(id, { status_id: status('Next', 'Unstarted'), project_id: choice.Next.project ?? undefined });
+          if (!choice.Next.as_next_action) return issue;
+          await api.projects.setNext(choice.Next.project!, id);
+          return getIssue(id);
+        }
         const note = choice.Delegate!.note.trim();
         if (!note) fail('Invalid', 'say who you are waiting on');
         const issue = await api.issues.update(id, { status_id: status('Delegated', 'Started') });
@@ -1394,7 +1479,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   };
   const commandOf = (mod: string, fn: string) => `${mod}_${fn.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}`;
   const mutating = (
-    'inbox.process issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.setFlow statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
+    'inbox.process issues.create issues.update issues.bulkUpdate issues.duplicate issues.markDuplicate issues.delete issues.emptyArchive issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.setFlow statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
     'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
     'projects.create projects.update projects.setNext projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink decisions.create decisions.answer decisions.withdraw decisions.link decisions.unlink links.add links.remove templates.create templates.update templates.delete templates.apply ' +
@@ -1514,7 +1599,7 @@ const issues: Issue[] = rows.map((r, k) => {
     project_id: r.project, milestone_id: r.milestone ?? null, parent_id: r.parent ?? null, cycle_id: r.cycle ?? null,
     label_ids: r.labels ?? [], start_date: r.start === undefined ? null : day(r.start),
     due: r.due === undefined ? null : { Date: day(r.due) }, estimate_minutes: r.hours === undefined ? null : r.hours * 60,
-    points: POINTS[n] ?? null, hidden_until: null, depth: null,
+    points: POINTS[n] ?? null, hidden_until: null, depth: null, repeat: null,
     properties: { ...(r.area && { area: r.area }), ...(r.effort && { effort: r.effort }) } as Issue['properties'],
     created_at: created, updated_at: created, completed_at: finished ? created : null, archived_at: null,
   };

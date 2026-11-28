@@ -30,6 +30,8 @@ const ISSUE_FIELDS: &[&str] = &[
     "estimate_minutes",
     "points",
     "hidden_until",
+    "depth",
+    "repeat",
     "properties",
 ];
 
@@ -206,7 +208,7 @@ async fn apply(
     let patch = patch_for(&issue, field, target, expect)?;
     let patch: IssuePatch =
         serde_json::from_value(Value::Object(patch)).map_err(|e| Error::Invalid(e.to_string()))?;
-    issues::update_in(tx, id, patch, src).await?;
+    issues::restore_in(tx, id, patch, src).await?;
     Ok(())
 }
 

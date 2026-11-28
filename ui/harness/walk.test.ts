@@ -404,6 +404,26 @@ describe('walk', { timeout: 20_000 }, () => {
     await pw(page.locator('tr[data-slug=office]')).toContainText('Stuck');
   });
 
+  it('ARCHIVE an archived issue is deleted for good only after the dialog, and Cancel keeps it', async () => {
+    await open();
+    await press('j');
+    const key = (await focusedKey())!;
+    await press('#');
+    await page.getByRole('link', { name: 'Archive' }).click();
+    const row = page.locator('li.row', { hasText: key });
+    await pw(row).toBeVisible();
+    await row.getByRole('checkbox').click();
+    await page.getByRole('button', { name: 'Delete selected permanently…' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Delete 1 issue permanently?' });
+    await pw(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await pw(dialog).toHaveCount(0);
+    await pw(row).toBeVisible();
+    await page.getByRole('button', { name: 'Delete selected permanently…' }).click();
+    await dialog.getByRole('button', { name: 'Delete 1 issue' }).click();
+    await pw(row).toHaveCount(0);
+  });
+
   it('PROCESS the Inbox page opens from the sidebar, a key and a button clear issues, typing never fires a key, and the switch removes it', async () => {
     await open('/my');
     await page.getByRole('link', { name: 'Process Inbox' }).click();
@@ -429,5 +449,20 @@ describe('walk', { timeout: 20_000 }, () => {
     await open('/settings/features');
     await page.getByRole('switch', { name: 'Process Inbox' }).click();
     await pw(page.getByRole('link', { name: 'Process Inbox' })).toHaveCount(0);
+  });
+
+  it('RECUR the Repeat row sets a rule, shows it in words, offers skip, stops it, and the switch removes the row', async () => {
+    await open('/issue/ABC-1');
+    await page.getByRole('button', { name: 'Repeat', exact: true }).click();
+    await page.getByRole('option', { name: 'Every weekday' }).click();
+    await pw(page.getByRole('button', { name: 'Repeat', exact: true })).toHaveText('Every weekday');
+    await page.getByRole('button', { name: 'Repeat', exact: true }).click();
+    await pw(page.getByRole('button', { name: 'Skip this occurrence' })).toBeVisible();
+    await page.getByRole('option', { name: 'Does not repeat' }).click();
+    await pw(page.getByRole('button', { name: 'Repeat', exact: true })).toHaveText('None');
+    await open('/settings/features');
+    await page.getByRole('switch', { name: 'Recurring issues' }).click();
+    await go('/issue/ABC-1');
+    await pw(page.getByRole('button', { name: 'Repeat', exact: true })).toHaveCount(0);
   });
 });

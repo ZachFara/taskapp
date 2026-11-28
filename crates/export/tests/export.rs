@@ -9,8 +9,8 @@ use chrono::{NaiveDate, TimeZone, Utc};
 use serde_json::json;
 use taskapp_core::{
     ChangeSource, Db, Depth, Due, IssueId, IssuePatch, Layout, NewIssue, PinKind, PropertyDef,
-    PropertyKind, Relation, RelationKind, StatusCategory, ViewDef, comments, cycles, focus, issues,
-    labels, pins, projects, properties, relation_kinds, relations, settings, views,
+    PropertyKind, Relation, RelationKind, StatusCategory, ViewDef, comments, cycles, delete, focus,
+    issues, labels, pins, projects, properties, relation_kinds, relations, settings, views,
 };
 use taskapp_export::{git, rebuild, write};
 
@@ -245,6 +245,20 @@ async fn export_is_deterministic() -> R {
         again.files_written, 0,
         "unchanged data must not rewrite files"
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_deleted_issue_leaves_the_export_and_the_export_still_rebuilds() -> R {
+    let db = seeded().await?;
+    let dir = tempfile::tempdir()?;
+    write::write_snapshot(&db, dir.path()).await?;
+    assert!(tree(dir.path()).contains_key("issues/ABC-2.md"));
+    delete::remove(&db, &[IssueId(2)], SRC).await?;
+    write::write_snapshot(&db, dir.path()).await?;
+    assert!(!tree(dir.path()).contains_key("issues/ABC-2.md"));
+    let rebuilt = rebuild::rebuild(dir.path(), &dir.path().join("rebuilt.db")).await?;
+    assert!(issues::get(&rebuilt, IssueId(2)).await.is_err());
     Ok(())
 }
 
@@ -1071,5 +1085,34 @@ async fn hidden_until_survives_export_and_rebuild() -> R {
         Some(until)
     );
     assert_eq!(issues::get(&rebuilt, IssueId(2)).await?.hidden_until, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn repeat_rule_and_series_link_survive_export_and_rebuild() -> R {
+    let db = seeded().await?;
+    issues::update(
+        &db,
+        IssueId(1),
+        IssuePatch {
+            repeat: Some(Some("every monday".into())),
+            ..IssuePatch::default()
+        },
+        SRC,
+    )
+    .await?;
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let text = String::from_utf8_lossy(&tree(src.path())["issues/ABC-1.md"]).into_owned();
+    assert!(
+        text.contains("repeat: every 1 week on mon from due"),
+        "{text}"
+    );
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    assert_eq!(
+        issues::get(&rebuilt, IssueId(1)).await?.repeat.as_deref(),
+        Some("every 1 week on mon from due")
+    );
+    assert_eq!(issues::get(&rebuilt, IssueId(2)).await?.repeat, None);
     Ok(())
 }

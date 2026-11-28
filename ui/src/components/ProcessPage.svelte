@@ -4,6 +4,7 @@
   import type { InboxChoice, Issue, IssuePatch, Project } from '../lib/bindings';
   import { navigate } from '../app/routes';
   import Button from '../ui/Button.svelte';
+  import Checkbox from '../ui/Checkbox.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import PageHeader from '../ui/PageHeader.svelte';
   import Select from '../ui/Select.svelte';
@@ -23,6 +24,9 @@
   let note = $state('');
   let until = $state('');
   let projectId = $state('');
+  let asNext = $state(false);
+  // Projects that already have an open next action; a Next pick there leaves the flag off by default.
+  let withNext = $state(new Set<number>());
   let projects = $state<Project[]>([]);
   let editingDescription = $state(false);
   let title = $state('');
@@ -82,8 +86,12 @@
     e.preventDefault();
     if (mode === 'delegate') void run({ Delegate: { note } }).then(() => (note = ''));
     else if (mode === 'defer') void run({ Defer: { until } });
-    else if (mode === 'next') void run({ Next: { project: projectId ? Number(projectId) : null } });
+    else if (mode === 'next') void run({ Next: { project: projectId ? Number(projectId) : null, as_next_action: asNext && !!projectId } });
   };
+
+  $effect(() => {
+    asNext = !!projectId && !withNext.has(Number(projectId));
+  });
 
   const save = async (patch: IssuePatch) => {
     if (!current) return;
@@ -120,6 +128,7 @@
   onMount(() => {
     void load();
     api.projects.list().then((p) => (projects = p.filter((x) => !x.archived_at)), () => {});
+    api.next.list().then((l) => (withNext = new Set(l.filter((n) => n.issue).map((n) => n.project.id))), () => {});
   });
 </script>
 
@@ -161,6 +170,7 @@
             <Button type="submit" variant="primary" disabled={!until}>Defer</Button>
           {:else}
             <Select label="Project" placeholder="No project" bind:value={projectId} items={[{ value: '', label: 'No project' }, ...projects.map((p) => ({ value: String(p.id), label: p.name }))]} />
+            <label class="also"><Checkbox label="Also make it the project's next action" disabled={!projectId} bind:checked={asNext} /><span>Also make it the project's next action</span></label>
             <Button type="submit" variant="primary">Move to Next</Button>
           {/if}
           <Button onclick={() => (mode = null)}>Cancel</Button>
@@ -190,6 +200,7 @@
   .key { margin: 0; color: var(--muted); font-size: var(--fs-sm); font-weight: 600; }
   .choices, .ask, .nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
   .ask :global(.field) { flex: 1 1 220px; width: auto; }
+  .also { display: inline-flex; align-items: center; gap: var(--s-2); color: var(--muted); font-size: var(--fs-sm); }
   .nav { justify-content: space-between; border-top: 1px solid var(--border); padding-top: var(--s-5); }
   .error { color: var(--warning); margin: 0; }
 </style>

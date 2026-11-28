@@ -1,11 +1,13 @@
+use chrono::TimeZone as _;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value};
 use sqlx::{Row, SqliteConnection, sqlite::SqliteRow};
 
 use crate::{
-    ChangeSource, Db, Depth, Due, Error, Issue, IssueId, IssuePatch, LabelId, NewIssue, Result,
-    StatusCategory, StatusId, history, search, statuses::parse_category,
+    ChangeSource, Db, Depth, Due, Error, Issue, IssueId, IssuePatch, LabelId, NewIssue, Relation,
+    RelationKind, Result, StatusCategory, StatusId, checklist, history, recur::Rule, relations,
+    search, statuses::parse_category,
 };
 
 fn bad<E: std::fmt::Display>(e: E) -> Error {
@@ -37,7 +39,7 @@ pub(crate) async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Is
         r#"SELECT id AS "id!: i64", number, title, description, status_id, priority,
                   project_id, milestone_id, parent_id, cycle_id,
                   start_date AS "start_date: NaiveDate", due_date AS "due_date: NaiveDate",
-                  due_time_utc AS "due_time_utc: DateTime<Utc>", due_tz, estimate_minutes, points, depth, properties,
+                  due_time_utc AS "due_time_utc: DateTime<Utc>", due_tz, estimate_minutes, points, depth, repeat_rule, properties,
                   hidden_until AS "hidden_until: NaiveDate",
                   created_at AS "created_at: DateTime<Utc>", updated_at AS "updated_at: DateTime<Utc>",
                   completed_at AS "completed_at: DateTime<Utc>", archived_at AS "archived_at: DateTime<Utc>"
@@ -83,6 +85,7 @@ pub(crate) async fn fetch(conn: &mut SqliteConnection, id: IssueId) -> Result<Is
         points: r.points,
         hidden_until: r.hidden_until,
         depth: r.depth.as_deref().map(parse_depth).transpose()?,
+        repeat: r.repeat_rule,
         properties: serde_json::from_str(&r.properties).map_err(bad)?,
         created_at: r.created_at,
         updated_at: r.updated_at,
@@ -149,6 +152,7 @@ pub(crate) fn issue_from_row(r: &SqliteRow, prefix: &str) -> Result<Issue> {
             .as_deref()
             .map(parse_depth)
             .transpose()?,
+        repeat: r.try_get("repeat_rule")?,
         properties: serde_json::from_str::<Map<String, Value>>(&props)
             .map_err(|e| Error::Invalid(format!("issue properties: {e}")))?,
         created_at: r.try_get("created_at")?,
@@ -389,6 +393,7 @@ fn apply_patch(old: &Issue, p: IssuePatch) -> Issue {
     n.points = p.points.unwrap_or(n.points);
     n.hidden_until = p.hidden_until.unwrap_or(n.hidden_until);
     n.depth = p.depth.unwrap_or(n.depth);
+    n.repeat = p.repeat.unwrap_or(n.repeat);
     if let Some(mut l) = p.label_ids {
         l.sort_by_key(|l| l.0);
         l.dedup();
@@ -469,6 +474,7 @@ fn changes(old: &Issue, n: &Issue) -> Vec<(&'static str, Value, Value)> {
     diff(&mut c, "points", &old.points, &n.points);
     diff(&mut c, "hidden_until", &old.hidden_until, &n.hidden_until);
     diff(&mut c, "depth", &old.depth, &n.depth);
+    diff(&mut c, "repeat", &old.repeat, &n.repeat);
     diff(&mut c, "properties", &old.properties, &n.properties);
     c
 }
@@ -535,11 +541,160 @@ pub async fn update_in(
     patch: IssuePatch,
     src: ChangeSource,
 ) -> Result<Issue> {
+    write_in(tx, id, patch, src, true).await
+}
+
+/// [`update_in`] for undo and redo: finishing a repeating issue then creates nothing, because the
+/// recorded edits of the original step (the cleared rule, the new issue) replay on their own.
+pub(crate) async fn restore_in(
+    tx: &mut SqliteConnection,
+    id: IssueId,
+    patch: IssuePatch,
+    src: ChangeSource,
+) -> Result<Issue> {
+    write_in(tx, id, patch, src, false).await
+}
+
+/// The workspace time zone, read inside the caller's transaction.
+async fn zone_in(tx: &mut SqliteConnection) -> Result<chrono_tz::Tz> {
+    let name = sqlx::query_scalar::<_, String>(
+        "SELECT json_extract(value, '$') FROM settings WHERE key = 'timezone'",
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    .unwrap_or_else(crate::workspace::system_tz);
+    name.parse()
+        .map_err(|_| Error::Invalid(format!("unknown time zone {name}")))
+}
+
+/// `due` moved to the local day `next`, keeping a timed due's time of day; a missing due becomes that date.
+fn due_on(due: Option<&Due>, next: NaiveDate, zone: chrono_tz::Tz) -> Due {
+    let Some(Due::DateTime { utc, tz }) = due else {
+        return Due::Date(next);
+    };
+    let z: chrono_tz::Tz = tz.parse().unwrap_or(zone);
+    z.from_local_datetime(&next.and_time(utc.with_timezone(&z).time()))
+        .earliest()
+        .map_or(Due::Date(next), |t| Due::DateTime {
+            utc: t.with_timezone(&Utc),
+            tz: tz.clone(),
+        })
+}
+
+/// Skips this occurrence of a repeating issue: its due date moves to the next one, nothing is created.
+///
+/// # Errors
+/// `Invalid` when the issue does not repeat; `NotFound` for an unknown id.
+pub async fn skip_repeat(db: &Db, id: IssueId, src: ChangeSource) -> Result<Issue> {
+    let issue = get(db, id).await?;
+    let rule: Rule = issue
+        .repeat
+        .as_deref()
+        .ok_or_else(|| Error::Invalid(format!("{} does not repeat", issue.key)))?
+        .parse()?;
+    let zone = crate::insights::zone(db).await?;
+    let today = crate::insights::local(Utc::now(), zone);
+    let next = rule.next(due_cols(issue.due.as_ref()).date.unwrap_or(today), today);
+    let due = due_on(issue.due.as_ref(), next, zone);
+    update(
+        db,
+        id,
+        IssuePatch {
+            due: Some(Some(due)),
+            ..IssuePatch::default()
+        },
+        src,
+    )
+    .await
+}
+
+/// Creates the next occurrence of a repeating issue that was just finished: a copy with the ticks
+/// cleared, the next due date and the same rule, linked to it with a `follows` relation.
+async fn spawn_next(
+    tx: &mut SqliteConnection,
+    done: &Issue,
+    rule: &Rule,
+    src: ChangeSource,
+) -> Result<()> {
+    let zone = zone_in(tx).await?;
+    let today = Utc::now().with_timezone(&zone).date_naive();
+    let base = due_cols(done.due.as_ref()).date.unwrap_or(today);
+    let next = rule.next(base, today);
+    let shift = next - base;
+    let new = NewIssue {
+        title: done.title.clone(),
+        description: Some(checklist::reset(&done.description)),
+        priority: Some(done.priority),
+        project_id: done.project_id,
+        milestone_id: done.milestone_id,
+        parent_id: done.parent_id,
+        label_ids: Some(done.label_ids.clone()),
+        start_date: done.start_date.map(|s| s + shift),
+        due: Some(due_on(done.due.as_ref(), next, zone)),
+        estimate_minutes: done.estimate_minutes,
+        points: done.points,
+        properties: Some(done.properties.clone()),
+        ..NewIssue::default()
+    };
+    let made = create_in(tx, new, src).await?;
+    // Not recorded as edits: undoing the step archives the new issue, which carries these along.
+    sqlx::query("UPDATE issues SET depth = ?, repeat_rule = ? WHERE id = ?")
+        .bind(done.depth.map(Depth::as_str))
+        .bind(rule.to_string())
+        .bind(made.id.0)
+        .execute(&mut *tx)
+        .await?;
+    let rel = Relation {
+        from: made.id,
+        to: done.id,
+        kind: RelationKind("follows".into()),
+    };
+    relations::add_in(tx, rel, src).await
+}
+
+/// Checks and canonicalises a changed repeat rule. Finishing (not cancelling) a repeating issue hands the rule to
+/// the next occurrence: the rule is cleared on `new` and returned.
+async fn settle_repeat(
+    tx: &mut SqliteConnection,
+    old: &Issue,
+    new: &mut Issue,
+    spawn: bool,
+) -> Result<Option<Rule>> {
+    if new.repeat != old.repeat {
+        new.repeat = new
+            .repeat
+            .as_deref()
+            .map(|r| r.parse::<Rule>().map(|r| r.to_string()))
+            .transpose()?;
+    }
+    let (Some(rule), true) = (&old.repeat, spawn && new.status_id != old.status_id) else {
+        return Ok(None);
+    };
+    if new.repeat != old.repeat {
+        return Ok(None);
+    }
+    let done = category(tx, new.status_id).await? == StatusCategory::Completed;
+    let was = is_done(category(tx, old.status_id).await?);
+    if !done || was {
+        return Ok(None);
+    }
+    new.repeat = None;
+    Ok(Some(rule.parse()?))
+}
+
+async fn write_in(
+    tx: &mut SqliteConnection,
+    id: IssueId,
+    patch: IssuePatch,
+    src: ChangeSource,
+    spawn: bool,
+) -> Result<Issue> {
     let old = fetch(tx, id).await?;
     let mut new = apply_patch(&old, patch);
     check_fields(&new.title, new.priority, new.points)?;
     check_parent(tx, id, new.parent_id).await?;
     check_props(tx, Some(&old.properties), Some(&new.properties)).await?;
+    let finished = settle_repeat(tx, &old, &mut new, spawn).await?;
     let cs = changes(&old, &new);
     if cs.is_empty() {
         return Ok(old);
@@ -556,7 +711,7 @@ pub async fn update_in(
     sqlx::query!(
         "UPDATE issues SET title = ?, description = ?, status_id = ?, priority = ?, project_id = ?,
            milestone_id = ?, parent_id = ?, cycle_id = ?, start_date = ?, due_date = ?, due_time_utc = ?,
-           due_tz = ?, estimate_minutes = ?, points = ?, hidden_until = ?, depth = ?, properties = ?, updated_at = ?, completed_at = ? WHERE id = ?",
+           due_tz = ?, estimate_minutes = ?, points = ?, hidden_until = ?, depth = ?, repeat_rule = ?, properties = ?, updated_at = ?, completed_at = ? WHERE id = ?",
         new.title,
         new.description,
         new.status_id.0,
@@ -573,6 +728,7 @@ pub async fn update_in(
         new.points,
         new.hidden_until,
         depth,
+        new.repeat,
         props,
         new.updated_at,
         new.completed_at,
@@ -584,6 +740,9 @@ pub async fn update_in(
         set_labels(tx, id, &new.label_ids).await?;
     }
     record_all(tx, src, id, &cs).await?;
+    if let Some(rule) = finished {
+        spawn_next(tx, &new, &rule, src).await?;
+    }
     Ok(new)
 }
 

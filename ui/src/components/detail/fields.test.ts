@@ -3,6 +3,7 @@ import { mount, unmount } from 'svelte';
 import { createMockApi } from '../../lib/api.mock';
 import { setApi } from '../../lib/api';
 import { loadFields } from '../../lib/fields.svelte';
+import { features } from '../../lib/features.svelte';
 import IssueDetail from '../IssueDetail.svelte';
 
 let app: object | undefined;
@@ -28,4 +29,24 @@ it('the details panel hides a field that is off, and lists the rest in the chose
   expect(rows[0]).toBe('Status');
   await api.settings.set('issue_fields', []);
   await loadFields();
+});
+
+it('the details panel hides the cycle row while Cycles is switched off', async () => {
+  const api = createMockApi();
+  setApi(api);
+  const issue = await api.issues.create({ title: 'Cycle subject' });
+  const rowsNow = async () => {
+    app = mount(IssueDetail, { target: document.body, props: { params: { key: issue.key } } });
+    await settle();
+    const rows = [...document.querySelectorAll('.plate .row .k')].map((k) => k.textContent);
+    if (app) unmount(app);
+    app = undefined;
+    document.body.innerHTML = '';
+    return rows;
+  };
+  features.cycles = true;
+  expect(await rowsNow()).toContain('Cycle');
+  features.cycles = false;
+  expect(await rowsNow()).not.toContain('Cycle');
+  features.cycles = true;
 });

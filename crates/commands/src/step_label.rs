@@ -67,8 +67,12 @@ pub fn step_label(name: &str, args: &Value, out: Option<&Value>) -> String {
     match name {
         "issues_create" | "issues_create_from_quickadd" => format!("Created {}", key()),
         "issues_update" => format!("Edited {}", key()),
+        "issues_skip_repeat" => format!("Skipped {}", key()),
         "inbox_process" => format!("Processed {}", key()),
+        "issues_mark_duplicate" => format!("Marked {} duplicate", key()),
         "issues_bulk_update" => bulk(args),
+        "issues_delete" => format!("Deleted {}", count(ids(args), "issue")),
+        "issues_empty_archive" => "Emptied archive".into(),
         "issues_duplicate" => format!("Duplicated {}", count(ids(args), "issue")),
         "import_apply" => {
             let n = out.map_or(0, |o| o["created"].as_u64().unwrap_or(0));

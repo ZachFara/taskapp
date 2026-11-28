@@ -194,6 +194,7 @@ mod tests {
             points: None,
             hidden_until: None,
             depth: None,
+            repeat: None,
             properties: Map::new(),
             created_at: Utc::now(),
             updated_at: Utc::now(),

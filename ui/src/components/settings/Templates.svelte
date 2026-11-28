@@ -292,8 +292,8 @@
   .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-1); width: 100%; }
   /* Each row spans the list, so its actions sit at the list's right edge. */
   .list > li { display: flex; }
-  /* The list is a narrow column: the row's actions take the slug's place while the row is hovered or focused. */
-  .list > li:hover .slug, .list > li:focus-within .slug { visibility: hidden; }
+  /* The row's "More actions" button is quiet until the row is hovered or focused, like .es-tools; the slug stays. */
+  .list :global(.acts) { opacity: 0.55; pointer-events: auto; }
   .row {
     all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: var(--s-3);
     min-height: var(--row-h); padding: 0 var(--s-3); border-radius: var(--r-ctl); cursor: pointer;

@@ -5,7 +5,7 @@ use chrono::NaiveDate;
 
 use crate::{
     ChangeSource, Db, Error, InboxChoice, Issue, IssueId, IssuePatch, Result, StatusCategory,
-    StatusId, comments, issues, statuses::category_str,
+    StatusId, comments, issues, next_actions, statuses::category_str,
 };
 
 /// Issues in the status named Inbox (any case), or in the Backlog category when the workspace has none.
@@ -73,6 +73,7 @@ pub async fn process(
 ) -> Result<Issue> {
     let mut patch = IssuePatch::default();
     let mut note = None;
+    let mut flag = None;
     match choice {
         InboxChoice::Done => {
             patch.status_id = Some(status(db, "Done", Some(StatusCategory::Completed)).await?);
@@ -92,9 +93,16 @@ pub async fn process(
             }
             patch.hidden_until = Some(Some(until));
         }
-        InboxChoice::Next { project } => {
+        InboxChoice::Next {
+            project,
+            as_next_action,
+        } => {
+            if as_next_action && project.is_none() {
+                return Err(Error::Invalid("a next action needs a project".into()));
+            }
             patch.status_id = Some(status(db, "Next", Some(StatusCategory::Unstarted)).await?);
             patch.project_id = project.map(Some);
+            flag = project.filter(|_| as_next_action);
         }
         InboxChoice::Someday => patch.status_id = Some(status(db, "Someday", None).await?),
         InboxChoice::Trash => {
@@ -102,9 +110,13 @@ pub async fn process(
             return issues::get(db, id).await;
         }
     }
-    let issue = issues::update(db, id, patch, src).await?;
+    let mut issue = issues::update(db, id, patch, src).await?;
     if let Some(note) = note {
         comments::add_comment(db, id, &note, None, src).await?;
+    }
+    if let Some(project) = flag {
+        next_actions::set(db, project, Some(id), src).await?;
+        issue = issues::get(db, id).await?;
     }
     Ok(issue)
 }

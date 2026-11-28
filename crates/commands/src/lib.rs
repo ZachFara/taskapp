@@ -23,10 +23,10 @@ use taskapp_core::{
     StaleIssue, Status, StatusCategory, StatusId, SyncState, SyncStatus, TemplateId, TemplateInput,
     UndoStatus, VelocityPeriod, ViewDef, ViewEntity, ViewFolder, ViewFolderId, ViewId,
     ViewTemplate, ViewTemplateId, WorkBlock, WorkBlockId, WorkspaceStatus, attachments, backup,
-    blocks, bulk, comments, cycles, decisions, events, focus, forecast, history, import, inbox,
-    insights, issues, labels, links, metrics, next_actions, pins, project_statuses, projects,
-    properties, quickadd, relation_kinds, relations, schedule, search, settings, stale, statuses,
-    templates, undo, view_folders, view_templates, views, workspace,
+    blocks, bulk, comments, cycles, decisions, delete, events, focus, forecast, history, import,
+    inbox, insights, issues, labels, links, metrics, next_actions, pins, project_statuses,
+    projects, properties, quickadd, relation_kinds, relations, schedule, search, settings, stale,
+    statuses, templates, undo, view_folders, view_templates, views, workspace,
 };
 
 pub struct AppState {

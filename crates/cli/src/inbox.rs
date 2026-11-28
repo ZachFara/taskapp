@@ -31,6 +31,9 @@ pub enum InboxCmd {
         /// Status Next, in this project (id, slug or name).
         #[arg(long, group = "choice", value_name = "PROJECT")]
         next: Option<String>,
+        /// With --next: also make it the project's next action.
+        #[arg(long = "as-next-action", requires = "next")]
+        as_next_action: bool,
         #[arg(long, group = "choice")]
         someday: bool,
         /// Archive it.
@@ -57,6 +60,7 @@ pub async fn run(db: &Db, args: InboxArgs) -> Result<Value> {
         delegate,
         defer,
         next,
+        as_next_action,
         someday,
         trash,
     }) = args.cmd
@@ -73,6 +77,7 @@ pub async fn run(db: &Db, args: InboxArgs) -> Result<Value> {
         },
         (false, None, None, Some(p), false, false) => InboxChoice::Next {
             project: crate::references::project(db, Some(&p)).await?,
+            as_next_action,
         },
         (false, None, None, None, true, false) => InboxChoice::Someday,
         (false, None, None, None, false, true) => InboxChoice::Trash,

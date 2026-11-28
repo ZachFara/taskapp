@@ -1,6 +1,6 @@
 use taskapp_core::{
-    ChangeSource, Db, Error, IssueId, Relation, RelationKind, RelationKindDef, history,
-    relation_kinds, relations, undo,
+    ChangeSource, Db, Error, IssueId, Relation, RelationKind, RelationKindDef, StatusCategory,
+    history, issues, relation_kinds, relations, statuses, undo,
 };
 
 type R = Result<(), Box<dyn std::error::Error>>;
@@ -232,5 +232,45 @@ async fn filter_has_relation_of_kind() -> R {
         Vec::<i64>::new()
     );
     assert_eq!(keys(Op::IsEmpty, serde_json::Value::Null).await?, [3]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn mark_duplicate_links_the_copy_and_sets_status_duplicate() -> R {
+    let db = db_with_issues(2).await?;
+    statuses::create(
+        &db,
+        "Duplicate",
+        StatusCategory::Canceled,
+        "gray",
+        None,
+        ChangeSource::Ui,
+    )
+    .await?;
+    let marked = history::step(
+        "dup",
+        relations::mark_duplicate(&db, IssueId(1), IssueId(2), ChangeSource::Ui),
+    )
+    .await?;
+    let status = statuses::list(&db)
+        .await?
+        .into_iter()
+        .find(|s| s.id == marked.status_id);
+    assert_eq!(status.map(|s| s.name).as_deref(), Some("Duplicate"));
+    let rels = relations::for_issue(&db, IssueId(1)).await?;
+    assert_eq!(rels, vec![rel(1, 2, RelationKind::new("duplicate"))]);
+    // One command call is one undo step: the link and the status go together.
+    undo::undo(&db).await?;
+    assert_eq!(relations::for_issue(&db, IssueId(1)).await?, vec![]);
+    assert_ne!(
+        issues::get(&db, IssueId(1)).await?.status_id,
+        marked.status_id
+    );
+    // An issue cannot duplicate itself.
+    assert!(
+        relations::mark_duplicate(&db, IssueId(1), IssueId(1), ChangeSource::Ui)
+            .await
+            .is_err()
+    );
     Ok(())
 }

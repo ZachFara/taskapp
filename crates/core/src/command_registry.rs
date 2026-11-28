@@ -13,11 +13,17 @@ macro_rules! with_commands {
             issues_bulk_update(s, ids: Vec<IssueId>, patch: BulkPatch) -> () {
                 bulk::update(&s.db, &ids, patch, $source).await
             }
+            issues_mark_duplicate(s, id: IssueId, of: IssueId) -> Issue {
+                relations::mark_duplicate(&s.db, id, of, $source).await
+            }
             issues_duplicate(s, ids: Vec<IssueId>) -> Vec<Issue> {
                 bulk::duplicate(&s.db, &ids, $source).await
             }
+            issues_delete(s, ids: Vec<IssueId>) -> u32 { delete::remove(&s.db, &ids, $source).await }
+            issues_empty_archive(s) -> u32 { delete::empty_archive(&s.db, $source).await }
             issues_get(s, id: IssueId) -> Issue { issues::get(&s.db, id).await }
             issues_get_by_key(s, key: String) -> Issue { issues::get_by_key(&s.db, &key).await }
+            issues_skip_repeat(s, id: IssueId) -> Issue { issues::skip_repeat(&s.db, id, $source).await }
             issues_archive(s, id: IssueId) -> () { issues::archive(&s.db, id, $source).await }
             issues_restore(s, id: IssueId) -> () { issues::restore(&s.db, id, $source).await }
             issues_children(s, id: IssueId) -> Vec<Issue> { issues::children(&s.db, id).await }

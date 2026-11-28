@@ -19,7 +19,7 @@ export type DisplayDef = ViewDef & {
 // Every built-in field a view can show. Points is hidden by the panel and FieldValue when estimation excludes it.
 export const BUILT_IN: { field: FieldRef; name: string }[] = [
   ['Key', 'Key'], ['Priority', 'Priority'], ['Status', 'Status'], ['Label', 'Labels'], ['Project', 'Project'],
-  ['Milestone', 'Milestone'], ['Cycle', 'Cycle'], ['Parent', 'Parent'], ['StartDate', 'Start'], ['DueDate', 'Due'], ['Estimate', 'Estimate'], ['Points', 'Points'], ['Depth', 'Depth'],
+  ['Milestone', 'Milestone'], ['Cycle', 'Cycle'], ['Parent', 'Parent'], ['StartDate', 'Start'], ['DueDate', 'Due'], ['Estimate', 'Estimate'], ['Points', 'Points'], ['Depth', 'Depth'], ['Repeat', 'Repeats'],
   ['SubIssueProgress', 'Sub-issues'], ['Checklist', 'Checklist'], ['RelationCount', 'Relations'], ['CommentCount', 'Comments'], ['CreatedAt', 'Created'], ['UpdatedAt', 'Updated'],
 ].map(([f, name]) => ({ field: { Fixed: f as FixedField }, name }));
 

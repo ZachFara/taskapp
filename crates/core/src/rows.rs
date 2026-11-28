@@ -33,6 +33,8 @@ pub(crate) const TABLES: &[&str] = &[
     "decision_issues",
     "links",
     "focus_sessions",
+    "issues",
+    "issue_labels",
 ];
 
 pub(crate) const ENTITY_PREFIX: &str = "row:";
@@ -235,11 +237,24 @@ pub(crate) async fn apply(
     };
     q.execute(&mut *tx).await?;
     log(tx, src, table, key, expect, target).await?;
-    if *table == "comments" {
-        let row = if target.is_null() { expect } else { target };
-        if let Some(issue) = row["issue_id"].as_i64() {
-            search::reindex_in(tx, crate::IssueId(issue)).await?;
-        }
+    reindex(
+        tx,
+        table,
+        if target.is_null() { expect } else { target },
+        key,
+    )
+    .await
+}
+
+/// Keeps the full-text index in step with a restored or removed issue or comment.
+async fn reindex(tx: &mut SqliteConnection, table: &str, row: &Value, key: &str) -> Result<()> {
+    let issue = match table {
+        "issues" => key.parse().ok(),
+        "comments" => row["issue_id"].as_i64(),
+        _ => None,
+    };
+    if let Some(id) = issue {
+        search::reindex_in(tx, crate::IssueId(id)).await?;
     }
     Ok(())
 }

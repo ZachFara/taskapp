@@ -902,6 +902,23 @@ fn sync_now_with_nothing_configured_does_nothing() {
     assert_eq!(v["gcal"]["created"], 0);
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn sync_now_skips_a_switched_off_feature_and_says_so() {
+    let (_d, db) = fresh();
+    {
+        let conn = taskapp_core::Db::open(&db).await.expect("open");
+        taskapp_core::settings::set(&conn, "feature_reminders", &false)
+            .await
+            .expect("set");
+        taskapp_core::settings::set(&conn, "feature_gcal", &false)
+            .await
+            .expect("set");
+    }
+    let v = run_json(&db, &["sync", "now"]);
+    assert!(v["reminders"]["skipped"].is_string(), "{v}");
+    assert!(v["gcal"]["skipped"].is_string(), "{v}");
+}
+
 fn raise(db: &Path) -> Value {
     run(db, &["add", "Pick a database"]);
     let args = [
@@ -1452,6 +1469,33 @@ fn inbox_lists_and_processes_and_hide_until_hides() {
 }
 
 #[test]
+fn inbox_next_as_next_action_flags_the_project() {
+    let (_d, db) = fresh();
+    run(&db, &["project", "create", "alpha", "Alpha"]);
+    run(&db, &["add", "Call the bank"]);
+    run_json(
+        &db,
+        &[
+            "inbox",
+            "process",
+            "ABC-1",
+            "--next",
+            "alpha",
+            "--as-next-action",
+        ],
+    );
+    let flagged = run_json(&db, &["next"]);
+    assert_eq!(flagged[0]["issue"]["key"], "ABC-1");
+    // The flag needs --next.
+    run(&db, &["add", "Another"]);
+    assert!(
+        !run(&db, &["inbox", "process", "ABC-2", "--as-next-action"])
+            .status
+            .success()
+    );
+}
+
+#[test]
 fn focus_start_stop_and_log_write_sessions() {
     let (_d, db) = fresh();
     run(&db, &["add", "Draft the spec"]);
@@ -1475,4 +1519,64 @@ fn issue_depth_rejects_unknown_words() {
     let out = run(&db, &["issue", "update", "ABC-1", "--depth", "medium"]);
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("deep, shallow or none"));
+}
+
+#[test]
+fn delete_and_empty_archive_need_yes() {
+    let (_d, db) = fresh();
+    for t in ["One", "Two", "Three"] {
+        run(&db, &["add", t]);
+    }
+    let refused = run(&db, &["issue", "delete", "ABC-1"]);
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("--yes"));
+    assert_eq!(run_json(&db, &["issue", "get", "ABC-1"])["key"], "ABC-1");
+
+    assert_eq!(
+        run_json(&db, &["issue", "delete", "ABC-1", "--yes"])["deleted"],
+        "ABC-1"
+    );
+    assert!(!run(&db, &["issue", "get", "ABC-1"]).status.success());
+
+    run(&db, &["issue", "archive", "ABC-2"]);
+    let listed = run_json(&db, &["archive", "list"]);
+    assert_eq!(listed[0]["key"], "ABC-2");
+    assert!(!run(&db, &["archive", "empty"]).status.success());
+    assert_eq!(run_json(&db, &["issue", "get", "ABC-2"])["key"], "ABC-2");
+    assert_eq!(run_json(&db, &["archive", "empty", "--yes"])["deleted"], 1);
+    assert_eq!(run_json(&db, &["archive", "list"]), Value::Array(vec![]));
+    assert_eq!(run_json(&db, &["issue", "get", "ABC-3"])["key"], "ABC-3");
+
+    run(&db, &["undo"]);
+    assert_eq!(run_json(&db, &["issue", "get", "ABC-2"])["key"], "ABC-2");
+}
+
+#[test]
+fn issue_repeat_sets_shows_skips_and_clears_a_rule() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Water plants"]);
+    let set = run_json(&db, &["issue", "repeat", "ABC-1", "every monday"]);
+    assert_eq!(set["repeat"], "every 1 week on mon from due");
+    let got = run_json(&db, &["issue", "get", "ABC-1"]);
+    assert_eq!(got["repeat_words"], "Every week on Mon");
+    let skipped = run_json(&db, &["issue", "repeat", "ABC-1", "--skip"]);
+    assert!(
+        skipped["due"].is_object() || skipped["due"].is_string(),
+        "{skipped}"
+    );
+    let cleared = run_json(&db, &["issue", "repeat", "ABC-1", "--clear"]);
+    assert!(cleared["repeat"].is_null());
+}
+
+#[test]
+fn issue_repeat_refuses_a_bad_rule_and_finishing_makes_the_next_one() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Water plants"]);
+    let out = run(&db, &["issue", "repeat", "ABC-1", "sometimes"]);
+    assert!(!out.status.success());
+    run_json(&db, &["issue", "repeat", "ABC-1", "daily"]);
+    run_json(&db, &["issue", "update", "ABC-1", "--status", "Done"]);
+    let next = run_json(&db, &["issue", "get", "ABC-2"]);
+    assert_eq!(next["title"], "Water plants");
+    assert_eq!(next["repeat"], "every 1 day from due");
 }

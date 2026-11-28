@@ -1,6 +1,7 @@
 //! Command-line adapter over `taskapp-core`. Every write uses `ChangeSource::Cli`.
 
 mod api;
+mod archive;
 mod commands;
 mod decision;
 mod forecast;
@@ -46,6 +47,9 @@ enum Cmd {
     },
     #[command(subcommand)]
     Issue(IssueCmd),
+    /// Archived issues: list them, or delete them all for good.
+    #[command(subcommand)]
+    Archive(archive::ArchiveCmd),
     #[command(subcommand)]
     View(ViewCmd),
     #[command(subcommand)]
@@ -285,6 +289,19 @@ enum IssueCmd {
         #[arg(long)]
         depth: Option<String>,
     },
+    /// Sets, clears or skips an issue's repeat rule. Finishing a repeating issue creates the next one.
+    Repeat {
+        key: String,
+        /// For example "every monday", "every 2 weeks from completion", "monthly on 15", "weekdays".
+        #[arg(conflicts_with_all = ["clear", "skip"])]
+        rule: Option<String>,
+        /// Stop repeating.
+        #[arg(long, conflicts_with = "skip")]
+        clear: bool,
+        /// Move the due date to the next occurrence without creating one.
+        #[arg(long)]
+        skip: bool,
+    },
     /// Adds a link to an issue; adding the same URL again changes nothing.
     Link {
         key: String,
@@ -307,6 +324,12 @@ enum IssueCmd {
     },
     Archive {
         key: String,
+    },
+    /// Delete an issue for good, with its comments, relations, links and the rest. Needs --yes.
+    Delete {
+        key: String,
+        #[arg(long)]
+        yes: bool,
     },
     Search {
         text: String,
@@ -750,7 +773,7 @@ enum PinCmd {
 async fn main() -> ExitCode {
     let cli = Cli::parse();
     let json = cli.json;
-    match run(cli).await {
+    match Box::pin(run(cli)).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             report(&err, json);

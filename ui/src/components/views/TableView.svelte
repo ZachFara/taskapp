@@ -28,6 +28,7 @@
   import { onRowsChanged } from './onRowsChanged';
   import { sortable } from '../../lib/viewSort';
   import SortHeading from './SortHeading.svelte';
+  import { isOn } from '../../lib/features.svelte';
 
   let { view, onsort }: { view: SavedView; onsort?: (field: FieldRef) => void } = $props();
 
@@ -42,6 +43,7 @@
     Estimate: { label: 'Estimate', kind: 'Number' },
     Points: { label: 'Points', kind: 'Read' },
     Depth: { label: 'Depth', kind: 'Read' },
+    Repeat: { label: 'Repeats', kind: 'Read' },
     Project: { label: 'Project', kind: 'Project' },
     Label: { label: 'Labels', kind: 'Labels' },
     // Shown through FieldValue and not editable here.
@@ -75,7 +77,7 @@
   const groupBy = $derived(def.group_by?.Fixed === 'Points' && !ctx.points ? null : def.group_by);
   const cols = $derived(
     base
-      .filter((ref) => ctx.points || ref.Fixed !== 'Points')
+      .filter((ref) => (ctx.points || ref.Fixed !== 'Points') && (ref.Fixed !== 'Cycle' || isOn('cycles')))
       .map((ref, index) => ({ ref, index, id: colId(ref), kind: kindOf(ref), label: label(ref) }))
       .filter((c): c is typeof c & { kind: EditKind } => c.kind !== null && fixedOn(c.ref.Fixed)),
   );
@@ -143,6 +145,7 @@
       case 'Estimate': return i.estimate_minutes;
       case 'Points': return i.points;
       case 'Depth': return i.depth;
+      case 'Repeat': return i.repeat;
       default: return null;
     }
   };

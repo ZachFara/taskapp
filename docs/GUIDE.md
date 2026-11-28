@@ -175,6 +175,9 @@ issue has items (the Checklist field, on by default). `taskapp issue get` report
   it. Built-in kinds cannot be changed. A view can filter on "Relation kind" (issues with a relation of that kind, on
   either end).
   CLI: `relation add`. In the timeline, "blocks" relations draw as arrows and a critical path is highlighted.
+- **Similar issues.** The issue page lists up to three open issues whose titles overlap most with this one's (in the same
+  project first). Click one to open it, or use its Mark duplicate action: this issue gets status Duplicate and a
+  duplicate relation to that one, as a single undo step. Needs a status called Duplicate.
 - **Comments.** Markdown. Panel "Comments" section: type and press the Comment button. CLI `comment add`; MCP `add_comment`.
 - **History.** The panel's History section lists every change with its source (UI, Agent, Cli, import, Undo, ...).
   CLI `history <key>`; MCP `get_history`.
@@ -202,6 +205,17 @@ MCP call is one step. After a change a toast offers Undo. Toasts stack (at most 
 toast "Nothing to undo" shows when the stack is empty.
 Undo refuses when something changed since. Inside a text field `mod+z` is the field's own undo. CLI: `taskapp undo`,
 `taskapp redo`; MCP: `undo`, `redo`, `undo_status`. An import is one step ("Undo import" button after it).
+
+## Archive and deleting issues
+
+Archiving hides an issue and keeps everything; the Archive page (sidebar, `g a`) lists the archived issues, with a
+search box. Tick issues, then Restore from archive, or Delete permanently. "Empty archive" deletes every archived issue.
+Delete permanently is also in the right-click menu and command menu of any issue. It removes the issue with its
+comments, relations, links, labels, focus sessions, event and decision links, next-action flag and pins; sub-issues stay
+and lose their parent. It always asks first, naming how many issues go, and it is one undo step: Undo (right after, or
+any time until another change) brings it all back. A deleted issue is gone from the next export. CLI:
+`taskapp issue delete ABC-1 --yes`, `taskapp archive list`, `taskapp archive empty --yes` (all refuse without `--yes`).
+Pasted images are shared by the whole workspace and stay.
 
 ## Views
 
@@ -417,7 +431,7 @@ day. A view's Display panel has "Show deferred" to list them anyway, and "Hidden
 it from the terminal with `taskapp issue update ABC-1 --hide-until 2026-12-24` (or `clear`). Settings > Features can
 switch Process Inbox off; its page, sidebar entry and commands go, the data stays.
 
-For agents: `taskapp inbox [--limit N]` lists the next Inbox items and the total; `taskapp inbox process ABC-1 --do`,
+For agents: `taskapp inbox [--limit N]` lists the next Inbox items and the total; `taskapp inbox process ABC-1 --do`, `--next PROJECT --as-next-action` also flags it as the project's next action,
 `--delegate "Sam"`, `--defer 2026-12-24`, `--next <project>`, `--someday` or `--trash` clears one (exactly one flag).
 
 ## Dashboard
@@ -459,6 +473,24 @@ the page resumes. Each session is written when it ends, and the issue's Focus lo
 Dashboard's Deep hours card sums deep sessions per day or week for the range, with the total and the streak of days
 ending today with deep time. CLI: `taskapp focus stop`, `taskapp focus log [--key ABC-1] [--range day|week|month|all]`.
 Turning Focus mode off hides its commands, page and card; the sessions stay in the database.
+
+### Recurring issues
+
+An issue can repeat. Set it in the issue's Details (Repeat row) or with "Repeat" in the command menu: pick a preset
+(every day, every weekday, every week on the due weekday, every month on the due day, every 2 weeks, or day, week or
+month counted from completion), or type a rule such as `every 2 weeks on mon,thu`, `monthly on 15` or
+`every 3 days from completion`. The rule is stored as text (`every 1 week on mon,thu from due`) and shown in words
+("Every week on Mon and Thu"). Counting from the due date, the next date is the next slot after both the due date and
+today, so finishing late skips missed slots; counting from completion, it is that many days, weeks or months after today.
+A month day past the month's end (31) falls on the last day. Finishing the issue by any route (app, CLI, bulk) creates
+the next occurrence: same title, description with the checklist unticked, labels, project, points, depth and the same
+rule, due on the next date, linked to the finished one with a "follows" relation, in the same undo step. The finished
+issue stops repeating. Cancelling does not create one. "Skip this occurrence" moves the due date to the next one
+without creating anything; "Does not repeat" stops the series. The Repeats field can be shown in views and filtered
+(Repeats is set). Google Calendar needs nothing extra: the next occurrence has a due date and appears like any issue
+(no recurring-event series yet). CLI: `taskapp issue repeat ABC-1 "every monday"`, `--clear`, `--skip`; `issue get`
+shows `repeat` and `repeat_words`. Settings > Features > Recurring issues hides the row and commands. Not built:
+repeat in quick add.
 
 ## Points and insights
 
@@ -668,9 +700,11 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 
 Settings > Features lists every optional feature with a switch, all on by default: Dashboard, Decisions, Cycles,
 Events, Progress charts (burn-ups and sparklines on projects and cycles), Stale nudges, Reminders capture, Google
-Calendar, Next actions, Process Inbox, and the coming Focus mode. Switching one off hides its sidebar entries, its
+Calendar, Next actions, Process Inbox, Focus mode and Recurring issues. Switching one off hides its sidebar entries, its
 page (the address shows "is switched off"), its commands in the command menu, its Settings page where it has one
-(Cycles, Reminders, Calendar) and its dashboard card. Your data stays and comes back when you switch it on. Each switch
+(Cycles, Reminders, Calendar) and its dashboard card. Switching Cycles off also hides the cycle row in issue details and
+the cycle field in views. Switching Reminders capture or Google Calendar off stops their background sync too; Sync now
+skips them and says so. Your data stays and comes back when you switch it on. Each switch
 applies at once, has its own command ("Turn Cycles on or off"), and is stored as a setting (`dashboard`,
 `insights_charts`, `feature_<name>`; `taskapp api call settings_get`). Show tooltips stays in General: it is per
 device and off by default, so it is a preference, not a workspace feature.
@@ -757,6 +791,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.projects` | Go to Projects | `g p` | Go to the project list. |
 | `nav.cycles` | Go to Cycles | `g c` | Go to Cycles. |
 | `nav.events` | Go to Events | `g e` | Go to Events. |
+| `nav.archive` | Go to Archive | `g a` | Go to the Archive page: archived issues, restore, delete for good. |
 | `nav.next` | Go to Next actions | `g n` | Go to the next action of each project (when it is switched on in Settings). |
 | `nav.dashboard` | Go to Dashboard | `g b` | Go to the Dashboard (when it is switched on in Settings). |
 | `nav.process` | Process Inbox | `g o` | Go to Process Inbox (when it is switched on in Settings). |
@@ -773,7 +808,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `process.do` | Process: do it now (Done) | `o` | Set the issue to Done and show the next one. |
 | `process.delegate` | Process: delegate (waiting on) | `y` | Ask who you are waiting on, then set Delegated with a comment. |
 | `process.defer` | Process: defer (hide until a day) | `z` | Ask for a day and hide the issue until then. |
-| `process.next` | Process: next action (pick a project) | `n` | Pick a project and set status Next. |
+| `process.next` | Process: next action (pick a project) | `n` | Pick a project and set status Next. A checkbox also makes it the project's next action; it is on by default when the project has none. |
 | `process.someday` | Process: someday | `b` | Set status Someday. |
 | `process.trash` | Process: trash (archive) | `q` | Archive the issue. |
 | `process.skip` | Process: skip to the next issue | `shift+arrowright` | Show the next issue without changing this one. |
@@ -888,6 +923,8 @@ These appear in the command menu (when they apply) and have no shortcut.
 
 | Command id | Name | Keys | What it does |
 |---|---|---|---|
+| `issue.repeat` | Repeat | (none) | Pick a repeat preset or type a rule; "Stop repeating" clears it. |
+| `issue.repeat.skip` | Skip this occurrence | (none) | Move a repeating issue's due date to its next occurrence. |
 | `issue.next` | Make next action | (none) | Flag the issue as its project's next action. |
 | `project.next` | Set next action | (none) | On a project page: pick the project's next action from its open issues, or clear it. |
 | `image.attach` | Attach image | (none) | Choose an image file for the description or comment box you used last. |
@@ -1007,11 +1044,12 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `issue links <key>` | List an issue's links. | `taskapp issue links ABC-1` |
 | `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --solution <url> --hide-until DATE\|clear`. | `taskapp issue update ABC-1 --status 3` |
 | `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --depth deep\|shallow\|none`. | `taskapp issue update ABC-1 --status 3` |
+| `issue repeat <key> [rule]` | Set a repeat rule ("every monday"), or `--clear` it, or `--skip` to the next occurrence. | `taskapp issue repeat ABC-1 "every 2 weeks"` |
 | `focus start <key> [--deep]`, `focus stop`, `focus log [--key] [--range]` | Focus sessions: start one (ends a running one), end the running one, list sessions with their total minutes. | `taskapp focus start ABC-1 --deep` |
 | `issue list [...]` | Issues by name filters, most urgent first, with status, priority, project and label names: `--project --status --not-status --priority --label` (repeat or comma-separate). | `taskapp issue list --project Cairn --not-status Done,Canceled,Someday` |
 | `issue get <key>` | Show one issue, with `status`, `project`, `labels` and `priority_name` as names next to the ids. | `taskapp issue get ABC-1` |
 | `inbox [--limit N]` | The next Inbox items, oldest first, and how many there are (deferred ones left out). | `taskapp inbox --limit 3` |
-| `inbox process <key> (--do \| --delegate NOTE \| --defer DATE \| --next PROJECT \| --someday \| --trash)` | Clear one Inbox issue, as the Process Inbox page does; one undo step. | `taskapp inbox process ABC-1 --defer 2026-12-24` |
+| `inbox process <key> (--do \| --delegate NOTE \| --defer DATE \| --next PROJECT [--as-next-action] \| --someday \| --trash)` | Clear one Inbox issue, as the Process Inbox page does; one undo step. | `taskapp inbox process ABC-1 --defer 2026-12-24` |
 | `issue archive <key>` | Archive an issue. | `taskapp issue archive ABC-1` |
 | `event list [--from --to]` | Events overlapping a date range. | `taskapp event list --from 2026-12-01` |
 | `event create <title> --start T [--end T --all-day --place --notes]` | Create an event (`T` is `YYYY-MM-DDTHH:MM` or a date). | `taskapp event create Demo --start 2026-12-10T09:30` |

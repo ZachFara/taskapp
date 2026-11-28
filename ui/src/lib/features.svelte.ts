@@ -13,6 +13,7 @@ export const FEATURES = [
   { name: 'process_inbox', key: 'feature_process_inbox', label: 'Process Inbox', blurb: 'Go through the Inbox one issue at a time: do it, delegate, defer, plan, park or trash. The Process Inbox page and its commands.' },
   { name: 'next_actions', key: 'feature_next_actions', label: 'Next actions', blurb: 'One flagged next action per project, the Next page, and a Stuck marker and dashboard card for active projects without one.' },
   { name: 'focus', key: 'feature_focus', label: 'Focus mode', blurb: 'One issue at a time on a timer, with a focus log per issue and the Deep hours card.' },
+  { name: 'recurring', key: 'feature_recurring', label: 'Recurring issues', blurb: 'A Repeat rule on an issue: finishing it creates the next one. The Repeat row and its commands.' },
 ] as const;
 export type Feature = (typeof FEATURES)[number]['name'];
 
@@ -46,6 +47,7 @@ const COMMANDS: [RegExp, Feature][] = [
   [/^settings\.reminders$/, 'reminders'],
   [/^settings\.calendar$/, 'gcal'],
   [/^(issue\.focus$|focus\.)/, 'focus'],
+  [/^issue\.repeat/, 'recurring'],
 ];
 export const featureOfCommand = (id: string) => COMMANDS.find(([re]) => re.test(id))?.[1];
 

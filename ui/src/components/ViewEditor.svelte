@@ -3,6 +3,7 @@
   // change as a partial ViewDef; the page decides when to save.
   import { onMount, untrack, type Snippet } from 'svelte';
   import { api } from '../lib/api';
+  import { isOn } from '../lib/features.svelte';
   import type { FieldRef, FixedField, ViewDef, ViewEntity } from '../lib/bindings';
   import Button from '../ui/Button.svelte';
   import IconButton from '../ui/IconButton.svelte';
@@ -88,7 +89,7 @@
 
   const plain: FixedField[] = project ? ['Title', 'Status', 'StatusCategory', 'Priority', 'StartDate', 'TargetDate', 'CreatedAt', 'UpdatedAt', 'Progress', 'IssueCount'] : ['Status', 'StatusCategory', 'Priority', 'Project', 'Cycle', 'DueDate', 'Points', 'Title'];
   const allFields = $derived([
-    ...plain.filter(on).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
+    ...plain.filter((f) => on(f) && (f !== 'Cycle' || isOn('cycles'))).map((f) => ({ field: { Fixed: f } as FieldRef, name: lookup.name({ Fixed: f }) })),
     ...data.defs.map((p) => ({ field: { Property: p.key } as FieldRef, name: p.name })),
   ]);
   const fieldItems = $derived(allFields.map((f) => ({ value: fieldKey(f.field), label: f.name })));
