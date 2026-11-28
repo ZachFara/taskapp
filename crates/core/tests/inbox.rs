@@ -47,8 +47,7 @@ async fn status_name(db: &Db, id: IssueId) -> Result<String, Box<dyn std::error:
         .await?
         .into_iter()
         .find(|s| s.id == i.status_id)
-        .map(|s| s.name)
-        .unwrap_or_default())
+        .map_or_else(String::new, |s| s.name))
 }
 
 #[tokio::test]
