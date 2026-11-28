@@ -24,6 +24,8 @@
   const base = $derived(h - box.bottom);
   const slot = $derived((w - box.left - box.right) / Math.max(1, bars.length));
   const bw = $derived(Math.min(40, slot * 0.6));
+  // A label needs about 36 px; with narrower bars only every nth period gets one, so dates do not run together.
+  const every = $derived(Math.max(1, Math.ceil(36 / slot)));
   const s = $derived(scales(2, top, box));
   const avg = $derived(bars.length > 1 ? bars.reduce((a, b) => a + b.value, 0) / bars.length : null);
   const text = $derived(`${title}: ${bars.map((b) => `${b.label} ${format(b.value)}`).join(', ')} ${unit}.`);
@@ -42,7 +44,7 @@
         {@const x = box.left + slot * i + (slot - bw) / 2}
         <rect class="bar" class:latest={i === bars.length - 1} {x} y={s.y(b.value)} width={bw} height={base - s.y(b.value)} />
         <text class="val" x={x + bw / 2} y={s.y(b.value) - 4} text-anchor="middle">{format(b.value)}</text>
-        <text class="tick" x={x + bw / 2} y={h - 5} text-anchor="middle">{b.label}</text>
+        {#if i % every === 0}<text class="tick" x={x + bw / 2} y={h - 5} text-anchor="middle">{b.label}</text>{/if}
       {/each}
       {#if avg !== null}
         <line class="avg" x1={box.left} x2={w - box.right} y1={s.y(avg)} y2={s.y(avg)} />

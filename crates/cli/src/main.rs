@@ -3,6 +3,7 @@
 mod api;
 mod commands;
 mod decision;
+mod forecast;
 mod list;
 mod look;
 mod metrics;
@@ -70,11 +71,15 @@ enum Cmd {
     Template(TemplateCmd),
     /// Throughput, lead and cycle time, work in progress and breakdowns, rebuilt from history.
     Metrics(metrics::MetricsArgs),
+    /// When a project's or cycle's open issues are likely done, from the last eight weeks of throughput.
+    Forecast(forecast::ForecastArgs),
     /// Progress and velocity over time, rebuilt from history.
     #[command(subcommand)]
     Insights(InsightsCmd),
     /// Change history of an issue.
     History { key: String },
+    /// Issues that have sat in their status past its nudge age, longest first.
+    Stale,
     /// Undo the newest step, whatever made it (UI, agent or CLI).
     Undo,
     /// Redo the step most recently undone.
@@ -486,6 +491,23 @@ enum CycleCmd {
         #[arg(long)]
         icon: Option<String>,
     },
+    /// Set a cycle's retrospective; fields not given stay as they are.
+    Set {
+        /// Cycle id or exact name.
+        cycle: String,
+        /// One sentence, set at planning.
+        #[arg(long)]
+        goal: Option<String>,
+        /// Was the goal met: yes or no.
+        #[arg(long)]
+        goal_met: Option<String>,
+        /// How it went, 1 to 5.
+        #[arg(long)]
+        rating: Option<u8>,
+        /// Markdown.
+        #[arg(long)]
+        notes: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -703,6 +725,9 @@ async fn run(cli: Cli) -> Result<()> {
         Cmd::Api(ApiCmd::Call { name, .. }) => format!("api call {name}"),
         _ => words.join(" "),
     };
+    if let Cmd::Forecast(args) = &cli.cmd {
+        return forecast::print(&db, args, cli.json).await;
+    }
     if let Cmd::Metrics(args) = &cli.cmd {
         return metrics::print(&db, args, cli.json).await;
     }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
-  import type { Cycle, Label, Project } from '../../lib/bindings';
+  import type { Cycle, Label, Project, StaleIssue } from '../../lib/bindings';
   import { localDay } from '../../lib/gantt';
   import Button from '../../ui/Button.svelte';
   import Checkbox from '../../ui/Checkbox.svelte';
@@ -13,6 +13,7 @@
   import Skeleton from '../../ui/Skeleton.svelte';
   import Tabs from '../../ui/Tabs.svelte';
   import TextInput from '../../ui/TextInput.svelte';
+  import { navigate } from '../../app/routes';
   import { workspaceZone } from '../views/dates';
   import { CARDS } from './cards';
   import { dashboard, moveCard, orderedCards, set, toggleCard } from './dashboard.svelte';
@@ -24,6 +25,7 @@
   let projects = $state<Project[]>([]);
   let labels = $state<Label[]>([]);
   let metrics = $state<Metrics | null>(null);
+  let stale = $state<StaleIssue[]>([]);
   let error = $state('');
   let ready = $state(false);
 
@@ -34,6 +36,8 @@
   });
 
   const range = $derived(ready ? rangeOf(dashboard.range, { today, weekStart, cycles }, dashboard.from, dashboard.to) : null);
+  // A cycle chosen in Range links to its retrospective.
+  const picked = $derived(range && 'Cycle' in range.scope ? cycles.find((c) => c.id === (range.scope as { Cycle: number }).Cycle) : undefined);
   const all = $derived([...PRESETS.filter((p) => p.id !== 'custom'), ...cycles.map((c) => ({ id: `cycle:${c.id}`, label: c.name ?? `Cycle ${c.number}` })), PRESETS.at(-1)!].map((p) => ({ value: p.id, label: p.label })));
   const shown = $derived(orderedCards().filter((id) => !dashboard.hidden.includes(id)).map((id) => CARDS.find((c) => c.id === id)!));
 
@@ -45,8 +49,10 @@
     const q = { scope: range.scope, bucket: bucketFor(range.from, range.to), filter: filterOf(dashboard.project, dashboard.label), measure: dashboard.measure };
     error = '';
     metrics = null;
-    metricsFor(q).then(
-      (m) => n === asked && (metrics = m),
+    Promise.all([metricsFor(q), api.stale.list()]).then(
+      ([m, st]) => {
+        if (n === asked) [metrics, stale] = [m, st];
+      },
       (e) => n === asked && (error = (e as { message?: string }).message ?? String(e)),
     );
   });
@@ -66,6 +72,7 @@
     <Tabs segmented label="Measure" tabs={[{ id: 'Count', label: 'Count' }, { id: 'Points', label: 'Points' }]} bind:value={() => dashboard.measure, (v) => set({ measure: v as 'Count' | 'Points' })} />
   {/snippet}
   {#snippet actions()}
+    {#if picked}<Button icon="cycle" onclick={() => navigate(`/cycles#${picked.number}`)}>Retrospective</Button>{/if}
     <Popover>
       {#snippet trigger(props)}<Button icon="eye" {...props}>Cards</Button>{/snippet}
       <ul class="cards" aria-label="Dashboard cards">
@@ -97,7 +104,7 @@
       {#each shown as c (c.id)}
         <section class="card" class:wide={c.wide} aria-label={c.title}>
           <h2>{c.title}</h2>
-          <c.component {metrics} measure={dashboard.measure} />
+          <c.component {metrics} measure={dashboard.measure} filter={filterOf(dashboard.project, dashboard.label)} cycle={range && 'Cycle' in range.scope ? range.scope.Cycle : null} {stale} />
         </section>
       {/each}
     </div>

@@ -8,10 +8,13 @@ use chrono::{DateTime, Datelike, Duration, Months, NaiveDate, Utc};
 use chrono_tz::Tz;
 use sqlx::Row;
 
+#[path = "metrics_ext.rs"]
+mod ext;
+
 use crate::{
     Bucket, ChangeSource, Cycle, CycleTime, CycleTimePoint, Db, Error, Issue, LabelBreakdown,
-    LeadTime, Measure, Metrics, MetricsBucket, MetricsQuery, MetricsScope, Result, SourceBreakdown,
-    StatusCategory, VelocityCycle, ViewDef, cycles,
+    LeadTime, Measure, Metrics, MetricsBucket, MetricsQuery, MetricsScope, Relation, Result,
+    SourceBreakdown, StatusCategory, VelocityCycle, ViewDef, cycles,
     insights::{local, zone},
     labels, statuses, views,
 };
@@ -21,21 +24,36 @@ const THIN: usize = 5;
 const VELOCITY_CYCLES: usize = 6;
 
 /// One issue's story: when it was made and by whom, where its status went, and when it finished.
-struct Facts {
-    issue: Issue,
+pub(crate) struct Facts {
+    pub(crate) issue: Issue,
     made: NaiveDate,
     made_by: String,
     cat0: StatusCategory,
     /// (local day, category entered), oldest first.
     moves: Vec<(NaiveDate, StatusCategory)>,
     started: Option<NaiveDate>,
-    done: Option<NaiveDate>,
+    pub(crate) done: Option<NaiveDate>,
     done_by: String,
+    /// The status before the first move, and every status entered as (local day, status id).
+    status0: i64,
+    path: Vec<(NaiveDate, i64)>,
+    /// The cycle before the first move, and every cycle change as (local day, cycle id entered).
+    cycle0: Option<i64>,
+    cycles: Vec<(NaiveDate, Option<i64>)>,
 }
 
 impl Facts {
+    /// The cycle at the end of `day`.
+    fn cycle_at(&self, day: NaiveDate) -> Option<i64> {
+        self.cycles
+            .iter()
+            .rev()
+            .find(|m| m.0 <= day)
+            .map_or(self.cycle0, |m| m.1)
+    }
+
     /// The category at the end of `day` and the day it was entered; `None` before the issue existed.
-    fn at(&self, day: NaiveDate) -> Option<(StatusCategory, NaiveDate)> {
+    pub(crate) fn at(&self, day: NaiveDate) -> Option<(StatusCategory, NaiveDate)> {
         if self.made > day {
             return None;
         }
@@ -97,33 +115,63 @@ fn next_start(start: NaiveDate, b: Bucket) -> NaiveDate {
 
 /// (when, source, old, new) of one status change.
 type Move = (DateTime<Utc>, String, Option<String>, Option<String>);
+/// (when, old, new, made with the issue) of one cycle change; creation rows say what the issue was made into.
+type CycleMove = (DateTime<Utc>, Option<i64>, Option<i64>, bool);
+/// (when, relation, added) of one add or remove of a `blocks` relation.
+type BlockEdit = (DateTime<Utc>, Relation, bool);
+/// (local day, status id entered), oldest first.
+type StatusPath = Vec<(NaiveDate, i64)>;
 /// The days a query covers and the cycle it is about, if any.
 type Span = (NaiveDate, NaiveDate, Option<Cycle>);
 
 /// Every status change and the source of every creation, per issue.
 struct Log {
     moves: HashMap<i64, Vec<Move>>,
+    /// (when, old, new) of each cycle change, per issue.
+    cycles: HashMap<i64, Vec<CycleMove>>,
+    /// (when, relation, added) of each add or remove of a `blocks` relation.
+    blocks: Vec<BlockEdit>,
     made_by: HashMap<i64, String>,
 }
 
 async fn log(db: &Db) -> Result<Log> {
     let rows = sqlx::query(
         "SELECT entity_id, field, at, source, old_value, new_value FROM changes
-         WHERE entity = 'issue' AND field IN ('key', 'status_id') ORDER BY at, id",
+         WHERE entity = 'issue' AND field IN ('key', 'status_id', 'cycle_id', 'relation') ORDER BY at, id",
     )
     .fetch_all(&db.pool)
     .await?;
     let mut out = Log {
         moves: HashMap::new(),
+        cycles: HashMap::new(),
+        blocks: vec![],
         made_by: HashMap::new(),
     };
+    let id_of =
+        |v: Option<String>| v.and_then(|v| serde_json::from_str::<Option<i64>>(&v).ok().flatten());
     for r in &rows {
         let Ok(id) = r.try_get::<String, _>(0)?.parse::<i64>() else {
             continue;
         };
         let source = source_name(&r.try_get::<String, _>(3)?);
-        if r.try_get::<String, _>(1)? == "key" {
+        let field = r.try_get::<String, _>(1)?;
+        if field == "key" {
             out.made_by.entry(id).or_insert(source);
+        } else if field == "cycle_id" {
+            let raw: Option<String> = r.try_get(4)?;
+            let (old, new) = (id_of(raw.clone()), id_of(r.try_get(5)?));
+            out.cycles
+                .entry(id)
+                .or_default()
+                .push((r.try_get(2)?, old, new, raw.is_none()));
+        } else if field == "relation" {
+            let added = r.try_get::<Option<String>, _>(5)?;
+            let json = added.clone().or(r.try_get(4)?);
+            if let Some(rel) = json.and_then(|j| serde_json::from_str::<Relation>(&j).ok())
+                && rel.kind.0 == "blocks"
+            {
+                out.blocks.push((r.try_get(2)?, rel, added.is_some()));
+            }
         } else {
             out.moves.entry(id).or_default().push((
                 r.try_get(2)?,
@@ -134,6 +182,21 @@ async fn log(db: &Db) -> Result<Log> {
         }
     }
     Ok(out)
+}
+
+/// The status before the first move, and each status entered as (local day, id).
+fn status_path(issue: &Issue, events: &[Move], tz: Tz) -> (i64, StatusPath) {
+    let sid = |s: &Option<String>| s.as_deref().and_then(|s| s.parse::<i64>().ok());
+    (
+        events
+            .first()
+            .and_then(|e| sid(&e.2))
+            .unwrap_or(issue.status_id.0),
+        events
+            .iter()
+            .filter_map(|e| Some((local(e.0, tz), sid(&e.3)?)))
+            .collect(),
+    )
 }
 
 fn story(issue: Issue, log: &Log, cats: &HashMap<i64, StatusCategory>, tz: Tz) -> Facts {
@@ -154,6 +217,9 @@ fn story(issue: Issue, log: &Log, cats: &HashMap<i64, StatusCategory>, tz: Tz) -
         .iter()
         .filter_map(|e| Some((local(e.0, tz), cat_of(&e.3)?, &e.1)))
         .collect();
+    let made = local(issue.created_at, tz);
+    let (status0, path) = status_path(&issue, events, tz);
+    let cyc = log.cycles.get(&issue.id.0).map_or(&[][..], Vec::as_slice);
     // Linear imports have no history: their completed_at stands in for the move.
     let finishing = moves
         .iter()
@@ -172,19 +238,41 @@ fn story(issue: Issue, log: &Log, cats: &HashMap<i64, StatusCategory>, tz: Tz) -
         .map(|m| m.0)
         .filter(|s| done.is_some_and(|d| *s <= d));
     Facts {
-        made: local(issue.created_at, tz),
+        made,
         made_by: log
             .made_by
             .get(&issue.id.0)
             .cloned()
             .unwrap_or_else(|| "Migration".into()),
         cat0: before,
+        status0,
+        path,
+        cycle0: cyc.first().map_or(issue.cycle_id.map(|c| c.0), |c| c.1),
+        // A creation row stands at the issue's own creation day, whenever the row was written.
+        cycles: cyc
+            .iter()
+            .map(|c| (if c.3 { made } else { local(c.0, tz) }, c.2))
+            .collect(),
         moves: moves.into_iter().map(|m| (m.0, m.1)).collect(),
         started,
         done,
         done_by,
         issue,
     }
+}
+
+async fn facts(
+    db: &Db,
+    def: &ViewDef,
+    log: &Log,
+    cats: &HashMap<i64, StatusCategory>,
+    tz: Tz,
+) -> Result<Vec<Facts>> {
+    Ok(views::query(db, def)
+        .await?
+        .into_iter()
+        .map(|i| story(i, log, cats, tz))
+        .collect())
 }
 
 fn buckets(mine: &[&Facts], from: NaiveDate, to: NaiveDate, kind: Bucket) -> Vec<MetricsBucket> {
@@ -348,6 +436,21 @@ fn times(done: &[&Facts]) -> (LeadTime, CycleTime) {
     )
 }
 
+/// The story of every issue the filter lets through (for the forecast).
+pub(crate) async fn facts_for(db: &Db, filter: Option<crate::Filter>) -> Result<Vec<Facts>> {
+    let tz = zone(db).await?;
+    let cats: HashMap<i64, StatusCategory> = statuses::list(db)
+        .await?
+        .into_iter()
+        .map(|s| (s.id.0, s.category))
+        .collect();
+    let def = ViewDef {
+        filter,
+        ..ViewDef::default()
+    };
+    facts(db, &def, &log(db).await?, &cats, tz).await
+}
+
 fn span(q: &MetricsQuery, all_cycles: &[Cycle]) -> Result<Span> {
     let (from, to, cycle) = match q.scope {
         MetricsScope::Range { from, to } => (from, to, None),
@@ -372,6 +475,29 @@ fn span(q: &MetricsQuery, all_cycles: &[Cycle]) -> Result<Span> {
     Ok((from, to, cycle))
 }
 
+fn started_at(f: &Facts, day: NaiveDate) -> bool {
+    matches!(f.at(day), Some((StatusCategory::Started, _)))
+}
+
+/// Velocity looks across cycles, so `all` keeps every filtered issue; the rest is the cycle's members and what they finished.
+fn members<'a>(
+    all: &'a [Facts],
+    cycle: Option<&Cycle>,
+    from: NaiveDate,
+    to: NaiveDate,
+) -> (Vec<&'a Facts>, Vec<&'a Facts>) {
+    let mine: Vec<_> = all
+        .iter()
+        .filter(|f| cycle.is_none_or(|c| f.issue.cycle_id == Some(c.id)))
+        .collect();
+    let done = mine
+        .iter()
+        .copied()
+        .filter(|f| f.finished_in(from, to))
+        .collect();
+    (mine, done)
+}
+
 /// [`metrics_for`] with the clock given, so a test can fix "today".
 ///
 /// # Errors
@@ -385,36 +511,18 @@ pub async fn metrics_on(db: &Db, q: MetricsQuery, today: NaiveDate) -> Result<Me
     let tz = zone(db).await?;
     let all_cycles = cycles::list(db).await?;
     let (from, to, cycle) = span(&q, &all_cycles)?;
-    let cats: HashMap<i64, StatusCategory> = statuses::list(db)
-        .await?
-        .into_iter()
-        .map(|s| (s.id.0, s.category))
-        .collect();
+    let sts = statuses::list(db).await?;
+    let cats: HashMap<i64, StatusCategory> = sts.iter().map(|s| (s.id.0, s.category)).collect();
     let log = log(db).await?;
     let def = ViewDef {
         filter: q.filter,
         ..ViewDef::default()
     };
-    let all: Vec<Facts> = views::query(db, &def)
-        .await?
-        .into_iter()
-        .map(|i| story(i, &log, &cats, tz))
-        .collect();
-    // Velocity looks across cycles, so it keeps every filtered issue; the rest is the cycle's members.
-    let mine: Vec<&Facts> = all
-        .iter()
-        .filter(|f| {
-            cycle
-                .as_ref()
-                .is_none_or(|c| f.issue.cycle_id == Some(c.id))
-        })
-        .collect();
-    let done: Vec<&Facts> = mine
-        .iter()
-        .copied()
-        .filter(|f| f.finished_in(from, to))
-        .collect();
+    let all = facts(db, &def, &log, &cats, tz).await?;
+    let (mine, done) = members(&all, cycle.as_ref(), from, to);
     let (lead_time, cycle_time) = times(&done);
+    let every = ext::everyone(db, &def, &log, &cats, tz).await?;
+    let links = ext::links(db, &log, every.as_deref().unwrap_or(&all), tz).await?;
     Ok(Metrics {
         from,
         to,
@@ -422,15 +530,20 @@ pub async fn metrics_on(db: &Db, q: MetricsQuery, today: NaiveDate) -> Result<Me
         buckets: buckets(&mine, from, to, q.bucket),
         lead_time,
         cycle_time,
-        wip_now: count(
-            mine.iter()
-                .filter(|f| matches!(f.at(today), Some((StatusCategory::Started, _))))
-                .count(),
-        ),
+        wip_now: count(mine.iter().filter(|f| started_at(f, today)).count()),
         by_label: by_label(db, &done, q.measure).await?,
         by_source: by_source(&mine, from, to),
         velocity: velocity(&all, &all_cycles, today),
         thin: done.len() < THIN,
+        cycle: cycle.as_ref().map(|c| ext::commit(&all, c, today)),
+        blocked: Some(ext::blocked(
+            &mine,
+            &done,
+            every.as_deref().unwrap_or(&all),
+            &links,
+            today,
+        )),
+        flow: Some(ext::flow(&done, &sts)),
     })
 }
 

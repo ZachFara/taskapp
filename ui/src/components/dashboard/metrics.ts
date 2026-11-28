@@ -18,7 +18,26 @@ export type Metrics = {
   by_source: { source: string; created: number; completed: number }[];
   velocity: { cycle_id: number; name: string; points: number; count: number }[];
   thin: boolean;
+  // Added by MIT-332/333/334, all optional: older engines send none of them. `cycle` is present for a cycle scope only.
+  cycle?: CycleCommit | null;
+  blocked?: Blocked | null;
+  flow?: FlowEfficiency | null;
 };
+export type CycleCommit = {
+  committed: number; committed_points: number; done: number; done_points: number; say_do_pct: number | null; say_do_points_pct: number | null;
+  added: number; added_points: number; removed: number; removed_points: number; scope_change_pct: number | null; scope_change_points_pct: number | null;
+};
+export type Blocked = {
+  now: { issue_id: number; key: string; title: string; blocked_by: string[]; days: number }[];
+  time: { issue_id: number; key: string; title: string; days: number }[];
+  avg_days: number | null;
+};
+export type FlowEfficiency = { avg_pct: number | null; n: number; distribution: number[]; waiting: { status_id: number; name: string; days: number; issues: number }[] };
+
+/** A percentage to the nearest whole number, or a dash. */
+export const pct = (n: number | null | undefined) => (n == null ? '–' : `${Math.round(n)}%`);
+/** Days to one decimal, or a dash. */
+export const days = (n: number | null | undefined) => (n == null ? '–' : `${Math.round(n * 10) / 10} d`);
 
 // The engine's measure is the shared lowercase Measure type; the page's own copy of the shape stays until bindings replace it.
 type Wire = { metrics: { for: (q: Omit<MetricsQuery, 'measure'> & { measure: 'count' | 'points' }) => Promise<Metrics> } };

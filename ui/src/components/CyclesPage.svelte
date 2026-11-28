@@ -19,6 +19,7 @@
   import TextInput from '../ui/TextInput.svelte';
   import ListView from './views/ListView.svelte';
   import BarChart from './charts/BarChart.svelte';
+  import CycleRetro from './CycleRetro.svelte';
   import CycleBurnup from './insights/CycleBurnup.svelte';
   import CycleSpark from './insights/CycleSpark.svelte';
   import { chartsOn, defaultMeasure, unitOf } from './insights/estimation';
@@ -32,6 +33,8 @@
   const LABEL: Record<Band, string> = { current: 'Current', upcoming: 'Upcoming', past: 'Past' };
 
   let rows = $state<Row[]>([]);
+  // The cycles as the store holds them: what the retrospective writes back.
+  let stored = $state<Cycle[]>([]);
   // Ids of pinned cycles, as the pins store them.
   let pinned = $state<Set<string>>(new Set());
   async function loadPins() {
@@ -45,6 +48,16 @@
   let bars = $state<{ label: string; value: number }[]>([]);
   let unit = $state('issues');
   let opened = $state<number | null>(null);
+  // `/cycles#<number>` opens that cycle's retrospective (the command menu and the dashboard link there).
+  const fromHash = () => {
+    const r = rows.find((x) => `#${x.number}` === location.hash);
+    if (r) collapsed[r.band] = false;
+    return r?.id ?? null;
+  };
+  const open = (id: number | null) => {
+    opened = id;
+    history.replaceState(null, '', id === null ? '/cycles' : `#${rows.find((r) => r.id === id)?.number}`);
+  };
   let collapsed = $state<Record<Band, boolean>>({ current: false, upcoming: false, past: true });
   let creating = $state(false);
   let moving = $state(false);
@@ -82,6 +95,7 @@
     // `finished` reads the statuses, so they load before the counts are made.
     statuses = await api.statuses.list();
     const list = await api.cycles.list();
+    stored = list;
     [folders, places] = await Promise.all([api.folders.list(), api.folders.items()]);
     const issues = await Promise.all(list.map((c) => api.views.query(cycleView(c).def)));
     rows = list
@@ -98,6 +112,7 @@
         })))
       : [];
     loaded = true;
+    opened ??= fromHash();
   }
 
   const bands = $derived((['current', 'upcoming', 'past'] as Band[]).map((b) => ({ band: b, items: rows.filter((r) => r.band === b) })));
@@ -131,8 +146,10 @@
     void load();
     void loadPins();
     const reload = () => (void load(), void loadPins());
+    const jump = () => (opened = fromHash() ?? opened);
     addEventListener('rows:changed', reload);
-    return () => removeEventListener('rows:changed', reload);
+    addEventListener('popstate', jump);
+    return () => (removeEventListener('rows:changed', reload), removeEventListener('popstate', jump));
   });
 </script>
 
@@ -167,7 +184,7 @@
                 <li class="row" data-cycle={c.id} style:padding-left={`calc(${r.depth} * var(--s-8))`}>
                   <RowActions label={title(c)} actions={rowActs({ kind: 'cycle', id: c.id, name: title(c) }, pinned.has(String(c.id)))}>
                     <IconColorPicker label={`Icon and colour of ${title(c)}`} value={{ icon: c.icon ?? 'icon:cycle', color: c.color }} onchange={(v) => patch({ kind: 'cycle', id: c.id, name: title(c) }, { icon: v.icon, color: v.color })} bind:open={() => rowUi.picking === `cycle:${c.id}`, (o) => (rowUi.picking = o ? `cycle:${c.id}` : null)} />
-                    <span class="grow"><ListRow selected={opened === c.id} onpick={() => (opened = opened === c.id ? null : c.id)}>
+                    <span class="grow"><ListRow selected={opened === c.id} onpick={() => open(opened === c.id ? null : c.id)}>
                                         <span class="title">{title(c)}</span>
                     <span class="dates">{dayText(c.start_date)} to {dayText(c.end_date)}</span>
                     <span class="meter" role="progressbar" aria-label="Progress" aria-valuenow={c.done} aria-valuemax={c.total}><span class="fill" style:width={`${c.total ? (c.done / c.total) * 100 : 0}%`}></span></span>
@@ -182,7 +199,7 @@
                 </li>
                 {#if charts && group.band === 'current'}<div class="burnup"><CycleBurnup cycleId={c.id} /></div>{/if}
                 {#if opened === c.id}
-                  {#key c.id}<div class="issues"><ListView view={cycleView(c)} /></div>{/key}
+                  {#key c.id}<CycleRetro cycle={stored.find((x) => x.id === c.id) ?? c} /><div class="issues"><ListView view={cycleView(c)} /></div>{/key}
                 {/if}
                {/if}
               {/each}

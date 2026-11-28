@@ -282,7 +282,7 @@ async fn relation_kinds(db: &Db) -> Result<Vec<RelationKindRow>> {
 
 async fn cycles(db: &Db) -> Result<Vec<CycleRow>> {
     let rows = sqlx::query_as(
-        "SELECT number, name, start_date, end_date, icon, color, folder_id, position FROM cycles ORDER BY number",
+        "SELECT number, name, start_date, end_date, icon, color, folder_id, position, goal, goal_met, rating, notes FROM cycles ORDER BY number",
     )
     .fetch_all(&db.pool)
     .await?;

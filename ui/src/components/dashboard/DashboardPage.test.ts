@@ -4,6 +4,7 @@ import { setApi, type Api } from '../../lib/api';
 import { createMockApi } from '../../lib/api.mock';
 import { listCommands, type Ctx } from '../../lib/commands';
 import Sidebar from '../Sidebar.svelte';
+import { CARDS } from './cards';
 import DashboardPage from './DashboardPage.svelte';
 import { dashboard, moveCard, orderedCards, setDashboard, toggleCard } from './dashboard.svelte';
 import type { Metrics, MetricsQuery } from './metrics';
@@ -56,7 +57,7 @@ describe('DashboardPage', () => {
     expect(s.textContent).toContain('Completed');
     expect(s.textContent).toContain('5.5 d');
     expect(document.querySelector('section[aria-label="Burn-up"]')).not.toBeNull();
-    expect(text()).not.toContain('rough');
+    expect(text()).not.toContain('Fewer than 5 issues finished');
   });
 
   it('says so when the data is thin', async () => {
@@ -79,15 +80,30 @@ describe('DashboardPage', () => {
   });
 
   it('hidden cards stay hidden and the order is kept', async () => {
-    toggleCard('burnup');
+    const ids = CARDS.map((c) => c.id);
+    ids.slice(1).forEach(toggleCard);
     await open(() => metrics());
     expect(document.querySelector('section[aria-label="Burn-up"]')).toBeNull();
-    toggleCard('summary');
+    for (const c of CARDS) if (!dashboard.hidden.includes(c.id)) toggleCard(c.id);
     await settle();
     expect(text()).toContain('All cards are hidden');
     moveCard('summary', 1);
-    expect(orderedCards()).toEqual(['burnup', 'summary']);
-    expect(JSON.parse(localStorage.getItem('cairn.dashboard')!)).toMatchObject({ order: ['burnup', 'summary'], hidden: ['burnup', 'summary'] });
+    expect(orderedCards().slice(0, 2)).toEqual(['burnup', 'summary']);
+    const saved = JSON.parse(localStorage.getItem('cairn.dashboard')!);
+    expect(saved.order.slice(0, 2)).toEqual(['burnup', 'summary']);
+    expect([...saved.hidden].sort()).toEqual(CARDS.map((c) => c.id).sort());
+  });
+
+  it('a cycle chosen in Range links to its retrospective', async () => {
+    await open(() => metrics());
+    expect([...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Retrospective')).toBe(false);
+    const id = (await createMockApi().cycles.list())[0].id;
+    dashboard.range = `cycle:${id}`;
+    await settle();
+    const link = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Retrospective')!;
+    link.click();
+    expect(location.pathname + location.hash).toMatch(/^\/cycles#\d+$/);
+    history.replaceState(null, '', '/');
   });
 
   it('the Points switch asks again with Points', async () => {

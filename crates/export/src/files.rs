@@ -124,6 +124,14 @@ pub struct CycleRow {
     pub folder_id: Option<i64>,
     #[serde(default = "unplaced")]
     pub position: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_met: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rating: Option<i64>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub notes: String,
 }
 
 /// The position a row has until it is placed by hand; an older export carries none.

@@ -2,6 +2,7 @@
   import { onMount, tick, untrack } from 'svelte';
   import type { FieldRef, FixedField, Issue, IssuePatch, PropertyKind, SavedView, StatusCategory, Value } from '../../lib/bindings';
   import { selection } from '../../lib/selection.svelte';
+  import { refreshStale, stale } from '../../lib/stale.svelte';
   import { currentViewId, issues, propertyDefs, refreshAll, statuses, views } from '../../lib/stores.svelte';
   import Checkbox from '../../ui/Checkbox.svelte';
   import CommandButton from '../CommandButton.svelte';
@@ -121,6 +122,9 @@
   onMount(() => {
     currentViewId.value = view.id;
     void refreshAll().finally(() => (loaded = true));
+    void refreshStale();
+    window.addEventListener('history:wrote', refreshStale);
+    return () => window.removeEventListener('history:wrote', refreshStale);
     void Promise.all([api.projects.list(), api.labels.list(), workspaceZone()]).then(([p, l, z]) => ([projects, labels, tz] = [p, l, z]));
   });
 
@@ -477,7 +481,7 @@
           {#if !collapsed.has(g.name)}
             {#each g.rows as issue (issue.id)}
               <tr use:flash={{ id: issue.id, sig: `${issue.status_id}:${issue.priority}`, key: issue.key }} data-key={issue.key} data-id={issue.id} aria-selected={rowSelected(issue)} data-focused={issue.id === activeRowId ? '' : undefined}>
-                <th scope="row" class="key-cell">{issue.key}</th>
+                <th scope="row" class="key-cell">{issue.key}{#if stale.ids.has(issue.id)}<span class="stale">stale</span>{/if}</th>
                 {#each cols as col, c (col.id)}
                   {@const isEditing = editing !== null && visibleIds[editing.row] === issue.id && editing.col === c}
                   <td
@@ -613,6 +617,7 @@
     text-align: end;
     font-variant-numeric: tabular-nums;
   }
+  .stale { display: block; width: fit-content; margin-top: var(--s-1); padding: 0 var(--s-3); border-radius: var(--r-sheet); border: 1px solid var(--border); color: var(--muted); font-size: var(--fs-sm); font-weight: 500; white-space: nowrap; }
   .key-cell {
     position: sticky;
     left: 0;

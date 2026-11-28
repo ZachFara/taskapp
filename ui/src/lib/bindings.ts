@@ -809,7 +809,21 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	forecastFor: (query: ForecastQuery, options?: InvokeOptions) => __TAURI_INVOKE<Forecast>("forecast_for", { query }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	metricsFor: (query: MetricsQuery, options?: InvokeOptions) => __TAURI_INVOKE<Metrics>("metrics_for", { query }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	staleList: (options?: InvokeOptions) => __TAURI_INVOKE<StaleIssue[]>("stale_list", undefined, options),
 	/**
 	 * Forwards to the command of the same name.
 	 * 
@@ -1038,6 +1052,32 @@ export type Bar = {
 	from_estimate: boolean,
 };
 
+/**
+ *  `time` is approximate: whole days, from creation to finish, whose end found an unfinished blocker linked.
+ *  `avg_days` spreads it over every issue finished in the range.
+ */
+export type Blocked = {
+	now: BlockedItem[],
+	time: BlockedTime[],
+	avg_days: number | null,
+};
+
+/**  An open issue with an unfinished `blocks` blocker; `days` since the newest such link began. */
+export type BlockedItem = {
+	issue_id: IssueId,
+	key: string,
+	title: string,
+	blocked_by: string[],
+	days: number | null,
+};
+
+export type BlockedTime = {
+	issue_id: IssueId,
+	key: string,
+	title: string,
+	days: number | null,
+};
+
 export type Bucket = "Day" | "Week" | "Month";
 
 /**  One edit for a whole selection: the patch, labels to add or remove, and a relation from each issue to `add_relation.1`. */
@@ -1082,6 +1122,33 @@ export type Cycle = {
 	end_date: string,
 	icon: string | null,
 	color: string | null,
+	/**  The retrospective: a one-sentence goal, whether it was met (`None` until decided), a 1 to 5 rating, notes. */
+	goal?: string | null,
+	goal_met?: boolean | null,
+	rating?: number | null,
+	notes?: string,
+};
+
+/**
+ *  A cycle's commitment: its members at the end of its start day against what it holds and finished by its end
+ *  (or today, for a cycle still running). Percentages are `None` when nothing was committed.
+ */
+export type CycleCommit = {
+	committed: number,
+	committed_points: number | null,
+	/**  Committed issues finished. */
+	done: number,
+	done_points: number | null,
+	say_do_pct: number | null,
+	say_do_points_pct: number | null,
+	/**  Issues that joined or left the cycle after its start day. */
+	added: number,
+	added_points: number | null,
+	removed: number,
+	removed_points: number | null,
+	/**  (added + removed) as a percentage of what was committed. */
+	scope_change_pct: number | null,
+	scope_change_points_pct: number | null,
 };
 
 export type CycleId = number;
@@ -1217,11 +1284,42 @@ export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "P
 /**  Project views only: shows progress as a percent with a scope and completed sparkline; sorts and filters as `Progress`. */
 "ProgressChart";
 
+/**
+ *  Active-kind days over cycle-time days, per finished issue that has a cycle time above zero (`n` of them).
+ *  `distribution` counts them in five 20% bins, lowest first.
+ */
+export type FlowEfficiency = {
+	avg_pct: number | null,
+	n: number,
+	distribution: number[],
+	waiting: WaitingStatus[],
+};
+
 /**  Whether time in a status is work (`Active`), blocked on someone or something (`Waiting`) or neither (`Idle`). */
 export type FlowKind = "Active" | "Waiting" | "Idle";
 
 /**  The sidebar section a folder belongs to; its items live in the table of the same name. */
 export type FolderSection = "pin" | "view" | "project" | "cycle";
+
+/**
+ *  When the open issues are likely done at the recent pace. `p50` and `p85` are the days by which half and
+ *  85 in 100 simulated futures are finished; both are `None` when `enough` is false (too little history) or
+ *  nothing is open. `completions` is what finished in the `window_days` before today.
+ */
+export type Forecast = {
+	open: number,
+	completions: number,
+	window_days: number,
+	enough: boolean,
+	p50: string | null,
+	p85: string | null,
+};
+
+/**  What to forecast: the issues the filter lets through, or one cycle's own members. */
+export type ForecastQuery = {
+	filter: Filter | null,
+	cycle: CycleId | null,
+};
 
 /**
  *  Everything an import would create. The lists of statuses, labels, projects, cycles and property
@@ -1349,6 +1447,10 @@ export type Metrics = {
 	velocity: VelocityCycle[],
 	/**  Fewer than five issues finished in the range: read the numbers as anecdotes. */
 	thin: boolean,
+	/**  Present for a cycle scope only. */
+	cycle?: CycleCommit | null,
+	blocked?: Blocked | null,
+	flow?: FlowEfficiency | null,
 };
 
 /**  One bucket; `scope` is open plus finished-in-range work at the bucket's end, `done_total` the finished part. */
@@ -1629,6 +1731,15 @@ export type SourceBreakdown = {
 	completed: number,
 };
 
+/**  An issue past its status's nudge age: where it sits, since when, and for how many whole days. */
+export type StaleIssue = {
+	issue: Issue,
+	status_name: string,
+	nudge_days: number,
+	since: string,
+	days: number,
+};
+
 export type Status = {
 	id: StatusId,
 	name: string,
@@ -1774,6 +1885,14 @@ export type ViewTemplate = {
 };
 
 export type ViewTemplateId = number;
+
+/**  Days the finished issues spent in one Waiting status between starting and finishing. */
+export type WaitingStatus = {
+	status_id: StatusId,
+	name: string,
+	days: number | null,
+	issues: number,
+};
 
 export type WorkBlock = {
 	id: WorkBlockId,

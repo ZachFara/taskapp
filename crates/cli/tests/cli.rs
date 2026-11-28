@@ -1220,3 +1220,86 @@ fn metrics_reads_ranges_cycles_and_filters() {
     let cycle = run_json(&db, &["metrics", "--cycle", "Sprint"]);
     assert_eq!(cycle["from"], "2026-01-01");
 }
+
+#[test]
+fn forecast_says_when_history_is_too_thin_and_checks_names() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Write report"]);
+    let f = run_json(&db, &["forecast"]);
+    assert_eq!(
+        (&f["open"], &f["enough"], &f["p50"]),
+        (&Value::from(1), &Value::from(false), &Value::Null)
+    );
+    let text = String::from_utf8_lossy(&run(&db, &["forecast"]).stdout).into_owned();
+    assert!(text.contains("Not enough history"), "{text}");
+    assert_ne!(
+        run(&db, &["forecast", "--project", "Nope"]).status.code(),
+        Some(0)
+    );
+}
+
+#[test]
+fn stale_prints_an_empty_list_until_a_nudged_issue_waits() {
+    let (_d, db) = fresh();
+    run(
+        &db,
+        &["status", "create", "Parked", "--category", "Backlog"],
+    );
+    run(&db, &["status", "update", "Parked", "--nudge-days", "7"]);
+    run(&db, &["add", "Fresh idea"]);
+    assert_eq!(run_json(&db, &["stale"]), serde_json::json!([]));
+}
+
+#[test]
+fn cycle_set_writes_the_retrospective() {
+    let (_d, db) = fresh();
+    run_json(
+        &db,
+        &[
+            "cycle",
+            "create",
+            "--start",
+            "2024-01-01",
+            "--end",
+            "2024-01-14",
+            "--name",
+            "Sprint",
+        ],
+    );
+    let set = run_json(
+        &db,
+        &[
+            "cycle",
+            "set",
+            "sprint",
+            "--goal",
+            "Ship it",
+            "--goal-met",
+            "yes",
+            "--rating",
+            "4",
+            "--notes",
+            "ok",
+        ],
+    );
+    assert_eq!(
+        (
+            &set["goal"],
+            &set["goal_met"],
+            &set["rating"],
+            &set["notes"]
+        ),
+        (&"Ship it".into(), &true.into(), &4.into(), &"ok".into())
+    );
+    // Unmentioned fields stay; a bad rating is refused.
+    let again = run_json(&db, &["cycle", "set", "1", "--goal-met", "no"]);
+    assert_eq!(
+        (&again["goal"], &again["goal_met"]),
+        (&"Ship it".into(), &false.into())
+    );
+    assert!(
+        !run(&db, &["cycle", "set", "1", "--rating", "9"])
+            .status
+            .success()
+    );
+}

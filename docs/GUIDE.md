@@ -300,6 +300,12 @@ filter chips, Group, Sort and Display.
   Settings > Cycles. The current cycle shows a burn-up chart, past cycles a spark line and the page a "Completed per
   cycle" bar chart, when Progress charts is on. "Move unfinished to next cycle" (button, or the command) moves unfinished issues
   to the next cycle. Set an issue's cycle with `shift+c`.
+- **Cycle retrospective.** Click a cycle on the Cycles page to open its retrospective above its issues: a one-sentence
+  goal (set at planning), Goal met yes or no, a 1 to 5 rating, notes, and the cycle's own numbers (throughput, say/do and
+  scope change, AI vs me, flow efficiency, blocked work). In the command menu: "Set cycle goal...", "Was the cycle goal
+  met...", "Rate the cycle..." (they act on the open cycle, else the running one) and "Open cycle retrospective...". On the
+  Dashboard, a cycle chosen in Range shows a Retrospective button. For AI: `taskapp cycle set NAME --goal ... --goal-met
+  yes|no --rating N --notes ...`, and `taskapp metrics --cycle NAME` for the numbers.
 - **Pins.** Pin issues, projects, views and cycles (CLI also notes and URLs). The Pinned page lists them; `g h`.
 
 ## Events
@@ -354,10 +360,27 @@ with its recommendation until you answer). Decisions are Cairn's own; nothing ou
 The Dashboard (sidebar, or `g b`) shows how work is going over a range. Pick the range at the top: Today, This week,
 This cycle, any other cycle, Month, Quarter, Year, or Custom with two dates. The chart steps by day up to 31 days, by
 week up to about six months, and by month beyond. Limit it to a project or a label, and switch Count or Points.
-Two cards so far: Summary (completed, created, in progress now, lead time and cycle time as median and 85th percentile;
-a note appears when fewer than 5 issues finished) and Burn-up (scope against done). The Cards button shows, hides and
+Cards: Summary (completed, created, in progress now, lead time and cycle time as median and 85th percentile;
+a note appears when fewer than 5 issues finished), Burn-up (scope against done), Throughput (completed per day, week
+or month; points when Points is on), Created vs completed (issues, always counts), Velocity (the last five cycles, with
+their average as a dashed line), AI vs me (created and completed split into you in the app, AI and tools, imported,
+and other), By label (the top five labels by completed, the rest as Other), Cycle time (one dot per finished issue,
+by the day it finished against its days; the lines mark the median and the 85th percentile, and "85% finish within N
+days"; click a dot to open the issue), Lead time (created to finished), and Work in progress (now, and per period with
+Little's Law: average cycle time = WIP / throughput), Cycle commitment (pick a cycle in Range: say/do and scope change),
+Blocked work (issues waiting on an unfinished blocker, approximate blocked time) and Flow efficiency (active time over
+cycle time, and which Waiting statuses held work longest). The Cards button shows, hides and
 reorders cards, kept on this device. Every choice is also in the command menu ("Dashboard range", "Dashboard: show or
 hide cards"). Settings > General > Dashboard turns the whole page off; it is on by default.
+
+### Stale issues
+
+An issue is stale when it has sat in its status longer than that status's nudge days (Settings > Statuses). The clock
+starts at the issue's last status change; an issue with no status history (an import, for example) uses its last
+update. A status with no nudge, or 0 days, never makes issues stale, so nothing lights up until you set nudges, and
+imported Linear issues stay quiet unless their status has one. Stale rows in the table carry a quiet "stale" tag. The
+Stale card on the Dashboard counts them by status and lists the oldest first; click a key to open the issue. The CLI
+prints the same list: `taskapp stale`.
 
 ## Points and insights
 
@@ -384,6 +407,16 @@ the last six finished cycles. Only Done counts as finished; archived and cancele
 a Started move (including Linear imports, which have no history) have a lead time but no cycle time. `thin` is true
 when fewer than five issues finished in the range: read the numbers as anecdotes. With a cycle, only its members are
 counted; velocity always looks across cycles.
+
+### Forecast
+When will the open issues be done? The registry command is `forecast_for` (query: optional filter, optional cycle);
+the CLI is `taskapp forecast [--project NAME | --cycle NAME]`. It replays the last 56 days of completions for the
+filtered issues, then simulates the open issues (a cycle's members, when a cycle is given) 1000 times, each day
+finishing as many as a randomly drawn past day did. The answer is the day by which half (`p50`, "likely by") and 85 in
+100 (`p85`) of the runs are done. Fewer than 10 finishes in the window gives `enough: false` and no dates, and
+nothing open gives no dates either. The same data always gives the same answer. The Dashboard has a Forecast card (for
+its project and label filters, or the cycle when the range is a cycle), and each project page shows one line:
+"At the current pace: likely by Jan 12, 85% by Jan 20."
 
 ## Custom properties
 
@@ -890,6 +923,7 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `insights progress (--project N \| --cycle N \| --view N) [--measure points\|count\|time --from --to]` | Per-day scope, started, completed. | `taskapp insights progress --project 1 --measure count` |
 | `insights velocity (--project N \| --cycle N \| --view N) [--measure --periods 6]` | Completed per cycle or week. | `taskapp insights velocity --cycle 1` |
 | `metrics [--range today\|week\|month\|quarter\|year\|FROM..TO \| --cycle NAME] [--project NAME --label NAME --points --json]` | Throughput, lead and cycle time, WIP, by label and source, velocity. Ranges end today; buckets are days up to 31 days, weeks up to about six months, then months. | `taskapp metrics --range month --label bug` |
+| `forecast [--project NAME \| --cycle NAME]` | When the open issues are likely done at the recent pace (p50 and p85 dates). | `taskapp forecast --project Website` |
 | `history <key>` | Change history of an issue. | `taskapp history ABC-1` |
 | `undo` / `redo` | Undo or redo the newest step. | `taskapp undo` |
 | `backup list --dir <dir>` | List backups in a folder. | `taskapp backup list --dir ~/Backups/cairn` |

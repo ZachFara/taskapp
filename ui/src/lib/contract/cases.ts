@@ -330,6 +330,10 @@ export const cases: Case[] = [
   metrics('metrics: backwards range is Invalid', { scope: { Range: { from: ago(0), to: ago(5) } } }),
   metrics('metrics: time measure is Invalid', { measure: 'time' }),
   metrics('metrics: unknown cycle is NotFound', { scope: { Cycle: 99 } }),
+  call('forecast: whole workspace', 'forecast_for', { query: { filter: null, cycle: null } }),
+  call('forecast: project filter', 'forecast_for', { query: { filter: cond(fixed('Project'), 'In', [2]), cycle: null } }),
+  call('forecast: a cycle', 'forecast_for', { query: { filter: null, cycle: 1 } }),
+  call('forecast: unknown cycle is NotFound', 'forecast_for', { query: { filter: null, cycle: 99 } }),
 
   // Writes and their validation
   call('issues: empty title is Invalid', 'issues_create', { input: { title: '  ' } }),
@@ -446,6 +450,10 @@ export const cases: Case[] = [
   filter('projects: issues of the deleted project', cond(fixed('Project'), 'Eq', 3)),
   call('cycles: edit', 'cycles_update', { cycle: { id: 2, number: 2, name: 'Sprint two', start_date: '2026-11-30', end_date: '2026-12-12', icon: 'icon:repeat', color: 'blue' } }),
   call('cycles: overlapping another is Invalid', 'cycles_update', { cycle: { id: 2, number: 2, name: 'Sprint two', start_date: '2026-11-20', end_date: '2026-12-12', icon: null, color: null } }),
+  call('cycles: retrospective saved', 'cycles_update', { cycle: { id: 2, number: 2, name: 'Sprint two', start_date: '2026-11-30', end_date: '2026-12-12', icon: 'icon:repeat', color: 'blue', goal: 'Ship the importer', goal_met: true, rating: 4, notes: 'Went **well**' } }),
+  call('cycles: list with the retrospective', 'cycles_list'),
+  call('cycles: undo the retrospective', 'history_undo'),
+  call('cycles: a rating of 6 is Invalid', 'cycles_update', { cycle: { id: 2, number: 2, name: 'Sprint two', start_date: '2026-11-30', end_date: '2026-12-12', icon: 'icon:repeat', color: 'blue', rating: 6 } }),
   call('cycles: update unknown is NotFound', 'cycles_update', { cycle: { id: 99, number: 9, name: null, start_date: '2031-01-01', end_date: '2031-01-14', icon: null, color: null } }),
   call('statuses: rename and recolour', 'statuses_update', { id: 2, name: 'To do', color: 'blue', position: null, icon: null }),
   call('statuses: a name in use is Conflict', 'statuses_update', { id: 2, name: 'Done', color: null, position: null, icon: null }),
@@ -453,6 +461,7 @@ export const cases: Case[] = [
   call('statuses: update unknown is NotFound', 'statuses_update', { id: 99, name: 'x', color: null, position: null, icon: null }),
   call('statuses: list after edits', 'statuses_list'),
   call('statuses: set definition, kind and nudge', 'statuses_set_flow', { id: 2, definition: ' Ready to pick up ', flow_kind: 'Waiting', nudge_days: 7 }),
+  metrics('metrics: flow counts time in a Waiting status', { scope: { Range: { from: ago(35), to: ago(0) } }, bucket: 'Month' }),
   call('statuses: nudge 0 clears it, other fields stay', 'statuses_set_flow', { id: 2, definition: null, flow_kind: null, nudge_days: 0 }),
   call('statuses: a negative nudge is Invalid', 'statuses_set_flow', { id: 2, definition: null, flow_kind: null, nudge_days: -1 }),
   call('statuses: set flow on unknown is NotFound', 'statuses_set_flow', { id: 99, definition: 'x', flow_kind: null, nudge_days: null }),
@@ -668,4 +677,8 @@ export const cases: Case[] = [
   query('pviews: a project field on an issue view is Invalid', { filter: cond(fixed('TargetDate'), 'IsEmpty') }),
   call('pviews: undo the last save', 'history_undo'),
   call('pviews: the list after undo', 'views_list'),
+  // Stale: the seed's own nudges, then a tighter one on the first status.
+  call('stale: the seeded nudges list their issues', 'stale_list'),
+  call('stale: a one-day nudge on the first status', 'statuses_set_flow', { id: 1, definition: null, flow_kind: null, nudge_days: 1 }),
+  call('stale: a one-day nudge lists more', 'stale_list'),
 ];

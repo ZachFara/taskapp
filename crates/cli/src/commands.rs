@@ -31,6 +31,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
             crate::api::call(db, dir, &name, args).await
         }
         Cmd::Undo => val(undo::undo(db).await?),
+        Cmd::Stale => val(taskapp_core::stale::list(db).await?),
         Cmd::Setup { name, key, tz } => {
             val(taskapp_core::workspace::setup(db, &name, &key, tz.as_deref()).await?)
         }
@@ -75,6 +76,8 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Template(_)
         | Cmd::Insights(_)
         | Cmd::Metrics(_)
+        | Cmd::Forecast(_)
+        | Cmd::Stale
         | Cmd::Status(_)
         | Cmd::Attachment(_)
         | Cmd::Event(_)
@@ -532,6 +535,34 @@ async fn cycle(db: &Db, cmd: CycleCmd) -> Result<Value> {
                 SRC,
             )
             .await?)
+        }
+        CycleCmd::Set {
+            cycle,
+            goal,
+            goal_met,
+            rating,
+            notes,
+        } => {
+            let id = crate::references::cycle(db, Some(&cycle)).await?;
+            let mut c = cycles::list(db)
+                .await?
+                .into_iter()
+                .find(|c| Some(c.id) == id)
+                .ok_or_else(|| Error::NotFound(format!("cycle {cycle}")))?;
+            c.goal = goal.or(c.goal);
+            c.rating = rating.or(c.rating);
+            c.notes = notes.unwrap_or(c.notes);
+            c.goal_met = match goal_met.as_deref() {
+                None => c.goal_met,
+                Some("yes") => Some(true),
+                Some("no") => Some(false),
+                Some(other) => {
+                    return Err(Error::Invalid(format!(
+                        "goal-met is yes or no, not {other}"
+                    )));
+                }
+            };
+            val(cycles::update(db, c, SRC).await?)
         }
     }
 }

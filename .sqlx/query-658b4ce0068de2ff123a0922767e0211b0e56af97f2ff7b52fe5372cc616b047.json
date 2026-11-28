@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT name, start_date AS \"start_date!: NaiveDate\", end_date AS \"end_date!: NaiveDate\",\n                  icon, color, goal, goal_met AS \"goal_met: bool\", rating, notes\n           FROM cycles WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "name",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "start_date!: NaiveDate",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "end_date!: NaiveDate",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "icon",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "color",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "goal",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "goal_met: bool",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "rating",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "notes",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "658b4ce0068de2ff123a0922767e0211b0e56af97f2ff7b52fe5372cc616b047"
+}

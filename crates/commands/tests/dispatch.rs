@@ -276,3 +276,17 @@ async fn metrics_for_takes_the_wire_shape() -> R {
     assert_eq!(out["thin"], true);
     Ok(())
 }
+
+#[tokio::test]
+async fn forecast_for_takes_the_wire_shape() -> R {
+    let s = state().await;
+    let out = dispatch(
+        &s,
+        "forecast_for",
+        json!({ "query": {"filter": null, "cycle": null} }),
+    )
+    .await?;
+    assert_eq!(out["enough"], false);
+    assert_eq!(out["p50"], json!(null));
+    Ok(())
+}

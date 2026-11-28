@@ -4,7 +4,8 @@ import { planCsv, projectSlug } from './api.mock.import';
 import { FIELDS } from './issueFields';
 import { parseQuickadd } from './api.mock.quickadd';
 import * as insights from './api.mock.insights';
-import { metrics } from './api.mock.metrics';
+import { forecast, metrics } from './api.mock.metrics';
+import { stale } from './api.mock.stale';
 import { stepLabel } from './api.mock.stepLabel';
 import { byStatusOrder, flowDefaults } from './statusOrder';
 import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
@@ -99,7 +100,9 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   let workspace: Workspace = s.workspace ?? { setup_done: false, name: null, key: 'ABC', timezone: tz };
   const labels = s.labels ?? [];
   const projectStatuses = (s.projectStatuses ??= structuredClone(projectStatusSeed));
-  const cycles = s.cycles ?? [];
+  // A cycle always carries its retrospective fields, as the backend sends them.
+  const retro = { goal: null, goal_met: null, rating: null, notes: '' };
+  const cycles = (s.cycles ?? []).map((c) => ({ ...retro, ...c }));
   const events: Event[] = [];
   const decisions: Decision[] = s.decisions ?? [];
   const views = s.views ?? [];
@@ -196,6 +199,8 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     if (!valid) fail('Invalid', `pin target ${JSON.stringify(target)} for ${kind.toLowerCase()}`);
   };
   const next = (rows: { id: number }[]) => Math.max(0, ...rows.map((r) => r.id)) + 1;
+  // The real seed adds these through the core, which records them.
+  for (const r of relations) rec(r.from, 'relation', null, r);
   const find = <T extends { id: number }>(rows: T[], id: number, what: string) =>
     rows.find((r) => r.id === id) ?? fail('NotFound', `${what} ${id}`);
   const remove = <T extends { id: number }>(rows: T[], id: number, what: string) =>
@@ -846,11 +851,14 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       create: async (name, startDate, endDate, icon, color) => {
         if (endDate < startDate) fail('Invalid', `cycle ends ${endDate} before it starts ${startDate}`);
         checkIcon(icon);
-        const c = { id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name, start_date: startDate, end_date: endDate, icon: icon ?? null, color: colorKey(color) };
+        const c = { id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name, start_date: startDate, end_date: endDate, icon: icon ?? null, color: colorKey(color), ...retro };
         cycles.push(c);
         return c;
       },
-      update: async (c) => upsert(cycles, c, 'cycle'),
+      update: async (c) => {
+        if (c.rating != null && !(c.rating >= 1 && c.rating <= 5)) fail('Invalid', 'a rating is 1 to 5');
+        return upsert(cycles, { ...retro, ...c }, 'cycle');
+      },
       delete: async (id) => {
         remove(cycles, id, 'cycle');
         s.issues.forEach((i) => i.cycle_id === id && (i.cycle_id = null));
@@ -967,12 +975,13 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           if (reach(rel.to)) fail('Conflict', 'would create a dependency cycle');
         }
         relations.push(rel);
+        rec(rel.from, 'relation', null, rel);
         return null;
       },
       remove: async (given) => {
         const rel = { ...given, kind: kinds.resolve(given.kind) };
         const at = relations.findIndex((r) => r.from === rel.from && r.to === rel.to && r.kind === rel.kind);
-        if (at >= 0) relations.splice(at, 1);
+        if (at >= 0) rec(rel.from, 'relation', relations.splice(at, 1)[0], null);
         return null;
       },
       forIssue: async (id) => relations.filter((r) => r.from === id || r.to === id),
@@ -1077,8 +1086,14 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         return insights.velocity(tls, spans);
       },
     },
+    forecast: {
+      for: async (q) => forecast(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, tz: workspace.timezone, today: zoneToday() }, fail),
+    },
     metrics: {
-      for: async (q) => metrics(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, tz: workspace.timezone, today: zoneToday() }, fail),
+      for: async (q) => metrics(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, relations, everyone: query(withDisplay({ filter: null, layout: 'List' })), tz: workspace.timezone, today: zoneToday() }, fail),
+    },
+    stale: {
+      list: async () => stale(s.issues, s.statuses, changes, new Date()),
     },
     search: {
       // shortcut: results come in id order; the backend ranks by bm25. Upgrade when a screen depends on relevance order.
@@ -1229,7 +1244,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           s.projects.push({ id: next(s.projects), slug, name, description: null, doc_link: null, start_date: null, target_date: null, archived_at: null, created_at: now(), updated_at: now(), icon: null, color: null, ...projectDefaults() });
         }
         for (const c of plan.cycles ?? []) {
-          if (!cycles.some((x) => x.start_date === c.start_date)) cycles.push({ id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name: c.name, start_date: c.start_date, end_date: c.end_date, icon: null, color: null });
+          if (!cycles.some((x) => x.start_date === c.start_date)) cycles.push({ id: next(cycles), number: Math.max(0, ...cycles.map((x) => x.number)) + 1, name: c.name, start_date: c.start_date, end_date: c.end_date, icon: null, color: null, ...retro });
         }
         for (const d of plan.property_defs ?? []) if (!s.propertyDefs.some((x) => x.key === d.key)) s.propertyDefs.push({ ...d, position: Math.max(-1, ...s.propertyDefs.map((x) => x.position)) + 1 });
         const [ids, mark] = [new Map<string, number>(), changes.length];
