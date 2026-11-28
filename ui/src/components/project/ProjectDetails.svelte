@@ -11,6 +11,7 @@
   import OptionList from '../detail/OptionList.svelte';
   import PropertyRow from '../detail/PropertyRow.svelte';
   import PropertyRows from '../detail/PropertyRows.svelte';
+  import NextActionRow from './NextActionRow.svelte';
 
   // The project's fields as a plate, like an issue's: each row opens its editor, each edit is one update.
   let { project, onsaved }: { project: Project; onsaved: (p: Project) => void } = $props();
@@ -68,6 +69,7 @@
       <LabelPicker {labels} selected={project.label_ids} ontoggle={toggleLabel} oncreate={createLabel} ondelete={(l) => askDelete({ kind: 'label', id: l.id, name: l.name })} />
     {/snippet}
   </PropertyRow>
+  <NextActionRow {project} bind:openRow />
   <PropertyRows defs={visible} values={project.properties} {setProp} bind:openRow />
 </section>
 

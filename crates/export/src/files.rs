@@ -241,6 +241,9 @@ pub struct ProjectFile {
     pub folder_id: Option<i64>,
     #[serde(default = "unplaced")]
     pub position: i64,
+    /// The number of the flagged next-action issue.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_issue: Option<i64>,
     #[sqlx(skip)]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub labels: Vec<String>,

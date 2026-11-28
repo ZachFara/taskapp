@@ -392,4 +392,15 @@ describe('walk', { timeout: 20_000 }, () => {
     await page.getByRole('switch', { name: 'Dashboard' }).click();
     await pw(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0);
   });
+
+  it('P5 a next action is set on the project page, listed on Next actions, and stuck projects are marked', async () => {
+    await open('/project/mobile');
+    await pw(page.getByText('Stuck').first()).toBeVisible();
+    await page.getByRole('button', { name: 'Next action', exact: true }).click();
+    await page.getByRole('option').nth(1).click();
+    await pw(page.getByRole('button', { name: 'Next action', exact: true })).toContainText('ABC-');
+    await go('/next');
+    await pw(page.locator('tr[data-slug=mobile]')).toContainText('ABC-');
+    await pw(page.locator('tr[data-slug=office]')).toContainText('Stuck');
+  });
 });

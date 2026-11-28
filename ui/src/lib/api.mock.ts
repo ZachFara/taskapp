@@ -6,6 +6,7 @@ import { parseQuickadd } from './api.mock.quickadd';
 import * as insights from './api.mock.insights';
 import { forecast, metrics } from './api.mock.metrics';
 import { stale } from './api.mock.stale';
+import { nextActions } from './api.mock.next';
 import { stepLabel } from './api.mock.stepLabel';
 import { byStatusOrder, flowDefaults } from './statusOrder';
 import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
@@ -119,12 +120,14 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const kinds = relationKindsApi(relationKinds, relations, fail);
   const pins: Pin[] = s.pins ?? [];
   const blocks: WorkBlock[] = [];
+  // [project id, flagged issue id]; an array so undo snapshots it with the other collections.
+  const nextFlags: [number, number][] = [];
   const changes: Change[] = [...(s.history ?? [])];
   // One step per command that changed anything, like the backend; undo and redo cover every entity.
   type Step = { label: string; before: Issue[]; after: Issue[]; rows: Change[]; beforeRest: string; afterRest: string };
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
-  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, decisions, links, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog] as unknown[][];
+  const collections = () => [s.statuses, s.projects, projectStatuses, s.propertyDefs, labels, cycles, events, decisions, links, templates, relations, relationKinds, comments, views, milestones, pins, viewTemplates, folders, placed, importLog, nextFlags] as unknown[][];
   const others = () => JSON.stringify(collections());
   const status = () => ({ undo: undoSteps.at(-1)?.label ?? null, redo: redoSteps.at(-1)?.label ?? null });
   // A command that calls other commands (bulk update) is one step: only the outermost call records it.
@@ -829,8 +832,21 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         for (const l of p.label_ids) find(labels, l, 'label');
         return upsert(s.projects, { ...p, created_at: find(s.projects, p.id, 'project').created_at, updated_at: now(), color: colorKey(p.color), label_ids: [...new Set(p.label_ids)].sort((a, b) => a - b) }, 'project');
       },
+      setNext: async (project, issue) => {
+        const p = find(s.projects, project, 'project');
+        const at = nextFlags.findIndex(([x]) => x === project);
+        if (at >= 0) nextFlags.splice(at, 1);
+        if (issue === null) return null;
+        const i = getIssue(issue);
+        if (i.project_id !== project) fail('Invalid', `${i.key} is not in project ${p.slug}`);
+        if (['Completed', 'Canceled'].includes(s.statuses.find((x) => x.id === i.status_id)?.category ?? '')) fail('Invalid', `${i.key} is already finished`);
+        nextFlags.push([project, issue]);
+        return null;
+      },
       delete: async (id) => {
         remove(s.projects, id, 'project');
+        const flag = nextFlags.findIndex(([x]) => x === id);
+        if (flag >= 0) nextFlags.splice(flag, 1);
         s.issues.forEach((i) => i.project_id === id && (i.project_id = null));
         return null;
       },
@@ -1095,6 +1111,9 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     metrics: {
       for: async (q) => metrics(q, query(withDisplay({ filter: q.filter, layout: 'List' })), { changes, statuses: s.statuses, cycles, labels, relations, everyone: query(withDisplay({ filter: null, layout: 'List' })), tz: workspace.timezone, today: zoneToday() }, fail),
     },
+    next: {
+      list: async () => nextActions(s.projects, s.issues, s.statuses, projectStatuses, labels, new Map(nextFlags)),
+    },
     stale: {
       list: async () => stale(s.issues, s.statuses, changes, new Date()),
     },
@@ -1318,7 +1337,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
   const mutating = (
     'issues.create issues.update issues.bulkUpdate issues.duplicate issues.archive issues.restore issues.createFromQuickadd statuses.create statuses.update statuses.reorder statuses.setFlow statuses.delete project.statusesCreate project.statusesUpdate project.statusesReorder project.statusesDelete properties.setAppliesTo ' +
     'properties.createDef properties.renameDef properties.changeKind properties.reorder properties.setScope properties.deleteDef properties.setValue ' +
-    'projects.create projects.update projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
+    'projects.create projects.update projects.setNext projects.delete projects.createMilestone projects.updateMilestone projects.deleteMilestone ' +
     'cycles.create cycles.update cycles.delete events.create events.update events.delete events.link events.unlink decisions.create decisions.answer decisions.withdraw decisions.link decisions.unlink links.add links.remove templates.create templates.update templates.delete templates.apply ' +
     'labels.create labels.update labels.delete labels.addLabel labels.removeLabel comments.addComment comments.update comments.delete ' +
     'relations.add relations.remove relation.kindsCreate relation.kindsUpdate relation.kindsDelete views.save views.saveProject views.delete views.reorder folders.create folders.rename folders.delete folders.place folders.placeItem views.createFromTemplate views.saveAsTemplate views.resetToTemplate ' +

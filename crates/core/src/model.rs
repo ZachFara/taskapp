@@ -941,6 +941,14 @@ pub struct StaleIssue {
     pub days: i32,
 }
 
+/// A project with its open next action; `stuck` when the project is active and has none.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct NextAction {
+    pub project: Project,
+    pub issue: Option<Issue>,
+    pub stuck: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct Metrics {
     pub from: NaiveDate,

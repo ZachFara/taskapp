@@ -334,6 +334,16 @@ filter chips, Group, Sort and Display.
   met...", "Rate the cycle..." (they act on the open cycle, else the running one) and "Open cycle retrospective...". On the
   Dashboard, a cycle chosen in Range shows a Retrospective button. For AI: `taskapp cycle set NAME --goal ... --goal-met
   yes|no --rating N --notes ...`, and `taskapp metrics --cycle NAME` for the numbers.
+- **Next actions and stuck projects.** Each project has one flagged next action, an open issue of that project. Set it
+  from an issue (right-click > "Make next action", or the command), from the "Next action" row on the project page, or
+  with "Set next action" in the command menu on a project page. The Next actions page (sidebar, `g n`) lists every
+  project's next action. A project is stuck when its status is a Started one, it has neither the Area nor the Collection
+  label, and it has no open next action: it shows a "Stuck" tag on the Projects list, the project page and the Next
+  actions page, and the Stuck projects card on the Dashboard lists them. Finishing or cancelling an issue, moving it
+  to another project or archiving it ends its time as the next action, and a prompt then offers the project's open
+  issues to pick the following one (Skip leaves the project stuck); undo brings the flag back. Switch the whole feature
+  off in Settings > Features (data stays). CLI: `taskapp project next SLUG KEY` flags an issue, `taskapp project next
+  SLUG clear` removes the flag, `taskapp next` lists every project with its next action and `stuck`.
 - **Pins.** Pin issues, projects, views and cycles (CLI also notes and URLs). The Pinned page lists them; `g h`.
 
 ## Events
@@ -618,7 +628,7 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 
 Settings > Features lists every optional feature with a switch, all on by default: Dashboard, Decisions, Cycles,
 Events, Progress charts (burn-ups and sparklines on projects and cycles), Stale nudges, Reminders capture, Google
-Calendar, and the coming Process Inbox, Next actions and Focus mode. Switching one off hides its sidebar entries, its
+Calendar, Next actions, and the coming Process Inbox and Focus mode. Switching one off hides its sidebar entries, its
 page (the address shows "is switched off"), its commands in the command menu, its Settings page where it has one
 (Cycles, Reminders, Calendar) and its dashboard card. Your data stays and comes back when you switch it on. Each switch
 applies at once, has its own command ("Turn Cycles on or off"), and is stored as a setting (`dashboard`,
@@ -707,6 +717,7 @@ registry, or when a row names an unknown command. Rows whose first cell is not a
 | `nav.projects` | Go to Projects | `g p` | Go to the project list. |
 | `nav.cycles` | Go to Cycles | `g c` | Go to Cycles. |
 | `nav.events` | Go to Events | `g e` | Go to Events. |
+| `nav.next` | Go to Next actions | `g n` | Go to the next action of each project (when it is switched on in Settings). |
 | `nav.dashboard` | Go to Dashboard | `g b` | Go to the Dashboard (when it is switched on in Settings). |
 | `nav.decisions` | Go to Decisions | `g q` | Go to Decisions. |
 | `nav.views` | Go to Views | `g v` | Go to Views. |
@@ -823,6 +834,8 @@ These appear in the command menu (when they apply) and have no shortcut.
 
 | Command id | Name | Keys | What it does |
 |---|---|---|---|
+| `issue.next` | Make next action | (none) | Flag the issue as its project's next action. |
+| `project.next` | Set next action | (none) | On a project page: pick the project's next action from its open issues, or clear it. |
 | `image.attach` | Attach image | (none) | Choose an image file for the description or comment box you used last. |
 | `app.reload` | Reload | (none) | Reload the window. |
 | `pane.sidebar.reset` | Reset sidebar width | (none) | Back to the default sidebar width. |
@@ -964,6 +977,8 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `property set <issue> <key> <value>` | Set a value (JSON; `null` clears). | `taskapp property set ABC-1 area '"web"'` |
 | `project list` / `project create <slug> <name> [--icon --color]` | List or create projects. | `taskapp project create web Website` |
 | `project set <slug> [--name --description --icon --color --start --target --status --priority --label --property]` | Change a project's name, look (`--icon` from `icons`, `--color` from `colors`), dates (`YYYY-MM-DD`) or other fields. | `taskapp project set web --icon folder --color teal --start 2026-12-01` |
+| `next` (no arguments) | Every project with its open next action and whether it is stuck (active, no next action). | `taskapp next` |
+| `project next <slug> <KEY or clear>` | Flag an issue of the project as its next action, or clear the flag. | `taskapp project next web ABC-12` |
 | `icons` / `colors` | List the icon names and palette colors `project set` accepts. | `taskapp colors` |
 | `cycle list` / `cycle create --start --end [--name --color --icon]` | List or create cycles. | `taskapp cycle create --start 2026-12-01 --end 2026-12-14` |
 | `label list` / `label create <name> <color> [--icon]` | List or create labels. | `taskapp label create bug red` |

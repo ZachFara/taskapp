@@ -598,6 +598,7 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
         "INSERT INTO view_folders (id, name, position) VALUES (3, 'Work', 0)",
         "INSERT INTO view_folders (id, name, position, section, parent_id) VALUES (4, 'Inner', 1, 'project', NULL), (5, 'Deep', 2, 'project', 4)",
         "UPDATE projects SET folder_id = 5, position = 2",
+        "UPDATE projects SET next_issue_id = (SELECT id FROM issues WHERE number = 1) WHERE slug = 'app'",
         "UPDATE cycles SET folder_id = NULL, position = 3",
         "UPDATE pins SET folder_id = 3",
         "UPDATE views SET icon = 'icon:star', color = 'yellow', template_id = 7, folder_id = 3 WHERE id = (SELECT min(id) FROM views)",
@@ -638,12 +639,19 @@ async fn rebuild_restores_every_column_the_database_holds() -> R {
     .fetch_all(&rebuilt.pool)
     .await?;
     assert_eq!(dlinked, vec![1]);
-    let linked_issue = sqlx::query_scalar::<_, i64>(
-        "SELECT i.number FROM links l JOIN issues i ON i.id = l.issue_id WHERE l.id = 5",
-    )
-    .fetch_all(&rebuilt.pool)
-    .await?;
-    assert_eq!(linked_issue, vec![2]);
+    links_and_next_point_at_the_right_issues(&rebuilt).await
+}
+
+/// A link and a project's next action refer to issues by id; after a rebuild they must reach the same issues.
+async fn links_and_next_point_at_the_right_issues(rebuilt: &Db) -> R {
+    let number = |sql: &'static str| sqlx::query_scalar::<_, i64>(sql).fetch_all(&rebuilt.pool);
+    let linked =
+        number("SELECT i.number FROM links l JOIN issues i ON i.id = l.issue_id WHERE l.id = 5");
+    assert_eq!(linked.await?, vec![2]);
+    let next = number(
+        "SELECT i.number FROM projects p JOIN issues i ON i.id = p.next_issue_id WHERE p.slug = 'app'",
+    );
+    assert_eq!(next.await?, vec![1]);
     Ok(())
 }
 

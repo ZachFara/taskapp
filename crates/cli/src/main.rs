@@ -80,6 +80,8 @@ enum Cmd {
     History { key: String },
     /// Issues that have sat in their status past its nudge age, longest first.
     Stale,
+    /// Every project's next action, and which active projects are stuck without one.
+    Next,
     /// Optional features and whether each is on; `features set NAME on|off` switches one (data stays).
     Features {
         #[command(subcommand)]
@@ -475,6 +477,11 @@ enum ProjectCmd {
         category: String,
         #[arg(long, default_value = "gray")]
         color: String,
+    },
+    /// Flag an issue (KEY) as the project's next action, or `clear` the flag.
+    Next {
+        slug: String,
+        target: String,
     },
     /// Change a project's name, look, dates, status, priority, labels or a custom property value.
     Set {

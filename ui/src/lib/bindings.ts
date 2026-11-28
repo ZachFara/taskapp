@@ -270,6 +270,20 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	nextList: (options?: InvokeOptions) => __TAURI_INVOKE<NextAction[]>("next_list", undefined, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
+	projectsSetNext: (project: ProjectId, issue: IssueId | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("projects_set_next", { project, issue }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	projectsProgress: (id: ProjectId, options?: InvokeOptions) => __TAURI_INVOKE<[number, number]>("projects_progress", { id }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1547,6 +1561,13 @@ export type NewIssue = {
 	properties?: { [key in string]: Value } | null,
 	created_at?: string | null,
 	completed_at?: string | null,
+};
+
+/**  A project with its open next action; `stuck` when the project is active and has none. */
+export type NextAction = {
+	project: Project,
+	issue: Issue | null,
+	stuck: boolean,
 };
 
 export type Op = "Eq" | "Neq" | "In" | "NotIn" | "Lt" | "Lte" | "Gt" | "Gte" | "Contains" | "IsEmpty" | "IsNotEmpty";

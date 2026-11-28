@@ -29,6 +29,7 @@ export function stepLabel(name: string, args: unknown[], out: unknown): string {
     case 'issues_duplicate': return `Duplicated ${count(len(args[0]), 'issue')}`;
     case 'import_apply': return `Imported ${count(Number((out as Obj).created ?? 0), 'issue')}`;
     case 'pins_set': return `${args[2] === false ? 'Unpinned' : 'Pinned'} ${count(len(args[1]), 'item')}`;
+    case 'projects_set_next': return args[1] === null || args[1] === undefined ? 'Cleared next action' : 'Set next action';
     case 'project_statuses_create': return 'Created project status';
     case 'project_statuses_update': return 'Edited project status';
     case 'project_statuses_reorder': return 'Reordered project statuses';

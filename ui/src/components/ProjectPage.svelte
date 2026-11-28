@@ -5,6 +5,8 @@
   import { navigate } from '../app/routes';
   import { tick } from 'svelte';
   import { openExternal } from '../lib/openExternal';
+  import { isOn } from '../lib/features.svelte';
+  import Pill from '../ui/Pill.svelte';
   import Button from '../ui/Button.svelte';
   import Dialog from '../ui/Dialog.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
@@ -40,6 +42,7 @@
   let confirming = $state(false);
   let insights = $state(false);
   let iconOpen = $state(false);
+  let stuck = $state(false);
 
   const pinned = $derived(pins.find((p) => p.pin.kind === 'Project' && p.pin.target === slug));
   // Only Obsidian and https links get a button; anything else (javascript:, http:, file:) is dropped.
@@ -60,6 +63,7 @@
       filter: { Cond: { field: { Fixed: 'Project' }, op: 'Eq', value: found.id } },
       sorts: [], group_by: null, layout: 'List', columns: [], include_archived: false,
     });
+    stuck = isOn('next_actions') && !!(await api.next.list()).find((n) => n.project.id === found.id)?.stuck;
     [progress, milestones, pins, rows, statuses] = await Promise.all([
       api.projects.progress(found.id),
       api.projects.listMilestones(found.id),
@@ -128,7 +132,7 @@
   });
 </script>
 
-{#snippet crumb()}<span class="crumb">{project?.slug}</span>{/snippet}
+{#snippet crumb()}<span class="crumb">{project?.slug}</span>{#if stuck}<span class="tag"><Pill color="red">Stuck</Pill></span>{/if}{/snippet}
 
 {#if project === undefined}
   <div class="load" aria-busy="true"><Skeleton /><Skeleton /><Skeleton /></div>
@@ -183,6 +187,7 @@
   .details { padding: var(--s-5) var(--s-7) 0; }
   .ms { padding: var(--s-7); }
   .toolbar { display: flex; align-items: center; gap: var(--s-7); flex-wrap: wrap; padding: 0 var(--s-7); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .tag { margin-left: var(--s-4); }
   .crumb { font-size: var(--fs-lg); font-weight: 600; color: var(--muted); }
   .issues { height: 70vh; }
   .load { display: grid; gap: var(--s-5); padding: var(--s-8) var(--s-7); }

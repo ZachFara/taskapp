@@ -21,6 +21,7 @@
   import ImageViewer from '../components/ImageViewer.svelte';
   import UndoToast from '../components/UndoToast.svelte';
   import LinkSolution from '../components/LinkSolution.svelte';
+  import NextPrompt from '../components/NextPrompt.svelte';
   import { fresh } from '../lib/motion.svelte';
   import { dismiss, onWrote, say } from '../components/undoState.svelte';
 
@@ -234,6 +235,7 @@
   <CheatSheet bind:open={cheat} />
   <div class="toasts"><UndoToast /></div>
   <LinkSolution />
+  <NextPrompt />
   <ImageViewer />
 {/if}
 

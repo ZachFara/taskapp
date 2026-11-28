@@ -85,6 +85,12 @@ pub fn step_label(name: &str, args: &Value, out: Option<&Value>) -> String {
             let n = args["targets"].as_array().map_or(0, Vec::len);
             format!("{verb} {}", count(n, "item"))
         }
+        "projects_set_next" => if args["issue"].is_null() {
+            "Cleared next action"
+        } else {
+            "Set next action"
+        }
+        .into(),
         "project_statuses_create" => "Created project status".into(),
         "project_statuses_update" => "Edited project status".into(),
         "project_statuses_reorder" => "Reordered project statuses".into(),

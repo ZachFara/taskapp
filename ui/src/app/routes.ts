@@ -4,6 +4,7 @@ import DashboardPage from '../components/dashboard/DashboardPage.svelte';
 import CyclesPage from '../components/CyclesPage.svelte';
 import InboxPage from '../components/InboxPage.svelte';
 import IssueDetail from '../components/IssueDetail.svelte';
+import NextPage from '../components/NextPage.svelte';
 import MyIssuesPage from '../components/MyIssuesPage.svelte';
 import PinnedPage from '../components/PinnedPage.svelte';
 import ProjectPage from '../components/ProjectPage.svelte';
@@ -27,6 +28,7 @@ export const routes: { pattern: string; component: Component }[] = [
   { pattern: '/cycles', component: CyclesPage },
   { pattern: '/dashboard', component: DashboardPage },
   { pattern: '/decisions', component: DecisionsPage },
+  { pattern: '/next', component: NextPage },
   { pattern: '/events', component: EventsPage },
   { pattern: '/event/:id', component: EventPage },
   { pattern: '/settings/:section', component: Settings },

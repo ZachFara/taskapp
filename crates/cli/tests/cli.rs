@@ -1251,6 +1251,22 @@ fn stale_prints_an_empty_list_until_a_nudged_issue_waits() {
 }
 
 #[test]
+fn project_next_flags_an_issue_and_next_lists_it() {
+    let (_d, db) = fresh();
+    run(&db, &["project", "create", "alpha", "Alpha"]);
+    run(&db, &["add", "Call the bank +alpha"]);
+    run(&db, &["project", "set", "alpha", "--status", "In progress"]);
+    let stuck = run_json(&db, &["next"]);
+    assert_eq!(stuck[0]["stuck"], true);
+    run(&db, &["project", "next", "alpha", "ABC-1"]);
+    let flagged = run_json(&db, &["next"]);
+    assert_eq!(flagged[0]["issue"]["key"], "ABC-1");
+    assert_eq!(flagged[0]["stuck"], false);
+    run(&db, &["project", "next", "alpha", "clear"]);
+    assert_eq!(run_json(&db, &["next"])[0]["stuck"], true);
+}
+
+#[test]
 fn cycle_set_writes_the_retrospective() {
     let (_d, db) = fresh();
     run_json(

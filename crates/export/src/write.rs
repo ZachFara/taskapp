@@ -583,7 +583,8 @@ async fn import_log(db: &Db) -> Result<Vec<ImportLogRow>> {
 async fn projects(db: &Db) -> Result<Vec<ProjectFile>> {
     let mut projects: Vec<ProjectFile> = sqlx::query_as(
         "SELECT p.slug, p.name, p.description, p.doc_link, p.start_date, p.target_date, p.archived_at,
-                p.created_at, p.updated_at, p.icon, p.color, s.name AS status, p.priority, p.folder_id, p.position
+                p.created_at, p.updated_at, p.icon, p.color, s.name AS status, p.priority, p.folder_id, p.position,
+                (SELECT i.number FROM issues i WHERE i.id = p.next_issue_id) AS next_issue
          FROM projects p JOIN project_statuses s ON s.id = p.status_id ORDER BY p.slug",
     )
     .fetch_all(&db.pool)

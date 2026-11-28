@@ -706,4 +706,14 @@ export const cases: Case[] = [
   call('stale: the seeded nudges list their issues', 'stale_list'),
   call('stale: a one-day nudge on the first status', 'statuses_set_flow', { id: 1, definition: null, flow_kind: null, nudge_days: 1 }),
   call('stale: a one-day nudge lists more', 'stale_list'),
+  // Next actions: the seed has no active project, so none is stuck; flag, undo, refuse, clear.
+  call('next: the seeded projects have none flagged', 'next_list'),
+  call('next: flag an issue of the project', 'projects_set_next', { project: 1, issue: 1 }),
+  call('next: the flag is listed', 'next_list'),
+  call('next: undo the flag', 'history_undo'),
+  call('next: the list after undo', 'next_list'),
+  call('next: an issue of another project is Invalid', 'projects_set_next', { project: 1, issue: 24 }),
+  call('next: an unknown issue is NotFound', 'projects_set_next', { project: 1, issue: 99 }),
+  call('next: an unknown project is NotFound', 'projects_set_next', { project: 99, issue: null }),
+  call('next: clearing with none flagged is fine', 'projects_set_next', { project: 1, issue: null }),
 ];

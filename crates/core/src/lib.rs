@@ -23,6 +23,7 @@ pub mod issues;
 pub mod labels;
 pub mod links;
 pub mod metrics;
+pub mod next_actions;
 pub mod palette;
 pub mod pins;
 pub mod project_statuses;

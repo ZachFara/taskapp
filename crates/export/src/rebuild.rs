@@ -49,6 +49,7 @@ pub async fn restore_into(db: &Db, dir: &Path) -> Result<()> {
     wipe(&mut tx).await?;
     restore_tables(db, &mut tx, dir).await?;
     restore_issues(&mut tx, dir).await?;
+    restore_next_actions(&mut tx, dir).await?;
     tx.commit().await?;
     // reindex rebuilds every search row at once; the id argument is not used.
     search::reindex(db, IssueId(0)).await?;
@@ -407,6 +408,29 @@ async fn restore_cycles(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
         .bind(c.notes)
             .execute(&mut **tx)
             .await?;
+    }
+    Ok(())
+}
+
+/// Needs the issues, so it runs after them.
+async fn restore_next_actions(tx: &mut Tx<'_>, dir: &Path) -> Result<()> {
+    for path in files_in(dir, "projects", "yaml")? {
+        let p: ProjectFile = read_yaml(&path)?;
+        if let Some(n) = p.next_issue {
+            sqlx::query(
+                "UPDATE projects SET next_issue_id = (SELECT id FROM issues WHERE number = ?) WHERE slug = ?",
+            )
+            .bind(n)
+            .bind(&p.slug)
+            .execute(&mut **tx)
+            .await?;
+            // The projects_touch trigger just bumped updated_at; put the exported value back.
+            sqlx::query("UPDATE projects SET updated_at = ? WHERE slug = ?")
+                .bind(p.updated_at.unwrap_or(p.created_at))
+                .bind(p.slug)
+                .execute(&mut **tx)
+                .await?;
+        }
     }
     Ok(())
 }

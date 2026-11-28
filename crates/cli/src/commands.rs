@@ -31,7 +31,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
             crate::api::call(db, dir, &name, args).await
         }
         Cmd::Undo => val(undo::undo(db).await?),
-        Cmd::Stale => val(taskapp_core::stale::list(db).await?),
+        Cmd::Stale | Cmd::Next => lists(db, cmd).await,
         Cmd::Setup { name, key, tz } => {
             val(taskapp_core::workspace::setup(db, &name, &key, tz.as_deref()).await?)
         }
@@ -79,6 +79,7 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Metrics(_)
         | Cmd::Forecast(_)
         | Cmd::Stale
+        | Cmd::Next
         | Cmd::Status(_)
         | Cmd::Attachment(_)
         | Cmd::Event(_)
@@ -561,6 +562,14 @@ async fn project_set(db: &Db, slug: &str, edit: ProjectEdit) -> Result<Value> {
     val(projects::update(db, p, SRC).await?)
 }
 
+/// `stale` or `next`: the two read-only lists.
+async fn lists(db: &Db, cmd: Cmd) -> Result<Value> {
+    match cmd {
+        Cmd::Next => val(taskapp_core::next_actions::list(db).await?),
+        _ => val(taskapp_core::stale::list(db).await?),
+    }
+}
+
 async fn project(db: &Db, cmd: ProjectCmd) -> Result<Value> {
     match cmd {
         ProjectCmd::List => val(projects::list(db).await?),
@@ -570,6 +579,18 @@ async fn project(db: &Db, cmd: ProjectCmd) -> Result<Value> {
             category,
             color,
         } => val(project_statuses::create(db, &name, named(&category)?, &color, None, SRC).await?),
+        ProjectCmd::Next { slug, target } => {
+            let project = crate::references::project(db, Some(&slug))
+                .await?
+                .ok_or_else(|| Error::NotFound(format!("project {slug}")))?;
+            let issue = if target == "clear" {
+                None
+            } else {
+                Some(taskapp_core::issues::get_by_key(db, &target).await?.id)
+            };
+            taskapp_core::next_actions::set(db, project, issue, SRC).await?;
+            val(taskapp_core::next_actions::list(db).await?)
+        }
         ProjectCmd::Set { slug, edit } => project_set(db, &slug, edit).await,
         ProjectCmd::Create {
             slug,

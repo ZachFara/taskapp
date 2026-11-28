@@ -1,5 +1,5 @@
 import type { Component } from 'svelte';
-import type { Filter, StaleIssue } from '../../lib/bindings';
+import type { Filter, NextAction, StaleIssue } from '../../lib/bindings';
 import type { Metrics } from './metrics';
 import AiVsMeCard from './AiVsMeCard.svelte';
 import BurnupCard from './BurnupCard.svelte';
@@ -7,6 +7,7 @@ import ByLabelCard from './ByLabelCard.svelte';
 import CreatedDoneCard from './CreatedDoneCard.svelte';
 import ForecastCard from './ForecastCard.svelte';
 import StaleCard from './StaleCard.svelte';
+import StuckCard from './StuckCard.svelte';
 import SummaryCard from './SummaryCard.svelte';
 import CycleTimeCard from './CycleTimeCard.svelte';
 import LeadTimeCard from './LeadTimeCard.svelte';
@@ -17,7 +18,7 @@ import CycleCard from './CycleCard.svelte';
 import BlockedCard from './BlockedCard.svelte';
 import FlowCard from './FlowCard.svelte';
 
-export type CardProps = { metrics: Metrics; measure: 'Count' | 'Points'; filter: Filter | null; cycle: number | null; stale: StaleIssue[] };
+export type CardProps = { metrics: Metrics; measure: 'Count' | 'Points'; filter: Filter | null; cycle: number | null; stale: StaleIssue[]; stuck: NextAction[] };
 /** One entry per card; the later tickets (MIT-328 to 334) add theirs here. A card never fetches: it draws `metrics`. */
 export const CARDS: { id: string; title: string; wide?: boolean; component: Component<CardProps> }[] = [
   { id: 'summary', title: 'Summary', component: SummaryCard },
@@ -35,4 +36,5 @@ export const CARDS: { id: string; title: string; wide?: boolean; component: Comp
   { id: 'blocked', title: 'Blocked work', component: BlockedCard },
   { id: 'flow', title: 'Flow efficiency', component: FlowCard },
   { id: 'stale', title: 'Stale', component: StaleCard },
+  { id: 'stuck', title: 'Stuck projects', component: StuckCard },
 ];

@@ -92,6 +92,10 @@ macro_rules! with_commands {
             }
             projects_update(s, project: Project) -> Project { projects::update(&s.db, project, $source).await }
             projects_delete(s, id: ProjectId) -> () { projects::delete(&s.db, id, $source).await }
+            next_list(s) -> Vec<NextAction> { next_actions::list(&s.db).await }
+            projects_set_next(s, project: ProjectId, issue: Option<IssueId>) -> () {
+                next_actions::set(&s.db, project, issue, $source).await
+            }
             projects_progress(s, id: ProjectId) -> (u32, u32) { projects::progress(&s.db, id).await }
             projects_list_milestones(s, project: ProjectId) -> Vec<Milestone> {
                 projects::list_milestones(&s.db, project).await
