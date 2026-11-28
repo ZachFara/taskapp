@@ -28,7 +28,7 @@
   import { decisions, openDecisions, watchDecisions } from '../lib/decisions.svelte';
   import { labelFor } from '../lib/commands';
   import { shortcutFor } from '../lib/commands';
-  import { dashboard, loadDashboard } from './dashboard/dashboard.svelte';
+  import { isOn, loadFeatures } from '../lib/features.svelte';
   import ProjectSpark from './insights/ProjectSpark.svelte';
   import IconColorPicker from './pickers/IconColorPicker.svelte';
 
@@ -43,7 +43,7 @@
   let picking = $state<string | null>(null);
 
   onMount(watchDecisions);
-  onMount(loadDashboard);
+  onMount(loadFeatures);
   const waiting = $derived(openDecisions());
   const blocking = $derived(waiting.filter((d) => d.mode === 'blocking').length);
 
@@ -288,15 +288,17 @@
     </Collapse>
   </section>
 
-  <section aria-label="Cycles">
-    {@render head('cycles', 'Cycles', cycles.length, 'cycle')}
-    <Collapse open={!closed.cycles}>{@render rowsOf('cycle', cycleRows, cycleLeaf, allCycles)}</Collapse>
-  </section>
+  {#if isOn('cycles')}
+    <section aria-label="Cycles">
+      {@render head('cycles', 'Cycles', cycles.length, 'cycle')}
+      <Collapse open={!closed.cycles}>{@render rowsOf('cycle', cycleRows, cycleLeaf, allCycles)}</Collapse>
+    </section>
+  {/if}
 
   <ul class="top">
-    {#if dashboard.on}<li>{@render navLink('/dashboard', 'chart', 'Dashboard', 'nav.dashboard', route === '/dashboard')}</li>{/if}
-    <li>{@render navLink('/events', 'calendar', 'Events', 'nav.events', route === '/events' || route.startsWith('/event/'))}</li>
-    <li>{@render navLink('/decisions', 'help', 'Decisions', 'nav.decisions', route === '/decisions', waiting.length > 0 && !decisions.error ? { n: waiting.length, urgent: blocking } : undefined)}</li>
+    {#if isOn('dashboard')}<li>{@render navLink('/dashboard', 'chart', 'Dashboard', 'nav.dashboard', route === '/dashboard')}</li>{/if}
+    {#if isOn('events')}<li>{@render navLink('/events', 'calendar', 'Events', 'nav.events', route === '/events' || route.startsWith('/event/'))}</li>{/if}
+    {#if isOn('decisions')}<li>{@render navLink('/decisions', 'help', 'Decisions', 'nav.decisions', route === '/decisions', waiting.length > 0 && !decisions.error ? { n: waiting.length, urgent: blocking } : undefined)}</li>{/if}
   </ul>
 
   <ul class="bottom">

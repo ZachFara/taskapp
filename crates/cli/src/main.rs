@@ -80,6 +80,11 @@ enum Cmd {
     History { key: String },
     /// Issues that have sat in their status past its nudge age, longest first.
     Stale,
+    /// Optional features and whether each is on; `features set NAME on|off` switches one (data stays).
+    Features {
+        #[command(subcommand)]
+        cmd: Option<FeaturesCmd>,
+    },
     /// Undo the newest step, whatever made it (UI, agent or CLI).
     Undo,
     /// Redo the step most recently undone.
@@ -111,6 +116,18 @@ enum Cmd {
         #[arg(long)]
         tz: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+enum FeaturesCmd {
+    /// Switches a feature on or off. Names: see `taskapp features`.
+    Set { name: String, state: OnOff },
+}
+
+#[derive(clap::ValueEnum, Clone, Copy)]
+enum OnOff {
+    On,
+    Off,
 }
 
 #[derive(Subcommand)]

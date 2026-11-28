@@ -7,6 +7,6 @@ defineCommand({
   icon: 'bolt',
   group: 'View',
   noShortcutReason: 'reached from the Count and Points switch and the command menu',
-  when: (ctx) => dashboard.on && ctx.route === '/dashboard',
+  when: (ctx) => ctx.route === '/dashboard',
   run: () => set({ measure: dashboard.measure === 'Count' ? 'Points' : 'Count' }),
 });

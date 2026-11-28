@@ -1207,6 +1207,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
         if (key === 'issue_fields') checkIssueFields(value);
         if (key === 'default_status' && !(typeof value === 'number' && s.statuses.some((st) => st.id === value)))
           fail('Invalid', `setting default_status must be ${typeof value === 'number' ? 'an existing status' : 'a status id'}`);
+        if ((key === 'dashboard' || key === 'insights_charts' || key.startsWith('feature_')) && typeof value !== 'boolean') fail('Invalid', `setting ${key} must be true or false`);
         const allowed = choices[key];
         if (allowed && !(typeof value === 'string' && allowed.includes(value))) fail('Invalid', `setting ${key} must be one of ${allowed.join(', ')}`);
         return nothing(settings.set(key, value));

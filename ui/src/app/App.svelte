@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount, setContext, tick, untrack } from 'svelte';
   import { matchRoute, navigate } from './routes';
+  import { FEATURES, isOn, ROUTES } from '../lib/features.svelte';
+  import EmptyState from '../ui/EmptyState.svelte';
   import { api } from '../lib/api';
   import { attachKeys, type Ctx, type Layout } from '../lib/commands';
   import { selection } from '../lib/selection.svelte';
@@ -24,6 +26,8 @@
   let path = $state(location.pathname);
   const match = $derived(matchRoute(path));
   const Page = $derived(match?.component);
+  // A page whose feature is switched off says so instead of opening.
+  const off = $derived(FEATURES.find((f) => f.name === ROUTES['/' + path.split('/')[1]] && !isOn(f.name)));
 
   // 'loading' draws nothing, so a set-up workspace never flashes the setup screen.
   let setup = $state<'loading' | 'needed' | 'done'>('loading');
@@ -210,7 +214,9 @@
         {#key shownKey}<IssueDetail params={{ key: shownKey }} mode="panel" onclose={closePanel} onopen={(k) => navigate(`/issue/${k}`)} />{/key}
       {/if}
     {/snippet}
-    {#if Page}
+    {#if off}
+      <EmptyState title={`${off.label} is switched off`} hint="Turn it on in Settings, Features." />
+    {:else if Page}
       {#key refreshed}<Page params={match?.params ?? {}} />{/key}
     {:else}
       <p>Not found: {path}</p>

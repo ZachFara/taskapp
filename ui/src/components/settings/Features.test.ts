@@ -1,0 +1,44 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import { FEATURES, features, isOn } from '../../lib/features.svelte';
+import { listCommands, type Ctx } from '../../lib/commands';
+import Features from './Features.svelte';
+import { field, mountSettings, toggle } from './testing';
+
+const ctx = { route: '/my', selection: [], focusedIssueId: null, openIssueId: null, navigate: () => {} } as unknown as Ctx;
+const ids = () => listCommands(ctx).map((c) => c.id);
+
+beforeEach(() => FEATURES.forEach((f) => (features[f.name] = true)));
+
+describe('Features', () => {
+  it('lists every feature with a switch, all on by default', async () => {
+    const { target } = await mountSettings(Features);
+    for (const f of FEATURES) expect(field(target, f.label).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('shows a stored off switch', async () => {
+    const { target } = await mountSettings(Features, { settings: { get: async (k: unknown) => (k === 'feature_cycles' ? false : null) } });
+    expect(field(target, 'Cycles').getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('a switch writes its own key at once, and the commands follow', async () => {
+    const { target, api } = await mountSettings(Features);
+    expect(ids()).toContain('nav.cycles');
+    await toggle(target, 'Cycles');
+    expect(await api.settings.get('feature_cycles')).toBe(false);
+    expect(isOn('cycles')).toBe(false);
+    expect(ids()).not.toContain('nav.cycles');
+    expect(ids()).toContain('feature.cycles.toggle');
+  });
+
+  it('dashboard and charts keep their existing keys', async () => {
+    const { target, api } = await mountSettings(Features);
+    await toggle(target, 'Dashboard');
+    await toggle(target, 'Progress charts');
+    expect(await api.settings.get('dashboard')).toBe(false);
+    expect(await api.settings.get('insights_charts')).toBe(false);
+  });
+
+  it('has a command per switch', () => {
+    for (const f of FEATURES) expect(ids()).toContain(`feature.${f.name}.toggle`);
+  });
+});

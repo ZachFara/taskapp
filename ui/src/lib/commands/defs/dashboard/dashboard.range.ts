@@ -11,7 +11,7 @@ defineCommand({
   group: 'View',
   noShortcutReason: 'reached from the dashboard range picker and the command menu',
   keywords: ['today', 'week', 'cycle', 'month', 'quarter', 'year', 'custom', 'dates'],
-  when: (ctx) => dashboard.on && ctx.route === '/dashboard',
+  when: (ctx) => ctx.route === '/dashboard',
   page: (ctx) => ({
     title: 'Dashboard range',
     // Two dates typed as `2026-11-01 2026-11-30` make a custom range.

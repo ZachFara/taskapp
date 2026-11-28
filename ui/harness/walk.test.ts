@@ -388,7 +388,7 @@ describe('walk', { timeout: 20_000 }, () => {
     await page.getByRole('button', { name: 'Cards' }).click();
     await page.getByRole('checkbox', { name: 'Burn-up' }).click();
     await pw(page.getByRole('region', { name: 'Burn-up' })).toHaveCount(0);
-    await open('/settings/general');
+    await open('/settings/features');
     await page.getByRole('switch', { name: 'Dashboard' }).click();
     await pw(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0);
   });

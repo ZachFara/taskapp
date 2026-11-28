@@ -1,5 +1,6 @@
 import type { Status } from '../bindings';
 import type { Api } from '../api';
+import { featureOfCommand, isOn } from '../features.svelte';
 
 /** What the open view shows; the view publishes it (`selection.layout`) so keys can be scoped to it. */
 export type Layout = 'list' | 'table' | 'board' | 'calendar' | 'timeline';
@@ -69,6 +70,11 @@ const commands = new Map<string, Command>();
 /** Registers a command; call it from one file under `defs/`. */
 export function defineCommand(c: Command) {
   if (!c.run && !c.page) throw new Error(`command ${c.id} needs run or page`);
+  const feature = featureOfCommand(c.id);
+  if (feature) {
+    const when = c.when;
+    c = { ...c, when: (ctx) => isOn(feature) && (!when || when(ctx)) };
+  }
   commands.set(c.id, c);
   return c;
 }

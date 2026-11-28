@@ -16,9 +16,9 @@ use taskapp_core::{
 };
 
 use crate::{
-    AttachmentCmd, Cmd, CommentCmd, CycleCmd, EventCmd, ImportCmd, InsightsCmd, IssueCmd, LabelCmd,
-    PinCmd, ProjectCmd, ProjectEdit, PropertyCmd, RelationCmd, ScopeArgs, StatusCmd, SyncCmd,
-    TemplateCmd, ViewCmd, look,
+    AttachmentCmd, Cmd, CommentCmd, CycleCmd, EventCmd, FeaturesCmd, ImportCmd, InsightsCmd,
+    IssueCmd, LabelCmd, OnOff, PinCmd, ProjectCmd, ProjectEdit, PropertyCmd, RelationCmd,
+    ScopeArgs, StatusCmd, SyncCmd, TemplateCmd, ViewCmd, look,
 };
 
 const SRC: ChangeSource = ChangeSource::Cli;
@@ -56,6 +56,7 @@ pub async fn run(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
 
 async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
     match cmd {
+        Cmd::Features { cmd } => features(db, cmd).await,
         Cmd::Add { text, tz } => add(db, &text, tz.as_deref()).await,
         Cmd::Issue(cmd) => issue(db, cmd).await,
         Cmd::View(cmd) => view(db, cmd).await,
@@ -85,16 +86,30 @@ async fn run_group(db: &Db, dir: &Path, cmd: Cmd) -> Result<Value> {
         | Cmd::Icons
         | Cmd::Colors
         | Cmd::Sync(_) => handled_in_run(),
-        Cmd::History { key } => {
-            let id = issue_id(db, &key).await?;
-            val(history::list_for(db, "issue", &id.0.to_string()).await?)
-        }
+        Cmd::History { key } => issue_history(db, &key).await,
     }
 }
 
 /// Undo, redo and templates are answered in [`run`] before the group commands.
 fn handled_in_run() -> Result<Value> {
     Err(Error::Invalid("handled by run".into()))
+}
+
+async fn issue_history(db: &Db, key: &str) -> Result<Value> {
+    let id = issue_id(db, key).await?;
+    val(history::list_for(db, "issue", &id.0.to_string()).await?)
+}
+
+async fn features(db: &Db, cmd: Option<FeaturesCmd>) -> Result<Value> {
+    if let Some(FeaturesCmd::Set { name, state }) = cmd {
+        taskapp_core::settings::set_feature(db, &name, matches!(state, OnOff::On)).await?;
+    }
+    let list = taskapp_core::settings::features(db).await?;
+    Ok(json!(
+        list.iter()
+            .map(|(name, on)| json!({"name": name, "on": on}))
+            .collect::<Vec<_>>()
+    ))
 }
 
 async fn add(db: &Db, text: &str, tz: Option<&str>) -> Result<Value> {

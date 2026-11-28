@@ -2,6 +2,7 @@ import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, setApi } from '../lib/api';
 import { createMockApi } from '../lib/api.mock';
+import { features } from '../lib/features.svelte';
 import { setTheme } from '../lib/theme.svelte';
 import { refreshAll, selectedIssueId, statuses as statusStore } from '../lib/stores.svelte';
 import { say } from '../components/undoState.svelte';
@@ -42,6 +43,15 @@ afterEach(() => {
   document.body.innerHTML = '';
   localStorage.clear();
   document.documentElement.removeAttribute('data-theme');
+});
+
+describe('a switched-off feature', () => {
+  afterEach(() => (features.cycles = true));
+  it('shows a notice instead of its page', async () => {
+    const base = createMockApi();
+    await open('/cycles', { settings: { ...base.settings, get: async (k: string) => (k === 'feature_cycles' ? false : base.settings.get(k)) } });
+    expect(document.body.textContent).toContain('Cycles is switched off');
+  });
 });
 
 describe('first run gate', () => {

@@ -7,7 +7,7 @@ defineCommand({
   icon: 'filter',
   group: 'View',
   noShortcutReason: 'reached from the dashboard filters and the command menu',
-  when: (ctx) => dashboard.on && ctx.route === '/dashboard',
+  when: (ctx) => ctx.route === '/dashboard',
   page: (ctx) => ({
     title: 'Dashboard filter',
     items: Promise.all([ctx.api.projects.list(), ctx.api.labels.list()]).then(([projects, labels]) => [

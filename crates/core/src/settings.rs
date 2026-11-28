@@ -68,6 +68,7 @@ const USER_KEYS: &[&str] = &[
     "point_scale",
     "issue_fields",
     "insights_charts",
+    "dashboard",
     "sidebar_sparklines",
     "reminders_list_id",
     "gcal_enabled",
@@ -81,7 +82,48 @@ const USER_KEYS: &[&str] = &[
 ];
 
 /// Prefixes of keys the UI writes per item: `insights.<kind>.<id>` and `sidebar_*`.
-const USER_PREFIXES: &[&str] = &["insights.", "sidebar_"];
+const USER_PREFIXES: &[&str] = &["insights.", "sidebar_", "feature_"];
+
+/// Optional features that can be switched off (name, setting key); all default to on. Off hides the feature, data stays.
+/// The names are what `taskapp features set` takes and what `ui/src/lib/features.svelte.ts` lists.
+pub const FEATURES: &[(&str, &str)] = &[
+    ("dashboard", "dashboard"),
+    ("decisions", "feature_decisions"),
+    ("cycles", "feature_cycles"),
+    ("events", "feature_events"),
+    ("charts", "insights_charts"),
+    ("stale", "feature_stale"),
+    ("reminders", "feature_reminders"),
+    ("gcal", "feature_gcal"),
+    ("process_inbox", "feature_process_inbox"),
+    ("next_actions", "feature_next_actions"),
+    ("focus", "feature_focus"),
+];
+
+/// Every feature with whether it is on (a never-written switch is on).
+///
+/// # Errors
+/// Fails when a stored value is not true or false.
+pub async fn features(db: &Db) -> Result<Vec<(&'static str, bool)>> {
+    let mut out = Vec::new();
+    for (name, key) in FEATURES {
+        out.push((*name, get::<bool>(db, key).await?.unwrap_or(true)));
+    }
+    Ok(out)
+}
+
+/// # Errors
+/// `Invalid` for an unknown feature name.
+pub async fn set_feature(db: &Db, name: &str, on: bool) -> Result<()> {
+    let (_, key) = FEATURES.iter().find(|(n, _)| *n == name).ok_or_else(|| {
+        let names: Vec<_> = FEATURES.iter().map(|(n, _)| *n).collect();
+        Error::Invalid(format!(
+            "unknown feature `{name}`; choose from {}",
+            names.join(", ")
+        ))
+    })?;
+    set_from_user(db, key, &serde_json::Value::Bool(on)).await
+}
 
 /// Writes a value the UI chose, checked the way its dedicated command checks it.
 ///
@@ -106,6 +148,11 @@ pub async fn set_from_user(db: &Db, key: &str, value: &serde_json::Value) -> Res
         "workspace_name" => {
             if value.as_str().is_none_or(|s| s.trim().is_empty()) {
                 return Err(bad("a non-empty name"));
+            }
+        }
+        k if k == "dashboard" || k == "insights_charts" || k.starts_with("feature_") => {
+            if !value.is_boolean() {
+                return Err(bad("true or false"));
             }
         }
         "theme" => check_one_of(key, value, &["system", "light", "dark"])?,

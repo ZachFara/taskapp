@@ -6,7 +6,8 @@ import { listCommands, type Ctx } from '../../lib/commands';
 import Sidebar from '../Sidebar.svelte';
 import { CARDS } from './cards';
 import DashboardPage from './DashboardPage.svelte';
-import { dashboard, moveCard, orderedCards, setDashboard, toggleCard } from './dashboard.svelte';
+import { dashboard, moveCard, orderedCards, toggleCard } from './dashboard.svelte';
+import { features, setFeature } from '../../lib/features.svelte';
 import type { Metrics, MetricsQuery } from './metrics';
 
 const proto = Element.prototype as unknown as Record<string, unknown>;
@@ -38,7 +39,8 @@ async function open(answer: (q: MetricsQuery) => Promise<Metrics> | Metrics, com
 }
 beforeEach(() => {
   localStorage.clear();
-  Object.assign(dashboard, { range: 'month', from: '', to: '', measure: 'Count', order: [], hidden: [], on: true, project: null, label: null });
+  features.dashboard = true;
+  Object.assign(dashboard, { range: 'month', from: '', to: '', measure: 'Count', order: [], hidden: [], project: null, label: null });
   asked.length = 0;
 });
 afterEach(() => {
@@ -117,14 +119,14 @@ describe('DashboardPage', () => {
 
 describe('the Dashboard switch', () => {
   const ctx = (route: string) => ({ route, api: createMockApi(), selection: [], focusedIssueId: null, openIssueId: null, navigate: () => {} }) as unknown as Ctx;
-  const ids = (route: string) => listCommands(ctx(route)).map((c) => c.id).filter((id) => id.includes('dashboard'));
+  const ids = (route: string) => listCommands(ctx(route)).map((c) => c.id).filter((id) => id.includes('dashboard') && !id.startsWith('feature.'));
 
   it('turns the sidebar entry and the commands off and on', async () => {
     await open(() => metrics(), Sidebar);
     expect(document.querySelector('a[href="/dashboard"]')).not.toBeNull();
     expect(ids('/dashboard')).toEqual(expect.arrayContaining(['nav.dashboard', 'dashboard.range', 'dashboard.measure', 'dashboard.filter', 'dashboard.cards', 'dashboard.cards.move']));
     expect(ids('/my')).toEqual(['nav.dashboard']);
-    await setDashboard(false);
+    await setFeature('dashboard', false);
     await settle();
     expect(document.querySelector('a[href="/dashboard"]')).toBeNull();
     expect(ids('/dashboard')).toEqual([]);

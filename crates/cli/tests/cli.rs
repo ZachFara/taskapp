@@ -1303,3 +1303,41 @@ fn cycle_set_writes_the_retrospective() {
             .success()
     );
 }
+
+#[test]
+fn features_default_on_and_switch() {
+    let (_d, db) = fresh();
+    let all = run_json(&db, &["features"]);
+    assert!(
+        all.as_array()
+            .expect("list")
+            .iter()
+            .all(|f| f["on"] == true)
+    );
+    let after = run_json(&db, &["features", "set", "cycles", "off"]);
+    let on = |name: &str| {
+        after
+            .as_array()
+            .expect("list")
+            .iter()
+            .find(|f| f["name"] == name)
+            .expect(name)["on"]
+            .clone()
+    };
+    assert_eq!(on("cycles"), false);
+    assert_eq!(on("dashboard"), true);
+    let got = run_json(
+        &db,
+        &[
+            "api",
+            "call",
+            "settings_get",
+            "--args",
+            r#"{"key":"feature_cycles"}"#,
+        ],
+    );
+    assert_eq!(got, false);
+    let bad = run(&db, &["features", "set", "nope", "off"]);
+    assert_ne!(bad.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("unknown feature"));
+}

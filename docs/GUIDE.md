@@ -44,7 +44,7 @@ The same screen has a second choice, "Restore from an export": see [Restore](#re
 ## The screen
 
 - **Sidebar (left).** Top: My issues. Then four collapsible sections with counts: Pinned, Views, Projects (with "All
-  projects"), Cycles (with "All cycles"). Then Events, Decisions and Dashboard (Settings > General can hide it). Bottom: Settings. Drag a pin or a view to reorder it. Right-click a view, folder,
+  projects"), Cycles (with "All cycles"). Then Events, Decisions and Dashboard (Settings > Features can hide each of these). Bottom: Settings. Drag a pin or a view to reorder it. Right-click a view, folder,
   project or cycle and choose Pin or Unpin. The Projects section shows only "All projects" until you right-click its
   heading and choose "Show projects in the sidebar" (kept on this device); pinned projects always show under Pinned. With "Sidebar sparklines" on (Settings > General) each project
   shows a small progress line. The sidebar has no Inbox link; `/inbox` exists but only shows "Inbox arrives in a later
@@ -375,7 +375,7 @@ Little's Law: average cycle time = WIP / throughput), Cycle commitment (pick a c
 Blocked work (issues waiting on an unfinished blocker, approximate blocked time) and Flow efficiency (active time over
 cycle time, and which Waiting statuses held work longest). The Cards button shows, hides and
 reorders cards, kept on this device. Every choice is also in the command menu ("Dashboard range", "Dashboard: show or
-hide cards"). Settings > General > Dashboard turns the whole page off; it is on by default.
+hide cards"). Settings > Features > Dashboard turns the whole page off; it is on by default.
 
 ### Stale issues
 
@@ -397,7 +397,7 @@ prints the same list: `taskapp stale`.
   area, Bars per week), Range (This cycle or Project dates or 30 days, 30, 90, All). Drag its left edge to resize it.
   Charts are rebuilt from the change history, per local day: scope (every issue that existed and is not canceled),
   started, completed. With a chart focused, left and right arrows step through days.
-- **Progress charts** switch (Settings > General): burn-ups on project and cycle pages, sparklines on past cycles.
+- **Progress charts** switch (Settings > Features): burn-ups on project and cycle pages, sparklines on past cycles.
 - CLI: `insights progress` and `insights velocity`; MCP: `insights_progress`, `insights_velocity`.
 
 ### Metrics
@@ -573,7 +573,7 @@ restoring the backup it wrote (`taskapp backup restore`).
 
 ## Settings
 
-Settings is a list of sections: General, Statuses, Project statuses, Labels, Projects, Cycles, Fields, Properties, Relations, Templates, Import, Reminders,
+Settings is a list of sections: General, Features, Statuses, Project statuses, Labels, Projects, Cycles, Fields, Properties, Relations, Templates, Import, Reminders,
 Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` saves the open page.
 
 | General setting | Values | Notes |
@@ -585,11 +585,24 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 | Theme | System, Light, Dark | Also the top-bar button. |
 | Estimation | None, Points, Time, Both | |
 | Point scale | Fibonacci, Linear, Powers, T-shirt | Disabled when points are off. |
-| Progress charts | on or off | Burn-ups and sparklines on projects and cycles. |
 | Sidebar sparklines | on or off | A small progress line per project. |
 | Interface size | 100%, 110%, 115%, 125% | Scales the whole app on this device (not saved in the workspace). Default 110%. Applies at once. |
 | Animation speed | Off, Fast, Normal, Slow | Per device, like interface size. Default Normal; Off by default when the system asks for reduced motion. Applies at once. |
 | Show tooltips | On, Off | Per device. Off by default: no name or shortcut boxes appear on hover. Shortcuts stay listed in the command menu and the shortcut sheet. Applies at once. |
+
+### Features
+
+Settings > Features lists every optional feature with a switch, all on by default: Dashboard, Decisions, Cycles,
+Events, Progress charts (burn-ups and sparklines on projects and cycles), Stale nudges, Reminders capture, Google
+Calendar, and the coming Process Inbox, Next actions and Focus mode. Switching one off hides its sidebar entries, its
+page (the address shows "is switched off"), its commands in the command menu, its Settings page where it has one
+(Cycles, Reminders, Calendar) and its dashboard card. Your data stays and comes back when you switch it on. Each switch
+applies at once, has its own command ("Turn Cycles on or off"), and is stored as a setting (`dashboard`,
+`insights_charts`, `feature_<name>`; `taskapp api call settings_get`). Show tooltips stays in General: it is per
+device and off by default, so it is a preference, not a workspace feature.
+
+From the terminal: `taskapp features` lists them; `taskapp features set cycles off` (names: dashboard, decisions,
+cycles, events, charts, stale, reminders, gcal, process_inbox, next_actions, focus).
 
 Sidebar and issue panel widths are remembered per device. Drag an edge to resize; double-click it to reset.
 
@@ -793,6 +806,7 @@ These appear in the command menu (when they apply) and have no shortcut.
 | `motion.faster` | Faster animations | (none) | One animation speed step faster (Normal, then Fast, then Off). |
 | `motion.slower` | Slower animations | (none) | One animation speed step slower (Normal, then Slow). |
 | `tooltips.toggle` | Show or hide tooltips | (none) | Switch the Show tooltips setting. |
+| `feature.<name>.toggle` | Turn Cycles on or off (one per feature) | (none) | Switch that feature on Settings > Features. |
 | `cycle.move_unfinished` | Move unfinished issues to the next cycle | (none) | Move unfinished issues of the cycle to the next cycle (Cycles page). |
 | `cycle.new` | New cycle | (none) | New cycle. |
 | `group.add` | Add issue to this group | (none) | Add an issue to this group. |

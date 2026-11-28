@@ -15,7 +15,7 @@
 .es-name { flex: 1; min-width: 0; }
 .es-name .field { border-color: transparent; background: transparent; font-weight: 600; }
 .es-meta { color: var(--muted); font-size: var(--fs-sm); white-space: nowrap; }
-.es-tools { display: flex; gap: var(--s-1); opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.es-tools { display: flex; gap: var(--s-1); opacity: 0.55; transition: opacity var(--dur-1) var(--ease); }
 .es-row:hover .es-tools, .es-row:focus-within .es-tools { opacity: 1; }
 .es-add { display: flex; align-items: center; gap: var(--s-5); padding: var(--s-4); border: 1px dashed var(--control); border-radius: var(--r-ctl); }
 .es-add .es-name .field { border-color: var(--control); background: var(--sheet); font-weight: 500; }
