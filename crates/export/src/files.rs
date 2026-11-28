@@ -419,6 +419,9 @@ pub struct IssueFront {
     /// `deep` or `shallow`; missing until chosen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub depth: Option<String>,
+    /// The repeat rule text; missing when the issue does not repeat.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub focus: Vec<FocusRow>,
 }

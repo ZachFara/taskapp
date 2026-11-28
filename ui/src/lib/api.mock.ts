@@ -9,6 +9,7 @@ import { stale } from './api.mock.stale';
 import { nextActions } from './api.mock.next';
 import { deepHours } from './api.mock.focus';
 import { stepLabel } from './api.mock.stepLabel';
+import { canonical, nextDue, parseRule, resetChecklist, ruleText } from './recur';
 import { byStatusOrder, flowDefaults } from './statusOrder';
 import { builtInKinds, relationKindsApi } from './api.mock.relationKinds';
 import { decisionsApi } from './api.mock.decisions';
@@ -19,7 +20,7 @@ import { scrubDef, seedViewTemplates, withDisplay } from './api.mock.views';
 import type {
   AppliedTemplate, Bar, Change, Measure, ProgressScope, Comment, Cycle, Decision, Event, EventInput, FieldRef, Filter, Issue, IssueTemplate, Label, Layout, Link, Milestone,
   NewIssue, Pin, Placement, Project, ProjectRow, ProjectStatus, ProjectStatusCategory, PropertyAppliesTo, PropertyDef, Relation, Reschedule, SavedView, Status, FixedField, TemplateFields,
-  FocusSession, TemplateInput, Value, ViewDef, ViewEntity, ViewFolder, ViewTemplate, WorkBlock,
+  Due, FocusSession, TemplateInput, Value, ViewDef, ViewEntity, ViewFolder, ViewTemplate, WorkBlock,
 } from './bindings';
 
 export type MockSeed = {
@@ -50,7 +51,7 @@ export type MockApi = Api & {
 };
 
 const nullableIssueFields = [
-  'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until', 'depth',
+  'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until', 'depth', 'repeat',
 ] as const;
 // The backend's error text is `<kind>: <detail>`; the UI shows it as is.
 const fail = (kind: string, message: string): never => {
@@ -253,7 +254,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       ProjectStatus: s.projects.find((x) => x.id === i.project_id)?.status_id ?? null,
       Title: i.title, Status: i.status_id, StatusCategory: category(i)?.toLowerCase() ?? null, Priority: i.priority,
       Project: i.project_id, Milestone: i.milestone_id, Cycle: i.cycle_id, Label: i.label_ids,
-      Parent: i.parent_id, StartDate: i.start_date, DueDate: dueDay(i), Estimate: i.estimate_minutes, Points: i.points, HiddenUntil: i.hidden_until,
+      Parent: i.parent_id, StartDate: i.start_date, DueDate: dueDay(i), Estimate: i.estimate_minutes, Points: i.points, HiddenUntil: i.hidden_until, Repeat: i.repeat,
       CreatedAt: i.created_at, UpdatedAt: i.updated_at, CompletedAt: i.completed_at,
       Archived: i.archived_at !== null, Key: i.id,
       SubIssueProgress: s.issues.filter((c) => c.parent_id === i.id && !c.archived_at).length,
@@ -370,7 +371,7 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
       priority: input.priority ?? 0, project_id: input.project_id ?? null, milestone_id: input.milestone_id ?? null,
       parent_id: input.parent_id ?? null, cycle_id: input.cycle_id ?? null, label_ids: [...new Set(input.label_ids ?? [])].sort((a, b) => a - b),
       start_date: input.start_date ?? null, due: input.due ?? null, estimate_minutes: input.estimate_minutes ?? null, points: input.points ?? null, hidden_until: null,
-      depth: null, properties: input.properties ?? {}, created_at: input.created_at ?? at, updated_at: at,
+      depth: null, repeat: null, properties: input.properties ?? {}, created_at: input.created_at ?? at, updated_at: at,
       completed_at: input.completed_at ?? null, archived_at: null,
     };
     checkIssue(issue, issue.properties);
@@ -381,6 +382,29 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
     return issue;
   };
   const getIssue = (id: number) => find(s.issues, id, 'issue');
+  // `i`'s due on the day `next`; a timed due keeps its time of day (shortcut: shifted by whole days, so a DST change moves it an hour).
+  const dueMoved = (i: Issue, next: string): Due => {
+    const base = dueDay(i);
+    if (!i.due?.DateTime || base === null) return { Date: next };
+    const utc = new Date(Date.parse(i.due.DateTime.utc) + dayDiff(base, next) * 86_400_000).toISOString();
+    return { DateTime: { ...i.due.DateTime, utc: utc.replace('.000Z', 'Z') } };
+  };
+  // Port of issues::spawn_next: the copy gets the next due date, the same rule and a `follows` link to the finished issue.
+  const spawnNext = async (done: Issue, text: string) => {
+    const rule = parseRule(text)!;
+    const today = zoneToday();
+    const base = dueDay(done) ?? today;
+    const next = nextDue(rule, base, today);
+    const copy = create({
+      title: done.title, description: resetChecklist(done.description), priority: done.priority, project_id: done.project_id,
+      milestone_id: done.milestone_id, parent_id: done.parent_id, label_ids: done.label_ids, due: dueMoved(done, next),
+      start_date: done.start_date === null ? null : addDays(done.start_date, dayDiff(base, next)), estimate_minutes: done.estimate_minutes,
+      points: done.points, properties: structuredClone(done.properties),
+    });
+    copy.depth = done.depth;
+    copy.repeat = ruleText(rule);
+    await api.relations.add({ from: copy.id, to: done.id, kind: 'follows' });
+  };
   // Only one session runs: a start ends the open one.
   const endOpen = (at: string) => {
     const open = focusSessions.find((f) => f.ended_at === null);
@@ -573,6 +597,17 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           if (v === null) delete i.properties[k];
           else i.properties[k] = v;
         }
+        if (i.repeat !== old.repeat && i.repeat !== null) {
+          const text = canonical(i.repeat);
+          if (!text) {
+            Object.assign(i, old);
+            fail('Invalid', `\`${patch.repeat}\` is not a repeat rule (try: every monday, every 2 weeks, monthly on 15, weekdays)`);
+          }
+          i.repeat = text;
+        }
+        // Finishing (not cancelling) a repeating issue hands the rule to the next occurrence.
+        const finished = old.repeat !== null && i.repeat === old.repeat && i.status_id !== old.status_id && category(i) === 'Completed' && !done(old);
+        if (finished) i.repeat = null;
         const changed = (Object.keys(i) as (keyof Issue)[]).filter((k) => JSON.stringify(i[k]) !== JSON.stringify(old[k]));
         if (!changed.length) return old;
         try {
@@ -584,11 +619,19 @@ export function createMockApi(seed: MockSeed = fixtures, tz = Intl.DateTimeForma
           Object.assign(i, old);
           throw e;
         }
-        const order = ['title', 'description', 'status_id', 'priority', 'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'label_ids', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until', 'properties'] as const;
+        const order = ['title', 'description', 'status_id', 'priority', 'project_id', 'milestone_id', 'parent_id', 'cycle_id', 'label_ids', 'start_date', 'due', 'estimate_minutes', 'points', 'hidden_until', 'repeat', 'properties'] as const;
         for (const k of order) if (changed.includes(k)) rec(id, k, old[k] as Value, i[k] as Value);
         i.updated_at = now();
         if (i.status_id !== old.status_id) i.completed_at = done(i) ? (done({ ...old }) ? old.completed_at : i.updated_at) : null;
+        if (finished) await spawnNext(i, old.repeat!);
         return i;
+      },
+      skipRepeat: async (id) => {
+        const i = getIssue(id);
+        const rule = i.repeat === null ? null : parseRule(i.repeat);
+        if (!rule) fail('Invalid', `${i.key} does not repeat`);
+        const today = zoneToday();
+        return api.issues.update(id, { due: dueMoved(i, nextDue(rule!, dueDay(i) ?? today, today)) });
       },
       get: async (id) => getIssue(id),
       // The prefix is display-only: the number alone identifies the issue.
@@ -1556,7 +1599,7 @@ const issues: Issue[] = rows.map((r, k) => {
     project_id: r.project, milestone_id: r.milestone ?? null, parent_id: r.parent ?? null, cycle_id: r.cycle ?? null,
     label_ids: r.labels ?? [], start_date: r.start === undefined ? null : day(r.start),
     due: r.due === undefined ? null : { Date: day(r.due) }, estimate_minutes: r.hours === undefined ? null : r.hours * 60,
-    points: POINTS[n] ?? null, hidden_until: null, depth: null,
+    points: POINTS[n] ?? null, hidden_until: null, depth: null, repeat: null,
     properties: { ...(r.area && { area: r.area }), ...(r.effort && { effort: r.effort }) } as Issue['properties'],
     created_at: created, updated_at: created, completed_at: finished ? created : null, archived_at: null,
   };

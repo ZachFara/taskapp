@@ -9,6 +9,7 @@
   import StatusGlyph from '../../ui/StatusGlyph.svelte';
   import { dayText, dueDay } from '../views/dates';
   import { issues } from '../../lib/stores.svelte';
+  import { repeatWords } from '../../lib/repeatPresets';
   import { paletteKey, type Ctx } from './types';
   import { checklistCount } from '../detail/checklist';
 
@@ -91,6 +92,8 @@
   <span class="num">{estimate(issue.estimate_minutes)}</span>
 {:else if field.Fixed === 'Points'}
   {#if ctx.points && issue.points !== null}<span class="num">{issue.points}</span>{/if}
+{:else if field.Fixed === 'Repeat'}
+  {#if issue.repeat}<span class="muted">{repeatWords(issue.repeat)}</span>{/if}
 {:else if field.Fixed === 'Depth'}
   {#if issue.depth}<span class="muted">{issue.depth}</span>{/if}
 {:else if field.Fixed === 'CreatedAt'}

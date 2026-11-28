@@ -289,6 +289,19 @@ enum IssueCmd {
         #[arg(long)]
         depth: Option<String>,
     },
+    /// Sets, clears or skips an issue's repeat rule. Finishing a repeating issue creates the next one.
+    Repeat {
+        key: String,
+        /// For example "every monday", "every 2 weeks from completion", "monthly on 15", "weekdays".
+        #[arg(conflicts_with_all = ["clear", "skip"])]
+        rule: Option<String>,
+        /// Stop repeating.
+        #[arg(long, conflicts_with = "skip")]
+        clear: bool,
+        /// Move the due date to the next occurrence without creating one.
+        #[arg(long)]
+        skip: bool,
+    },
     /// Adds a link to an issue; adding the same URL again changes nothing.
     Link {
         key: String,
@@ -760,7 +773,7 @@ enum PinCmd {
 async fn main() -> ExitCode {
     let cli = Cli::parse();
     let json = cli.json;
-    match run(cli).await {
+    match Box::pin(run(cli)).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             report(&err, json);

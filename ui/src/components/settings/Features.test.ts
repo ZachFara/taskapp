@@ -40,6 +40,16 @@ describe('Features', () => {
     expect(ids()).toContain('feature.focus.toggle');
   });
 
+  it('repeat commands follow the recurring switch', async () => {
+    const onIssue = () => listCommands({ ...ctx, focusedIssueId: 1 } as Ctx).map((c) => c.id);
+    const { target } = await mountSettings(Features);
+    expect(onIssue()).toContain('issue.repeat');
+    await toggle(target, 'Recurring issues');
+    expect(isOn('recurring')).toBe(false);
+    expect(onIssue()).not.toContain('issue.repeat');
+    expect(onIssue()).not.toContain('issue.repeat.skip');
+  });
+
   it('dashboard and charts keep their existing keys', async () => {
     const { target, api } = await mountSettings(Features);
     await toggle(target, 'Dashboard');

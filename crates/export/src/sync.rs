@@ -182,6 +182,9 @@ fn patch_of(
     if depth != old.depth {
         p.depth = Some(depth);
     }
+    if f.repeat != old.repeat {
+        p.repeat = Some(f.repeat.clone());
+    }
     patch_refs(&mut p, f, old, l)?;
     patch_props(&mut p, f, old);
     Ok(p)

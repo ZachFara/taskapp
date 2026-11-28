@@ -15,6 +15,8 @@
   import OptionList from './OptionList.svelte';
   import { fieldList, fieldOn } from '../../lib/fields.svelte';
   import { isOn } from '../../lib/features.svelte';
+  import { parseRule } from '../../lib/recur';
+  import { presets, repeatWords } from '../../lib/repeatPresets';
   import PointsRow from '../insights/PointsRow.svelte';
   import PropertyRow from './PropertyRow.svelte';
   import PropertyRows from './PropertyRows.svelte';
@@ -196,12 +198,27 @@
   </PropertyRow>
   {/snippet}
 
+  {#snippet row_repeat()}
+  <PropertyRow id="repeat" name="Repeat" cmd="issue.repeat" bind:openRow>
+    {#snippet value()}{repeatWords(issue.repeat) ?? ''}{#if issue.repeat === null}{@render none()}{/if}{/snippet}
+    {#snippet editor(close)}
+      <div class="stack">
+        <OptionList label="Repeat" value={issue.repeat === null ? 'none' : ''} options={[...presets(due.date || null).map((p) => ({ id: p.rule, name: p.label })), { id: 'none', name: 'Does not repeat' }]} onpick={(id) => { close(); save({ repeat: id === 'none' ? null : String(id) }); }} />
+        <TextInput label="Custom repeat" placeholder="every 2 weeks on mon" value={issue.repeat ?? ''} onchange={(v) => { if (parseRule(v)) { close(); save({ repeat: v }); } }} />
+        {#if issue.repeat !== null}<Button onclick={() => { close(); act(api.issues.skipRepeat(issue.id)); }}>Skip this occurrence</Button>{/if}
+      </div>
+    {/snippet}
+  </PropertyRow>
+  {/snippet}
+
   {#each fieldList() as f (f.field)}
     {#if fieldOn(f.field) && (f.field !== 'cycle' || isOn('cycles'))}
       {@const rows = { priority: row_priority, project: row_project, milestone: row_milestone, cycle: row_cycle, labels: row_labels, start: row_start, due: row_due, estimate: row_estimate, points: row_points, depth: row_depth, parent: row_parent }}
       {@render rows[f.field]()}
     {/if}
   {/each}
+
+  {#if isOn('recurring')}{@render row_repeat()}{/if}
 
   <PropertyRows defs={visible} values={issue.properties} {setProp} bind:openRow />
 </section>

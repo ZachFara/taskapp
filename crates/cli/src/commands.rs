@@ -200,12 +200,37 @@ async fn issue(db: &Db, cmd: IssueCmd) -> Result<Value> {
         update @ IssueCmd::Update { .. } => issue_update(db, update).await,
         IssueCmd::List(args) => crate::list::run(db, &args).await,
         IssueCmd::Get { key } => crate::list::get(db, &key).await,
-        IssueCmd::Delete { key, yes } => crate::archive::delete_issue(db, &key, yes).await,
-        keyed @ (IssueCmd::Archive { .. } | IssueCmd::Link { .. } | IssueCmd::Links { .. }) => {
-            issue_keyed(db, keyed).await
-        }
+        keyed @ (IssueCmd::Archive { .. }
+        | IssueCmd::Delete { .. }
+        | IssueCmd::Link { .. }
+        | IssueCmd::Links { .. }) => issue_keyed(db, keyed).await,
+        repeat @ IssueCmd::Repeat { .. } => issue_repeat(db, repeat).await,
         find @ (IssueCmd::Search { .. } | IssueCmd::Similar { .. }) => issue_find(db, find).await,
     }
+}
+
+async fn issue_repeat(db: &Db, cmd: IssueCmd) -> Result<Value> {
+    let IssueCmd::Repeat {
+        key,
+        rule,
+        clear,
+        skip,
+    } = cmd
+    else {
+        unreachable!("issue_repeat is only called with Repeat");
+    };
+    let id = issue_id(db, &key).await?;
+    if skip {
+        return val(issues::skip_repeat(db, id, SRC).await?);
+    }
+    if rule.is_none() && !clear {
+        return Err(Error::Invalid("give a rule, --clear or --skip".into()));
+    }
+    let patch = IssuePatch {
+        repeat: Some(rule),
+        ..IssuePatch::default()
+    };
+    val(issues::update(db, id, patch, SRC).await?)
 }
 
 async fn issue_find(db: &Db, cmd: IssueCmd) -> Result<Value> {
@@ -289,6 +314,7 @@ fn due_arg(clear: bool, due: Option<&str>) -> Result<taskapp_core::Clearable<Due
 
 async fn issue_keyed(db: &Db, cmd: IssueCmd) -> Result<Value> {
     match cmd {
+        IssueCmd::Delete { key, yes } => crate::archive::delete_issue(db, &key, yes).await,
         IssueCmd::Archive { key } => {
             let id = issue_id(db, &key).await?;
             issues::archive(db, id, SRC).await?;

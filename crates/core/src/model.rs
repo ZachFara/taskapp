@@ -131,6 +131,8 @@ pub struct Issue {
     pub hidden_until: Option<NaiveDate>,
     /// Deep or shallow work; `None` until chosen.
     pub depth: Option<Depth>,
+    /// Canonical repeat rule (`every 1 week on mon from due`); completing the issue creates the next one.
+    pub repeat: Option<String>,
     pub properties: Map<String, Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -205,6 +207,12 @@ pub struct IssuePatch {
     )]
     #[specta(type = Option<Depth>)]
     pub depth: Clearable<Depth>,
+    #[serde(
+        deserialize_with = "double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[specta(type = Option<String>)]
+    pub repeat: Clearable<String>,
     #[serde(
         deserialize_with = "double_option",
         skip_serializing_if = "Option::is_none"
@@ -541,6 +549,8 @@ pub enum FixedField {
     /// Issues only: the day a deferred issue comes back.
     HiddenUntil,
     Depth,
+    /// Issues only: the repeat rule, empty when the issue does not repeat.
+    Repeat,
     CreatedAt,
     UpdatedAt,
     CompletedAt,

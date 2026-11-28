@@ -23,6 +23,7 @@ macro_rules! with_commands {
             issues_empty_archive(s) -> u32 { delete::empty_archive(&s.db, $source).await }
             issues_get(s, id: IssueId) -> Issue { issues::get(&s.db, id).await }
             issues_get_by_key(s, key: String) -> Issue { issues::get_by_key(&s.db, &key).await }
+            issues_skip_repeat(s, id: IssueId) -> Issue { issues::skip_repeat(&s.db, id, $source).await }
             issues_archive(s, id: IssueId) -> () { issues::archive(&s.db, id, $source).await }
             issues_restore(s, id: IssueId) -> () { issues::restore(&s.db, id, $source).await }
             issues_children(s, id: IssueId) -> Vec<Issue> { issues::children(&s.db, id).await }

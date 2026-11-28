@@ -474,6 +474,24 @@ Dashboard's Deep hours card sums deep sessions per day or week for the range, wi
 ending today with deep time. CLI: `taskapp focus stop`, `taskapp focus log [--key ABC-1] [--range day|week|month|all]`.
 Turning Focus mode off hides its commands, page and card; the sessions stay in the database.
 
+### Recurring issues
+
+An issue can repeat. Set it in the issue's Details (Repeat row) or with "Repeat" in the command menu: pick a preset
+(every day, every weekday, every week on the due weekday, every month on the due day, every 2 weeks, or day, week or
+month counted from completion), or type a rule such as `every 2 weeks on mon,thu`, `monthly on 15` or
+`every 3 days from completion`. The rule is stored as text (`every 1 week on mon,thu from due`) and shown in words
+("Every week on Mon and Thu"). Counting from the due date, the next date is the next slot after both the due date and
+today, so finishing late skips missed slots; counting from completion, it is that many days, weeks or months after today.
+A month day past the month's end (31) falls on the last day. Finishing the issue by any route (app, CLI, bulk) creates
+the next occurrence: same title, description with the checklist unticked, labels, project, points, depth and the same
+rule, due on the next date, linked to the finished one with a "follows" relation, in the same undo step. The finished
+issue stops repeating. Cancelling does not create one. "Skip this occurrence" moves the due date to the next one
+without creating anything; "Does not repeat" stops the series. The Repeats field can be shown in views and filtered
+(Repeats is set). Google Calendar needs nothing extra: the next occurrence has a due date and appears like any issue
+(no recurring-event series yet). CLI: `taskapp issue repeat ABC-1 "every monday"`, `--clear`, `--skip`; `issue get`
+shows `repeat` and `repeat_words`. Settings > Features > Recurring issues hides the row and commands. Not built:
+repeat in quick add.
+
 ## Points and insights
 
 - **Estimation setting** (Settings > General): None, Points, Time or Both. Points show only for Points or Both; time
@@ -682,7 +700,7 @@ Calendar, Export, Backups, and "Keyboard shortcuts" (opens the sheet). `mod+s` s
 
 Settings > Features lists every optional feature with a switch, all on by default: Dashboard, Decisions, Cycles,
 Events, Progress charts (burn-ups and sparklines on projects and cycles), Stale nudges, Reminders capture, Google
-Calendar, Next actions, Process Inbox, and the coming Focus mode. Switching one off hides its sidebar entries, its
+Calendar, Next actions, Process Inbox, Focus mode and Recurring issues. Switching one off hides its sidebar entries, its
 page (the address shows "is switched off"), its commands in the command menu, its Settings page where it has one
 (Cycles, Reminders, Calendar) and its dashboard card. Switching Cycles off also hides the cycle row in issue details and
 the cycle field in views. Switching Reminders capture or Google Calendar off stops their background sync too; Sync now
@@ -905,6 +923,8 @@ These appear in the command menu (when they apply) and have no shortcut.
 
 | Command id | Name | Keys | What it does |
 |---|---|---|---|
+| `issue.repeat` | Repeat | (none) | Pick a repeat preset or type a rule; "Stop repeating" clears it. |
+| `issue.repeat.skip` | Skip this occurrence | (none) | Move a repeating issue's due date to its next occurrence. |
 | `issue.next` | Make next action | (none) | Flag the issue as its project's next action. |
 | `project.next` | Set next action | (none) | On a project page: pick the project's next action from its open issues, or clear it. |
 | `image.attach` | Attach image | (none) | Choose an image file for the description or comment box you used last. |
@@ -1024,6 +1044,7 @@ Calendar sign-in/listing, Reminders listing, immediate sync or export actions. T
 | `issue links <key>` | List an issue's links. | `taskapp issue links ABC-1` |
 | `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --solution <url> --hide-until DATE\|clear`. | `taskapp issue update ABC-1 --status 3` |
 | `issue update <key> [...]` | Change fields: `--title --description --priority --status --due --clear-due --points --clear-points --depth deep\|shallow\|none`. | `taskapp issue update ABC-1 --status 3` |
+| `issue repeat <key> [rule]` | Set a repeat rule ("every monday"), or `--clear` it, or `--skip` to the next occurrence. | `taskapp issue repeat ABC-1 "every 2 weeks"` |
 | `focus start <key> [--deep]`, `focus stop`, `focus log [--key] [--range]` | Focus sessions: start one (ends a running one), end the running one, list sessions with their total minutes. | `taskapp focus start ABC-1 --deep` |
 | `issue list [...]` | Issues by name filters, most urgent first, with status, priority, project and label names: `--project --status --not-status --priority --label` (repeat or comma-separate). | `taskapp issue list --project Cairn --not-status Done,Canceled,Someday` |
 | `issue get <key>` | Show one issue, with `status`, `project`, `labels` and `priority_name` as names next to the ids. | `taskapp issue get ABC-1` |

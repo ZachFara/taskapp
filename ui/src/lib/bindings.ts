@@ -74,6 +74,13 @@ export const commands = {
 	 * # Errors
 	 * As that command.
 	 */
+	issuesSkipRepeat: (id: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<Issue>("issues_skip_repeat", { id }, options),
+	/**
+	 * Forwards to the command of the same name.
+	 * 
+	 * # Errors
+	 * As that command.
+	 */
 	issuesArchive: (id: IssueId, options?: InvokeOptions) => __TAURI_INVOKE<null>("issues_archive", { id }, options),
 	/**
 	 * Forwards to the command of the same name.
@@ -1391,7 +1398,9 @@ export type Filter = ({ And: Filter[] }) & { Cond?: never; Not?: never; Or?: nev
 
 export type FixedField = "Title" | "Status" | "StatusCategory" | "Priority" | "Project" | "Milestone" | "Cycle" | "Label" | "Parent" | "StartDate" | "DueDate" | "Estimate" | "Points" | 
 /**  Issues only: the day a deferred issue comes back. */
-"HiddenUntil" | "Depth" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount" | 
+"HiddenUntil" | "Depth" | 
+/**  Issues only: the repeat rule, empty when the issue does not repeat. */
+"Repeat" | "CreatedAt" | "UpdatedAt" | "CompletedAt" | "Archived" | "Key" | "SubIssueProgress" | "RelationCount" | "CommentCount" | 
 /**  Shows `done/total` of the description's task lines; not sortable or filterable. */
 "Checklist" | 
 /**  Filter only: the issue has a relation of the given kind id(s), on either end. */
@@ -1513,6 +1522,8 @@ export type Issue = {
 	hidden_until: string | null,
 	/**  Deep or shallow work; `None` until chosen. */
 	depth: Depth | null,
+	/**  Canonical repeat rule (`every 1 week on mon from due`); completing the issue creates the next one. */
+	repeat: string | null,
 	properties: { [key in string]: Value },
 	created_at: string,
 	updated_at: string,
@@ -1535,6 +1546,7 @@ export type IssuePatch = {
 	label_ids?: LabelId[] | null,
 	start_date?: string | null,
 	depth?: Depth | null,
+	repeat?: string | null,
 	due?: Due | null,
 	estimate_minutes?: number | null,
 	points?: number | null,

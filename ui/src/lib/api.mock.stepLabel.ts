@@ -25,6 +25,7 @@ export function stepLabel(name: string, args: unknown[], out: unknown): string {
   switch (name) {
     case 'issues_create': case 'issues_create_from_quickadd': return `Created ${key}`;
     case 'issues_update': return `Edited ${key}`;
+    case 'issues_skip_repeat': return `Skipped ${key}`;
     case 'inbox_process': return `Processed ${key}`;
     case 'issues_mark_duplicate': return `Marked ${key} duplicate`;
     case 'issues_bulk_update': return bulk(args[0], (args[1] ?? {}) as Obj);

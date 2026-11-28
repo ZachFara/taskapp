@@ -382,6 +382,7 @@ mod tests {
             points: None,
             hidden_until: None,
             depth: None,
+            repeat: None,
             properties: serde_json::Map::default(),
             created_at: now,
             updated_at: now,

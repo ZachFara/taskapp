@@ -1550,3 +1550,33 @@ fn delete_and_empty_archive_need_yes() {
     run(&db, &["undo"]);
     assert_eq!(run_json(&db, &["issue", "get", "ABC-2"])["key"], "ABC-2");
 }
+
+#[test]
+fn issue_repeat_sets_shows_skips_and_clears_a_rule() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Water plants"]);
+    let set = run_json(&db, &["issue", "repeat", "ABC-1", "every monday"]);
+    assert_eq!(set["repeat"], "every 1 week on mon from due");
+    let got = run_json(&db, &["issue", "get", "ABC-1"]);
+    assert_eq!(got["repeat_words"], "Every week on Mon");
+    let skipped = run_json(&db, &["issue", "repeat", "ABC-1", "--skip"]);
+    assert!(
+        skipped["due"].is_object() || skipped["due"].is_string(),
+        "{skipped}"
+    );
+    let cleared = run_json(&db, &["issue", "repeat", "ABC-1", "--clear"]);
+    assert!(cleared["repeat"].is_null());
+}
+
+#[test]
+fn issue_repeat_refuses_a_bad_rule_and_finishing_makes_the_next_one() {
+    let (_d, db) = fresh();
+    run(&db, &["add", "Water plants"]);
+    let out = run(&db, &["issue", "repeat", "ABC-1", "sometimes"]);
+    assert!(!out.status.success());
+    run_json(&db, &["issue", "repeat", "ABC-1", "daily"]);
+    run_json(&db, &["issue", "update", "ABC-1", "--status", "Done"]);
+    let next = run_json(&db, &["issue", "get", "ABC-2"]);
+    assert_eq!(next["title"], "Water plants");
+    assert_eq!(next["repeat"], "every 1 day from due");
+}

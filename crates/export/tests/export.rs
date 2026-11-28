@@ -1087,3 +1087,32 @@ async fn hidden_until_survives_export_and_rebuild() -> R {
     assert_eq!(issues::get(&rebuilt, IssueId(2)).await?.hidden_until, None);
     Ok(())
 }
+
+#[tokio::test]
+async fn repeat_rule_and_series_link_survive_export_and_rebuild() -> R {
+    let db = seeded().await?;
+    issues::update(
+        &db,
+        IssueId(1),
+        IssuePatch {
+            repeat: Some(Some("every monday".into())),
+            ..IssuePatch::default()
+        },
+        SRC,
+    )
+    .await?;
+    let (src, dst) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    write::write_snapshot(&db, src.path()).await?;
+    let text = String::from_utf8_lossy(&tree(src.path())["issues/ABC-1.md"]).into_owned();
+    assert!(
+        text.contains("repeat: every 1 week on mon from due"),
+        "{text}"
+    );
+    let rebuilt = rebuild::rebuild(src.path(), &dst.path().join("rebuilt.db")).await?;
+    assert_eq!(
+        issues::get(&rebuilt, IssueId(1)).await?.repeat.as_deref(),
+        Some("every 1 week on mon from due")
+    );
+    assert_eq!(issues::get(&rebuilt, IssueId(2)).await?.repeat, None);
+    Ok(())
+}

@@ -43,6 +43,7 @@
     Estimate: { label: 'Estimate', kind: 'Number' },
     Points: { label: 'Points', kind: 'Read' },
     Depth: { label: 'Depth', kind: 'Read' },
+    Repeat: { label: 'Repeats', kind: 'Read' },
     Project: { label: 'Project', kind: 'Project' },
     Label: { label: 'Labels', kind: 'Labels' },
     // Shown through FieldValue and not editable here.
@@ -144,6 +145,7 @@
       case 'Estimate': return i.estimate_minutes;
       case 'Points': return i.points;
       case 'Depth': return i.depth;
+      case 'Repeat': return i.repeat;
       default: return null;
     }
   };

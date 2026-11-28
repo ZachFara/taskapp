@@ -98,6 +98,7 @@ pub const FEATURES: &[(&str, &str)] = &[
     ("process_inbox", "feature_process_inbox"),
     ("next_actions", "feature_next_actions"),
     ("focus", "feature_focus"),
+    ("recurring", "feature_recurring"),
 ];
 
 /// Every feature with whether it is on (a never-written switch is on).

@@ -34,3 +34,23 @@ fn task_box(line: &str) -> Option<bool> {
     let end = inner[mark.len_utf8()..].strip_prefix(']')?;
     (end.is_empty() || end.starts_with(' ')).then_some(mark != ' ')
 }
+
+/// The description with every ticked task box unticked (a recurring issue's next copy); code fences are left alone.
+#[must_use]
+pub fn reset(description: &str) -> String {
+    let mut fenced = false;
+    let lines: Vec<String> = description
+        .lines()
+        .map(|line| {
+            let t = line.trim_start();
+            if t.starts_with("```") || t.starts_with("~~~") {
+                fenced = !fenced;
+            } else if !fenced && task_box(t) == Some(true) {
+                let at = line.find('[').unwrap_or(0);
+                return format!("{}[ {}", &line[..at], &line[at + 2..]);
+            }
+            line.to_string()
+        })
+        .collect();
+    lines.join("\n")
+}
